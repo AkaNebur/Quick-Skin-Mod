@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.util.FileDialogHelper;
 import com.quickskin.mod.client.gui.util.SkinImporter;
+import com.quickskin.mod.client.gui.widget.LinkButton;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.gui.widget.SkinEntry;
 import com.quickskin.mod.client.gui.widget.SkinListWidget;
@@ -17,6 +18,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
@@ -48,8 +50,10 @@ public class PlayerSkinMenuScreen extends Screen {
 
     // Action buttons
     private Button importButton;
+    private Button hdSkinWebsiteButton;
+    private Button skinWebsiteButton;
     private Button capeButton;
-    private Button settingsButton;
+    private Button doneButton;
 
     // Panel dimensions
     private int panelX;
@@ -61,6 +65,17 @@ public class PlayerSkinMenuScreen extends Screen {
     private static final int MIN_PANEL_WIDTH = 340;
     private static final int MAX_PANEL_WIDTH = 600;
     private static final int PANEL_HEIGHT = 400;
+
+    // Icon textures
+    private static final ResourceLocation DISCORD_ICON = new ResourceLocation("quickskin", "textures/gui/discord_icon.png");
+    private static final ResourceLocation CURSEFORGE_ICON = new ResourceLocation("quickskin", "textures/gui/curseforge_icon.png");
+    private static final ResourceLocation MODRINTH_ICON = new ResourceLocation("quickskin", "textures/gui/modrinth_icon.png");
+    private static final ResourceLocation SETTINGS_ICON = new ResourceLocation("quickskin", "textures/gui/settings_icon.png");
+
+    // URLs
+    private static final String DISCORD_URL = "https://discord.gg/yGxdvA7qej";
+    private static final String CURSEFORGE_URL = "https://www.curseforge.com/minecraft/mc-mods/quick-skin";
+    private static final String MODRINTH_URL = "https://modrinth.com/mod/quick-skin";
 
     public PlayerSkinMenuScreen(@Nullable Screen parent) {
         super(Component.literal("QuickSkin"));
@@ -113,61 +128,133 @@ public class PlayerSkinMenuScreen extends Screen {
         );
         this.addRenderableWidget(playerWidget);
 
-        // Add model type buttons below player widget
-        int modelButtonWidth = 56;
-        int modelButtonHeight = 18;
-        int modelButtonY = playerWidgetY + playerWidgetHeight + 5;
-        int modelButtonSpacing = 2;
-        int totalModelButtonWidth = (modelButtonWidth * 3) + (modelButtonSpacing * 2);
-        int modelButtonStartX = playerWidgetX + (playerWidgetWidth - totalModelButtonWidth) / 2;
+        // --- Bottom Buttons (anchored to bottom of panel, matching original layout) ---
+        int scaledPadding = 6;
+        int scaledSpacing = 4;
+        int scaledComponentHeight = 20;
+        int bottomY = panelY + panelHeight - scaledPadding;
+        int fullWidthX = panelX + scaledPadding;
+        int fullComponentWidth = panelWidth - (scaledPadding * 2);
 
-        autoModelButton = Button.builder(Component.literal("Auto"), button -> {
-            setModelType("auto");
-        }).bounds(modelButtonStartX, modelButtonY, modelButtonWidth, modelButtonHeight).build();
-        this.addRenderableWidget(autoModelButton);
+        // Row 1 (Bottom-most): Done Button (full width)
+        bottomY -= scaledComponentHeight;
+        doneButton = Button.builder(Component.literal("Done"), button -> onClose())
+                .bounds(fullWidthX, bottomY, fullComponentWidth, scaledComponentHeight)
+                .build();
+        this.addRenderableWidget(doneButton);
 
-        slimModelButton = Button.builder(Component.literal("Slim"), button -> {
-            setModelType("slim");
-        }).bounds(modelButtonStartX + modelButtonWidth + modelButtonSpacing, modelButtonY, modelButtonWidth, modelButtonHeight).build();
-        this.addRenderableWidget(slimModelButton);
+        // Row 2: Import, HD Skin, Skin, Cape Buttons (4 equal width buttons)
+        bottomY -= (scaledComponentHeight + scaledSpacing);
+        int fourButtonWidth = (fullComponentWidth - (scaledSpacing * 3)) / 4;
 
-        classicModelButton = Button.builder(Component.literal("Classic"), button -> {
-            setModelType("classic");
-        }).bounds(modelButtonStartX + (modelButtonWidth + modelButtonSpacing) * 2, modelButtonY, modelButtonWidth, modelButtonHeight).build();
-        this.addRenderableWidget(classicModelButton);
-
-        // Add action buttons below the skin list
-        int actionButtonWidth = 70;
-        int actionButtonHeight = 18;
-        int actionButtonY = skinListY + skinListHeight + 5;
-        int actionButtonSpacing = 3;
-
-        importButton = Button.builder(Component.literal("Import"), button -> {
+        importButton = Button.builder(Component.literal("Import Skin"), button -> {
             openImportDialog();
-        }).bounds(skinListX, actionButtonY, actionButtonWidth, actionButtonHeight).build();
+        }).bounds(fullWidthX, bottomY, fourButtonWidth, scaledComponentHeight).build();
         this.addRenderableWidget(importButton);
+
+        hdSkinWebsiteButton = Button.builder(Component.literal("HD Skin Website"), button -> {
+            // TODO: Open HD skin website
+            if (this.minecraft != null) {
+                this.minecraft.options.chatLinksPrompt().set(false);
+            }
+        }).bounds(fullWidthX + fourButtonWidth + scaledSpacing, bottomY, fourButtonWidth, scaledComponentHeight).build();
+        this.addRenderableWidget(hdSkinWebsiteButton);
+
+        skinWebsiteButton = Button.builder(Component.literal("Skin Website"), button -> {
+            // TODO: Open skin website
+            if (this.minecraft != null) {
+                this.minecraft.options.chatLinksPrompt().set(false);
+            }
+        }).bounds(fullWidthX + (fourButtonWidth + scaledSpacing) * 2, bottomY, fourButtonWidth, scaledComponentHeight).build();
+        this.addRenderableWidget(skinWebsiteButton);
 
         capeButton = Button.builder(Component.literal("Cape"), button -> {
             // TODO: Open cape selection screen
-        }).bounds(skinListX + actionButtonWidth + actionButtonSpacing, actionButtonY, actionButtonWidth, actionButtonHeight).build();
+        }).bounds(fullWidthX + (fourButtonWidth + scaledSpacing) * 3, bottomY, fourButtonWidth, scaledComponentHeight).build();
         this.addRenderableWidget(capeButton);
 
-        settingsButton = Button.builder(Component.literal("Settings"), button -> {
-            // TODO: Open settings screen
-        }).bounds(skinListX + (actionButtonWidth + actionButtonSpacing) * 2, actionButtonY, actionButtonWidth, actionButtonHeight).build();
-        this.addRenderableWidget(settingsButton);
+        // Row 3: Model buttons (Auto, Wide/Classic, Slim) positioned in the rightmost fourth
+        bottomY -= (scaledComponentHeight + scaledSpacing);
+        int modelButtonsX = fullWidthX + (fourButtonWidth + scaledSpacing) * 3;
+        int modelButtonsTotalWidth = fourButtonWidth;
 
-        // Add close button
-        int buttonWidth = 100;
-        int buttonHeight = 20;
-        int buttonX = panelX + (panelWidth - buttonWidth) / 2;
-        int buttonY = panelY + panelHeight - 30;
+        // Auto button is smaller (square button for the emoji), Classic/Slim share the rest equally
+        int autoButtonWidth = scaledComponentHeight; // Square button
+        int remainingWidth = modelButtonsTotalWidth - autoButtonWidth - scaledSpacing;
+        int normalModelButtonWidth = (remainingWidth - scaledSpacing) / 2;
 
-        this.addRenderableWidget(
-                Button.builder(Component.literal("Close"), button -> onClose())
-                        .bounds(buttonX, buttonY, buttonWidth, buttonHeight)
-                        .build()
-        );
+        autoModelButton = Button.builder(Component.literal("✨"), button -> {
+            setModelType("auto");
+        }).bounds(modelButtonsX, bottomY, autoButtonWidth, scaledComponentHeight).build();
+        this.addRenderableWidget(autoModelButton);
+
+        classicModelButton = Button.builder(Component.literal("Wide"), button -> {
+            setModelType("classic");
+        }).bounds(modelButtonsX + autoButtonWidth + scaledSpacing, bottomY, normalModelButtonWidth, scaledComponentHeight).build();
+        this.addRenderableWidget(classicModelButton);
+
+        slimModelButton = Button.builder(Component.literal("Slim"), button -> {
+            setModelType("slim");
+        }).bounds(modelButtonsX + autoButtonWidth + scaledSpacing + normalModelButtonWidth + scaledSpacing, bottomY, normalModelButtonWidth, scaledComponentHeight).build();
+        this.addRenderableWidget(slimModelButton);
+
+        // --- Top-Right Link Buttons (Modrinth, CurseForge, Discord, Settings) ---
+        int buttonSize = scaledComponentHeight;
+        int linkButtonY = panelY + scaledPadding;
+
+        // Settings button (far right)
+        int settingsButtonX = panelX + panelWidth - buttonSize - scaledPadding;
+        this.addRenderableWidget(new LinkButton(
+                settingsButtonX,
+                linkButtonY,
+                buttonSize,
+                buttonSize,
+                SETTINGS_ICON,
+                null, // No URL, will be handled differently
+                Component.literal("Settings")
+        ) {
+            @Override
+            public void onPress() {
+                // TODO: Open settings screen
+                QuickSkin.LOGGER.info("Settings button pressed");
+            }
+        });
+
+        // Discord button (left of settings)
+        int discordButtonX = settingsButtonX - buttonSize - scaledSpacing;
+        this.addRenderableWidget(new LinkButton(
+                discordButtonX,
+                linkButtonY,
+                buttonSize,
+                buttonSize,
+                DISCORD_ICON,
+                DISCORD_URL,
+                Component.literal("Join our Discord!")
+        ));
+
+        // CurseForge button (left of Discord)
+        int curseforgeButtonX = discordButtonX - buttonSize - scaledSpacing;
+        this.addRenderableWidget(new LinkButton(
+                curseforgeButtonX,
+                linkButtonY,
+                buttonSize,
+                buttonSize,
+                CURSEFORGE_ICON,
+                CURSEFORGE_URL,
+                Component.literal("Visit our CurseForge page")
+        ));
+
+        // Modrinth button (left of CurseForge)
+        int modrinthButtonX = curseforgeButtonX - buttonSize - scaledSpacing;
+        this.addRenderableWidget(new LinkButton(
+                modrinthButtonX,
+                linkButtonY,
+                buttonSize,
+                buttonSize,
+                MODRINTH_ICON,
+                MODRINTH_URL,
+                Component.literal("Visit our Modrinth page")
+        ));
     }
 
     /**
