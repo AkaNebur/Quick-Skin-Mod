@@ -109,15 +109,37 @@ public class ClientEvents {
             int spacing = 4;
 
             if (screen instanceof TitleScreen titleScreen) {
-                // Position next to accessibility button on title screen (matching old mod's robust positioning)
-                final int vanillaButtonsY = titleScreen.height / 4 + 48 + 72;
-                int rightmostX = titleScreen.width / 2 + 124; // Default right edge of accessibility button
+                // Position next to accessibility button on title screen
+                // Find the actual accessibility/language button row by looking for the bottom-most row of small buttons
+                int vanillaButtonsY = -1;
+                int rightmostX = 0;
 
-                // Find the true rightmost edge in that row to account for other mods
+                // Step 1: Find all 20px height buttons and identify the bottom-most row
+                int maxY = -1;
                 for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
-                    if (listener instanceof AbstractWidget widget && widget.getY() == vanillaButtonsY) {
-                        rightmostX = Math.max(rightmostX, widget.getX() + widget.getWidth());
+                    if (listener instanceof Button button && button.getHeight() == buttonHeight) {
+                        if (button.getY() > maxY) {
+                            maxY = button.getY();
+                        }
                     }
+                }
+
+                // Step 2: The bottom-most row is likely the language/accessibility row
+                vanillaButtonsY = maxY;
+
+                // Step 3: Find the rightmost button in that row
+                if (vanillaButtonsY >= 0) {
+                    for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
+                        if (listener instanceof AbstractWidget widget && widget.getY() == vanillaButtonsY) {
+                            rightmostX = Math.max(rightmostX, widget.getX() + widget.getWidth());
+                        }
+                    }
+                }
+
+                // Fallback if we couldn't find any buttons
+                if (vanillaButtonsY < 0) {
+                    vanillaButtonsY = titleScreen.height / 4 + 48 + 72;
+                    rightmostX = titleScreen.width / 2 + 124;
                 }
 
                 buttonX = rightmostX + spacing;
