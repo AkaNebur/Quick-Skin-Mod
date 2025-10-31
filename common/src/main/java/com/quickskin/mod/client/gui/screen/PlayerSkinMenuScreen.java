@@ -224,6 +224,11 @@ public class PlayerSkinMenuScreen extends Screen {
         }).bounds(modelButtonsX + autoButtonWidth + scaledSpacing + normalModelButtonWidth + scaledSpacing, bottomY, normalModelButtonWidth, scaledComponentHeight).build();
         this.addRenderableWidget(slimModelButton);
 
+        // Set button references for player widget positioning
+        if (playerWidget != null) {
+            playerWidget.setModelButtons(autoModelButton, classicModelButton, slimModelButton);
+        }
+
         // --- Top-Right Link Buttons (Modrinth, CurseForge, Discord, Settings) ---
         int buttonSize = scaledComponentHeight;
         int linkButtonY = panelY + scaledPadding;

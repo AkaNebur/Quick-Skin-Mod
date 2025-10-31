@@ -4,6 +4,7 @@ import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import com.quickskin.mod.client.rendering.PreviewPlayerData;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
@@ -26,19 +27,24 @@ public class PlayerWidget extends AbstractWidget {
     private double lastMouseY = 0;
 
     // Rotation state
-    private float bodyYaw = 20.0f;
+    private float bodyYaw = 20.0f; // 20 degrees for sideways pose (matching original)
     private float headYaw = 0.0f;
     private float headPitch = 0.0f;
 
-    // Animation state
-    private long lastUpdateTime = System.currentTimeMillis();
-    private float autoRotationAngle = 0.0f;
-    private boolean autoRotate = true;
+    // Animation state (disabled for static pose)
+    private boolean autoRotate = false; // Disabled - keep static pose
 
     // Display settings
-    private float scale = 30.0f;
-    private int modelCenterX;
-    private int modelCenterY;
+    private float scale = 96.9f; // 5% smaller than 102 (102 * 0.95 = 96.9)
+
+
+    // Button references for positioning (like the original mod)
+    private net.minecraft.client.gui.components.Button autoButton = null;
+    private net.minecraft.client.gui.components.Button classicButton = null;
+    private net.minecraft.client.gui.components.Button slimButton = null;
+
+    // Default offset from button center
+    private static final double DEFAULT_OFFSET_FROM_BUTTON_Y = -15.0; // Lowered by 30px total (was -50)
 
     /**
      * Creates a new player widget
@@ -62,25 +68,64 @@ public class PlayerWidget extends AbstractWidget {
         );
         this.previewData.setCapeLocation(capeLocation);
         this.previewData.setModelType(modelType != null ? modelType : "classic");
+    }
 
-        this.modelCenterX = x + width / 2;
-        this.modelCenterY = y + height / 2 + 10; // Offset down slightly
+    /**
+     * Get the X position for model rendering (dynamically calculated)
+     * Uses model buttons if available, otherwise widget center
+     */
+    private int getModelCenterX() {
+        // In skin menu: Center of all three model buttons (Auto, Wide, Slim)
+        if (autoButton != null && slimButton != null) {
+            // Calculate center of the entire button group
+            int leftEdge = autoButton.getX();
+            int rightEdge = slimButton.getX() + slimButton.getWidth();
+            int middleX = (leftEdge + rightEdge) / 2;
+            return middleX;
+        }
+        // Fallback: if only classic/slim buttons exist
+        else if (classicButton != null && slimButton != null) {
+            int classicCenterX = classicButton.getX() + classicButton.getWidth() / 2;
+            int slimCenterX = slimButton.getX() + slimButton.getWidth() / 2;
+            int middleX = (classicCenterX + slimCenterX) / 2;
+            return middleX;
+        }
+        // Fallback to widget center if no button reference
+        return getX() + getWidth() / 2;
+    }
+
+    /**
+     * Get the Y position for model rendering (dynamically calculated)
+     * Uses Classic/Slim buttons if available, otherwise widget center
+     */
+    private int getModelCenterY() {
+        // In skin menu: Classic button Y coordinate (Classic and Slim are on same Y)
+        if (classicButton != null) {
+            int buttonCenterY = classicButton.getY() + classicButton.getHeight() / 2;
+            return (int)(buttonCenterY + DEFAULT_OFFSET_FROM_BUTTON_Y);
+        }
+        // Fallback to widget center if no button reference
+        return getY() + getHeight() / 2 + 10; // Offset down slightly
+    }
+
+    /**
+     * Set button references for positioning
+     */
+    public void setModelButtons(net.minecraft.client.gui.components.Button auto,
+                                net.minecraft.client.gui.components.Button classic,
+                                net.minecraft.client.gui.components.Button slim) {
+        this.autoButton = auto;
+        this.classicButton = classic;
+        this.slimButton = slim;
     }
 
     @Override
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Update auto-rotation if enabled
-        if (autoRotate && !isDragging) {
-            long currentTime = System.currentTimeMillis();
-            float deltaTime = (currentTime - lastUpdateTime) / 1000.0f;
-            lastUpdateTime = currentTime;
+        // Auto-rotation is disabled - model stays at fixed 20-degree angle
 
-            autoRotationAngle += 30.0f * deltaTime; // 30 degrees per second
-            if (autoRotationAngle >= 360.0f) {
-                autoRotationAngle -= 360.0f;
-            }
-            bodyYaw = autoRotationAngle;
-        }
+        // Get current model center (recalculated each frame for correct rotation pivot)
+        int modelCenterX = getModelCenterX();
+        int modelCenterY = getModelCenterY();
 
         // Update head tracking to follow mouse
         if (!isDragging && isMouseOver(mouseX, mouseY)) {
@@ -101,10 +146,9 @@ public class PlayerWidget extends AbstractWidget {
         previewData.setHeadPitch(headPitch);
 
         // Render the player model
-        // GuiGraphics provides pose() for PoseStack and bufferSource() for MultiBufferSource
+        // Use GuiGraphics directly for vanilla rendering method
         PlayerModelRenderer.renderPlayerModel(
-            graphics.pose(),
-            graphics.bufferSource(),
+            graphics,
             modelCenterX,
             modelCenterY,
             scale,
@@ -114,14 +158,6 @@ public class PlayerWidget extends AbstractWidget {
             mouseY,
             false
         );
-
-        // Draw border if hovered
-        if (isMouseOver(mouseX, mouseY)) {
-            graphics.fill(getX(), getY(), getX() + getWidth(), getY() + 1, 0x60FFFFFF); // Top
-            graphics.fill(getX(), getY() + getHeight() - 1, getX() + getWidth(), getY() + getHeight(), 0x60FFFFFF); // Bottom
-            graphics.fill(getX(), getY(), getX() + 1, getY() + getHeight(), 0x60FFFFFF); // Left
-            graphics.fill(getX() + getWidth() - 1, getY(), getX() + getWidth(), getY() + getHeight(), 0x60FFFFFF); // Right
-        }
     }
 
     @Override
@@ -213,25 +249,12 @@ public class PlayerWidget extends AbstractWidget {
     }
 
     /**
-     * Enable or disable auto-rotation
-     */
-    public void setAutoRotate(boolean autoRotate) {
-        this.autoRotate = autoRotate;
-        if (autoRotate) {
-            lastUpdateTime = System.currentTimeMillis();
-        }
-    }
-
-    /**
      * Reset to default rotation
      */
     public void resetRotation() {
         bodyYaw = 20.0f;
         headYaw = 0.0f;
         headPitch = 0.0f;
-        autoRotationAngle = 20.0f;
-        autoRotate = true;
-        lastUpdateTime = System.currentTimeMillis();
     }
 
     /**

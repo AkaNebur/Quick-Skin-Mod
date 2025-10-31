@@ -1,22 +1,30 @@
 package com.quickskin.mod.client.rendering;
 
+import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 /**
  * Utility for rendering player models in GUI using vanilla Minecraft rendering
@@ -42,20 +50,92 @@ public class PlayerModelRenderer {
         }
     }
 
+    // Debug mode flag
+    private static boolean debugMode = false;
+
+    // Fake player entity for rendering
+    private static Player fakePlayer;
+
     /**
-     * Render a player model in GUI
+     * Render a player model in GUI using vanilla InventoryScreen method
      *
-     * @param poseStack The pose stack for transformations
-     * @param buffer The buffer source for rendering
-     * @param x Screen X position (center of model)
-     * @param y Screen Y position (center of model)
-     * @param scale Scale factor (typically 75 for full-body view)
-     * @param yRotation Y-axis rotation in degrees
+     * @param graphics The GuiGraphics for rendering (contains PoseStack and buffer)
+     * @param x Screen X position (center point)
+     * @param y Screen Y position (feet position)
+     * @param scale Scale factor (typically 30-50 for GUI)
+     * @param yRotation Y-axis rotation in degrees (not used with vanilla method)
      * @param playerData Player data containing skin, model type, etc.
-     * @param mouseX Mouse X position (for head tracking, optional)
-     * @param mouseY Mouse Y position (for head tracking, optional)
+     * @param mouseX Mouse X position (for head tracking)
+     * @param mouseY Mouse Y position (for head tracking)
      * @param followMouse Whether the head should follow the mouse
      */
+    public static void renderPlayerModel(
+            GuiGraphics graphics,
+            int x,
+            int y,
+            float scale,
+            float yRotation,
+            PreviewPlayerData playerData,
+            int mouseX,
+            int mouseY,
+            boolean followMouse
+    ) {
+        if (playerData.getSkinLocation() == null) {
+            return; // No skin to render
+        }
+
+        // Get or create fake player entity with fixed pose
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) {
+            return; // Can't render without a world/player
+        }
+
+        // Always use the current player but reset its rotation for rendering
+        fakePlayer = mc.player;
+
+        // Store original rotation
+        float originalYRot = fakePlayer.getYRot();
+        float originalXRot = fakePlayer.getXRot();
+        float originalYHeadRot = fakePlayer.yHeadRot;
+        float originalYBodyRot = fakePlayer.yBodyRot;
+
+        // Set fixed rotation for preview (facing slightly sideways at 20 degrees - other direction)
+        // 180 + 20 = 200 degrees to face towards camera with slight angle
+        fakePlayer.setYRot(200.0F);
+        fakePlayer.setXRot(0.0F);
+        fakePlayer.yHeadRot = 200.0F;
+        fakePlayer.yBodyRot = 200.0F;
+
+        // Create quaternions for rotation (no mouse tracking)
+        // First quaternion: 180-degree flip to orient the model correctly
+        Quaternionf quaternionXZ = new Quaternionf().rotationXYZ(0.0F, 0.0F, (float)Math.PI);
+        // Second quaternion: empty (no rotation)
+        Quaternionf quaternionY = new Quaternionf();
+
+        // Use vanilla InventoryScreen rendering method
+        // This properly handles entity rendering with correct rotation pivot
+        // Signature: GuiGraphics, int x, int y, int scale, Quaternionf pose, Quaternionf camera, LivingEntity
+        InventoryScreen.renderEntityInInventory(
+            graphics,
+            x,
+            y,
+            (int)scale,
+            quaternionXZ,
+            quaternionY,
+            fakePlayer
+        );
+
+        // Restore original rotation after rendering
+        fakePlayer.setYRot(originalYRot);
+        fakePlayer.setXRot(originalXRot);
+        fakePlayer.yHeadRot = originalYHeadRot;
+        fakePlayer.yBodyRot = originalYBodyRot;
+    }
+
+    /**
+     * Legacy method for backwards compatibility - forwards to new GuiGraphics version
+     */
+    @Deprecated
     public static void renderPlayerModel(
             PoseStack poseStack,
             MultiBufferSource buffer,
@@ -68,60 +148,13 @@ public class PlayerModelRenderer {
             int mouseY,
             boolean followMouse
     ) {
-        ensureModelsLoaded();
+        // Create GuiGraphics wrapper
+        Minecraft mc = Minecraft.getInstance();
+        GuiGraphics graphics = new GuiGraphics(mc, buffer instanceof MultiBufferSource.BufferSource ?
+            (MultiBufferSource.BufferSource)buffer : mc.renderBuffers().bufferSource());
 
-        if (playerData.getSkinLocation() == null) {
-            return; // No skin to render
-        }
-
-        poseStack.pushPose();
-
-        // Translate to render position
-        poseStack.translate(x, y, 100.0);
-
-        // Apply scale
-        poseStack.scale(scale, scale, scale);
-
-        // Flip Z-axis for proper depth rendering
-        poseStack.mulPoseMatrix(new Matrix4f().scaling(1.0f, 1.0f, -1.0f));
-
-        // 180-degree rotation to flip model upright
-        Quaternionf quaternion = new Quaternionf().rotateZ((float) Math.PI);
-        poseStack.mulPose(quaternion);
-
-        // Apply Y-axis rotation (model turning)
-        poseStack.mulPose(Axis.YN.rotationDegrees(yRotation));
-
-        // Pivot point adjustment to center the model
-        // This positions the model so feet are at bottom and body is centered
-        poseStack.translate(-0.5f, -1.0f, -0.5f);
-
-        // Select appropriate model
-        PlayerModel<?> model = playerData.isSlim() ? slimModel : classicModel;
-
-        // Setup model pose
-        setupModelPose(model, playerData, mouseX, mouseY, followMouse, x, y);
-
-        // Setup lighting
-        setupLighting(yRotation);
-
-        // Get render type
-        ResourceLocation skinLocation = playerData.getSkinLocation();
-        RenderType renderType = RenderType.entityTranslucentCull(skinLocation);
-
-        // Render the model
-        model.renderToBuffer(
-                poseStack,
-                buffer.getBuffer(renderType),
-                15728880, // Full bright lighting (LightTexture.FULL_BRIGHT)
-                OverlayTexture.NO_OVERLAY,
-                1.0f, 1.0f, 1.0f, 1.0f // White color (no tinting)
-        );
-
-        poseStack.popPose();
-
-        // Reset render state
-        RenderSystem.applyModelViewMatrix();
+        // Forward to new method
+        renderPlayerModel(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);
     }
 
     /**
@@ -189,6 +222,62 @@ public class PlayerModelRenderer {
         model.leftPants.copyFrom(model.leftLeg);
         model.rightPants.copyFrom(model.rightLeg);
         model.jacket.copyFrom(model.body);
+    }
+
+    /**
+     * Render a debug cube at the chest position to show rotation center
+     */
+    private static void renderDebugCube(PoseStack poseStack, MultiBufferSource buffer, PlayerModel<?> model) {
+        poseStack.pushPose();
+
+        // Get chest position from the model's body part
+        // The body part is positioned at the chest area
+        ModelPart body = model.body;
+
+        // Translate to chest center (body origin is at chest)
+        poseStack.translate(0.0, -0.7, 0.0); // Move to chest height
+
+        // Scale the cube to be visible
+        poseStack.scale(0.2f, 0.2f, 0.2f);
+
+        // Render a bright colored cube
+        RenderType renderType = RenderType.lines();
+        var vertexConsumer = buffer.getBuffer(renderType);
+
+        // Draw cube wireframe (bright cyan/magenta for visibility)
+        float size = 1.0f;
+        Matrix4f matrix = poseStack.last().pose();
+
+        // Draw all 12 edges of a cube
+        // Bottom face
+        addLine(vertexConsumer, matrix, -size, -size, -size, size, -size, -size, 0, 255, 255); // Cyan
+        addLine(vertexConsumer, matrix, size, -size, -size, size, -size, size, 0, 255, 255);
+        addLine(vertexConsumer, matrix, size, -size, size, -size, -size, size, 0, 255, 255);
+        addLine(vertexConsumer, matrix, -size, -size, size, -size, -size, -size, 0, 255, 255);
+
+        // Top face
+        addLine(vertexConsumer, matrix, -size, size, -size, size, size, -size, 255, 0, 255); // Magenta
+        addLine(vertexConsumer, matrix, size, size, -size, size, size, size, 255, 0, 255);
+        addLine(vertexConsumer, matrix, size, size, size, -size, size, size, 255, 0, 255);
+        addLine(vertexConsumer, matrix, -size, size, size, -size, size, -size, 255, 0, 255);
+
+        // Vertical edges
+        addLine(vertexConsumer, matrix, -size, -size, -size, -size, size, -size, 255, 255, 0); // Yellow
+        addLine(vertexConsumer, matrix, size, -size, -size, size, size, -size, 255, 255, 0);
+        addLine(vertexConsumer, matrix, size, -size, size, size, size, size, 255, 255, 0);
+        addLine(vertexConsumer, matrix, -size, -size, size, -size, size, size, 255, 255, 0);
+
+        poseStack.popPose();
+    }
+
+    /**
+     * Helper method to add a colored line to the vertex consumer
+     */
+    private static void addLine(com.mojang.blaze3d.vertex.VertexConsumer consumer, Matrix4f matrix,
+                                float x1, float y1, float z1, float x2, float y2, float z2,
+                                int r, int g, int b) {
+        consumer.vertex(matrix, x1, y1, z1).color(r, g, b, 255).normal(1, 0, 0).endVertex();
+        consumer.vertex(matrix, x2, y2, z2).color(r, g, b, 255).normal(1, 0, 0).endVertex();
     }
 
     /**
