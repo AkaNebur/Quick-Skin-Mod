@@ -30,12 +30,13 @@ public class PlayerWidget extends AbstractWidget {
     private float bodyYaw = 20.0f; // 20 degrees for sideways pose (matching original)
     private float headYaw = 0.0f;
     private float headPitch = 0.0f;
+    private float targetYRotation = 20.0f; // Target rotation for smooth animation
 
     // Animation state (disabled for static pose)
     private boolean autoRotate = false; // Disabled - keep static pose
 
     // Display settings
-    private float scale = 96.9f; // 5% smaller than 102 (102 * 0.95 = 96.9)
+    private float scale = 87.2f; // 10% smaller than previous (96.9 * 0.9 = 87.21)
 
 
     // Button references for positioning (like the original mod)
@@ -44,7 +45,7 @@ public class PlayerWidget extends AbstractWidget {
     private net.minecraft.client.gui.components.Button slimButton = null;
 
     // Default offset from button center
-    private static final double DEFAULT_OFFSET_FROM_BUTTON_Y = -15.0; // Lowered by 30px total (was -50)
+    private static final double DEFAULT_OFFSET_FROM_BUTTON_Y = -15.0; // Moved up 5px from -15.0
 
     /**
      * Creates a new player widget
@@ -121,7 +122,14 @@ public class PlayerWidget extends AbstractWidget {
 
     @Override
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Auto-rotation is disabled - model stays at fixed 20-degree angle
+        // Smoothly animate rotation towards target
+        if (Math.abs(targetYRotation - bodyYaw) > 0.1f) {
+            float diff = targetYRotation - bodyYaw;
+            // Smooth interpolation (lerp with factor 0.15)
+            bodyYaw += diff * 0.15f;
+        } else {
+            bodyYaw = targetYRotation;
+        }
 
         // Get current model center (recalculated each frame for correct rotation pivot)
         int modelCenterX = getModelCenterX();
@@ -262,6 +270,14 @@ public class PlayerWidget extends AbstractWidget {
      */
     public void setScale(float scale) {
         this.scale = Math.max(15.0f, Math.min(60.0f, scale));
+    }
+
+    /**
+     * Toggle rotation - adds 180 degrees to target rotation
+     * Allows spamming for continuous spin
+     */
+    public void toggleRotation() {
+        targetYRotation += 180.0f;
     }
 
     @Override

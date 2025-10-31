@@ -50,6 +50,9 @@ public class PlayerSkinMenuScreen extends Screen {
     private Button classicModelButton;
     private String currentModelType = "classic";
 
+    // Rotate button
+    private Button rotateButton;
+
     // Action buttons
     private Button importButton;
     private Button hdSkinWebsiteButton;
@@ -229,6 +232,29 @@ public class PlayerSkinMenuScreen extends Screen {
             playerWidget.setModelButtons(autoModelButton, classicModelButton, slimModelButton);
         }
 
+        // Update button states to lock the currently selected model button
+        updateModelButtonStates();
+
+        // --- Rotate Button ---
+        int rotateButtonSize = 20;
+        int rightPanelEdgeX = panelX + panelWidth - scaledPadding;
+        int rotateButtonX = rightPanelEdgeX - rotateButtonSize;
+        int rotateButtonY = classicModelButton.getY() - rotateButtonSize - scaledSpacing;
+
+        rotateButton = this.addRenderableWidget(
+            new com.quickskin.mod.client.gui.widget.RotateButton(
+                rotateButtonX,
+                rotateButtonY,
+                rotateButtonSize,
+                b -> {
+                    if (playerWidget != null) {
+                        playerWidget.toggleRotation();
+                    }
+                }
+            )
+        );
+        rotateButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal("Rotate Preview")));
+
         // --- Top-Right Link Buttons (Modrinth, CurseForge, Discord, Settings) ---
         int buttonSize = scaledComponentHeight;
         int linkButtonY = panelY + scaledPadding;
@@ -383,10 +409,10 @@ public class PlayerSkinMenuScreen extends Screen {
         graphics.fill(panelX, panelY, panelX + panelWidth, panelY + 1, 0x60FFFFFF);
         // Bottom
         graphics.fill(panelX, panelY + panelHeight - 1, panelX + panelWidth, panelY + panelHeight, 0x60FFFFFF);
-        // Left
-        graphics.fill(panelX, panelY, panelX + 1, panelY + panelHeight, 0x60FFFFFF);
-        // Right
-        graphics.fill(panelX + panelWidth - 1, panelY, panelX + panelWidth, panelY + panelHeight, 0x60FFFFFF);
+        // Left (shortened by 1px at top and bottom to avoid corner overlap)
+        graphics.fill(panelX, panelY + 1, panelX + 1, panelY + panelHeight - 1, 0x60FFFFFF);
+        // Right (shortened by 1px at top and bottom to avoid corner overlap)
+        graphics.fill(panelX + panelWidth - 1, panelY + 1, panelX + panelWidth, panelY + panelHeight - 1, 0x60FFFFFF);
     }
 
     @Override
@@ -479,6 +505,25 @@ public class PlayerSkinMenuScreen extends Screen {
         this.currentModelType = modelType;
         if (playerWidget != null) {
             playerWidget.setModelType(modelType);
+        }
+        updateModelButtonStates();
+    }
+
+    /**
+     * Update the active state of model buttons based on current selection
+     * Buttons are locked (inactive) when they are the currently selected model
+     */
+    private void updateModelButtonStates() {
+        if (autoModelButton != null && classicModelButton != null && slimModelButton != null) {
+            boolean isAuto = "auto".equalsIgnoreCase(currentModelType);
+            boolean isSlim = "slim".equalsIgnoreCase(currentModelType);
+            boolean isClassic = "classic".equalsIgnoreCase(currentModelType);
+
+            // Button is active (clickable) when it's NOT the current model
+            // Button is inactive (locked/grayed out) when it IS the current model
+            autoModelButton.active = !isAuto;
+            classicModelButton.active = !isClassic;
+            slimModelButton.active = !isSlim;
         }
     }
 
