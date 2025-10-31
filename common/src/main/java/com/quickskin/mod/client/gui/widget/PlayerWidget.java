@@ -1,6 +1,7 @@
 package com.quickskin.mod.client.gui.widget;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.gui.util.DebugOffsetManager;
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import com.quickskin.mod.client.rendering.PreviewPlayerData;
 import net.fabricmc.api.EnvType;
@@ -47,6 +48,14 @@ public class PlayerWidget extends AbstractWidget {
 
     // Default offset from button center
     private static final double DEFAULT_OFFSET_FROM_BUTTON_Y = -15.0; // Moved up 5px from -15.0
+
+    // Debug positioning
+    private boolean isDebugDragging = false;
+    private int debugDragStartX = 0;
+    private int debugDragStartY = 0;
+    private int debugInitialX = 0;
+    private int debugInitialY = 0;
+    private String screenType = null; // "title" or "pause"
 
     /**
      * Creates a new player widget
@@ -176,11 +185,16 @@ public class PlayerWidget extends AbstractWidget {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0 && isMouseOver((int) mouseX, (int) mouseY)) {
-            isDragging = true;
-            lastMouseX = mouseX;
-            lastMouseY = mouseY;
-            autoRotate = false; // Stop auto-rotation when user interacts
-            return true;
+            // Start debug dragging (always enabled)
+            if (screenType != null) {
+                isDebugDragging = true;
+                debugDragStartX = (int) mouseX;
+                debugDragStartY = (int) mouseY;
+                debugInitialX = getX();
+                debugInitialY = getY();
+                QuickSkin.LOGGER.info("Started debug dragging for screen type: {}", screenType);
+                return true;
+            }
         }
         return false;
     }
@@ -188,6 +202,22 @@ public class PlayerWidget extends AbstractWidget {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == 0) {
+            if (isDebugDragging) {
+                // Save the new offset when debug dragging ends
+                int deltaX = (int) mouseX - debugDragStartX;
+                int deltaY = (int) mouseY - debugDragStartY;
+
+                int currentOffsetX = DebugOffsetManager.getOffsetX(screenType);
+                int currentOffsetY = DebugOffsetManager.getOffsetY(screenType);
+
+                int newOffsetX = currentOffsetX + deltaX;
+                int newOffsetY = currentOffsetY + deltaY;
+
+                DebugOffsetManager.setOffset(screenType, newOffsetX, newOffsetY);
+                QuickSkin.LOGGER.info("Saved new offset for {}: ({}, {})", screenType, newOffsetX, newOffsetY);
+
+                isDebugDragging = false;
+            }
             isDragging = false;
             return true;
         }
@@ -196,7 +226,15 @@ public class PlayerWidget extends AbstractWidget {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (isDragging && button == 0) {
+        if (isDebugDragging && button == 0) {
+            // Move the widget position during debug dragging
+            int deltaX = (int) mouseX - debugDragStartX;
+            int deltaY = (int) mouseY - debugDragStartY;
+
+            this.setX(debugInitialX + deltaX);
+            this.setY(debugInitialY + deltaY);
+            return true;
+        } else if (isDragging && button == 0) {
             float deltaX = (float) (mouseX - lastMouseX);
             float deltaY = (float) (mouseY - lastMouseY);
 
@@ -283,6 +321,20 @@ public class PlayerWidget extends AbstractWidget {
      */
     public void toggleRotation() {
         targetYRotation += 180.0f;
+    }
+
+    /**
+     * Set the screen type for this widget (used for debug offset saving)
+     */
+    public void setScreenType(String type) {
+        this.screenType = type;
+    }
+
+    /**
+     * Get the screen type for this widget
+     */
+    public String getScreenType() {
+        return this.screenType;
     }
 
     @Override
