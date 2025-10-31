@@ -1,6 +1,8 @@
 package com.quickskin.mod.event;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen;
+import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
 import com.quickskin.mod.client.services.ModelService;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
@@ -9,9 +11,14 @@ import dev.architectury.event.events.client.*;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.PauseScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * Client-side event handlers
@@ -21,6 +28,7 @@ import net.minecraft.client.player.LocalPlayer;
 public class ClientEvents {
 
     private static int tickCounter = 0;
+    private static PlayerWidget playerWidget;
 
     /**
      * Initializes client event listeners
@@ -81,13 +89,100 @@ public class ClientEvents {
         });
 
         // Screen init (after screen is initialized, before render)
-        ClientGuiEvent.INIT_POST.register((client, screen) -> {
+        ClientGuiEvent.INIT_POST.register((client, screenAccess) -> {
+            Screen screen = screenAccess.getScreen();
             // Check if this is the title screen or pause screen
             if (screen instanceof TitleScreen || screen instanceof PauseScreen) {
                 QuickSkin.LOGGER.debug("Screen initialized: {}", screen.getClass().getSimpleName());
 
-                // TODO Phase 8: Inject QuickSkin button and PlayerWidget
-                // GuiInjector.injectWidgets(screen, screen.width, screen.height);
+                // Inject QuickSkin button
+                int buttonX = 0;
+                int buttonY = 0;
+                int buttonWidth = 98;
+                int buttonHeight = 20;
+                int spacing = 4;
+
+                if (screen instanceof TitleScreen titleScreen) {
+                    // Position next to accessibility button on title screen
+                    int vanillaButtonsY = titleScreen.height / 4 + 48 + 72;
+                    int rightmostX = titleScreen.width / 2 + 124;
+
+                    for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
+                        if (listener instanceof AbstractWidget widget && widget.getY() == vanillaButtonsY) {
+                            rightmostX = Math.max(rightmostX, widget.getX() + widget.getWidth());
+                        }
+                    }
+
+                    buttonX = rightmostX + spacing;
+                    buttonY = vanillaButtonsY;
+
+                } else if (screen instanceof PauseScreen pauseScreen) {
+                    // Position next to "Save and Quit to Title" button
+                    Button saveAndQuitButton = null;
+                    int maxWidth = 0;
+
+                    for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
+                        if (listener instanceof Button button && button.getWidth() > maxWidth) {
+                            maxWidth = button.getWidth();
+                        }
+                    }
+
+                    if (maxWidth > 0) {
+                        int maxY = -1;
+                        for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
+                            if (listener instanceof Button button && button.getWidth() == maxWidth && button.getY() > maxY) {
+                                maxY = button.getY();
+                                saveAndQuitButton = button;
+                            }
+                        }
+                    }
+
+                    if (saveAndQuitButton != null) {
+                        int targetY = saveAndQuitButton.getY();
+                        int rightmostX = saveAndQuitButton.getX() + saveAndQuitButton.getWidth();
+
+                        for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
+                            if (listener instanceof AbstractWidget widget && widget.getY() == targetY) {
+                                rightmostX = Math.max(rightmostX, widget.getX() + widget.getWidth());
+                            }
+                        }
+
+                        buttonX = rightmostX + spacing;
+                        buttonY = targetY;
+                    } else {
+                        buttonX = pauseScreen.width - buttonWidth - spacing;
+                        buttonY = spacing;
+                    }
+                }
+
+                // Create and add the "Change Skin" button
+                Button changeSkinButton = Button.builder(
+                    Component.literal("Change Skin"),
+                    button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen))
+                ).bounds(buttonX, buttonY, buttonWidth, buttonHeight).build();
+
+                screenAccess.addRenderableWidget(changeSkinButton);
+
+                // Create and add the PlayerWidget above the button
+                int widgetSize = 144;
+                int widgetX = buttonX;
+                int widgetY = buttonY - widgetSize - 4; // 4px spacing
+
+                // Get player skin or use default Steve skin
+                ResourceLocation skinLocation = null;
+                LocalPlayer player = Minecraft.getInstance().player;
+                if (player != null) {
+                    skinLocation = player.getSkinTextureLocation();
+                } else {
+                    // Fallback to Steve skin if no player available
+                    skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
+                }
+
+                playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, null, "classic");
+                screenAccess.addRenderableWidget(playerWidget);
+
+                QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) and PlayerWidget at ({}, {})",
+                    buttonX, buttonY, widgetX, widgetY);
             }
         });
 

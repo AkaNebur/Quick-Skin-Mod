@@ -53,8 +53,12 @@ public class PlayerModelRenderer {
     // Debug mode flag
     private static boolean debugMode = false;
 
-    // Fake player entity for rendering
-    private static Player fakePlayer;
+    // Cached player entity for rendering (persists even after leaving world)
+    private static Player cachedPlayer;
+
+    // Fixed offset for positioning the model on title screen
+    public static double debugOffsetX = -20.0;
+    public static double debugOffsetY = -70.0;
 
     /**
      * Render a player model in GUI using vanilla InventoryScreen method
@@ -84,27 +88,35 @@ public class PlayerModelRenderer {
             return; // No skin to render
         }
 
-        // Get or create fake player entity with fixed pose
+        // Get Minecraft instance
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || mc.player == null) {
-            return; // Can't render without a world/player
+
+        // Cache the player when available for use on title screen
+        if (mc.player != null) {
+            cachedPlayer = mc.player;
         }
 
-        // Always use the current player but reset its rotation for rendering
-        fakePlayer = mc.player;
+        // Try to use cached player (works even on title screen after playing once)
+        Player playerToRender = cachedPlayer;
+
+        // If no cached player exists (fresh game launch), use manual rendering
+        if (playerToRender == null) {
+            renderPlayerModelManual(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);
+            return;
+        }
 
         // Store original rotation
-        float originalYRot = fakePlayer.getYRot();
-        float originalXRot = fakePlayer.getXRot();
-        float originalYHeadRot = fakePlayer.yHeadRot;
-        float originalYBodyRot = fakePlayer.yBodyRot;
+        float originalYRot = playerToRender.getYRot();
+        float originalXRot = playerToRender.getXRot();
+        float originalYHeadRot = playerToRender.yHeadRot;
+        float originalYBodyRot = playerToRender.yBodyRot;
 
         // Set fixed rotation for preview (facing slightly sideways at 20 degrees - other direction)
         // 180 + 20 = 200 degrees to face towards camera with slight angle
-        fakePlayer.setYRot(200.0F);
-        fakePlayer.setXRot(0.0F);
-        fakePlayer.yHeadRot = 200.0F;
-        fakePlayer.yBodyRot = 200.0F;
+        playerToRender.setYRot(200.0F);
+        playerToRender.setXRot(0.0F);
+        playerToRender.yHeadRot = 200.0F;
+        playerToRender.yBodyRot = 200.0F;
 
         // Create quaternions for rotation (no mouse tracking)
         // First quaternion: 180-degree flip to orient the model correctly
@@ -115,21 +127,101 @@ public class PlayerModelRenderer {
         // Use vanilla InventoryScreen rendering method
         // This properly handles entity rendering with correct rotation pivot
         // Signature: GuiGraphics, int x, int y, int scale, Quaternionf pose, Quaternionf camera, LivingEntity
-        InventoryScreen.renderEntityInInventory(
-            graphics,
-            x,
-            y,
-            (int)scale,
-            quaternionXZ,
-            quaternionY,
-            fakePlayer
-        );
+        try {
+            InventoryScreen.renderEntityInInventory(
+                graphics,
+                x,
+                y,
+                (int)scale,
+                quaternionXZ,
+                quaternionY,
+                playerToRender
+            );
+        } catch (Exception e) {
+            // If rendering fails (e.g., entity no longer valid), fall back to manual rendering
+            renderPlayerModelManual(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);
+        }
 
         // Restore original rotation after rendering
-        fakePlayer.setYRot(originalYRot);
-        fakePlayer.setXRot(originalXRot);
-        fakePlayer.yHeadRot = originalYHeadRot;
-        fakePlayer.yBodyRot = originalYBodyRot;
+        playerToRender.setYRot(originalYRot);
+        playerToRender.setXRot(originalXRot);
+        playerToRender.yHeadRot = originalYHeadRot;
+        playerToRender.yBodyRot = originalYBodyRot;
+    }
+
+    /**
+     * Manually render player model without requiring a player entity
+     * Used on title screen where no world/player exists
+     * Replicates InventoryScreen.renderEntityInInventory() behavior EXACTLY
+     */
+    private static void renderPlayerModelManual(
+            GuiGraphics graphics,
+            int x,
+            int y,
+            float scale,
+            float yRotation,
+            PreviewPlayerData playerData,
+            int mouseX,
+            int mouseY,
+            boolean followMouse
+    ) {
+        ensureModelsLoaded();
+
+        // Select model based on type
+        PlayerModel<?> model = playerData.getModelType().equalsIgnoreCase("slim") ? slimModel : classicModel;
+
+        PoseStack poseStack = graphics.pose();
+        poseStack.pushPose();
+
+        // Match InventoryScreen.renderEntityInInventory() transformations EXACTLY:
+        // From decompiled source:
+        // guiGraphics.pose().translate((double)i, (double)j, (double)50.0F);
+        // Apply debug offsets for positioning adjustment
+        poseStack.translate((double)x + debugOffsetX, (double)y + debugOffsetY, 50.0);
+
+        // guiGraphics.pose().mulPoseMatrix((new Matrix4f()).scaling((float)k, (float)k, (float)(-k)));
+        // NOTE: The negative Z scale is KEY - it flips the model to face forward
+        poseStack.mulPoseMatrix((new Matrix4f()).scaling((float)scale, (float)scale, (float)(-scale)));
+
+        // guiGraphics.pose().mulPose(quaternionf);
+        // quaternionf = (new Quaternionf()).rotateZ((float)Math.PI);
+        Quaternionf quaternionf = (new Quaternionf()).rotateZ((float)Math.PI);
+        poseStack.mulPose(quaternionf);
+
+        // Additional rotations to match in-game orientation on title screen
+        // First flip on X-axis, then rotate on Y-axis to face forward
+        poseStack.mulPose(Axis.XP.rotationDegrees(180.0f));
+        poseStack.mulPose(Axis.YP.rotationDegrees(180.0f));
+
+        // Lighting.setupForEntityInInventory();
+        Lighting.setupForEntityInInventory();
+
+        // Setup model pose (arms, legs, head rotation)
+        setupModelPose(model, playerData, mouseX, mouseY, followMouse, x, y);
+
+        // Get buffer source
+        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+
+        // Render the model with skin texture
+        RenderType renderType = RenderType.entityTranslucent(playerData.getSkinLocation());
+        var vertexConsumer = bufferSource.getBuffer(renderType);
+
+        // Render model
+        model.renderToBuffer(
+            poseStack,
+            vertexConsumer,
+            15728880, // Full brightness (light level) - same as InventoryScreen
+            OverlayTexture.NO_OVERLAY,
+            1.0f, 1.0f, 1.0f, 1.0f // RGBA
+        );
+
+        // Flush buffers - matches guiGraphics.flush() in InventoryScreen
+        bufferSource.endBatch();
+
+        poseStack.popPose();
+
+        // Lighting.setupFor3DItems();
+        Lighting.setupFor3DItems();
     }
 
     /**
