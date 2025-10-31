@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.util.FileDialogHelper;
+import com.quickskin.mod.client.gui.util.GuiScaleManager;
 import com.quickskin.mod.client.gui.util.SkinImporter;
 import com.quickskin.mod.client.gui.widget.LinkButton;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
@@ -19,6 +20,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
@@ -61,10 +63,14 @@ public class PlayerSkinMenuScreen extends Screen {
     private int panelWidth;
     private int panelHeight;
 
+    // GUI scale management
+    private boolean guiScaleForced = false;
+    private boolean isClosing = false;
+
     // Constants
     private static final int MIN_PANEL_WIDTH = 340;
     private static final int MAX_PANEL_WIDTH = 600;
-    private static final int PANEL_HEIGHT = 400;
+    private static final int MIN_PANEL_HEIGHT = 280;
 
     // Icon textures
     private static final ResourceLocation DISCORD_ICON = new ResourceLocation("quickskin", "textures/gui/discord_icon.png");
@@ -84,26 +90,49 @@ public class PlayerSkinMenuScreen extends Screen {
 
     @Override
     protected void init() {
+        // Force GUI scale to 2 for consistent appearance
+        if (!guiScaleForced && !isClosing) {
+            guiScaleForced = true;
+            int optimalScale = GuiScaleManager.getOptimalMenuScale();
+            if (GuiScaleManager.setMenuGuiScale(optimalScale)) {
+                // Scale was changed and resizeDisplay() was called, which will trigger init() again
+                return;
+            }
+        }
+
         super.init();
+        clearWidgets();
 
         // Calculate panel dimensions based on screen size
         calculatePanelDimensions();
 
-        // Create skin list on the left side
-        int skinListWidth = 220;
-        int skinListHeight = panelHeight - 100;
-        int skinListX = panelX + 10;
-        int skinListY = panelY + 40;
+        // Use consistent sizing values like the original mod
+        int scaledPadding = 6;
+        int scaledSpacing = 4;
+        int scaledComponentHeight = 20;
 
+        // Calculate left panel width (60% of total for balanced layout)
+        int leftPanelWidth = (int) (panelWidth * 0.6f);
+        int rightPanelWidth = (int) (panelWidth * 0.35f);
+
+        int componentX = panelX + scaledPadding;
+        int yPos = panelY + scaledPadding + scaledComponentHeight + scaledPadding;
+
+        // Calculate list height with proper spacing
+        int topSectionHeight = scaledPadding + scaledComponentHeight + scaledPadding + scaledComponentHeight + scaledSpacing;
+        int bottomSectionHeight = (scaledComponentHeight * 3) + (scaledSpacing * 2) + scaledPadding;
+        int listHeight = panelHeight - topSectionHeight - bottomSectionHeight;
+
+        // Create skin list on the left side
         skinListWidget = new SkinListWidget(
             this,
             this.minecraft,
-            skinListWidth,
-            skinListHeight,
-            skinListY,
-            36 // Entry height
+            leftPanelWidth,
+            listHeight,
+            yPos,
+            40 // Entry height - matches original
         );
-        skinListWidget.setLeftPos(skinListX);
+        skinListWidget.setLeftPos(componentX);
         skinListWidget.setRenderBackground(false);
         skinListWidget.setRenderTopAndBottom(false);
         this.addRenderableWidget(skinListWidget);
@@ -112,16 +141,16 @@ public class PlayerSkinMenuScreen extends Screen {
         loadSkins();
 
         // Create player widget in right section
-        int playerWidgetWidth = 180;
-        int playerWidgetHeight = 260;
-        int playerWidgetX = panelX + panelWidth - playerWidgetWidth - 20;
-        int playerWidgetY = panelY + 40;
+        int playerWidgetX = panelX + panelWidth - rightPanelWidth - scaledPadding;
+        int playerWidgetY = yPos;
+        int availableHeightForWidget = panelHeight - topSectionHeight - bottomSectionHeight;
+        int widgetSize = Math.min(144, Math.min(availableHeightForWidget, rightPanelWidth));
 
         playerWidget = new PlayerWidget(
-            playerWidgetX,
+            playerWidgetX + 20,
             playerWidgetY,
-            playerWidgetWidth,
-            playerWidgetHeight,
+            widgetSize,
+            widgetSize,
             null, // Will use default Steve skin
             null, // No cape initially
             "classic" // Default model type
@@ -129,9 +158,6 @@ public class PlayerSkinMenuScreen extends Screen {
         this.addRenderableWidget(playerWidget);
 
         // --- Bottom Buttons (anchored to bottom of panel, matching original layout) ---
-        int scaledPadding = 6;
-        int scaledSpacing = 4;
-        int scaledComponentHeight = 20;
         int bottomY = panelY + panelHeight - scaledPadding;
         int fullWidthX = panelX + scaledPadding;
         int fullComponentWidth = panelWidth - (scaledPadding * 2);
@@ -259,15 +285,60 @@ public class PlayerSkinMenuScreen extends Screen {
 
     /**
      * Calculate panel dimensions based on screen size
+     * Uses FIXED sizes since we're forcing GUI scale to 3
      */
     private void calculatePanelDimensions() {
-        // Adaptive width based on screen width
-        panelWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, this.width - 100));
-        panelHeight = PANEL_HEIGHT;
+        // Calculate panel dimensions as percentages of screen for flexible sizing
+        int desiredWidth = (int)(this.width * 0.5f);
+        int desiredHeight = (int)(this.height * 0.8f);
+
+        panelWidth = Mth.clamp(
+            desiredWidth,
+            MIN_PANEL_WIDTH,
+            Math.min(MAX_PANEL_WIDTH, this.width - 80)
+        );
+
+        panelHeight = Mth.clamp(
+            desiredHeight,
+            MIN_PANEL_HEIGHT,
+            this.height - 80
+        );
+
+        // Adjust panel size if components don't fit
+        int minRequiredHeight = calculateMinRequiredHeight();
+        if (panelHeight < minRequiredHeight) {
+            panelHeight = Math.min(minRequiredHeight, this.height - 40);
+        }
+
+        int minRequiredWidth = calculateMinRequiredWidth();
+        if (panelWidth < minRequiredWidth) {
+            panelWidth = Math.min(minRequiredWidth, this.width - 40);
+        }
 
         // Center the panel
         panelX = (this.width - panelWidth) / 2;
         panelY = (this.height - panelHeight) / 2;
+    }
+
+    /**
+     * Calculate minimum required height for all components
+     */
+    private int calculateMinRequiredHeight() {
+        int scaledPadding = 6;
+        int scaledComponentHeight = 20;
+        int scaledSpacing = 4;
+        // Title + username row + list (min 3 entries) + 3 button rows
+        return scaledPadding * 4 + scaledComponentHeight * 7 + scaledSpacing * 4 + 120; // 120 for min list height
+    }
+
+    /**
+     * Calculate minimum required width for all components
+     */
+    private int calculateMinRequiredWidth() {
+        int scaledPadding = 6;
+        int scaledSpacing = 4;
+        // Need space for left panel + right panel (player widget) + padding
+        return 220 + 150 + scaledPadding * 3 + scaledSpacing * 2;
     }
 
     @Override
@@ -314,7 +385,21 @@ public class PlayerSkinMenuScreen extends Screen {
     }
 
     @Override
+    public void removed() {
+        super.removed();
+        // GUI scale restoration is handled in onClose()
+    }
+
+    @Override
     public void onClose() {
+        // Restore original GUI scale BEFORE switching to parent screen
+        if (guiScaleForced) {
+            isClosing = true;
+            guiScaleForced = false;
+            GuiScaleManager.restoreOriginalGuiScale();
+            QuickSkin.LOGGER.info("PlayerSkinMenuScreen.onClose() - GUI scale restored");
+        }
+
         // Return to parent screen (or null to return to game)
         if (this.minecraft != null) {
             this.minecraft.setScreen(parent);
