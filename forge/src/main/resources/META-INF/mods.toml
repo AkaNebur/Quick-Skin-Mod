@@ -1,0 +1,41 @@
+# Forge mod metadata for QuickSkin
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "MIT"
+issueTrackerURL = "https://github.com/yourusername/quickskin/issues"
+
+[[mods]]
+modId = "quickskin"
+version = "${version}"
+displayName = "QuickSkin"
+authors = "The Plum Team"
+description = '''
+QuickSkin - Customize your Minecraft player skin and cape in-game!
+Supports both Fabric and Forge through Architectury.
+'''
+displayURL = "https://github.com/yourusername/quickskin"
+logoFile = "quickskin_logo.png"
+
+[[dependencies.quickskin]]
+modId = "forge"
+mandatory = true
+versionRange = "[47,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.quickskin]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[1.20.1,1.21)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.quickskin]]
+modId = "architectury"
+mandatory = true
+versionRange = "[9.2.14,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[mixins]]
+config = "quickskin.mixins.json"

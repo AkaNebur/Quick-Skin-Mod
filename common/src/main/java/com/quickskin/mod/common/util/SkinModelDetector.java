@@ -1,0 +1,134 @@
+package com.quickskin.mod.common.util;
+
+import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.SkinResolution;
+
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.InputStream;
+
+/**
+ * Utility for detecting skin model type (slim/Alex vs classic/Steve)
+ * by analyzing arm pixel transparency
+ */
+public class SkinModelDetector {
+
+    /**
+     * Detect skin model from BufferedImage
+     * @param image The skin image
+     * @return "slim" or "classic"
+     */
+    public static String detectSkinModel(BufferedImage image) {
+        if (image == null) {
+            return "classic";
+        }
+
+        int width = image.getWidth();
+        int height = image.getHeight();
+
+        // Determine resolution and scale factor
+        SkinResolution resolution = SkinResolution.fromDimensions(width, height);
+        int scale = resolution != null ? resolution.getScale() : 1;
+
+        // For legacy skins (64x32), default to classic
+        if (resolution == SkinResolution.LEGACY) {
+            return "classic";
+        }
+
+        // Check right arm outer layer (x=54-55 at 1x scale)
+        // In slim skins, this column should be mostly transparent
+        int rightArmX = 54 * scale;
+        int rightArmEndX = 56 * scale;
+        int armStartY = 20 * scale;
+        int armEndY = 32 * scale;
+
+        // Also check left arm outer layer (x=46-47 at 1x scale)
+        int leftArmX = 46 * scale;
+        int leftArmEndX = 48 * scale;
+
+        int totalPixels = 0;
+        int transparentPixels = 0;
+
+        // Check right arm column
+        for (int y = armStartY; y < armEndY && y < height; y++) {
+            for (int x = rightArmX; x < rightArmEndX && x < width; x++) {
+                totalPixels++;
+                int argb = image.getRGB(x, y);
+                int alpha = (argb >> 24) & 0xFF;
+
+                // Consider pixel transparent if alpha < 10 or if it's pure black with low alpha
+                if (alpha < 10) {
+                    transparentPixels++;
+                }
+            }
+        }
+
+        // Check left arm column
+        for (int y = armStartY; y < armEndY && y < height; y++) {
+            for (int x = leftArmX; x < leftArmEndX && x < width; x++) {
+                totalPixels++;
+                int argb = image.getRGB(x, y);
+                int alpha = (argb >> 24) & 0xFF;
+
+                if (alpha < 10) {
+                    transparentPixels++;
+                }
+            }
+        }
+
+        // If more than 50% of arm pixels are transparent, it's a slim model
+        if (totalPixels > 0) {
+            float transparentRatio = (float) transparentPixels / totalPixels;
+            boolean isSlim = transparentRatio > 0.5f;
+
+            QuickSkin.LOGGER.debug("Skin model detection: {}% transparent pixels -> {}",
+                    (int) (transparentRatio * 100), isSlim ? "slim" : "classic");
+
+            return isSlim ? "slim" : "classic";
+        }
+
+        // Default to classic if detection fails
+        return "classic";
+    }
+
+    /**
+     * Detect skin model from file
+     */
+    public static String detectSkinModel(File file) {
+        try {
+            BufferedImage image = ImageIO.read(file);
+            return detectSkinModel(image);
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Failed to detect skin model from file: {}", file, e);
+            return "classic";
+        }
+    }
+
+    /**
+     * Detect skin model from byte array
+     */
+    public static String detectSkinModel(byte[] data) {
+        try {
+            BufferedImage image = ImageIO.read(new ByteArrayInputStream(data));
+            return detectSkinModel(image);
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Failed to detect skin model from byte array", e);
+            return "classic";
+        }
+    }
+
+    /**
+     * Detect skin model from InputStream
+     */
+    public static String detectSkinModel(InputStream input) {
+        try {
+            BufferedImage image = ImageIO.read(input);
+            return detectSkinModel(image);
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Failed to detect skin model from input stream", e);
+            return "classic";
+        }
+    }
+}

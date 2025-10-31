@@ -1,0 +1,45 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+
+# Eclipse
+*.launch
+.settings/
+.metadata
+.classpath
+.project
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Visual Studio Code
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Fabric/Forge
+run/
+logs/
+crash-reports/
+.cache/
+.mixin.out/
+
+# Minecraft client/server files
+options.txt
+servers.dat
+usercache.json
+usernamecache.json
+
+# Build outputs (keep only source, ignore compiled)
+*.jar
+!gradle-wrapper.jar
+
+# Local environment
+.env
+local.properties

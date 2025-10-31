@@ -1,0 +1,156 @@
+package com.quickskin.mod.client.gui.util;
+
+import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.services.LocalAssetManager;
+import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.util.HashUtil;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Utility for importing skin files into the QuickSkin directory
+ */
+@Environment(EnvType.CLIENT)
+public class SkinImporter {
+
+    /**
+     * Import a skin file
+     * @param sourcePath Source file path
+     * @return The imported asset metadata, or null on failure
+     */
+    public static AssetMetadata importSkin(Path sourcePath) {
+        if (sourcePath == null || !Files.exists(sourcePath)) {
+            QuickSkin.LOGGER.error("Source file does not exist: {}", sourcePath);
+            return null;
+        }
+
+        // Validate it's a PNG file
+        String fileName = sourcePath.getFileName().toString().toLowerCase();
+        if (!fileName.endsWith(".png")) {
+            QuickSkin.LOGGER.error("File is not a PNG: {}", fileName);
+            return null;
+        }
+
+        // Validate image dimensions
+        try {
+            BufferedImage image = ImageIO.read(sourcePath.toFile());
+            if (image == null) {
+                QuickSkin.LOGGER.error("Failed to read image: {}", sourcePath);
+                return null;
+            }
+
+            int width = image.getWidth();
+            int height = image.getHeight();
+
+            // Check if valid skin dimensions
+            if (!isValidSkinDimension(width, height)) {
+                QuickSkin.LOGGER.error("Invalid skin dimensions {}x{}: {}", width, height, fileName);
+                return null;
+            }
+
+            QuickSkin.LOGGER.info("Importing skin {}x{}: {}", width, height, fileName);
+
+        } catch (IOException e) {
+            QuickSkin.LOGGER.error("Failed to validate image: {}", sourcePath, e);
+            return null;
+        }
+
+        // Copy file to skins directory
+        LocalAssetManager assetManager = LocalAssetManager.getInstance();
+        Path targetPath = assetManager.getSkinsDirectory().resolve(fileName);
+
+        // If file already exists, add a number
+        int counter = 1;
+        while (Files.exists(targetPath)) {
+            String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+            targetPath = assetManager.getSkinsDirectory().resolve(nameWithoutExt + "_" + counter + ".png");
+            counter++;
+        }
+
+        try {
+            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            QuickSkin.LOGGER.info("Copied skin to: {}", targetPath);
+
+            // Reload assets to pick up the new file
+            assetManager.reload();
+
+            // Get the metadata for the imported file
+            String hash = HashUtil.computeFileHash(targetPath);
+            if (hash != null) {
+                return assetManager.getMetadata(hash);
+            }
+
+        } catch (IOException e) {
+            QuickSkin.LOGGER.error("Failed to copy skin file", e);
+        }
+
+        return null;
+    }
+
+    /**
+     * Import multiple skin files
+     * @param sourcePaths Array of source file paths
+     * @return List of successfully imported assets
+     */
+    public static List<AssetMetadata> importSkins(Path[] sourcePaths) {
+        List<AssetMetadata> imported = new ArrayList<>();
+
+        for (Path path : sourcePaths) {
+            AssetMetadata metadata = importSkin(path);
+            if (metadata != null) {
+                imported.add(metadata);
+            }
+        }
+
+        return imported;
+    }
+
+    /**
+     * Check if dimensions are valid for a skin
+     */
+    private static boolean isValidSkinDimension(int width, int height) {
+        // Legacy format: 64x32
+        if (width == 64 && height == 32) {
+            return true;
+        }
+
+        // Standard and HD formats
+        // Valid if width is 64 * (2^n) and height is width
+        if (width >= 64 && width <= 2048 && height >= 32 && height <= 1024) {
+            // Check if width is a power of 2 multiple of 64
+            if (width % 64 == 0) {
+                int scale = width / 64;
+                // scale should be a power of 2 (1, 2, 4, 8, 16, 32)
+                if ((scale & (scale - 1)) == 0) {
+                    // Height should be width or width/2 (for legacy)
+                    return height == width || height == width / 2;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Get the skins directory path
+     */
+    public static Path getSkinsDirectory() {
+        return LocalAssetManager.getInstance().getSkinsDirectory();
+    }
+
+    /**
+     * Get the capes directory path
+     */
+    public static Path getCapesDirectory() {
+        return LocalAssetManager.getInstance().getCapesDirectory();
+    }
+}
