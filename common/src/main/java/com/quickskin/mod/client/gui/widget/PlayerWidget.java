@@ -1,5 +1,6 @@
 package com.quickskin.mod.client.gui.widget;
 
+import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import com.quickskin.mod.client.rendering.PreviewPlayerData;
 import net.fabricmc.api.EnvType;
@@ -69,6 +70,10 @@ public class PlayerWidget extends AbstractWidget {
         );
         this.previewData.setCapeLocation(capeLocation);
         this.previewData.setModelType(modelType != null ? modelType : "classic");
+
+        // Ensure widget is visible and active
+        this.visible = true;
+        this.active = true;
     }
 
     /**

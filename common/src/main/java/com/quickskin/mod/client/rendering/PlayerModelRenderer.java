@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.quickskin.mod.QuickSkin;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -41,12 +42,14 @@ public class PlayerModelRenderer {
      */
     private static void ensureModelsLoaded() {
         if (classicModel == null) {
+            QuickSkin.LOGGER.info("[PlayerModelRenderer] Initializing player models...");
             Minecraft mc = Minecraft.getInstance();
             ModelPart classicRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER);
             classicModel = new PlayerModel<>(classicRoot, false);
 
             ModelPart slimRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER_SLIM);
             slimModel = new PlayerModel<>(slimRoot, true);
+            QuickSkin.LOGGER.info("[PlayerModelRenderer] Models initialized successfully");
         }
     }
 
@@ -56,9 +59,19 @@ public class PlayerModelRenderer {
     // Cached player entity for rendering (persists even after leaving world)
     private static Player cachedPlayer;
 
-    // Fixed offset for positioning the model on title screen
-    public static double debugOffsetX = -20.0;
-    public static double debugOffsetY = -70.0;
+    // Fixed offset for positioning the model to match InventoryScreen rendering
+    // The manual rendering uses additional X/Y rotations that shift the model position
+    // These offsets compensate for that shift to match the InventoryScreen position
+    public static double debugOffsetX = 2.0;
+    public static double debugOffsetY = -129.0; // Move up to match InventoryScreen position
+
+    // Interactive debug mode for positioning
+    public static boolean debugPositioningMode = false; // Set to true to enable drag-to-position
+    private static boolean isDraggingModel = false;
+    private static int dragStartX = 0;
+    private static int dragStartY = 0;
+    private static double dragStartOffsetX = 0;
+    private static double dragStartOffsetY = 0;
 
     /**
      * Render a player model in GUI using vanilla InventoryScreen method
@@ -125,8 +138,6 @@ public class PlayerModelRenderer {
         Quaternionf quaternionY = new Quaternionf();
 
         // Use vanilla InventoryScreen rendering method
-        // This properly handles entity rendering with correct rotation pivot
-        // Signature: GuiGraphics, int x, int y, int scale, Quaternionf pose, Quaternionf camera, LivingEntity
         try {
             InventoryScreen.renderEntityInInventory(
                 graphics,
@@ -173,23 +184,22 @@ public class PlayerModelRenderer {
         PoseStack poseStack = graphics.pose();
         poseStack.pushPose();
 
-        // Match InventoryScreen.renderEntityInInventory() transformations EXACTLY:
-        // From decompiled source:
-        // guiGraphics.pose().translate((double)i, (double)j, (double)50.0F);
-        // Apply debug offsets for positioning adjustment
-        poseStack.translate((double)x + debugOffsetX, (double)y + debugOffsetY, 50.0);
+        // Match InventoryScreen.renderEntityInInventory() transformations
+        double finalX = (double)x + debugOffsetX;
+        double finalY = (double)y + debugOffsetY;
+        poseStack.translate(finalX, finalY, 50.0);
 
-        // guiGraphics.pose().mulPoseMatrix((new Matrix4f()).scaling((float)k, (float)k, (float)(-k)));
-        // NOTE: The negative Z scale is KEY - it flips the model to face forward
-        poseStack.mulPoseMatrix((new Matrix4f()).scaling((float)scale, (float)scale, (float)(-scale)));
+        // Apply scale (negative Z flips the model to face forward)
+        // Cast to int to match InventoryScreen.renderEntityInInventory() behavior
+        float scaleCasted = (float)(int)scale;
+        Matrix4f scaleMatrix = (new Matrix4f()).scaling(scaleCasted, scaleCasted, -scaleCasted);
+        poseStack.mulPoseMatrix(scaleMatrix);
 
-        // guiGraphics.pose().mulPose(quaternionf);
-        // quaternionf = (new Quaternionf()).rotateZ((float)Math.PI);
+        // Apply rotations
         Quaternionf quaternionf = (new Quaternionf()).rotateZ((float)Math.PI);
         poseStack.mulPose(quaternionf);
 
-        // Additional rotations to match in-game orientation on title screen
-        // First flip on X-axis, then rotate on Y-axis to face forward
+        // Additional rotations needed for manual rendering (not needed when using InventoryScreen)
         poseStack.mulPose(Axis.XP.rotationDegrees(180.0f));
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0f));
 
@@ -429,5 +439,64 @@ public class PlayerModelRenderer {
         defaultData.setModelType("classic");
 
         renderPlayerModel(poseStack, buffer, x, y, scale, yRotation, defaultData, 0, 0, false);
+    }
+
+    /**
+     * Handle mouse press for debug positioning mode
+     * Call this from your screen's mouseClicked method
+     */
+    public static boolean handleDebugMousePressed(int mouseX, int mouseY, int button) {
+        if (!debugPositioningMode || button != 0) {
+            return false;
+        }
+
+        // Start dragging
+        isDraggingModel = true;
+        dragStartX = mouseX;
+        dragStartY = mouseY;
+        dragStartOffsetX = debugOffsetX;
+        dragStartOffsetY = debugOffsetY;
+        return true;
+    }
+
+    /**
+     * Handle mouse drag for debug positioning mode
+     * Call this from your screen's mouseDragged method
+     */
+    public static boolean handleDebugMouseDragged(int mouseX, int mouseY, int button) {
+        if (!debugPositioningMode || !isDraggingModel || button != 0) {
+            return false;
+        }
+
+        // Update offsets based on drag distance
+        int deltaX = mouseX - dragStartX;
+        int deltaY = mouseY - dragStartY;
+
+        debugOffsetX = dragStartOffsetX + deltaX;
+        debugOffsetY = dragStartOffsetY + deltaY;
+
+        return true;
+    }
+
+    /**
+     * Handle mouse release for debug positioning mode
+     * Call this from your screen's mouseReleased method
+     */
+    public static boolean handleDebugMouseReleased(int mouseX, int mouseY, int button) {
+        if (!debugPositioningMode || !isDraggingModel || button != 0) {
+            return false;
+        }
+
+        isDraggingModel = false;
+
+        // Log the final offsets
+        QuickSkin.LOGGER.info("========================================");
+        QuickSkin.LOGGER.info("[Debug Positioning] Model positioned!");
+        QuickSkin.LOGGER.info("[Debug Positioning] Set these values in PlayerModelRenderer:");
+        QuickSkin.LOGGER.info("[Debug Positioning]   debugOffsetX = {};", debugOffsetX);
+        QuickSkin.LOGGER.info("[Debug Positioning]   debugOffsetY = {};", debugOffsetY);
+        QuickSkin.LOGGER.info("========================================");
+
+        return true;
     }
 }
