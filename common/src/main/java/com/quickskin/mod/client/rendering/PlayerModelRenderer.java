@@ -59,6 +59,17 @@ public class PlayerModelRenderer {
     // Cached player entity for rendering (persists even after leaving world)
     private static Player cachedPlayer;
 
+    // Previous rotation/position values for smooth lerping in idle animation
+    private static float prevHeadRotZ = 0.0f;
+    private static float prevHeadBobY = 0.0f;
+    private static float prevRightArmRotX = 0.0f;
+    private static float prevRightArmRotZ = 0.0f;
+    private static float prevLeftArmRotX = 0.0f;
+    private static float prevLeftArmRotZ = 0.0f;
+    private static float prevRightLegRotX = 0.0f;
+    private static float prevLeftLegRotX = 0.0f;
+    private static float prevBodyRotX = 0.0f;
+
     // Fixed offset for positioning the model to match InventoryScreen rendering
     // The manual rendering uses additional X/Y rotations that shift the model position
     // These offsets compensate for that shift to match the InventoryScreen position
@@ -130,6 +141,14 @@ public class PlayerModelRenderer {
         playerToRender.setXRot(0.0F);
         playerToRender.yHeadRot = 200.0F;
         playerToRender.yBodyRot = 200.0F;
+
+        // Set tickCount for idle animation ONLY when on title screen (no world)
+        // When in-game, the entity already has its own natural tickCount from the game loop
+        if (mc.level == null) {
+            // Title screen: manually set tickCount to enable animation
+            playerToRender.tickCount = (int)(System.currentTimeMillis() / 50); // 1 tick = 50ms
+        }
+        // Otherwise: keep entity's natural tickCount for proper in-game animation
 
         // Create quaternions for rotation (no mouse tracking)
         // First quaternion: 180-degree flip to orient the model correctly
@@ -209,8 +228,11 @@ public class PlayerModelRenderer {
         // Lighting.setupForEntityInInventory();
         Lighting.setupForEntityInInventory();
 
-        // Setup model pose (arms, legs, head rotation)
-        setupModelPose(model, playerData, mouseX, mouseY, followMouse, x, y);
+        // Get Minecraft instance for tick count
+        Minecraft mc = Minecraft.getInstance();
+
+        // Setup model pose with idle animation
+        setupModelPoseWithAnimation(model, playerData, mouseX, mouseY, followMouse, x, y, mc);
 
         // Get buffer source
         MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
@@ -263,60 +285,97 @@ public class PlayerModelRenderer {
     }
 
     /**
-     * Setup model pose (arm positions, head rotation, etc.)
+     * Smoothly lerp (linear interpolate) between current and target value
+     * @param current Current value
+     * @param target Target value
+     * @param factor Interpolation factor (0-1, higher = faster)
+     * @return Interpolated value
      */
-    private static void setupModelPose(
+    private static float smoothLerp(float current, float target, float factor) {
+        return current + (target - current) * factor;
+    }
+
+    /**
+     * Setup model pose with idle animation (arm positions, head rotation, etc.)
+     * Energetic bounce animation with smooth lerping
+     */
+    private static void setupModelPoseWithAnimation(
             PlayerModel<?> model,
             PreviewPlayerData playerData,
             int mouseX,
             int mouseY,
             boolean followMouse,
             int modelCenterX,
-            int modelCenterY
+            int modelCenterY,
+            Minecraft mc
     ) {
-        // Reset all rotations
+        // Set model state flags
         model.young = false;
         model.crouching = false;
         model.riding = false;
-
-        // Set default idle pose
         model.attackTime = 0.0f;
 
-        // Arms at sides (idle pose)
-        model.leftArm.xRot = 0.0f;
-        model.leftArm.yRot = 0.0f;
-        model.leftArm.zRot = 0.0f;
+        // Get elapsed time using Minecraft's tick counter
+        int tickCount = mc != null ? mc.gui.getGuiTicks() : 0;
+        float elapsedTime = tickCount / 20.0f; // Convert ticks to seconds
+        float t = elapsedTime * 0.8f; // Slower, more relaxed pace
 
-        model.rightArm.xRot = 0.0f;
+        // Lerp factor for smooth transitions
+        float lerpFactor = 0.15f;
+
+        // HEAD: Bouncy up/down with head tilt
+        // Note: Can't change position.y directly in Minecraft models, so we'll use body bounce instead
+        float targetHeadRotZ = (float)Math.sin(t * 1.2) * 0.04f;
+        prevHeadRotZ = smoothLerp(prevHeadRotZ, targetHeadRotZ, lerpFactor);
+
+        model.head.xRot = 0.0f;
+        model.head.yRot = 0.0f;
+        model.head.zRot = prevHeadRotZ;
+
+        // BODY: Bounce effect (simulates head position.y bounce from original)
+        // Using abs(sin) for always positive bounce
+        float targetBodyBounce = (float)Math.abs(Math.sin(t * 0.8)) * 0.12f;
+        prevBodyRotX = smoothLerp(prevBodyRotX, targetBodyBounce * 0.2f, lerpFactor); // Convert to rotation
+
+        model.body.xRot = -prevBodyRotX; // Negative to create upward lean during bounce
+        model.body.yRot = 0.0f;
+        model.body.zRot = 0.0f;
+
+        // RIGHT ARM: Swing forward/back with rotation
+        float targetRightArmRotX = (float)Math.sin(t * 0.8) * 0.12f;
+        float targetRightArmRotZ = (float)Math.sin(t) * 0.04f;
+        prevRightArmRotX = smoothLerp(prevRightArmRotX, targetRightArmRotX, lerpFactor);
+        prevRightArmRotZ = smoothLerp(prevRightArmRotZ, targetRightArmRotZ, lerpFactor);
+
+        model.rightArm.xRot = prevRightArmRotX;
         model.rightArm.yRot = 0.0f;
-        model.rightArm.zRot = 0.0f;
+        model.rightArm.zRot = prevRightArmRotZ;
 
-        // Legs at default position
-        model.leftLeg.xRot = 0.0f;
-        model.leftLeg.yRot = 0.0f;
-        model.leftLeg.zRot = 0.0f;
+        // LEFT ARM: Opposite swing (π phase shift)
+        float targetLeftArmRotX = (float)Math.sin(t * 0.8 + Math.PI) * 0.12f;
+        float targetLeftArmRotZ = (float)Math.sin(t + Math.PI) * -0.04f;
+        prevLeftArmRotX = smoothLerp(prevLeftArmRotX, targetLeftArmRotX, lerpFactor);
+        prevLeftArmRotZ = smoothLerp(prevLeftArmRotZ, targetLeftArmRotZ, lerpFactor);
 
-        model.rightLeg.xRot = 0.0f;
+        model.leftArm.xRot = prevLeftArmRotX;
+        model.leftArm.yRot = 0.0f;
+        model.leftArm.zRot = prevLeftArmRotZ;
+
+        // RIGHT LEG: Subtle swing
+        float targetRightLegRotX = (float)Math.sin(t * 0.5) * 0.05f;
+        prevRightLegRotX = smoothLerp(prevRightLegRotX, targetRightLegRotX, lerpFactor);
+
+        model.rightLeg.xRot = prevRightLegRotX;
         model.rightLeg.yRot = 0.0f;
         model.rightLeg.zRot = 0.0f;
 
-        // Head rotation
-        if (followMouse) {
-            // Calculate head rotation based on mouse position
-            float deltaX = mouseX - modelCenterX;
-            float deltaY = mouseY - modelCenterY;
+        // LEFT LEG: Opposite subtle swing (π phase shift)
+        float targetLeftLegRotX = (float)Math.sin(t * 0.5 + Math.PI) * 0.05f;
+        prevLeftLegRotX = smoothLerp(prevLeftLegRotX, targetLeftLegRotX, lerpFactor);
 
-            // Convert to angles (limited range for natural look)
-            float headYaw = Math.max(-45.0f, Math.min(45.0f, deltaX * 0.1f));
-            float headPitch = Math.max(-30.0f, Math.min(30.0f, deltaY * 0.05f));
-
-            model.head.yRot = (float) Math.toRadians(headYaw);
-            model.head.xRot = (float) Math.toRadians(headPitch);
-        } else {
-            // Use stored head rotation
-            model.head.yRot = (float) Math.toRadians(playerData.getHeadYaw());
-            model.head.xRot = (float) Math.toRadians(playerData.getHeadPitch());
-        }
+        model.leftLeg.xRot = prevLeftLegRotX;
+        model.leftLeg.yRot = 0.0f;
+        model.leftLeg.zRot = 0.0f;
 
         // Hat layer (outer layer of head) follows head rotation
         model.hat.copyFrom(model.head);
