@@ -235,7 +235,6 @@ public class ClientEvents {
             }
 
             playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, null, "classic");
-            playerWidget.setScreenType(screenType); // Set screen type for debug dragging
             screenAccess.addRenderableWidget(playerWidget);
 
             QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) and PlayerWidget at ({}, {}) for screen type '{}'",
