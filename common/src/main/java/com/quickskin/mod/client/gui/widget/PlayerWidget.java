@@ -149,14 +149,8 @@ public class PlayerWidget extends AbstractWidget {
         int modelCenterX = getModelCenterX();
         int modelCenterY = getModelCenterY();
 
-        // Update head tracking to follow mouse
-        if (!isDragging && isMouseOver(mouseX, mouseY)) {
-            float relativeMouseX = mouseX - modelCenterX;
-            float relativeMouseY = mouseY - modelCenterY;
-
-            headYaw = Math.max(-45.0f, Math.min(45.0f, relativeMouseX * 0.15f));
-            headPitch = Math.max(-30.0f, Math.min(30.0f, -relativeMouseY * 0.1f));
-        } else if (!isDragging) {
+        // Keep head at neutral position (mouse tracking disabled)
+        if (!isDragging) {
             // Smoothly return head to neutral
             headYaw *= 0.9f;
             headPitch *= 0.9f;
