@@ -1,5 +1,6 @@
 package com.quickskin.mod.client.gui.screen;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.panel.ActionButtonsPanel;
 import com.quickskin.mod.client.gui.panel.LinkButtonsPanel;
@@ -17,6 +18,7 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
@@ -53,6 +55,11 @@ public class PlayerSkinMenuScreen extends Screen {
     private static final int MIN_PANEL_WIDTH = 340;
     private static final int MAX_PANEL_WIDTH = 600;
     private static final int MIN_PANEL_HEIGHT = 280;
+
+    // --- NEW ---: Constants for the background effect
+    private static final ResourceLocation STAR_PATTERN_TEXTURE = new ResourceLocation(QuickSkin.MOD_ID, "textures/gui/background/star_pattern.png");
+    private static final ResourceLocation VIGNETTE_LOCATION = new ResourceLocation("textures/misc/vignette.png");
+
 
     public PlayerSkinMenuScreen(@Nullable Screen parent) {
         super(Component.literal("QuickSkin"));
@@ -96,12 +103,12 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Create Skin List Panel (left side)
         skinListPanel = new SkinListPanel(
-            componentX,
-            yPos,
-            leftPanelWidth,
-            listHeight,
-            this.minecraft,
-            this::onSkinSelected
+                componentX,
+                yPos,
+                leftPanelWidth,
+                listHeight,
+                this.minecraft,
+                this::onSkinSelected
         );
         skinListPanel.init(this);
 
@@ -125,52 +132,52 @@ public class PlayerSkinMenuScreen extends Screen {
         int availableHeightForWidget = panelHeight - topSectionHeight - bottomSectionHeight;
 
         playerPreviewPanel = new PlayerPreviewPanel(
-            playerWidgetX,
-            playerWidgetY,
-            rightPanelWidth,
-            availableHeightForWidget
+                playerWidgetX,
+                playerWidgetY,
+                rightPanelWidth,
+                availableHeightForWidget
         );
         playerPreviewPanel.initPlayerWidget(this);
 
         // Create model buttons positioned above the cape button
         playerPreviewPanel.initModelButtons(
-            this,
-            modelButtonsX,
-            modelButtonsY,
-            modelButtonsTotalWidth,
-            scaledComponentHeight,
-            scaledSpacing
+                this,
+                modelButtonsX,
+                modelButtonsY,
+                modelButtonsTotalWidth,
+                scaledComponentHeight,
+                scaledSpacing
         );
 
         // Create Action Buttons Panel (bottom)
         int bottomY = actionButtonsBottomY - (scaledComponentHeight * 2) - scaledSpacing;
 
         ActionButtonsPanel.ActionCallbacks callbacks = new ActionButtonsPanel.ActionCallbacks(
-            this::openImportDialog,
-            () -> {
-                // HD Skin Website
-                if (this.minecraft != null) {
-                    this.minecraft.options.chatLinksPrompt().set(false);
-                }
-            },
-            () -> {
-                // Skin Website
-                if (this.minecraft != null) {
-                    this.minecraft.options.chatLinksPrompt().set(false);
-                }
-            },
-            () -> {
-                // TODO: Open cape selection screen
-            },
-            this::onClose
+                this::openImportDialog,
+                () -> {
+                    // HD Skin Website
+                    if (this.minecraft != null) {
+                        this.minecraft.options.chatLinksPrompt().set(false);
+                    }
+                },
+                () -> {
+                    // Skin Website
+                    if (this.minecraft != null) {
+                        this.minecraft.options.chatLinksPrompt().set(false);
+                    }
+                },
+                () -> {
+                    // TODO: Open cape selection screen
+                },
+                this::onClose
         );
 
         actionButtonsPanel = new ActionButtonsPanel(
-            fullWidthX,
-            bottomY,
-            fullComponentWidth,
-            actionPanelHeight,
-            callbacks
+                fullWidthX,
+                bottomY,
+                fullComponentWidth,
+                actionPanelHeight,
+                callbacks
         );
         actionButtonsPanel.init(this, callbacks);
 
@@ -180,10 +187,10 @@ public class PlayerSkinMenuScreen extends Screen {
         int linkPanelX = panelX + panelWidth - linkPanelWidth - scaledPadding + scaledSpacing;
 
         linkButtonsPanel = new LinkButtonsPanel(
-            linkPanelX,
-            linkButtonY,
-            linkPanelWidth,
-            scaledComponentHeight
+                linkPanelX,
+                linkButtonY,
+                linkPanelWidth,
+                scaledComponentHeight
         );
         linkButtonsPanel.init(this);
     }
@@ -198,15 +205,15 @@ public class PlayerSkinMenuScreen extends Screen {
         int desiredHeight = (int)(this.height * 0.8f);
 
         panelWidth = Mth.clamp(
-            desiredWidth,
-            MIN_PANEL_WIDTH,
-            Math.min(MAX_PANEL_WIDTH, this.width - 80)
+                desiredWidth,
+                MIN_PANEL_WIDTH,
+                Math.min(MAX_PANEL_WIDTH, this.width - 80)
         );
 
         panelHeight = Mth.clamp(
-            desiredHeight,
-            MIN_PANEL_HEIGHT,
-            this.height - 80
+                desiredHeight,
+                MIN_PANEL_HEIGHT,
+                this.height - 80
         );
 
         // Adjust panel size if components don't fit
@@ -246,10 +253,74 @@ public class PlayerSkinMenuScreen extends Screen {
         return 220 + 150 + scaledPadding * 3 + scaledSpacing * 2;
     }
 
+    // --- NEW ---: Method to render the animated background
+    /**
+     * Renders a moving star pattern background similar to the effect on the example website.
+     * This includes a tiled, scrolling texture and a vignette overlay for depth.
+     */
+    private void renderBackgroundEffects(GuiGraphics graphics, float partialTick) {
+        // 1. Fill with solid black as a base layer.
+        graphics.fill(0, 0, this.width, this.height, 0xFF000000);
+
+        // 2. Render the moving star pattern.
+        // The size to render each tile (smaller = more stars visible).
+        int tileSize = 64;
+        // Animation speed: pixels per second
+        double pixelsPerSecond = 8.0;
+
+        // Use Minecraft's smooth game time (ticks + partial tick) for perfectly smooth animation
+        // This avoids stuttering from discrete millisecond updates
+        int tickCount = this.minecraft != null ? this.minecraft.gui.getGuiTicks() : 0;
+        // Combine with partialTick for smooth interpolation between frames
+        double smoothTime = (tickCount + partialTick) / 20.0; // Convert to seconds
+        double offset = (smoothTime * pixelsPerSecond) % tileSize;
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        // Set color tint and opacity for the stars (white with 50% opacity for visibility).
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 0.5F);
+
+        // Calculate how many tiles are needed to cover the screen, plus extra for smooth scrolling.
+        int xTiles = Mth.ceil((float) this.width / tileSize) + 2;
+        int yTiles = Mth.ceil((float) this.height / tileSize) + 1;
+
+        // Use matrix stack to scale down the texture rendering
+        var pose = graphics.pose();
+        pose.pushPose();
+
+        for (int y = 0; y < yTiles; ++y) {
+            for (int x = 0; x < xTiles; ++x) {
+                // Draw each tile, applying the horizontal scroll offset.
+                // Keep as double for sub-pixel smoothness - this is key to eliminating stuttering!
+                double drawX = x * tileSize - offset;
+                double drawY = y * tileSize;
+
+                // Draw the full 256x256 texture scaled down to tileSize x tileSize
+                pose.pushPose();
+                pose.translate(drawX, drawY, 0);
+                pose.scale(tileSize / 256.0f, tileSize / 256.0f, 1.0f);
+                graphics.blit(STAR_PATTERN_TEXTURE, 0, 0, 0, 0.0f, 0.0f, 256, 256, 256, 256);
+                pose.popPose();
+            }
+        }
+
+        pose.popPose();
+
+        // 3. Render a vignette overlay for a darker, focused feel around the edges.
+        // Use a semi-transparent black color for the vignette.
+        RenderSystem.setShaderColor(0.0F, 0.0F, 0.0F, 0.75F);
+        // Stretch Minecraft's vignette texture to cover the entire screen.
+        graphics.blit(VIGNETTE_LOCATION, 0, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
+
+        // 4. Reset render state to avoid affecting other GUI elements.
+        RenderSystem.disableBlend();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Render black background
-        graphics.fill(0, 0, this.width, this.height, 0xFF000000);
+        // --- MODIFIED ---: Render the new animated background instead of a simple fill
+        this.renderBackgroundEffects(graphics, partialTick);
 
         // Render panel background (frosted glass effect)
         renderPanel(graphics);
@@ -360,8 +431,8 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Filter for PNG files
         List<Path> pngFiles = files.stream()
-            .filter(path -> path.toString().toLowerCase().endsWith(".png"))
-            .toList();
+                .filter(path -> path.toString().toLowerCase().endsWith(".png"))
+                .toList();
 
         if (pngFiles.isEmpty()) {
             QuickSkin.LOGGER.warn("No PNG files in drop");
@@ -400,8 +471,8 @@ public class PlayerSkinMenuScreen extends Screen {
 
             // Update player preview with selected skin
             playerPreviewPanel.updateSkin(
-                metadata,
-                LocalAssetManager.getInstance().getTextureLocation(metadata.hash(), TextureQuality.FULL)
+                    metadata,
+                    LocalAssetManager.getInstance().getTextureLocation(metadata.hash(), TextureQuality.FULL)
             );
         }
     }
