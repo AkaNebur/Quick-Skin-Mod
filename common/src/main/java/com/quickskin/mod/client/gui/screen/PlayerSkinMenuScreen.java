@@ -1,25 +1,22 @@
 package com.quickskin.mod.client.gui.screen;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.gui.panel.ActionButtonsPanel;
+import com.quickskin.mod.client.gui.panel.LinkButtonsPanel;
+import com.quickskin.mod.client.gui.panel.PlayerPreviewPanel;
+import com.quickskin.mod.client.gui.panel.SkinListPanel;
 import com.quickskin.mod.client.gui.util.FileDialogHelper;
 import com.quickskin.mod.client.gui.util.GuiScaleManager;
 import com.quickskin.mod.client.gui.util.SkinImporter;
-import com.quickskin.mod.client.gui.widget.LinkButton;
-import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.gui.widget.SkinEntry;
-import com.quickskin.mod.client.gui.widget.SkinListWidget;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,29 +33,11 @@ public class PlayerSkinMenuScreen extends Screen {
     @Nullable
     private final Screen parent;
 
-    // Player preview widget
-    @Nullable
-    private PlayerWidget playerWidget;
-
-    // Skin list widget
-    @Nullable
-    private SkinListWidget skinListWidget;
-
-    // Model type buttons
-    private Button autoModelButton;
-    private Button slimModelButton;
-    private Button classicModelButton;
-    private String currentModelType = "classic";
-
-    // Rotate button
-    private Button rotateButton;
-
-    // Action buttons
-    private Button importButton;
-    private Button hdSkinWebsiteButton;
-    private Button skinWebsiteButton;
-    private Button capeButton;
-    private Button doneButton;
+    // Panels
+    private SkinListPanel skinListPanel;
+    private PlayerPreviewPanel playerPreviewPanel;
+    private ActionButtonsPanel actionButtonsPanel;
+    private LinkButtonsPanel linkButtonsPanel;
 
     // Panel dimensions
     private int panelX;
@@ -74,17 +53,6 @@ public class PlayerSkinMenuScreen extends Screen {
     private static final int MIN_PANEL_WIDTH = 340;
     private static final int MAX_PANEL_WIDTH = 600;
     private static final int MIN_PANEL_HEIGHT = 280;
-
-    // Icon textures
-    private static final ResourceLocation DISCORD_ICON = new ResourceLocation("quickskin", "textures/gui/discord_icon.png");
-    private static final ResourceLocation CURSEFORGE_ICON = new ResourceLocation("quickskin", "textures/gui/curseforge_icon.png");
-    private static final ResourceLocation MODRINTH_ICON = new ResourceLocation("quickskin", "textures/gui/modrinth_icon.png");
-    private static final ResourceLocation SETTINGS_ICON = new ResourceLocation("quickskin", "textures/gui/settings_icon.png");
-
-    // URLs
-    private static final String DISCORD_URL = "https://discord.gg/yGxdvA7qej";
-    private static final String CURSEFORGE_URL = "https://www.curseforge.com/minecraft/mc-mods/quick-skin";
-    private static final String MODRINTH_URL = "https://modrinth.com/mod/quick-skin";
 
     public PlayerSkinMenuScreen(@Nullable Screen parent) {
         super(Component.literal("QuickSkin"));
@@ -109,12 +77,12 @@ public class PlayerSkinMenuScreen extends Screen {
         // Calculate panel dimensions based on screen size
         calculatePanelDimensions();
 
-        // Use consistent sizing values like the original mod
+        // Use consistent sizing values
         int scaledPadding = 6;
         int scaledSpacing = 4;
         int scaledComponentHeight = 20;
 
-        // Calculate left panel width (60% of total for balanced layout)
+        // Calculate panel areas
         int leftPanelWidth = (int) (panelWidth * 0.6f);
         int rightPanelWidth = (int) (panelWidth * 0.35f);
 
@@ -126,192 +94,98 @@ public class PlayerSkinMenuScreen extends Screen {
         int bottomSectionHeight = (scaledComponentHeight * 3) + (scaledSpacing * 2) + scaledPadding;
         int listHeight = panelHeight - topSectionHeight - bottomSectionHeight;
 
-        // Create skin list on the left side
-        skinListWidget = new SkinListWidget(
-            this,
-            this.minecraft,
+        // Create Skin List Panel (left side)
+        skinListPanel = new SkinListPanel(
+            componentX,
+            yPos,
             leftPanelWidth,
             listHeight,
-            yPos,
-            40 // Entry height - matches original
+            this.minecraft,
+            this::onSkinSelected
         );
-        skinListWidget.setLeftPos(componentX);
-        skinListWidget.setRenderBackground(false);
-        skinListWidget.setRenderTopAndBottom(false);
-        this.addRenderableWidget(skinListWidget);
+        skinListPanel.init(this);
 
-        // Load skins from LocalAssetManager
-        loadSkins();
-
-        // Create player widget in right section
-        int playerWidgetX = panelX + panelWidth - rightPanelWidth - scaledPadding;
-        int playerWidgetY = yPos;
-        int availableHeightForWidget = panelHeight - topSectionHeight - bottomSectionHeight;
-        int widgetSize = Math.min(144, Math.min(availableHeightForWidget, rightPanelWidth));
-
-        playerWidget = new PlayerWidget(
-            playerWidgetX + 20,
-            playerWidgetY,
-            widgetSize,
-            widgetSize,
-            null, // Will use default Steve skin
-            null, // No cape initially
-            "classic" // Default model type
-        );
-        this.addRenderableWidget(playerWidget);
-
-        // --- Bottom Buttons (anchored to bottom of panel, matching original layout) ---
-        int bottomY = panelY + panelHeight - scaledPadding;
+        // Calculate bottom section dimensions first (needed for player preview panel)
         int fullWidthX = panelX + scaledPadding;
         int fullComponentWidth = panelWidth - (scaledPadding * 2);
-
-        // Row 1 (Bottom-most): Done Button (full width)
-        bottomY -= scaledComponentHeight;
-        doneButton = Button.builder(Component.literal("Done"), button -> onClose())
-                .bounds(fullWidthX, bottomY, fullComponentWidth, scaledComponentHeight)
-                .build();
-        this.addRenderableWidget(doneButton);
-
-        // Row 2: Import, HD Skin, Skin, Cape Buttons (4 equal width buttons)
-        bottomY -= (scaledComponentHeight + scaledSpacing);
         int fourButtonWidth = (fullComponentWidth - (scaledSpacing * 3)) / 4;
 
-        importButton = Button.builder(Component.literal("Import Skin"), button -> {
-            openImportDialog();
-        }).bounds(fullWidthX, bottomY, fourButtonWidth, scaledComponentHeight).build();
-        this.addRenderableWidget(importButton);
+        // Calculate where action buttons will be
+        int actionButtonsBottomY = panelY + panelHeight - scaledPadding;
+        int actionPanelHeight = (scaledComponentHeight * 2) + scaledSpacing;
 
-        hdSkinWebsiteButton = Button.builder(Component.literal("HD Skin Website"), button -> {
-            // TODO: Open HD skin website
-            if (this.minecraft != null) {
-                this.minecraft.options.chatLinksPrompt().set(false);
-            }
-        }).bounds(fullWidthX + fourButtonWidth + scaledSpacing, bottomY, fourButtonWidth, scaledComponentHeight).build();
-        this.addRenderableWidget(hdSkinWebsiteButton);
-
-        skinWebsiteButton = Button.builder(Component.literal("Skin Website"), button -> {
-            // TODO: Open skin website
-            if (this.minecraft != null) {
-                this.minecraft.options.chatLinksPrompt().set(false);
-            }
-        }).bounds(fullWidthX + (fourButtonWidth + scaledSpacing) * 2, bottomY, fourButtonWidth, scaledComponentHeight).build();
-        this.addRenderableWidget(skinWebsiteButton);
-
-        capeButton = Button.builder(Component.literal("Cape"), button -> {
-            // TODO: Open cape selection screen
-        }).bounds(fullWidthX + (fourButtonWidth + scaledSpacing) * 3, bottomY, fourButtonWidth, scaledComponentHeight).build();
-        this.addRenderableWidget(capeButton);
-
-        // Row 3: Model buttons (Auto, Wide/Classic, Slim) positioned in the rightmost fourth
-        bottomY -= (scaledComponentHeight + scaledSpacing);
+        // Model buttons row (Row 3: above Import/HD/Skin/Cape buttons)
+        int modelButtonsY = actionButtonsBottomY - actionPanelHeight - scaledComponentHeight - scaledSpacing;
         int modelButtonsX = fullWidthX + (fourButtonWidth + scaledSpacing) * 3;
         int modelButtonsTotalWidth = fourButtonWidth;
 
-        // Auto button is smaller (square button for the emoji), Classic/Slim share the rest equally
-        int autoButtonWidth = scaledComponentHeight; // Square button
-        int remainingWidth = modelButtonsTotalWidth - autoButtonWidth - scaledSpacing;
-        int normalModelButtonWidth = (remainingWidth - scaledSpacing) / 2;
+        // Create Player Preview Panel (right side)
+        int playerWidgetX = panelX + panelWidth - rightPanelWidth - scaledPadding;
+        int playerWidgetY = yPos;
+        int availableHeightForWidget = panelHeight - topSectionHeight - bottomSectionHeight;
 
-        autoModelButton = Button.builder(Component.literal("✨"), button -> {
-            setModelType("auto");
-        }).bounds(modelButtonsX, bottomY, autoButtonWidth, scaledComponentHeight).build();
-        this.addRenderableWidget(autoModelButton);
-
-        classicModelButton = Button.builder(Component.literal("Wide"), button -> {
-            setModelType("classic");
-        }).bounds(modelButtonsX + autoButtonWidth + scaledSpacing, bottomY, normalModelButtonWidth, scaledComponentHeight).build();
-        this.addRenderableWidget(classicModelButton);
-
-        slimModelButton = Button.builder(Component.literal("Slim"), button -> {
-            setModelType("slim");
-        }).bounds(modelButtonsX + autoButtonWidth + scaledSpacing + normalModelButtonWidth + scaledSpacing, bottomY, normalModelButtonWidth, scaledComponentHeight).build();
-        this.addRenderableWidget(slimModelButton);
-
-        // Set button references for player widget positioning
-        if (playerWidget != null) {
-            playerWidget.setModelButtons(autoModelButton, classicModelButton, slimModelButton);
-        }
-
-        // Update button states to lock the currently selected model button
-        updateModelButtonStates();
-
-        // --- Rotate Button ---
-        int rotateButtonSize = 20;
-        int rightPanelEdgeX = panelX + panelWidth - scaledPadding;
-        int rotateButtonX = rightPanelEdgeX - rotateButtonSize;
-        int rotateButtonY = classicModelButton.getY() - rotateButtonSize - scaledSpacing;
-
-        rotateButton = this.addRenderableWidget(
-            new com.quickskin.mod.client.gui.widget.RotateButton(
-                rotateButtonX,
-                rotateButtonY,
-                rotateButtonSize,
-                b -> {
-                    if (playerWidget != null) {
-                        playerWidget.toggleRotation();
-                    }
-                }
-            )
+        playerPreviewPanel = new PlayerPreviewPanel(
+            playerWidgetX,
+            playerWidgetY,
+            rightPanelWidth,
+            availableHeightForWidget
         );
-        rotateButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal("Rotate Preview")));
+        playerPreviewPanel.initPlayerWidget(this);
 
-        // --- Top-Right Link Buttons (Modrinth, CurseForge, Discord, Settings) ---
-        int buttonSize = scaledComponentHeight;
+        // Create model buttons positioned above the cape button
+        playerPreviewPanel.initModelButtons(
+            this,
+            modelButtonsX,
+            modelButtonsY,
+            modelButtonsTotalWidth,
+            scaledComponentHeight,
+            scaledSpacing
+        );
+
+        // Create Action Buttons Panel (bottom)
+        int bottomY = actionButtonsBottomY - (scaledComponentHeight * 2) - scaledSpacing;
+
+        ActionButtonsPanel.ActionCallbacks callbacks = new ActionButtonsPanel.ActionCallbacks(
+            this::openImportDialog,
+            () -> {
+                // HD Skin Website
+                if (this.minecraft != null) {
+                    this.minecraft.options.chatLinksPrompt().set(false);
+                }
+            },
+            () -> {
+                // Skin Website
+                if (this.minecraft != null) {
+                    this.minecraft.options.chatLinksPrompt().set(false);
+                }
+            },
+            () -> {
+                // TODO: Open cape selection screen
+            },
+            this::onClose
+        );
+
+        actionButtonsPanel = new ActionButtonsPanel(
+            fullWidthX,
+            bottomY,
+            fullComponentWidth,
+            actionPanelHeight,
+            callbacks
+        );
+        actionButtonsPanel.init(this, callbacks);
+
+        // Create Link Buttons Panel (top-right)
         int linkButtonY = panelY + scaledPadding;
+        int linkPanelWidth = (scaledComponentHeight + scaledSpacing) * 4;
+        int linkPanelX = panelX + panelWidth - linkPanelWidth - scaledPadding + scaledSpacing;
 
-        // Settings button (far right)
-        int settingsButtonX = panelX + panelWidth - buttonSize - scaledPadding;
-        this.addRenderableWidget(new LinkButton(
-                settingsButtonX,
-                linkButtonY,
-                buttonSize,
-                buttonSize,
-                SETTINGS_ICON,
-                null, // No URL, will be handled differently
-                Component.literal("Settings")
-        ) {
-            @Override
-            public void onPress() {
-                // TODO: Open settings screen
-                QuickSkin.LOGGER.info("Settings button pressed");
-            }
-        });
-
-        // Discord button (left of settings)
-        int discordButtonX = settingsButtonX - buttonSize - scaledSpacing;
-        this.addRenderableWidget(new LinkButton(
-                discordButtonX,
-                linkButtonY,
-                buttonSize,
-                buttonSize,
-                DISCORD_ICON,
-                DISCORD_URL,
-                Component.literal("Join our Discord!")
-        ));
-
-        // CurseForge button (left of Discord)
-        int curseforgeButtonX = discordButtonX - buttonSize - scaledSpacing;
-        this.addRenderableWidget(new LinkButton(
-                curseforgeButtonX,
-                linkButtonY,
-                buttonSize,
-                buttonSize,
-                CURSEFORGE_ICON,
-                CURSEFORGE_URL,
-                Component.literal("Visit our CurseForge page")
-        ));
-
-        // Modrinth button (left of CurseForge)
-        int modrinthButtonX = curseforgeButtonX - buttonSize - scaledSpacing;
-        this.addRenderableWidget(new LinkButton(
-                modrinthButtonX,
-                linkButtonY,
-                buttonSize,
-                buttonSize,
-                MODRINTH_ICON,
-                MODRINTH_URL,
-                Component.literal("Visit our Modrinth page")
-        ));
+        linkButtonsPanel = new LinkButtonsPanel(
+            linkPanelX,
+            linkButtonY,
+            linkPanelWidth,
+            scaledComponentHeight
+        );
+        linkButtonsPanel.init(this);
     }
 
     /**
@@ -374,8 +248,8 @@ public class PlayerSkinMenuScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Render background (darken screen)
-        renderBackground(graphics);
+        // Render black background
+        graphics.fill(0, 0, this.width, this.height, 0xFF000000);
 
         // Render panel background (frosted glass effect)
         renderPanel(graphics);
@@ -508,17 +382,9 @@ public class PlayerSkinMenuScreen extends Screen {
                     refreshSkinList();
 
                     // Auto-select the first imported skin
-                    if (skinListWidget != null && !imported.isEmpty()) {
+                    if (skinListPanel != null && !imported.isEmpty()) {
                         AssetMetadata firstImported = imported.get(0);
-                        for (int i = 0; i < skinListWidget.children().size(); i++) {
-                            SkinEntry entry = (SkinEntry) skinListWidget.children().get(i);
-                            if (entry.getMetadata().hash().equals(firstImported.hash())) {
-                                skinListWidget.setSelected(entry);
-                                onSkinSelected(entry);
-                                skinListWidget.makeVisible(entry);
-                                break;
-                            }
-                        }
+                        skinListPanel.setSelected(firstImported);
                     }
                 }
             });
@@ -526,73 +392,18 @@ public class PlayerSkinMenuScreen extends Screen {
     }
 
     /**
-     * Set the model type for the player preview
-     */
-    private void setModelType(String modelType) {
-        this.currentModelType = modelType;
-        if (playerWidget != null) {
-            playerWidget.setModelType(modelType);
-        }
-        updateModelButtonStates();
-    }
-
-    /**
-     * Update the active state of model buttons based on current selection
-     * Buttons are locked (inactive) when they are the currently selected model
-     */
-    private void updateModelButtonStates() {
-        if (autoModelButton != null && classicModelButton != null && slimModelButton != null) {
-            boolean isAuto = "auto".equalsIgnoreCase(currentModelType);
-            boolean isSlim = "slim".equalsIgnoreCase(currentModelType);
-            boolean isClassic = "classic".equalsIgnoreCase(currentModelType);
-
-            // Button is active (clickable) when it's NOT the current model
-            // Button is inactive (locked/grayed out) when it IS the current model
-            autoModelButton.active = !isAuto;
-            classicModelButton.active = !isClassic;
-            slimModelButton.active = !isSlim;
-        }
-    }
-
-    /**
-     * Load skins from LocalAssetManager
-     */
-    private void loadSkins() {
-        if (skinListWidget == null) {
-            return;
-        }
-
-        LocalAssetManager assetManager = LocalAssetManager.getInstance();
-        List<AssetMetadata> skins = assetManager.getAllSkins();
-
-        for (AssetMetadata metadata : skins) {
-            skinListWidget.addSkinEntry(metadata);
-        }
-    }
-
-    /**
      * Called when a skin is selected from the list
      */
     public void onSkinSelected(SkinEntry entry) {
-        if (playerWidget != null && entry != null) {
+        if (playerPreviewPanel != null && entry != null) {
             AssetMetadata metadata = entry.getMetadata();
 
             // Update player preview with selected skin
-            playerWidget.setSkin(LocalAssetManager.getInstance()
-                .getTextureLocation(metadata.hash(), TextureQuality.FULL));
-
-            // Update model type if auto-detect
-            if ("auto".equals(currentModelType)) {
-                playerWidget.setModelType(metadata.skinModel());
-            }
+            playerPreviewPanel.updateSkin(
+                metadata,
+                LocalAssetManager.getInstance().getTextureLocation(metadata.hash(), TextureQuality.FULL)
+            );
         }
-    }
-
-    /**
-     * Get the skin list widget
-     */
-    public SkinListWidget getSkinList() {
-        return skinListWidget;
     }
 
     /**
@@ -600,6 +411,13 @@ public class PlayerSkinMenuScreen extends Screen {
      */
     public net.minecraft.client.gui.Font getFont() {
         return this.font;
+    }
+
+    /**
+     * Public wrapper for addRenderableWidget to allow panels to add widgets
+     */
+    public <T extends net.minecraft.client.gui.components.events.GuiEventListener & net.minecraft.client.gui.components.Renderable & net.minecraft.client.gui.narration.NarratableEntry> T registerWidget(T widget) {
+        return this.addRenderableWidget(widget);
     }
 
     /**
@@ -630,17 +448,8 @@ public class PlayerSkinMenuScreen extends Screen {
                     refreshSkinList();
 
                     // Auto-select the imported skin
-                    if (skinListWidget != null) {
-                        // Find and select the imported entry
-                        for (int i = 0; i < skinListWidget.children().size(); i++) {
-                            SkinEntry entry = (SkinEntry) skinListWidget.children().get(i);
-                            if (entry.getMetadata().hash().equals(metadata.hash())) {
-                                skinListWidget.setSelected(entry);
-                                onSkinSelected(entry);
-                                skinListWidget.makeVisible(entry);
-                                break;
-                            }
-                        }
+                    if (skinListPanel != null) {
+                        skinListPanel.setSelected(metadata);
                     }
                 } else {
                     QuickSkin.LOGGER.error("Failed to import skin: {}", filePath);
@@ -654,12 +463,8 @@ public class PlayerSkinMenuScreen extends Screen {
      * Refresh the skin list after importing
      */
     private void refreshSkinList() {
-        if (skinListWidget == null) {
-            return;
+        if (skinListPanel != null) {
+            skinListPanel.refresh();
         }
-
-        // Clear and reload
-        skinListWidget.removeAllEntries();
-        loadSkins();
     }
 }

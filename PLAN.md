@@ -1,169 +1,180 @@
-Of course. This is an excellent exercise in software architecture and modernization. Here is a detailed, high-level plan to rewrite the QuickSkin mod for better scalability, maintainability, and performance, while removing the GeckoLib dependency.
+Of course! Refactoring a large UI screen class is an excellent way to improve maintainability and readability. Here is a very detailed plan to break down the `PlayerSkinMenuScreen` into smaller, more manageable components.
 
-### **Preamble: Core Philosophy and High-Level Goals**
+### Overall Goal
 
-The current mod is feature-rich but heavily centralized in a few "god classes" like `ClientSkinManager`. The primary goal of this rewrite is to deconstruct this monolithic structure into a modular, service-oriented architecture. This will make the code easier to test, maintain, and extend.
+The primary goal is to apply the **Single Responsibility Principle** to the `PlayerSkinMenuScreen`. Currently, it acts as a "god object" responsible for:
+1.  Overall screen state management (GUI scale, closing state).
+2.  Calculating the layout and dimensions for all UI elements.
+3.  Creating and managing every individual widget (buttons, lists, player preview).
+4.  Handling business logic for events like skin selection, file import, and model type changes.
 
-**Key Objectives:**
-
-1.  **Decoupling:** Break down large classes into smaller, single-responsibility services (e.g., a service for skins, a service for capes, a service for animations).
-2.  **Removing GeckoLib:** Replace the 3D player preview with a vanilla-based entity rendering system, which is more lightweight and avoids a large dependency.
-3.  **Performance & Scalability:** Optimize the animation system to use texture atlases and UV manipulation instead of registering hundreds of individual textures, reducing memory usage and GPU overhead.
-4.  **State Management:** Introduce a clear, centralized repository for managing player appearance data, acting as a single source of truth.
-5.  **Maintainability:** Adopt modern design patterns (like Dependency Injection and an internal Event Bus) and create a more logical package structure.
+We will refactor this into a "container" or "orchestrator" pattern. The `PlayerSkinMenuScreen` will become a simple container that holds and positions larger, self-contained panels. Each panel will be responsible for its own internal layout, state, and widgets.
 
 ---
 
-### **Phase 1: Core Architecture Redesign**
+### Proposed New File Structure
 
-This is the foundation of the rewrite. We will dismantle `ClientSkinManager` and establish a new service-based architecture.
-
-**1.1. New Package Structure:**
-
-Restructure the packages to reflect architecture layers, not just features.
+We will introduce a new package `panel` inside `gui` to hold these new composite widgets.
 
 ```
-com.quickskin.mod
-├── api             // (Optional) Interfaces for other mods to interact with.
-├── client
-│   ├── event       // Client-side Forge/FML event listeners.
-│   ├── input       // Keybind handlers.
-│   ├── rendering   // Custom renderers, layers, and the new preview system.
-│   └── ui          // All GUI screens, widgets, and logic (presenters/viewmodels).
-├── common
-│   ├── data        // Core data objects (SkinData, PlayerAppearance, etc.).
-│   ├── event       // Common Forge/FML event listeners.
-│   └── services    // Core logic interfaces (ISkinService, ICapeService).
-├── core
-│   ├── animation   // The new, optimized animation engine.
-│   ├── assets      // Local asset management (formerly localstorage).
-│   └── compat      // Compatibility modules.
-├── networking
-│   ├── client      // Client-side packet handlers.
-│   ├── packet      // Packet definitions.
-│   └── server      // Server-side packet handlers.
-└── server
-    ├── data        // Server-side data caches (textures, metadata).
-    └── event       // Server-side Forge/FML event listeners.
+.../gui/
+  ├── screen/
+  │   └── PlayerSkinMenuScreen.java  (Will be refactored)
+  ├── panel/
+  │   ├── ActionButtonsPanel.java    (New)
+  │   ├── LinkButtonsPanel.java      (New)
+  │   ├── PlayerPreviewPanel.java    (New)
+  │   └── SkinListPanel.java         (New)
+  ├── util/
+  │   └── ...
+  └── widget/
+      └── ...
 ```
 
-**1.2. Service-Oriented Refactor (Decomposition of `ClientSkinManager`):**
+---
 
-Instead of a single static manager, we'll use distinct services. These services will be instantiated once and passed where needed (manual dependency injection) rather than being accessed via `getInstance()`.
+### Refactoring Plan Details
 
-*   **`PlayerAppearanceService` (Client):** The new central point of contact. It coordinates other services. Its main job is to take a request (e.g., `applyLook(UUID, SkinData)`) and delegate the work to the appropriate services.
-*   **`SkinService` (Client):** Manages only player skins. Handles fetching from Mojang API, loading from local assets, and providing the correct `ResourceLocation`.
-*   **`CapeService` (Client):** Manages only capes. Handles all cape types (local, known, Mojang) and provides the correct `ResourceLocation`. It will work closely with the `AnimationService`.
-*   **`AnimationService` (Client):** The new animation engine. It manages animation timing and provides the current texture atlas and UV coordinates for animated capes. It does *not* manage texture registration.
-*   **`ModelService` (Client):** Manages player model types (`classic`/`slim`). Responsible for auto-detection and storing overrides.
-*   **`AssetService` (Client):** A rename and refinement of `LocalAssetManager`. Responsible for all file I/O, hashing, caching, and processing of local skins and capes.
+#### 1. `PlayerSkinMenuScreen.java` (The Refactored "Orchestrator")
 
-**1.3. Internal Event Bus:**
+The main screen will be heavily simplified. Its new responsibilities will be:
 
-We'll use a simple, custom event bus (or a lightweight library) to allow services to communicate without being directly coupled.
+*   **Be the Main Container:** It will hold the root panel and manage the overall screen lifecycle (`init`, `render`, `onClose`).
+*   **GUI Scale Management:** It will continue to manage forcing and restoring the GUI scale, as this is a screen-level concern.
+*   **Orchestrate Communication:** It will act as a mediator between the panels. For example, when a skin is selected in the `SkinListPanel`, the screen will receive this event and tell the `PlayerPreviewPanel` to update its display.
+*   **Handle Global Events:** It will still handle file drops (`onFilesDrop`) and top-level key presses (`keyPressed`).
 
-*   **`PlayerAppearanceUpdateEvent`:** Fired when a player's look is changed. The renderer and UI can listen for this to refresh.
-*   **`LocalAssetReloadEvent`:** Fired by the `AssetService` when new files are imported or deleted. The UI can listen to refresh its lists.
-*   **`ServerConfigSyncEvent`:** Fired when the client receives new config from the server.
+**Structural Changes:**
+
+*   **Fields:** Remove all individual `Button` and `Widget` fields (`autoModelButton`, `importButton`, `playerWidget`, etc.). Replace them with fields for the new panels:
+    ```java
+    private SkinListPanel skinListPanel;
+    private PlayerPreviewPanel playerPreviewPanel;
+    private ActionButtonsPanel actionButtonsPanel;
+    private LinkButtonsPanel linkButtonsPanel;
+    ```
+*   **`init()` method:** This will be the most significant change. It will be reduced to:
+    1.  Performing GUI scale checks.
+    2.  Calculating the main panel's overall dimensions (`panelX`, `panelY`, `panelWidth`, `panelHeight`).
+    3.  Calculating the bounds for each of the major panels (e.g., left panel width, right panel width, bottom action bar height).
+    4.  Instantiating the new panel classes, passing them their bounds (`x`, `y`, `width`, `height`) and any necessary callbacks.
+    5.  Adding the panels to the screen's renderables (`addRenderableWidget`).
+*   **Logic Methods:**
+    *   `onSkinSelected(SkinEntry entry)`: Will now be a callback passed to the `SkinListPanel`. When triggered, it will call `playerPreviewPanel.updateSkin(entry.getMetadata())`.
+    *   `openImportDialog()`, `handleSkinImport()`: Logic will remain, but the `importButton` will trigger it via a callback passed to the `ActionButtonsPanel`.
+    *   `refreshSkinList()`: Will simply call `skinListPanel.refresh()`.
 
 ---
 
-### **Phase 2: GeckoLib Replacement (3D Preview)**
+#### 2. `SkinListPanel.java` (New Class)
 
-This is the most significant visual change. We'll replace the GeckoLib preview in `PlayerWidget` with a vanilla-style entity rendering system.
+This panel will manage the left side of the screen.
 
-**2.1. Create a `PreviewPlayerEntity`:**
-
-*   Create a new class `PreviewPlayerEntity` that extends a simple, non-AI entity like `ArmorStand` or a custom base class. It will *not* be a real `Player`.
-*   This entity will exist only on the client and will not be added to the world.
-*   It will hold its own appearance data: skin, cape, model type, and current animation state (e.g., idle, walking).
-
-**2.2. Implement a Custom Renderer:**
-
-*   Create `PreviewPlayerRenderer` that extends `PlayerRenderer`. This allows us to reuse all the vanilla player model rendering logic, including layers (like capes and armor).
-*   The renderer will fetch skin/cape/model information directly from the `PreviewPlayerEntity` instance it's rendering.
-
-**2.3. Rewrite `PlayerWidget`:**
-
-*   The `PlayerWidget` will no longer use GeckoLib renderers. Instead, it will contain an instance of `PreviewPlayerEntity`.
-*   In its `render()` method, it will use `EntityRenderDispatcher.render()` to draw the entity, similar to how the inventory screen renders the player.
-*   We'll use `renderEntityInInventoryFollowsMouse()` or a similar utility function to handle the rotation and lighting.
-*   Methods like `setAnimation()` will now just update a state field on the `PreviewPlayerEntity` instance. The entity's `tick()` method (which we will call manually each frame) will update its internal animation controllers.
-
-**2.4. Handling Animations for the Preview:**
-
-*   Since `PreviewPlayerEntity` isn't a real player, we need to manually update its animation state.
-*   We can create a simple `PreviewAnimationController` that manages limb swing, head rotation, etc., based on the selected animation (e.g., "walking," "idle").
-*   The `PlayerWidget` will call `previewPlayer.tick()` and `animationController.tick()` in its own render loop.
+*   **Responsibilities:**
+    *   Contain the `SkinListWidget`.
+    *   Potentially contain a future search bar or sorting buttons above the list.
+    *   Load the initial list of skins from `LocalAssetManager`.
+    *   Handle the selection logic and expose an event/callback for when a skin is selected.
+*   **Structure:**
+    *   It will extend `AbstractWidget` or a similar base class to act as a container.
+    *   **Fields:**
+        ```java
+        private SkinListWidget skinListWidget;
+        // private Consumer<SkinEntry> onSkinSelectedCallback;
+        ```
+    *   **Constructor:** Will take its position/dimensions and the `onSkinSelected` callback.
+    *   **`init()` or Constructor Logic:** Will create the `SkinListWidget`, position it within the panel's bounds, and load the skins.
+    *   **Public Methods:**
+        *   `refresh()`: To clear and reload the skin list.
+        *   `setSelected(AssetMetadata metadata)`: To programmatically select a skin (useful after an import).
 
 ---
 
-### **Phase 3: Animation System Rework**
+#### 3. `PlayerPreviewPanel.java` (New Class)
 
-The current system of creating a `DynamicTexture` for every single frame is inefficient.
+This panel will manage the right side of the screen, focusing on the 3D player model.
 
-**3.1. Atlas-Based Animation:**
-
-*   **Processing:** When an animated cape (GIF or PNG strip) is imported, the `AssetService` will process it into a single vertical texture atlas (if it isn't already). The timing data is stored in a corresponding `.json` metadata file, just like it is now. This part of the logic is good and will be preserved.
-*   **Management:** The `AnimationService` will be responsible for managing the state of all active animations (e.g., `cape_<hash>`). For each animation, it will track the current frame index and the time until the next frame, based on the metadata.
-
-**3.2. Rendering via Custom `CapeLayer`:**
-
-*   We will use a Mixin for `CapeLayer` to intercept cape rendering.
-*   Inside the mixin, we'll check with the `CapeService` if a player has a custom cape.
-*   If the cape is animated, we'll ask the `AnimationService` for the current frame's UV coordinates for that cape's texture atlas.
-*   We will then create a custom `RenderType` or directly use a `VertexConsumer` to render just the cape model part, but with the modified UVs that point to the correct frame within the atlas.
-*   **Result:** Only one texture (the atlas) is ever bound for an animated cape, drastically reducing GPU and memory overhead. The CPU cost is minimal—just tracking frame times and calculating UVs.
-
----
-
-### **Phase 4: GUI System and Logic Overhaul**
-
-Decouple UI from business logic using a Model-View-Presenter (MVP) pattern.
-
-**4.1. MVP Implementation:**
-
-*   **Model:** The `PlayerAppearanceRepository` and `Config` files act as the model. They hold the data.
-*   **View:** The `PlayerSkinMenuScreen`, `CapeSelectionScreen`, etc. They are responsible *only* for rendering widgets and forwarding user input (button clicks, text entry) to the presenter. They should be as "dumb" as possible.
-*   **Presenter:** The `SkinMenuLogicHandler` will be promoted to a full Presenter. It receives input from the View, interacts with the new services (`PlayerAppearanceService`, `AssetService`), and tells the View how to update (e.g., "update the button states," "refresh the skin list," "select this entry").
-
-**4.2. Robust Widget Injection:**
-
-*   Instead of the fragile logic in `ClientEvents` that finds other buttons to position the "Change Skin" widget, we will use a Mixin into `TitleScreen` and `PauseScreen`.
-*   The mixin will inject our `PlayerWidget` and buttons at the end of the `init()` method, using robust relative positioning (`this.width`, `this.height`) to ensure it doesn't conflict with other mods.
+*   **Responsibilities:**
+    *   Contain and manage the `PlayerWidget`.
+    *   Contain and manage the model type buttons (`auto`, `classic`, `slim`) and the `RotateButton`.
+    *   Handle the layout of the player preview and its associated buttons. The logic to position the `PlayerWidget` relative to the model buttons will move here.
+    *   Manage the `currentModelType` state internally.
+    *   Update the `PlayerWidget`'s model and skin when instructed by the main screen.
+*   **Structure:**
+    *   Extend `AbstractWidget`.
+    *   **Fields:**
+        ```java
+        private PlayerWidget playerWidget;
+        private Button autoModelButton, classicModelButton, slimModelButton;
+        private RotateButton rotateButton;
+        private String currentModelType;
+        ```
+    *   **Constructor:** Will take its position/dimensions.
+    *   **`init()` or Constructor Logic:** Will create all its child widgets and lay them out within its bounds. The complex positioning logic from the original `init` method moves here.
+    *   **Public Methods:**
+        *   `updateSkin(AssetMetadata metadata)`: Sets the skin on the `PlayerWidget` and updates the model type if set to "auto".
+        *   `updateCape(AssetMetadata metadata)`: For when cape selection is added.
+    *   **Private Methods:**
+        *   `setModelType(String modelType)`: The internal logic for handling model button clicks.
+        *   `updateModelButtonStates()`: The logic to enable/disable the model buttons based on selection.
 
 ---
 
-### **Phase 5: Data and State Management**
+#### 4. `ActionButtonsPanel.java` (New Class)
 
-Centralize all state into a single, predictable location.
+This panel will manage the rows of buttons at the bottom of the screen.
 
-**5.1. `PlayerAppearanceRepository`:**
+*   **Responsibilities:**
+    *   Contain `importButton`, `hdSkinWebsiteButton`, `skinWebsiteButton`, `capeButton`, and `doneButton`.
+    *   Handle the complex layout of these buttons (the 4-button row and the full-width done button).
+    *   It will not contain any business logic. The actions for each button will be provided via callbacks (`Runnable` or `Consumer`) in its constructor.
+*   **Structure:**
+    *   Extend `AbstractWidget`.
+    *   **Fields:** References to the buttons it contains.
+    *   **Constructor:** Will take its position/dimensions and a record/class containing all the necessary callbacks.
+        ```java
+        // Example callbacks structure
+        public record ActionCallbacks(Runnable onImport, Runnable onCape, Runnable onDone, ...)
+        
+        public ActionButtonsPanel(..., ActionCallbacks callbacks) { ... }
+        ```
+    *   **`init()` or Constructor Logic:** Will create the buttons, assign the callbacks to their `onPress` actions, and perform all the layout math.
 
-*   A new client-side class that holds a `Map<UUID, PlayerAppearance>`.
-*   `PlayerAppearance` will be a simple record/class holding `skinId`, `capeId`, `model`, and references to the resolved `ResourceLocation`s.
-*   All mixins (`PlayerInfoMixin`, `CapeLayerMixin`) and services will query this repository to get a player's appearance. It's the single source of truth.
-*   The `PlayerAppearanceService` is the only class allowed to *modify* this repository.
+---
 
-### **Phase 6: Networking and Compatibility**
+#### 5. `LinkButtonsPanel.java` (New Class)
 
-*   **Networking:** The packet system is already reasonably modern. We will review and ensure all packets are still necessary. We might consolidate some, for example, by having a single `C2S_UpdateAppearancePacket(PlayerAppearance)` instead of separate ones.
-*   **Compatibility:** The reflection-based approach in `SkinLayers3DCompatibility` is excellent and should be preserved. It avoids hard dependencies.
+A simple panel for the social/link buttons in the top-right.
 
-### **Summary of Changes and Plan of Action**
+*   **Responsibilities:**
+    *   Contain the `LinkButton`s for Discord, CurseForge, Modrinth, and Settings.
+    *   Handle their horizontal layout.
+*   **Structure:**
+    *   Extend `AbstractWidget`.
+    *   **Constructor:** Will take its position/dimensions. It can create its children directly since their actions are self-contained (opening a URL) or simple (like the settings button).
 
-1.  **Foundation:** Create the new package structure. Define interfaces for all the new services (`IPlayerAppearanceService`, `ISkinService`, etc.).
-2.  **Service Implementation:** Move logic from `ClientSkinManager` into the new concrete service classes. Replace `getInstance()` calls with dependency passing.
-3.  **Repository:** Implement the `PlayerAppearanceRepository` and refactor all mixins to query it.
-4.  **GeckoLib Removal:**
-    *   Create `PreviewPlayerEntity` and its custom `PlayerRenderer`.
-    *   Rewrite `PlayerWidget` to use the new vanilla entity rendering.
-    *   Remove all `geo` packages and the GeckoLib dependency from the build script.
-5.  **Animation Rework:**
-    *   Implement the `AnimationService` to manage timing.
-    *   Create the `CapeLayer` mixin to render using UV manipulation from a texture atlas.
-    *   Deprecate `AnimatedTextureManager`.
-6.  **GUI Refactor:**
-    *   Solidify the `SkinMenuLogicHandler` as a Presenter, fully decoupling it from the `PlayerSkinMenuScreen` (the View).
-    *   Replace `ClientEvents` widget injection with cleaner mixins for `TitleScreen` and `PauseScreen`.
-7.  **Cleanup & Testing:** Review networking packets, update config options if necessary, and write unit tests for critical logic like `SkinModelDetector` and asset hashing.
+---
+
+### Refactoring Steps (High-Level)
+
+1.  **Create New Files:** Create the empty class files for `SkinListPanel`, `PlayerPreviewPanel`, `ActionButtonsPanel`, and `LinkButtonsPanel` in the new `panel` package. Make them extend a suitable widget container class.
+2.  **Migrate Player Preview:**
+    *   Copy the creation and layout logic for `playerWidget`, model buttons, and `rotateButton` from `PlayerSkinMenuScreen.init()` into `PlayerPreviewPanel`.
+    *   Move the `currentModelType` field and `setModelType`/`updateModelButtonStates` methods into `PlayerPreviewPanel`.
+3.  **Migrate Action Buttons:**
+    *   Copy the creation and layout logic for the bottom buttons (`import`, `cape`, `done`, etc.) into `ActionButtonsPanel`.
+    *   Modify the button creation to use callbacks passed into the panel's constructor.
+4.  **Migrate Other Panels:** Do the same for `LinkButtonsPanel` and `SkinListPanel`.
+5.  **Refactor `PlayerSkinMenuScreen`:**
+    *   Remove all the migrated code and fields.
+    *   In `init()`, add the new code to instantiate and position the four new panels.
+    *   Wire up the communication callbacks (e.g., `skinListPanel.setOnSkinSelected(...)`).
+6.  **Test and Cleanup:** Ensure all functionality remains the same. Remove any unused imports or private methods from the main screen class.
+
+### Benefits of this Refactor
+
+*   **Readability:** `PlayerSkinMenuScreen` will become very easy to understand, showing the high-level structure of the screen at a glance.
+*   **Maintainability:** If you need to change the layout of the bottom buttons, you only need to edit `ActionButtonsPanel.java`, without touching the other components.
+*   **Reusability:** The `PlayerPreviewPanel` could potentially be reused in other screens (like a future cape selection screen) with minimal changes.
+*   **Isolation:** Bugs in the layout of one panel are isolated to that panel's code, making debugging easier.
+*   **Clearer Responsibilities:** Each class will have a clear and distinct purpose, following best practices for software design.
