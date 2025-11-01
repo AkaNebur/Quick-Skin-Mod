@@ -28,7 +28,7 @@ public class PlayerWidget extends AbstractWidget {
 
     // Rotation state
     private float bodyYaw = 20.0f; // 20 degrees for sideways pose (matching original)
-    private float headYaw = 0.0f;
+    private float headYaw = 0.0f; // Head rotation relative to body (0 = looking same direction as body)
     private float headPitch = 0.0f;
     private float targetYRotation = 20.0f; // Target rotation for smooth animation
 

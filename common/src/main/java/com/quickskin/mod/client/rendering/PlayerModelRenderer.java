@@ -203,6 +203,9 @@ public class PlayerModelRenderer {
         poseStack.mulPose(Axis.XP.rotationDegrees(180.0f));
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0f));
 
+        // Apply body rotation (yRotation parameter from PlayerWidget)
+        poseStack.mulPose(Axis.YP.rotationDegrees(yRotation));
+
         // Lighting.setupForEntityInInventory();
         Lighting.setupForEntityInInventory();
 
