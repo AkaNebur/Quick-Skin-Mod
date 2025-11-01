@@ -284,7 +284,7 @@ public class PlayerSkinMenuScreen extends Screen {
         // Actual texture size
         int textureSize = 1024;
         // The size to render each tile (smaller = more stars visible).
-        int tileSize = 128;
+        int tileSize = 55;
         // Animation speed: pixels per second
         double pixelsPerSecond = 8.0;
 
@@ -295,7 +295,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 0.25F);
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 0.15F);
 
         // Calculate how many tiles are needed to cover the screen
         int xTiles = Mth.ceil((float) this.width / tileSize) + 2;
