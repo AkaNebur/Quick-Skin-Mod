@@ -263,51 +263,11 @@ public class PlayerSkinMenuScreen extends Screen {
         graphics.fill(0, 0, this.width, this.height, 0xFF000000);
 
         // 2. Render the moving star pattern.
-        // The size to render each tile (smaller = more stars visible).
-        int tileSize = 64;
-        // Animation speed: pixels per second
-        double pixelsPerSecond = 8.0;
-
-        // Use Minecraft's smooth game time (ticks + partial tick) for perfectly smooth animation
-        // This avoids stuttering from discrete millisecond updates
-        int tickCount = this.minecraft != null ? this.minecraft.gui.getGuiTicks() : 0;
-        // Combine with partialTick for smooth interpolation between frames
-        double smoothTime = (tickCount + partialTick) / 20.0; // Convert to seconds
-        double offset = (smoothTime * pixelsPerSecond) % tileSize;
-
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        // Set color tint and opacity for the stars (white with 50% opacity for visibility).
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 0.5F);
-
-        // Calculate how many tiles are needed to cover the screen, plus extra for smooth scrolling.
-        int xTiles = Mth.ceil((float) this.width / tileSize) + 2;
-        int yTiles = Mth.ceil((float) this.height / tileSize) + 1;
-
-        // Use matrix stack to scale down the texture rendering
-        var pose = graphics.pose();
-        pose.pushPose();
-
-        for (int y = 0; y < yTiles; ++y) {
-            for (int x = 0; x < xTiles; ++x) {
-                // Draw each tile, applying the horizontal scroll offset.
-                // Keep as double for sub-pixel smoothness - this is key to eliminating stuttering!
-                double drawX = x * tileSize - offset;
-                double drawY = y * tileSize;
-
-                // Draw the full 256x256 texture scaled down to tileSize x tileSize
-                pose.pushPose();
-                pose.translate(drawX, drawY, 0);
-                pose.scale(tileSize / 256.0f, tileSize / 256.0f, 1.0f);
-                graphics.blit(STAR_PATTERN_TEXTURE, 0, 0, 0, 0.0f, 0.0f, 256, 256, 256, 256);
-                pose.popPose();
-            }
-        }
-
-        pose.popPose();
+        renderStarPattern(graphics, partialTick);
 
         // 3. Render a vignette overlay for a darker, focused feel around the edges.
-        // Use a semi-transparent black color for the vignette.
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(0.0F, 0.0F, 0.0F, 0.75F);
         // Stretch Minecraft's vignette texture to cover the entire screen.
         graphics.blit(VIGNETTE_LOCATION, 0, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
@@ -317,9 +277,57 @@ public class PlayerSkinMenuScreen extends Screen {
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
+    /**
+     * Renders the animated star pattern
+     */
+    private void renderStarPattern(GuiGraphics graphics, float partialTick) {
+        // Actual texture size
+        int textureSize = 1024;
+        // The size to render each tile (smaller = more stars visible).
+        int tileSize = 128;
+        // Animation speed: pixels per second
+        double pixelsPerSecond = 8.0;
+
+        // Use Minecraft's smooth game time (ticks + partial tick) for perfectly smooth animation
+        int tickCount = this.minecraft != null ? this.minecraft.gui.getGuiTicks() : 0;
+        double smoothTime = (tickCount + partialTick) / 20.0; // Convert to seconds
+        double offset = (smoothTime * pixelsPerSecond) % tileSize;
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 0.25F);
+
+        // Calculate how many tiles are needed to cover the screen
+        int xTiles = Mth.ceil((float) this.width / tileSize) + 2;
+        int yTiles = Mth.ceil((float) this.height / tileSize) + 1;
+
+        var pose = graphics.pose();
+        pose.pushPose();
+
+        for (int y = 0; y < yTiles; ++y) {
+            for (int x = 0; x < xTiles; ++x) {
+                // Draw each tile, applying the horizontal scroll offset.
+                double drawX = x * tileSize - offset;
+                double drawY = y * tileSize;
+
+                // Draw the full texture scaled down to tileSize x tileSize
+                pose.pushPose();
+                pose.translate(drawX, drawY, 0);
+                pose.scale(tileSize / (float)textureSize, tileSize / (float)textureSize, 1.0f);
+                graphics.blit(STAR_PATTERN_TEXTURE, 0, 0, 0, 0.0f, 0.0f, textureSize, textureSize, textureSize, textureSize);
+                pose.popPose();
+            }
+        }
+
+        pose.popPose();
+
+        RenderSystem.disableBlend();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // --- MODIFIED ---: Render the new animated background instead of a simple fill
+        // Render the animated background
         this.renderBackgroundEffects(graphics, partialTick);
 
         // Render panel background (frosted glass effect)
