@@ -77,6 +77,9 @@ public class ClientEvents {
             PlayerAppearanceRepository.getInstance().clear();
             ModelService.getInstance().clearAll();
 
+            // Clear cached player to reset rendering state (fixes invisible buttons)
+            com.quickskin.mod.client.rendering.PlayerModelRenderer.clearCachedPlayer();
+
             // TODO Phase 5: Save local preferences
             // if (player != null) LocalAppearanceStorage.savePlayerPreferences(player.getUUID());
         });

@@ -445,6 +445,15 @@ public class PlayerModelRenderer {
     }
 
     /**
+     * Clear the cached player entity
+     * Call this when leaving a world to reset the player rendering state
+     */
+    public static void clearCachedPlayer() {
+        cachedPlayer = null;
+        QuickSkin.LOGGER.info("[PlayerModelRenderer] Cached player cleared");
+    }
+
+    /**
      * Handle mouse press for debug positioning mode
      * Call this from your screen's mouseClicked method
      */
