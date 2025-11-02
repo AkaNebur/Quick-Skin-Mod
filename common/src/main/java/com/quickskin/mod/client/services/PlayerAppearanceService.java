@@ -68,9 +68,13 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             appearance.setSkinId(skinId);
 
             // Resolve model type
-            String resolvedModel = modelService.getModelType(playerId, skinId, model != null ? model : "auto");
+            String requestedModel = model != null ? model : "auto";
+            String resolvedModel = modelService.getModelType(playerId, skinId, requestedModel);
             appearance.setModel(resolvedModel);
-            modelService.setModelOverride(playerId, resolvedModel);
+
+            // Store the REQUESTED model (not resolved) as override
+            // This allows "auto" to re-detect each time instead of locking to the first detection
+            modelService.setModelOverride(playerId, requestedModel);
 
             // Load skin ResourceLocation
             ResourceLocation skinLocation = skinService.getSkinLocation(playerId, skinId);

@@ -37,44 +37,43 @@ public class ModelService implements IModelService {
 
     @Override
     public String getModelType(UUID playerId, String skinId, String requestedModel) {
+        QuickSkin.LOGGER.info("ModelService.getModelType called: playerId={}, skinId={}, requestedModel={}",
+                playerId, skinId, requestedModel);
+
         // If a specific model is explicitly requested (not "auto"), honor that request
         if (requestedModel != null && !"auto".equalsIgnoreCase(requestedModel)) {
+            QuickSkin.LOGGER.info("Using explicitly requested model: {}", requestedModel);
             return requestedModel;
         }
 
-        // If auto mode, check for manual override first
-        if (modelOverrides.containsKey(playerId)) {
-            String override = modelOverrides.get(playerId);
-            if (!"auto".equalsIgnoreCase(override)) {
-                return override;
-            }
-        }
-
-        // If auto or no override, detect from skin texture
+        // If auto mode, detect from skin texture (ignore overrides)
         if ("auto".equalsIgnoreCase(requestedModel)) {
             // Auto-detect from skin texture
             if (skinId != null && skinId.startsWith("local_skin:")) {
                 String hash = skinId.substring("local_skin:".length());
+                QuickSkin.LOGGER.info("Auto-detecting model type for skin hash: {}", hash);
 
-                // Get metadata first to check if we already have the model type
-                AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(hash);
-                if (metadata != null && metadata.skinModel() != null && !metadata.skinModel().isEmpty()) {
-                    QuickSkin.LOGGER.debug("Using cached model type from metadata: {}", metadata.skinModel());
-                    return metadata.skinModel();
-                }
-
-                // If no metadata or no model in metadata, detect from texture
+                // Detect from texture
                 byte[] skinData = LocalAssetManager.getInstance().loadTexture(hash, TextureQuality.PREVIEW);
                 if (skinData != null) {
                     String detected = detectModelType(skinData);
-                    QuickSkin.LOGGER.debug("Auto-detected model type for {}: {}", hash, detected);
+                    QuickSkin.LOGGER.info("Auto-detected model type: {}", detected);
                     return detected;
                 }
             }
 
             // Default to classic if detection fails
-            QuickSkin.LOGGER.debug("Failed to auto-detect model type, defaulting to classic");
+            QuickSkin.LOGGER.warn("Failed to auto-detect model type, defaulting to classic");
             return "classic";
+        }
+
+        // Fallback: check for override
+        if (modelOverrides.containsKey(playerId)) {
+            String override = modelOverrides.get(playerId);
+            if (!"auto".equalsIgnoreCase(override)) {
+                QuickSkin.LOGGER.info("Using model override: {}", override);
+                return override;
+            }
         }
 
         return "classic";

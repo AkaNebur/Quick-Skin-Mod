@@ -542,9 +542,12 @@ public class PlayerSkinMenuScreen extends Screen {
             // Apply skin to the actual player in-game
             if (this.minecraft != null && this.minecraft.player != null) {
                 String skinId = "local_skin:" + metadata.hash();
+
+                // Pass the model type directly - ModelService will handle "auto" detection
                 com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                         .applySkin(this.minecraft.player.getUUID(), skinId, modelType);
-                QuickSkin.LOGGER.info("Applied skin to player: {} with model type: {}", metadata.friendlyName(), modelType);
+                QuickSkin.LOGGER.info("Applied skin to player: {} with model type: {}",
+                        metadata.friendlyName(), modelType);
             }
 
             // Save the active skin hash to config
@@ -565,7 +568,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 AssetMetadata metadata = selectedEntry.getMetadata();
                 String skinId = "local_skin:" + metadata.hash();
 
-                // Apply the skin with the new model type
+                // Pass the model type directly - ModelService will handle "auto" detection
                 com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                         .applySkin(this.minecraft.player.getUUID(), skinId, newModelType);
 

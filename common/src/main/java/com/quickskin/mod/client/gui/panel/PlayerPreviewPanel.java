@@ -143,11 +143,40 @@ public class PlayerPreviewPanel extends AbstractWidget {
             this.currentMetadata = metadata;
             playerWidget.setSkin(skinLocation);
 
-            // Update model type if auto-detect
+            // Update model type based on current mode
             if ("auto".equals(currentModelType)) {
-                playerWidget.setModelType(metadata.skinModel());
+                // Auto-detect from actual texture
+                String detectedModel = detectModelFromTexture(metadata);
+                playerWidget.setModelType(detectedModel);
+            } else {
+                // Use explicitly selected model
+                playerWidget.setModelType(currentModelType);
             }
         }
+    }
+
+    /**
+     * Detect model type from texture data
+     */
+    private String detectModelFromTexture(AssetMetadata metadata) {
+        try {
+            // Load texture and detect model
+            byte[] textureData = com.quickskin.mod.client.services.LocalAssetManager.getInstance()
+                    .loadTexture(metadata.hash(), com.quickskin.mod.common.data.TextureQuality.PREVIEW);
+
+            if (textureData != null) {
+                String detected = com.quickskin.mod.common.util.SkinModelDetector.detectSkinModel(textureData);
+                com.quickskin.mod.QuickSkin.LOGGER.info("Preview: Auto-detected model from texture for {}: {}",
+                        metadata.friendlyName(), detected);
+                return detected;
+            }
+        } catch (Exception e) {
+            com.quickskin.mod.QuickSkin.LOGGER.error("Failed to detect model from texture", e);
+        }
+
+        // Fallback to metadata if detection fails
+        com.quickskin.mod.QuickSkin.LOGGER.warn("Preview: Falling back to metadata model: {}", metadata.skinModel());
+        return metadata.skinModel() != null ? metadata.skinModel() : "classic";
     }
 
     /**
@@ -158,9 +187,10 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
         // Update preview widget
         if (playerWidget != null) {
-            // If auto mode, use the detected model from metadata
+            // If auto mode, detect from actual texture
             if ("auto".equals(modelType) && currentMetadata != null) {
-                playerWidget.setModelType(currentMetadata.skinModel());
+                String detectedModel = detectModelFromTexture(currentMetadata);
+                playerWidget.setModelType(detectedModel);
             } else {
                 playerWidget.setModelType(modelType);
             }
