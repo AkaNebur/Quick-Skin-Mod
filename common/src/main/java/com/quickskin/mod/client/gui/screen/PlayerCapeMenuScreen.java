@@ -8,6 +8,7 @@ import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.KnownCapes;
 import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -81,10 +82,10 @@ public class PlayerCapeMenuScreen extends Screen {
     private ConfirmationDialog confirmationDialog;
 
     @Nullable
-    private AssetMetadata selectedCape;
+    private CapeEntry selectedCape;
 
-    // Cape list
-    private final List<AssetMetadata> capes = new ArrayList<>();
+    // Cape list (both known and local capes)
+    private final List<CapeEntry> capes = new ArrayList<>();
 
     // Import feedback
     private String importMessage = "";
@@ -232,10 +233,23 @@ public class PlayerCapeMenuScreen extends Screen {
 
     private void refreshCapeList() {
         this.capes.clear();
-        List<AssetMetadata> loadedCapes = LocalAssetManager.getInstance()
+
+        // Add known capes first (exclude NONE)
+        for (KnownCapes knownCape : KnownCapes.values()) {
+            if (!knownCape.isNoCape()) {
+                this.capes.add(CapeEntry.fromKnown(knownCape));
+            }
+        }
+
+        // Then add local capes
+        List<AssetMetadata> localCapes = LocalAssetManager.getInstance()
             .getAssetsByType("cape");
-        this.capes.addAll(loadedCapes);
-        QuickSkin.LOGGER.debug("Loaded {} capes", capes.size());
+        for (AssetMetadata localCape : localCapes) {
+            this.capes.add(CapeEntry.fromLocal(localCape));
+        }
+
+        QuickSkin.LOGGER.debug("Loaded {} total capes ({} known + {} local)",
+            capes.size(), KnownCapes.values().length - 1, localCapes.size());
     }
 
     private void updateGridDimensions() {
@@ -271,24 +285,33 @@ public class PlayerCapeMenuScreen extends Screen {
         QuickSkin.LOGGER.info("Removed cape");
     }
 
-    public void showDeleteConfirmation(AssetMetadata metadata) {
+    public void showDeleteConfirmation(CapeEntry capeEntry) {
+        // Only allow deletion of local capes
+        if (!capeEntry.isLocal()) {
+            return;
+        }
+
         confirmationDialog = new ConfirmationDialog(
             Component.literal("Delete Cape?"),
-            Component.literal("Are you sure you want to delete '" + metadata.friendlyName() + "'?"),
-            () -> deleteCape(metadata),
+            Component.literal("Are you sure you want to delete '" + capeEntry.getFriendlyName() + "'?"),
+            () -> deleteCape(capeEntry),
             () -> confirmationDialog = null
         );
     }
 
-    private void deleteCape(AssetMetadata metadata) {
+    private void deleteCape(CapeEntry capeEntry) {
+        if (!capeEntry.isLocal() || capeEntry.getLocalCape() == null) {
+            return;
+        }
+
         try {
-            Files.deleteIfExists(metadata.path());
+            Files.deleteIfExists(capeEntry.getPath());
             LocalAssetManager.getInstance().discoverLocalAssets();
             refreshCapeList();
             updateGridDimensions();
             confirmationDialog = null;
             selectedCape = null;
-            QuickSkin.LOGGER.info("Deleted cape: {}", metadata.friendlyName());
+            QuickSkin.LOGGER.info("Deleted cape: {}", capeEntry.getFriendlyName());
             showImportMessage("✓ Deleted cape", 0x55FF55, 100);
         } catch (Exception e) {
             QuickSkin.LOGGER.error("Failed to delete cape", e);
@@ -417,11 +440,11 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // Tooltip logic
         if (isMouseOverGrid(mouseX, mouseY)) {
-            AssetMetadata hoveredCape = getCapeAt(mouseX, mouseY);
+            CapeEntry hoveredCape = getCapeAt(mouseX, mouseY);
             if (hoveredCape != null) {
                 boolean deleteHovered = false;
                 int[] pos = getCapePosition(hoveredCape);
-                if (pos != null) {
+                if (pos != null && hoveredCape.isLocal()) {
                     int x = pos[0];
                     int y = pos[1];
                     int margin = 2;
@@ -466,7 +489,7 @@ public class PlayerCapeMenuScreen extends Screen {
             // Render cape grid items
             int totalItems = capes.size() + 1; // +1 for "None"
             for (int i = 0; i < capes.size(); i++) {
-                AssetMetadata cape = capes.get(i);
+                CapeEntry cape = capes.get(i);
                 int itemIndex = i + 1; // +1 because "None" is at index 0
                 int row = itemIndex / capesPerRow;
                 int col = itemIndex % capesPerRow;
@@ -586,9 +609,8 @@ public class PlayerCapeMenuScreen extends Screen {
         }
     }
 
-    private void renderCapeEntry(GuiGraphics graphics, AssetMetadata cape, int x, int y, int mouseX, int mouseY) {
-        ResourceLocation texture = LocalAssetManager.getInstance()
-            .getTextureLocation(cape.hash(), TextureQuality.FULL);
+    private void renderCapeEntry(GuiGraphics graphics, CapeEntry cape, int x, int y, int mouseX, int mouseY) {
+        ResourceLocation texture = cape.getTextureLocation();
 
         boolean hovered = isMouseOver(mouseX, mouseY, x, y, capeDisplaySize, capeDisplaySize);
 
@@ -600,7 +622,9 @@ public class PlayerCapeMenuScreen extends Screen {
         }
 
         // Render custom indicator
-        renderCustomIndicator(graphics, x, y);
+        if (cape.isCustom()) {
+            renderCustomIndicator(graphics, x, y);
+        }
 
         // Render animated indicator if applicable
         if (cape.isAnimated()) {
@@ -614,8 +638,8 @@ public class PlayerCapeMenuScreen extends Screen {
             graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0x33FFFFFF);
         }
 
-        // Render delete button on hover
-        if (hovered) {
+        // Render delete button on hover (only for local capes)
+        if (hovered && cape.isLocal()) {
             int margin = 2;
             int deleteButtonX = x + capeDisplaySize - ACTION_BUTTON_SIZE - margin;
             int deleteButtonY = y + margin;
@@ -626,14 +650,15 @@ public class PlayerCapeMenuScreen extends Screen {
         }
     }
 
-    private void renderCapeTexture(GuiGraphics graphics, ResourceLocation texture, AssetMetadata cape, int x, int y) {
+    private void renderCapeTexture(GuiGraphics graphics, ResourceLocation texture, CapeEntry cape, int x, int y) {
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
         int textureWidth = 64;
         int textureHeight = 32;
 
-        if (cape.resolution().isHD()) {
-            int scale = cape.resolution().getScale();
+        // Check if it's a high resolution cape
+        if (cape.isLocal() && cape.getLocalCape() != null && cape.getLocalCape().resolution().isHD()) {
+            int scale = cape.getLocalCape().resolution().getScale();
             textureWidth *= scale;
             textureHeight *= scale;
         }
@@ -691,15 +716,18 @@ public class PlayerCapeMenuScreen extends Screen {
         graphics.drawString(this.font, badgeText, badgeX + 2, badgeY + 1, 0xFFFFFFFF);
     }
 
-    private boolean isSelected(AssetMetadata cape) {
+    private boolean isSelected(CapeEntry cape) {
         if (selectedCape == null || cape == null) return false;
-        return cape.hash().equals(selectedCape.hash());
+        return cape.getCapeId().equals(selectedCape.getCapeId());
     }
 
-    private List<Component> getCapeTooltip(AssetMetadata cape) {
+    private List<Component> getCapeTooltip(CapeEntry cape) {
         List<Component> tooltip = new ArrayList<>();
 
-        tooltip.add(Component.literal(cape.friendlyName()).withStyle(s -> s.withBold(true).withColor(0x55FF55)));
+        int nameColor = cape.isKnown() ? 0xFFD700 : 0x55FF55; // Gold for known, green for local
+        tooltip.add(Component.literal(cape.getFriendlyName()).withStyle(s -> s.withBold(true).withColor(nameColor)));
+
+        tooltip.add(Component.literal(cape.getDescription()).withStyle(s -> s.withColor(0xCCCCCC)));
 
         if (cape.isAnimated()) {
             tooltip.add(Component.literal("Animated cape").withStyle(s -> s.withColor(0xFFAA00)));
@@ -707,8 +735,8 @@ public class PlayerCapeMenuScreen extends Screen {
             tooltip.add(Component.literal("Static cape").withStyle(s -> s.withColor(0xAAAAAA)));
         }
 
-        if (cape.resolution() != null) {
-            String resolutionText = cape.resolution().name();
+        if (cape.isLocal() && cape.getLocalCape() != null && cape.getLocalCape().resolution() != null) {
+            String resolutionText = cape.getLocalCape().resolution().name();
             tooltip.add(Component.literal("Resolution: " + resolutionText).withStyle(s -> s.withColor(0x55FFFF)));
         }
 
@@ -761,20 +789,22 @@ public class PlayerCapeMenuScreen extends Screen {
                 return true;
             }
 
-            AssetMetadata clickedCape = getCapeAt((int) mouseX, (int) mouseY);
+            CapeEntry clickedCape = getCapeAt((int) mouseX, (int) mouseY);
             if (clickedCape != null) {
-                // Check for delete button click
-                int[] pos = getCapePosition(clickedCape);
-                if (pos != null) {
-                    int x = pos[0];
-                    int y = pos[1];
-                    int margin = 2;
+                // Check for delete button click (only for local capes)
+                if (clickedCape.isLocal()) {
+                    int[] pos = getCapePosition(clickedCape);
+                    if (pos != null) {
+                        int x = pos[0];
+                        int y = pos[1];
+                        int margin = 2;
 
-                    int deleteButtonX = x + capeDisplaySize - ACTION_BUTTON_SIZE - margin;
-                    int deleteButtonY = y + margin;
-                    if (isMouseOver((int) mouseX, (int) mouseY, deleteButtonX, deleteButtonY, ACTION_BUTTON_SIZE, ACTION_BUTTON_SIZE)) {
-                        showDeleteConfirmation(clickedCape);
-                        return true;
+                        int deleteButtonX = x + capeDisplaySize - ACTION_BUTTON_SIZE - margin;
+                        int deleteButtonY = y + margin;
+                        if (isMouseOver((int) mouseX, (int) mouseY, deleteButtonX, deleteButtonY, ACTION_BUTTON_SIZE, ACTION_BUTTON_SIZE)) {
+                            showDeleteConfirmation(clickedCape);
+                            return true;
+                        }
                     }
                 }
 
@@ -788,20 +818,19 @@ public class PlayerCapeMenuScreen extends Screen {
         return false;
     }
 
-    private void applyCape(AssetMetadata cape) {
+    private void applyCape(CapeEntry cape) {
         if (minecraft == null || minecraft.player == null) {
             return;
         }
 
-        String capeId = "local_cape:" + cape.hash();
+        String capeId = cape.getCapeId();
         PlayerAppearanceService.getInstance()
             .applyCape(minecraft.player.getUUID(), capeId);
 
-        ResourceLocation capeLocation = LocalAssetManager.getInstance()
-            .getTextureLocation(cape.hash(), TextureQuality.FULL);
+        ResourceLocation capeLocation = cape.getTextureLocation();
         playerWidget.setCape(capeLocation);
 
-        QuickSkin.LOGGER.info("Applied cape: {}", cape.friendlyName());
+        QuickSkin.LOGGER.info("Applied cape: {}", cape.getFriendlyName());
     }
 
     private void updateScrollFromMouse(double mouseY) {
@@ -860,7 +889,7 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     @Nullable
-    private AssetMetadata getCapeAt(int mouseX, int mouseY) {
+    private CapeEntry getCapeAt(int mouseX, int mouseY) {
         if (!isMouseOverGrid(mouseX, mouseY)) return null;
 
         int absoluteMouseY = mouseY + (int) scrollOffset;
@@ -889,9 +918,18 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     @Nullable
-    private int[] getCapePosition(AssetMetadata cape) {
+    private int[] getCapePosition(CapeEntry cape) {
         int currentY = gridY - (int) scrollOffset + HEADER_HEIGHT;
-        int index = capes.indexOf(cape);
+        int index = -1;
+
+        // Find the index of this cape
+        for (int i = 0; i < capes.size(); i++) {
+            if (capes.get(i).getCapeId().equals(cape.getCapeId())) {
+                index = i;
+                break;
+            }
+        }
+
         if (index == -1) return null;
 
         // +1 because "None" is at index 0

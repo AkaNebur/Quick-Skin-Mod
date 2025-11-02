@@ -94,19 +94,23 @@ public class CapeService implements ICapeService {
     @Override
     @Nullable
     public ResourceLocation loadKnownCape(String capeId) {
-        // Phase 5: Implement known cape loading (e.g., Minecon capes)
         QuickSkin.LOGGER.debug("Loading known cape: {}", capeId);
 
-        // Known capes could be pre-registered capes like Minecon capes, Optifine capes, etc.
-        // For now, we just return null as this requires a cape registry
-        // In a full implementation, this would check a registry of well-known cape IDs
+        // Look up the cape in the KnownCapes enum
+        com.quickskin.mod.common.data.KnownCapes cape = com.quickskin.mod.common.data.KnownCapes.getById(capeId);
 
+        if (cape != null && !cape.isNoCape()) {
+            ResourceLocation location = cape.getTextureLocation();
+            QuickSkin.LOGGER.debug("Found known cape {} at {}", capeId, location);
+            return location;
+        }
+
+        QuickSkin.LOGGER.debug("Unknown cape ID: {}", capeId);
         return null;
     }
 
     @Override
     public boolean isAnimated(String capeId) {
-        // Phase 7: Implement animation detection
         if (capeId == null || capeId.isEmpty()) {
             return false;
         }
@@ -123,7 +127,16 @@ public class CapeService implements ICapeService {
             }
         }
 
-        // Mojang capes and known capes are not animated
+        // Check if it's a known cape
+        if (capeId.startsWith("known:")) {
+            String knownId = capeId.substring("known:".length());
+            com.quickskin.mod.common.data.KnownCapes cape = com.quickskin.mod.common.data.KnownCapes.getById(knownId);
+            if (cape != null) {
+                return cape.isAnimated();
+            }
+        }
+
+        // Mojang capes are not animated
         return false;
     }
 
