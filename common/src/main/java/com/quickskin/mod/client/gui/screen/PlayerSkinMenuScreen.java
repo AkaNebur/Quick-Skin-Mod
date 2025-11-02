@@ -117,7 +117,8 @@ public class PlayerSkinMenuScreen extends Screen {
         int yPos = panelY + scaledPadding + scaledComponentHeight + scaledPadding;
 
         // Create Mojang username search field (below title)
-        int searchFieldWidth = (int)(panelWidth * 0.35f);
+        // Match the width of the skin list panel
+        int searchFieldWidth = leftPanelWidth;
         int searchButtonWidth = 60;
         int searchFieldX = componentX;
 
@@ -129,9 +130,17 @@ public class PlayerSkinMenuScreen extends Screen {
                 scaledComponentHeight,
                 Component.literal("Search by username")
         );
-        usernameSearchField.setHint(Component.literal("Username..."));
+        usernameSearchField.setSuggestion("Write a username...");
         usernameSearchField.setMaxLength(16);
-        usernameSearchField.setResponder(this::onUsernameFieldChanged);
+        usernameSearchField.setResponder(text -> {
+            onUsernameFieldChanged(text);
+            // Update suggestion visibility
+            if (text.isEmpty()) {
+                usernameSearchField.setSuggestion("Write a username...");
+            } else {
+                usernameSearchField.setSuggestion("");
+            }
+        });
         addRenderableWidget(usernameSearchField);
 
         searchButton = Button.builder(
