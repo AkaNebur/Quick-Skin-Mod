@@ -146,6 +146,9 @@ public class PlayerCapeMenuScreen extends Screen {
         refreshCapeList();
         updateGridDimensions();
 
+        // Initialize selected cape based on currently equipped cape
+        initializeSelectedCape();
+
         // Create buttons
         int bottomY = this.height - scaleValue(60);
 
@@ -263,6 +266,40 @@ public class PlayerCapeMenuScreen extends Screen {
 
         QuickSkin.LOGGER.debug("Loaded {} total capes ({} known + {} local)",
             capes.size(), KnownCapes.values().length - 1, localCapes.size());
+    }
+
+    /**
+     * Initialize the selected cape based on the player's currently equipped cape
+     */
+    private void initializeSelectedCape() {
+        if (minecraft == null || minecraft.player == null) {
+            QuickSkin.LOGGER.debug("No player available, cannot initialize selected cape");
+            return;
+        }
+
+        // Get the player's current appearance
+        java.util.UUID playerId = minecraft.player.getUUID();
+        com.quickskin.mod.common.data.PlayerAppearance appearance =
+            PlayerAppearanceService.getInstance().getAppearance(playerId);
+
+        if (appearance == null || appearance.getCapeId() == null || appearance.getCapeId().isEmpty()) {
+            QuickSkin.LOGGER.debug("No active cape for player");
+            this.selectedCape = null;
+            return;
+        }
+
+        // Find the matching cape in the list
+        String activeCapeId = appearance.getCapeId();
+        for (CapeEntry cape : this.capes) {
+            if (cape.getCapeId().equals(activeCapeId)) {
+                this.selectedCape = cape;
+                QuickSkin.LOGGER.info("Initialized selected cape: {}", cape.getFriendlyName());
+                return;
+            }
+        }
+
+        QuickSkin.LOGGER.warn("Could not find cape with ID '{}' in capes list", activeCapeId);
+        this.selectedCape = null;
     }
 
     private void updateGridDimensions() {
