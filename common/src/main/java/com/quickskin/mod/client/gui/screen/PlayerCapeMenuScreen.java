@@ -202,6 +202,9 @@ public class PlayerCapeMenuScreen extends Screen {
         int referenceX = this.gridX + this.gridWidth + MODEL_OFFSET_X;
         int referenceY = this.gridY + (this.gridHeight / 2) + MODEL_OFFSET_Y;
         this.playerWidget.setCustomReferencePoint(referenceX, referenceY);
+
+        // Trigger initial rotation animation on menu open
+        this.playerWidget.toggleRotation();
     }
 
     private void calculateAdaptiveDimensions() {
