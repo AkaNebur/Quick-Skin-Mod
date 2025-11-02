@@ -201,6 +201,13 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
      */
     @Nullable
     public String getModelName(UUID playerId) {
+        // Check model override first (priority)
+        String override = modelService.getModelOverride(playerId);
+        if (override != null) {
+            return override;
+        }
+
+        // Fall back to appearance model
         PlayerAppearance appearance = repository.getAppearance(playerId);
         return appearance != null ? appearance.getModel() : null;
     }

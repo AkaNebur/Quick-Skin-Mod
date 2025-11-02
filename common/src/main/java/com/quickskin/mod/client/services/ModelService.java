@@ -1,6 +1,9 @@
 package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.TextureQuality;
+import com.quickskin.mod.common.util.SkinModelDetector;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
@@ -34,7 +37,12 @@ public class ModelService implements IModelService {
 
     @Override
     public String getModelType(UUID playerId, String skinId, String requestedModel) {
-        // Check for manual override first
+        // If a specific model is explicitly requested (not "auto"), honor that request
+        if (requestedModel != null && !"auto".equalsIgnoreCase(requestedModel)) {
+            return requestedModel;
+        }
+
+        // If auto mode, check for manual override first
         if (modelOverrides.containsKey(playerId)) {
             String override = modelOverrides.get(playerId);
             if (!"auto".equalsIgnoreCase(override)) {
@@ -42,21 +50,48 @@ public class ModelService implements IModelService {
             }
         }
 
-        // If auto or no override, use requested model
+        // If auto or no override, detect from skin texture
         if ("auto".equalsIgnoreCase(requestedModel)) {
-            // TODO Phase 5: Auto-detect from skin texture
-            // For now, default to classic
+            // Auto-detect from skin texture
+            if (skinId != null && skinId.startsWith("local_skin:")) {
+                String hash = skinId.substring("local_skin:".length());
+
+                // Get metadata first to check if we already have the model type
+                AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(hash);
+                if (metadata != null && metadata.skinModel() != null && !metadata.skinModel().isEmpty()) {
+                    QuickSkin.LOGGER.debug("Using cached model type from metadata: {}", metadata.skinModel());
+                    return metadata.skinModel();
+                }
+
+                // If no metadata or no model in metadata, detect from texture
+                byte[] skinData = LocalAssetManager.getInstance().loadTexture(hash, TextureQuality.PREVIEW);
+                if (skinData != null) {
+                    String detected = detectModelType(skinData);
+                    QuickSkin.LOGGER.debug("Auto-detected model type for {}: {}", hash, detected);
+                    return detected;
+                }
+            }
+
+            // Default to classic if detection fails
+            QuickSkin.LOGGER.debug("Failed to auto-detect model type, defaulting to classic");
             return "classic";
         }
 
-        return requestedModel != null ? requestedModel : "classic";
+        return "classic";
     }
 
     @Override
     public String detectModelType(byte[] skinData) {
-        // TODO Phase 5: Implement actual detection using SkinModelDetector
-        // This will be migrated from the old code
-        return "classic";
+        if (skinData == null) {
+            return "classic";
+        }
+
+        try {
+            return SkinModelDetector.detectSkinModel(skinData);
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Failed to detect model type from skin data", e);
+            return "classic";
+        }
     }
 
     @Override
