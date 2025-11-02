@@ -135,12 +135,13 @@ public class PlayerModelRenderer {
         float originalYHeadRot = playerToRender.yHeadRot;
         float originalYBodyRot = playerToRender.yBodyRot;
 
-        // Set fixed rotation for preview (facing slightly sideways at 20 degrees - other direction)
-        // 180 + 20 = 200 degrees to face towards camera with slight angle
-        playerToRender.setYRot(200.0F);
+        // Set rotation for preview using the yRotation parameter
+        // Convert yRotation to match InventoryScreen orientation (180 + yRotation)
+        float targetRotation = 180.0F + yRotation;
+        playerToRender.setYRot(targetRotation);
         playerToRender.setXRot(0.0F);
-        playerToRender.yHeadRot = 200.0F;
-        playerToRender.yBodyRot = 200.0F;
+        playerToRender.yHeadRot = targetRotation + playerData.getHeadYaw();
+        playerToRender.yBodyRot = targetRotation;
 
         // Set tickCount for idle animation ONLY when on title screen (no world)
         // When in-game, the entity already has its own natural tickCount from the game loop

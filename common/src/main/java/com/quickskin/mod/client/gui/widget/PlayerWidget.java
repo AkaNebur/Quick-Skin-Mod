@@ -21,15 +21,8 @@ public class PlayerWidget extends AbstractWidget {
 
     private final PreviewPlayerData previewData;
 
-    // Mouse interaction
-    private boolean isDragging = false;
-    private double lastMouseX = 0;
-    private double lastMouseY = 0;
-
     // Rotation state
     private float bodyYaw = 20.0f; // 20 degrees for sideways pose (matching original)
-    private float headYaw = 0.0f; // Head rotation relative to body (0 = looking same direction as body)
-    private float headPitch = 0.0f;
     private float targetYRotation = 20.0f; // Target rotation for smooth animation
 
     // Animation state (disabled for static pose)
@@ -139,17 +132,10 @@ public class PlayerWidget extends AbstractWidget {
         int modelCenterX = getModelCenterX();
         int modelCenterY = getModelCenterY();
 
-        // Keep head at neutral position (mouse tracking disabled)
-        if (!isDragging) {
-            // Smoothly return head to neutral
-            headYaw *= 0.9f;
-            headPitch *= 0.9f;
-        }
-
         // Update preview data
         previewData.setYRotation(bodyYaw);
-        previewData.setHeadYaw(headYaw);
-        previewData.setHeadPitch(headPitch);
+        previewData.setHeadYaw(0.0f);
+        previewData.setHeadPitch(0.0f);
 
         // Render the player model
         // Use GuiGraphics directly for vanilla rendering method
@@ -166,69 +152,6 @@ public class PlayerWidget extends AbstractWidget {
         );
     }
 
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && isMouseOver((int) mouseX, (int) mouseY)) {
-            isDragging = true;
-            lastMouseX = mouseX;
-            lastMouseY = mouseY;
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 0) {
-            isDragging = false;
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (isDragging && button == 0) {
-            float deltaX = (float) (mouseX - lastMouseX);
-            float deltaY = (float) (mouseY - lastMouseY);
-
-            // Update body rotation based on horizontal drag
-            bodyYaw += deltaX * 0.5f;
-            if (bodyYaw >= 360.0f) bodyYaw -= 360.0f;
-            if (bodyYaw < 0.0f) bodyYaw += 360.0f;
-
-            // Update head rotation based on drag
-            headYaw += deltaX * 0.3f;
-            headPitch -= deltaY * 0.3f;
-
-            // Clamp head rotation
-            headYaw = Math.max(-45.0f, Math.min(45.0f, headYaw));
-            headPitch = Math.max(-30.0f, Math.min(30.0f, headPitch));
-
-            lastMouseX = mouseX;
-            lastMouseY = mouseY;
-            return true;
-        }
-        return false;
-    }
-
-    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
-        if (isMouseOver((int) mouseX, (int) mouseY)) {
-            // Zoom in/out with scroll wheel
-            scale += (float) deltaY * 2.0f;
-            scale = Math.max(15.0f, Math.min(60.0f, scale)); // Clamp scale
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Check if mouse is over the widget
-     */
-    private boolean isMouseOver(int mouseX, int mouseY) {
-        return mouseX >= getX() && mouseX < getX() + getWidth() &&
-               mouseY >= getY() && mouseY < getY() + getHeight();
-    }
 
     /**
      * Update the skin texture
@@ -258,15 +181,7 @@ public class PlayerWidget extends AbstractWidget {
      */
     public void resetRotation() {
         bodyYaw = 20.0f;
-        headYaw = 0.0f;
-        headPitch = 0.0f;
-    }
-
-    /**
-     * Set the scale of the model
-     */
-    public void setScale(float scale) {
-        this.scale = Math.max(15.0f, Math.min(60.0f, scale));
+        targetYRotation = 20.0f;
     }
 
     /**
