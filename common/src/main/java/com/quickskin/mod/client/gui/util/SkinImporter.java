@@ -141,6 +141,51 @@ public class SkinImporter {
     }
 
     /**
+     * Save a BufferedImage as a skin file
+     * @param image The image to save
+     * @param username The username (used for filename)
+     * @return The path to the saved file, or null on failure
+     */
+    public static Path saveSkinImage(BufferedImage image, String username) {
+        if (image == null || username == null) {
+            QuickSkin.LOGGER.error("Invalid parameters for saveSkinImage");
+            return null;
+        }
+
+        try {
+            // Validate dimensions
+            int width = image.getWidth();
+            int height = image.getHeight();
+            if (!isValidSkinDimension(width, height)) {
+                QuickSkin.LOGGER.error("Invalid skin dimensions {}x{} for {}", width, height, username);
+                return null;
+            }
+
+            // Create filename from username
+            String fileName = username + ".png";
+            LocalAssetManager assetManager = LocalAssetManager.getInstance();
+            Path targetPath = assetManager.getSkinsDirectory().resolve(fileName);
+
+            // If file already exists, add a number
+            int counter = 1;
+            while (Files.exists(targetPath)) {
+                targetPath = assetManager.getSkinsDirectory().resolve(username + "_" + counter + ".png");
+                counter++;
+            }
+
+            // Save the image
+            ImageIO.write(image, "PNG", targetPath.toFile());
+            QuickSkin.LOGGER.info("Saved skin image to: {}", targetPath);
+
+            return targetPath;
+
+        } catch (IOException e) {
+            QuickSkin.LOGGER.error("Failed to save skin image for: {}", username, e);
+            return null;
+        }
+    }
+
+    /**
      * Get the skins directory path
      */
     public static Path getSkinsDirectory() {

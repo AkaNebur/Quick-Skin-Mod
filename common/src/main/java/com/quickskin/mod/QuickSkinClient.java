@@ -29,6 +29,7 @@ public class QuickSkinClient {
         SkinService.init();
         CapeService.init();
         PlayerAppearanceService.init();
+        MojangApiService.init();
 
         // Phase 3: Register client networking (S2C receivers)
         ClientNetworking.init();

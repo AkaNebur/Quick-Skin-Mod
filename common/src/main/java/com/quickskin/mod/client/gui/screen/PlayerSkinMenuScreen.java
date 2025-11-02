@@ -13,6 +13,9 @@ import com.quickskin.mod.client.gui.widget.ConfirmationDialog;
 import com.quickskin.mod.client.gui.widget.ErrorToast;
 import com.quickskin.mod.client.gui.widget.SkinEntry;
 import com.quickskin.mod.client.services.LocalAssetManager;
+import com.quickskin.mod.client.services.MojangApiService;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Button;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
@@ -73,6 +76,11 @@ public class PlayerSkinMenuScreen extends Screen {
     @Nullable
     private ConfirmationDialog confirmationDialog;
 
+    // Mojang search widgets
+    private EditBox usernameSearchField;
+    private Button searchButton;
+    private boolean isSearching = false;
+
     public PlayerSkinMenuScreen(@Nullable Screen parent) {
         super(Component.literal("QuickSkin"));
         this.parent = parent;
@@ -108,8 +116,44 @@ public class PlayerSkinMenuScreen extends Screen {
         int componentX = panelX + scaledPadding;
         int yPos = panelY + scaledPadding + scaledComponentHeight + scaledPadding;
 
+        // Create Mojang username search field (below title)
+        int searchFieldWidth = (int)(panelWidth * 0.35f);
+        int searchButtonWidth = 60;
+        int searchFieldX = componentX;
+
+        usernameSearchField = new EditBox(
+                this.font,
+                searchFieldX,
+                yPos,
+                searchFieldWidth - searchButtonWidth - scaledSpacing,
+                scaledComponentHeight,
+                Component.literal("Search by username")
+        );
+        usernameSearchField.setHint(Component.literal("Username..."));
+        usernameSearchField.setMaxLength(16);
+        usernameSearchField.setResponder(this::onUsernameFieldChanged);
+        addRenderableWidget(usernameSearchField);
+
+        searchButton = Button.builder(
+                Component.literal("Search"),
+                button -> searchMojangSkin()
+        )
+        .bounds(
+                searchFieldX + searchFieldWidth - searchButtonWidth,
+                yPos,
+                searchButtonWidth,
+                scaledComponentHeight
+        )
+        .build();
+        addRenderableWidget(searchButton);
+        searchButton.active = false;
+
+        // Adjust the yPos for components below the search field
+        yPos += scaledComponentHeight + scaledSpacing;
+
         // Calculate list height with proper spacing
-        int topSectionHeight = scaledPadding + scaledComponentHeight + scaledPadding + scaledComponentHeight + scaledSpacing;
+        // Title + padding + search field + spacing + extra spacing for the list
+        int topSectionHeight = scaledPadding + scaledComponentHeight + scaledPadding + scaledComponentHeight + scaledSpacing + scaledSpacing;
         int bottomSectionHeight = (scaledComponentHeight * 3) + (scaledSpacing * 2) + scaledPadding;
         int listHeight = panelHeight - topSectionHeight - bottomSectionHeight;
 
@@ -701,6 +745,127 @@ public class PlayerSkinMenuScreen extends Screen {
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to delete skin: {}", metadata.friendlyName(), e);
             showError(Component.literal("Failed to delete skin: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Called when the username search field changes
+     */
+    private void onUsernameFieldChanged(String text) {
+        if (searchButton != null) {
+            searchButton.active = !text.trim().isEmpty() && !isSearching;
+        }
+    }
+
+    /**
+     * Search for a skin using Mojang API
+     */
+    private void searchMojangSkin() {
+        if (usernameSearchField == null || isSearching) {
+            return;
+        }
+
+        String username = usernameSearchField.getValue().trim();
+        if (username.isEmpty()) {
+            return;
+        }
+
+        // Disable search while fetching
+        isSearching = true;
+        searchButton.active = false;
+        searchButton.setMessage(Component.literal("Searching..."));
+
+        QuickSkin.LOGGER.info("Searching for Mojang skin: {}", username);
+
+        // Fetch skin asynchronously
+        MojangApiService.getInstance().fetchSkinByUsername(username)
+            .thenAccept(skinData -> {
+                // Execute on main thread
+                if (this.minecraft != null) {
+                    this.minecraft.execute(() -> {
+                        if (skinData != null) {
+                            handleMojangSkinFetched(skinData);
+                        } else {
+                            showError(Component.literal("Player not found: " + username));
+                            resetSearchButton();
+                        }
+                    });
+                }
+            })
+            .exceptionally(throwable -> {
+                QuickSkin.LOGGER.error("Error fetching Mojang skin", throwable);
+                if (this.minecraft != null) {
+                    this.minecraft.execute(() -> {
+                        showError(Component.literal("Failed to fetch skin: " + throwable.getMessage()));
+                        resetSearchButton();
+                    });
+                }
+                return null;
+            });
+    }
+
+    /**
+     * Handle the fetched Mojang skin data
+     */
+    private void handleMojangSkinFetched(MojangApiService.MojangSkinData skinData) {
+        try {
+            // Save the skin image to local storage
+            Path skinPath = SkinImporter.saveSkinImage(skinData.image, skinData.username);
+
+            if (skinPath != null) {
+                QuickSkin.LOGGER.info("Successfully saved Mojang skin for: {}", skinData.username);
+
+                // Reload the asset manager to pick up the new file
+                LocalAssetManager.getInstance().reload();
+
+                // Get the metadata for the saved file
+                String hash = com.quickskin.mod.common.util.HashUtil.computeFileHash(skinPath);
+                if (hash != null) {
+                    AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(hash);
+
+                    if (metadata != null) {
+                        // Refresh the skin list
+                        refreshSkinList();
+
+                        // Auto-select the imported skin
+                        if (skinListPanel != null) {
+                            skinListPanel.setSelected(metadata);
+                        }
+
+                        // Clear the search field
+                        usernameSearchField.setValue("");
+
+                        // Play success sound
+                        minecraft.getSoundManager().play(
+                            net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                                SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
+                            )
+                        );
+                    } else {
+                        showError(Component.literal("Failed to load skin metadata"));
+                    }
+                } else {
+                    showError(Component.literal("Failed to compute file hash"));
+                }
+            } else {
+                showError(Component.literal("Failed to save skin image"));
+            }
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Error handling Mojang skin", e);
+            showError(Component.literal("Error: " + e.getMessage()));
+        } finally {
+            resetSearchButton();
+        }
+    }
+
+    /**
+     * Reset the search button state
+     */
+    private void resetSearchButton() {
+        isSearching = false;
+        if (searchButton != null) {
+            searchButton.setMessage(Component.literal("Search"));
+            searchButton.active = usernameSearchField != null && !usernameSearchField.getValue().trim().isEmpty();
         }
     }
 }
