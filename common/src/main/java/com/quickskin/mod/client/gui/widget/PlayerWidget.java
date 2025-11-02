@@ -37,6 +37,10 @@ public class PlayerWidget extends AbstractWidget {
     private net.minecraft.client.gui.components.Button classicButton = null;
     private net.minecraft.client.gui.components.Button slimButton = null;
 
+    // Custom reference point (alternative to button positioning)
+    private Integer customCenterX = null;
+    private Integer customCenterY = null;
+
     // Default offset from button center
     private static final double DEFAULT_OFFSET_FROM_BUTTON_Y = -15.0; // Moved up 5px from -15.0
 
@@ -70,10 +74,14 @@ public class PlayerWidget extends AbstractWidget {
 
     /**
      * Get the X position for model rendering (dynamically calculated)
-     * Uses model buttons if available, otherwise widget center
+     * Uses custom reference first, then model buttons if available, otherwise widget center
      */
     private int getModelCenterX() {
-        // In skin menu: Center of all three model buttons (Auto, Wide, Slim)
+        // Priority 1: Custom reference point
+        if (customCenterX != null) {
+            return customCenterX;
+        }
+        // Priority 2: In skin menu: Center of all three model buttons (Auto, Wide, Slim)
         if (autoButton != null && slimButton != null) {
             // Calculate center of the entire button group
             int leftEdge = autoButton.getX();
@@ -81,28 +89,32 @@ public class PlayerWidget extends AbstractWidget {
             int middleX = (leftEdge + rightEdge) / 2;
             return middleX;
         }
-        // Fallback: if only classic/slim buttons exist
+        // Priority 3: Fallback: if only classic/slim buttons exist
         else if (classicButton != null && slimButton != null) {
             int classicCenterX = classicButton.getX() + classicButton.getWidth() / 2;
             int slimCenterX = slimButton.getX() + slimButton.getWidth() / 2;
             int middleX = (classicCenterX + slimCenterX) / 2;
             return middleX;
         }
-        // Fallback to widget center if no button reference
+        // Priority 4: Fallback to widget center if no reference
         return getX() + getWidth() / 2;
     }
 
     /**
      * Get the Y position for model rendering (dynamically calculated)
-     * Uses Classic/Slim buttons if available, otherwise widget center
+     * Uses custom reference first, then Classic/Slim buttons if available, otherwise widget center
      */
     private int getModelCenterY() {
-        // In skin menu: Classic button Y coordinate (Classic and Slim are on same Y)
+        // Priority 1: Custom reference point
+        if (customCenterY != null) {
+            return customCenterY;
+        }
+        // Priority 2: In skin menu: Classic button Y coordinate (Classic and Slim are on same Y)
         if (classicButton != null) {
             int buttonCenterY = classicButton.getY() + classicButton.getHeight() / 2;
             return (int)(buttonCenterY + DEFAULT_OFFSET_FROM_BUTTON_Y);
         }
-        // Fallback to widget center if no button reference
+        // Priority 3: Fallback to widget center if no reference
         return getY() + getHeight() / 2 + 10; // Offset down slightly
     }
 
@@ -115,6 +127,16 @@ public class PlayerWidget extends AbstractWidget {
         this.autoButton = auto;
         this.classicButton = classic;
         this.slimButton = slim;
+    }
+
+    /**
+     * Set custom reference point for positioning (alternative to button references)
+     * @param centerX X coordinate of the reference point
+     * @param centerY Y coordinate of the reference point
+     */
+    public void setCustomReferencePoint(int centerX, int centerY) {
+        this.customCenterX = centerX;
+        this.customCenterY = centerY;
     }
 
     @Override

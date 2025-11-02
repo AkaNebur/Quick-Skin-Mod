@@ -66,6 +66,10 @@ public class PlayerCapeMenuScreen extends Screen {
     private Button removeButton;
     private Button closeButton;
 
+    // Model position offsets from grid edge
+    private static final int MODEL_OFFSET_X = 80;
+    private static final int MODEL_OFFSET_Y = 85;
+
     private double scrollOffset = 0;
     private double targetScrollOffset = 0;
     private int maxScroll = 0;
@@ -193,6 +197,11 @@ public class PlayerCapeMenuScreen extends Screen {
                 this.playerWidgetX, this.playerWidgetY,
                 this.playerWidgetWidth, this.playerWidgetHeight,
                 skinLocation, null, modelType));
+
+        // Set custom reference point to right side center of capes grid with fixed offset
+        int referenceX = this.gridX + this.gridWidth + MODEL_OFFSET_X;
+        int referenceY = this.gridY + (this.gridHeight / 2) + MODEL_OFFSET_Y;
+        this.playerWidget.setCustomReferencePoint(referenceX, referenceY);
     }
 
     private void calculateAdaptiveDimensions() {
