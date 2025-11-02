@@ -1,5 +1,6 @@
 package com.quickskin.mod.client.gui.widget;
 
+import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import com.quickskin.mod.client.rendering.PreviewPlayerData;
 import net.fabricmc.api.EnvType;
@@ -159,6 +160,11 @@ public class PlayerWidget extends AbstractWidget {
         previewData.setHeadYaw(0.0f);
         previewData.setHeadPitch(0.0f);
 
+        // DEBUG: Log cape location every frame when not null
+        if (previewData.getCapeLocation() != null) {
+            QuickSkin.LOGGER.info("[PlayerWidget] renderWidget: capeLocation = {}", previewData.getCapeLocation());
+        }
+
         // Render the player model
         // Use GuiGraphics directly for vanilla rendering method
         PlayerModelRenderer.renderPlayerModel(
@@ -188,7 +194,10 @@ public class PlayerWidget extends AbstractWidget {
      * Update the cape texture
      */
     public void setCape(@Nullable ResourceLocation capeLocation) {
+        QuickSkin.LOGGER.info("[PlayerWidget] setCape called with: {}", capeLocation);
+        QuickSkin.LOGGER.info("[PlayerWidget] previewData instance: {}", previewData);
         previewData.setCapeLocation(capeLocation);
+        QuickSkin.LOGGER.info("[PlayerWidget] After setCape, getCapeLocation returns: {}", previewData.getCapeLocation());
     }
 
     /**

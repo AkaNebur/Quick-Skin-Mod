@@ -123,11 +123,18 @@ public class PlayerModelRenderer {
         // Try to use cached player (works even on title screen after playing once)
         Player playerToRender = cachedPlayer;
 
+        QuickSkin.LOGGER.info("[PlayerModelRenderer] playerToRender: {}, mc.level: {}",
+            playerToRender != null ? "NOT NULL" : "NULL",
+            mc.level != null ? "NOT NULL" : "NULL");
+
         // If no cached player exists (fresh game launch), use manual rendering
         if (playerToRender == null) {
+            QuickSkin.LOGGER.info("[PlayerModelRenderer] Using MANUAL rendering path");
             renderPlayerModelManual(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);
             return;
         }
+
+        QuickSkin.LOGGER.info("[PlayerModelRenderer] Using ENTITY rendering path (InventoryScreen)");
 
         // Store original rotation
         float originalYRot = playerToRender.getYRot();
@@ -196,6 +203,9 @@ public class PlayerModelRenderer {
             int mouseY,
             boolean followMouse
     ) {
+        QuickSkin.LOGGER.info("[PlayerModelRenderer] ===== ENTERED renderPlayerModelManual() =====");
+        QuickSkin.LOGGER.info("[PlayerModelRenderer] x={}, y={}, capeLocation={}", x, y, playerData.getCapeLocation());
+
         ensureModelsLoaded();
 
         // Select model based on type
@@ -251,6 +261,47 @@ public class PlayerModelRenderer {
             1.0f, 1.0f, 1.0f, 1.0f // RGBA
         );
 
+        // Render cape AFTER model if present
+        if (playerData.getCapeLocation() != null) {
+            QuickSkin.LOGGER.info("[PlayerModelRenderer] Rendering cape with same method as skin");
+
+            // Use the EXACT same render type as the skin (entityTranslucent)
+            RenderType capeRenderType = RenderType.entityTranslucent(playerData.getCapeLocation());
+            var capeVertexConsumer = bufferSource.getBuffer(capeRenderType);
+
+            // Render a simple quad behind the player
+            poseStack.pushPose();
+
+            // Apply body transformations
+            model.body.translateAndRotate(poseStack);
+
+            // Position at back of shoulders
+            // Y: shoulder height, Z: behind the body
+            poseStack.translate(0.0, 0.0, 0.25);
+
+            PoseStack.Pose pose = poseStack.last();
+            Matrix4f matrix = pose.pose();
+
+            // Cape dimensions
+            float capeWidth = 0.625f;  // 10/16
+            float capeHeight = 1.0f;   // 16/16
+            float capeX = -capeWidth / 2;
+
+            // UV coords - cape texture is at (1,1) to (11,17) on 64x32 texture
+            float u0 = 1.0f / 64.0f;
+            float v0 = 1.0f / 32.0f;
+            float u1 = 11.0f / 64.0f;
+            float v1 = 17.0f / 32.0f;
+
+            // Render quad using same method as PlayerModel (flip UVs horizontally to correct mirroring)
+            capeVertexConsumer.vertex(matrix, capeX, 0, 0).color(255, 255, 255, 255).uv(u1, v0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(pose.normal(), 0, 0, 1).endVertex();
+            capeVertexConsumer.vertex(matrix, capeX + capeWidth, 0, 0).color(255, 255, 255, 255).uv(u0, v0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(pose.normal(), 0, 0, 1).endVertex();
+            capeVertexConsumer.vertex(matrix, capeX + capeWidth, capeHeight, 0).color(255, 255, 255, 255).uv(u0, v1).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(pose.normal(), 0, 0, 1).endVertex();
+            capeVertexConsumer.vertex(matrix, capeX, capeHeight, 0).color(255, 255, 255, 255).uv(u1, v1).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(pose.normal(), 0, 0, 1).endVertex();
+
+            poseStack.popPose();
+        }
+
         // Flush buffers - matches guiGraphics.flush() in InventoryScreen
         bufferSource.endBatch();
 
@@ -258,6 +309,11 @@ public class PlayerModelRenderer {
 
         // Lighting.setupFor3DItems();
         Lighting.setupFor3DItems();
+
+        // DEBUG: Magenta square to show cape is being processed
+        if (playerData.getCapeLocation() != null) {
+            graphics.fill(x - 20, y - 150, x + 20, y - 130, 0xFFFF00FF);
+        }
     }
 
     /**
@@ -294,6 +350,188 @@ public class PlayerModelRenderer {
      */
     private static float smoothLerp(float current, float target, float factor) {
         return current + (target - current) * factor;
+    }
+
+    /**
+     * Render cape layer similar to vanilla CapeLayer
+     * This is called AFTER the player model is rendered
+     */
+    private static void renderCapeLayer(
+            PoseStack poseStack,
+            MultiBufferSource.BufferSource bufferSource,
+            ResourceLocation capeTexture,
+            PlayerModel<?> model
+    ) {
+        poseStack.pushPose();
+
+        // Apply body transformations (cape is attached to the body)
+        model.body.translateAndRotate(poseStack);
+
+        // Position cape at back of shoulders
+        poseStack.translate(0.0, 0.0, 0.125);
+
+        // Cape dimensions
+        float capeWidth = 10.0f / 16.0f;
+        float capeHeight = 16.0f / 16.0f;
+        float xOffset = -capeWidth / 2.0f;
+
+        // Get cape render type and buffer
+        RenderType capeRenderType = RenderType.entitySolid(capeTexture);
+        var capeConsumer = bufferSource.getBuffer(capeRenderType);
+
+        PoseStack.Pose pose = poseStack.last();
+        Matrix4f matrix = pose.pose();
+
+        // UV coordinates
+        float u0 = 0.0f;
+        float v0 = 0.0f;
+        float u1 = 10.0f / 64.0f;
+        float v1 = 16.0f / 32.0f;
+
+        // Render quad
+        capeConsumer.vertex(matrix, xOffset, 0.0f, 0.0f)
+                .color(255, 255, 255, 255)
+                .uv(u0, v0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), 0.0f, 0.0f, 1.0f)
+                .endVertex();
+
+        capeConsumer.vertex(matrix, xOffset, capeHeight, 0.0f)
+                .color(255, 255, 255, 255)
+                .uv(u0, v1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), 0.0f, 0.0f, 1.0f)
+                .endVertex();
+
+        capeConsumer.vertex(matrix, xOffset + capeWidth, capeHeight, 0.0f)
+                .color(255, 255, 255, 255)
+                .uv(u1, v1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), 0.0f, 0.0f, 1.0f)
+                .endVertex();
+
+        capeConsumer.vertex(matrix, xOffset + capeWidth, 0.0f, 0.0f)
+                .color(255, 255, 255, 255)
+                .uv(u1, v0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), 0.0f, 0.0f, 1.0f)
+                .endVertex();
+
+        poseStack.popPose();
+    }
+
+    /**
+     * OLD Render cape in manual mode with correct transformations
+     * The cape needs special handling because we're in a transformed coordinate space
+     */
+    private static void renderCapeManualOLD(
+            PoseStack poseStack,
+            MultiBufferSource.BufferSource bufferSource,
+            ResourceLocation capeLocation,
+            float yRotation
+    ) {
+        poseStack.pushPose();
+
+        // DEBUG: Render a GIANT bright magenta rectangle that's impossible to miss
+        // This will help us see exactly where the cape is being rendered
+        RenderType debugRenderType = RenderType.gui();
+        var debugConsumer = bufferSource.getBuffer(debugRenderType);
+        PoseStack.Pose debugPose = poseStack.last();
+        Matrix4f debugMatrix = debugPose.pose();
+
+        // Render a huge bright rectangle (5x5 units) centered at origin
+        float debugSize = 2.5f;
+        // Top-left
+        debugConsumer.vertex(debugMatrix, -debugSize, -debugSize, 0.0f)
+                .color(255, 0, 255, 255) // Bright magenta
+                .uv(0, 0)
+                .endVertex();
+        // Bottom-left
+        debugConsumer.vertex(debugMatrix, -debugSize, debugSize, 0.0f)
+                .color(255, 0, 255, 255)
+                .uv(0, 1)
+                .endVertex();
+        // Bottom-right
+        debugConsumer.vertex(debugMatrix, debugSize, debugSize, 0.0f)
+                .color(255, 0, 255, 255)
+                .uv(1, 1)
+                .endVertex();
+        // Top-right
+        debugConsumer.vertex(debugMatrix, debugSize, -debugSize, 0.0f)
+                .color(255, 0, 255, 255)
+                .uv(1, 0)
+                .endVertex();
+
+        // Position cape at the back of the player's body
+        // In our transformed space (after XP 180, YP 180), we need to adjust positioning
+        // The cape should be slightly behind the body center
+        poseStack.translate(0.0, 0.0, -0.125); // Negative Z because of our flipped coordinates
+
+        // Cape dimensions (Minecraft standard: 10x16 pixels on 64x32 texture)
+        float capeWidth = 10.0f / 16.0f;  // 0.625 units
+        float capeHeight = 16.0f / 16.0f; // 1.0 units
+        float xOffset = -capeWidth / 2.0f; // Center the cape
+
+        // Add subtle swing animation
+        float capeSwing = (float) Math.sin(System.currentTimeMillis() / 1000.0) * 0.1f;
+        poseStack.mulPose(Axis.XP.rotationDegrees(capeSwing * 10.0f));
+
+        // Get render type and vertex consumer
+        RenderType renderType = RenderType.entityTranslucentCull(capeLocation);
+        var vertexConsumer = bufferSource.getBuffer(renderType);
+
+        // Get matrices
+        PoseStack.Pose pose = poseStack.last();
+        Matrix4f positionMatrix = pose.pose();
+
+        // UV coordinates for standard Minecraft cape (64x32 texture)
+        float u0 = 0.0f / 64.0f;
+        float v0 = 0.0f / 32.0f;
+        float u1 = 10.0f / 64.0f;
+        float v1 = 16.0f / 32.0f;
+
+        // Render cape quad (4 vertices forming a rectangle)
+        // Top-left
+        vertexConsumer.vertex(positionMatrix, xOffset, 0.0f, 0.0f)
+                .color(255, 255, 255, 255)
+                .uv(u0, v0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880) // Full bright
+                .normal(0.0f, 0.0f, 1.0f)
+                .endVertex();
+
+        // Bottom-left
+        vertexConsumer.vertex(positionMatrix, xOffset, capeHeight, 0.0f)
+                .color(255, 255, 255, 255)
+                .uv(u0, v1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(0.0f, 0.0f, 1.0f)
+                .endVertex();
+
+        // Bottom-right
+        vertexConsumer.vertex(positionMatrix, xOffset + capeWidth, capeHeight, 0.0f)
+                .color(255, 255, 255, 255)
+                .uv(u1, v1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(0.0f, 0.0f, 1.0f)
+                .endVertex();
+
+        // Top-right
+        vertexConsumer.vertex(positionMatrix, xOffset + capeWidth, 0.0f, 0.0f)
+                .color(255, 255, 255, 255)
+                .uv(u1, v0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(0.0f, 0.0f, 1.0f)
+                .endVertex();
+
+        poseStack.popPose();
     }
 
     /**

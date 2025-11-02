@@ -5,6 +5,7 @@ import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.util.GuiScalingUtils;
 import com.quickskin.mod.client.gui.widget.ConfirmationDialog;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
+import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -285,16 +286,27 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     private void removeCape() {
-        if (minecraft == null || minecraft.player == null) {
-            return;
-        }
-
-        PlayerAppearanceService.getInstance()
-            .applyCape(minecraft.player.getUUID(), "");
-
+        // Always update preview widget (works both in-game and on title screen)
         playerWidget.setCape(null);
         this.selectedCape = null;
-        QuickSkin.LOGGER.info("Removed cape");
+
+        // Remove from PlayerAppearanceService
+        if (minecraft != null && minecraft.player != null) {
+            // In-game: use the real player's UUID
+            PlayerAppearanceService.getInstance()
+                .applyCape(minecraft.player.getUUID(), "");
+            QuickSkin.LOGGER.info("Removed cape from in-game player");
+        } else {
+            // Title screen: use cached player UUID if available
+            java.util.UUID dummyUUID = getDummyPlayerUUID();
+            if (dummyUUID != null) {
+                PlayerAppearanceService.getInstance()
+                    .applyCape(dummyUUID, "");
+                QuickSkin.LOGGER.info("Removed cape from cached player");
+            } else {
+                QuickSkin.LOGGER.info("Removed cape from preview only");
+            }
+        }
     }
 
     public void showDeleteConfirmation(CapeEntry capeEntry) {
@@ -831,18 +843,48 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     private void applyCape(CapeEntry cape) {
-        if (minecraft == null || minecraft.player == null) {
-            return;
-        }
-
-        String capeId = cape.getCapeId();
-        PlayerAppearanceService.getInstance()
-            .applyCape(minecraft.player.getUUID(), capeId);
-
         ResourceLocation capeLocation = cape.getTextureLocation();
+        String capeId = cape.getCapeId();
+
+        // Always update preview widget (works both in-game and on title screen)
+        QuickSkin.LOGGER.info("[PlayerCapeMenuScreen] Setting cape in preview widget: {}", capeLocation);
         playerWidget.setCape(capeLocation);
 
-        QuickSkin.LOGGER.info("Applied cape: {}", cape.getFriendlyName());
+        // Apply to PlayerAppearanceService
+        if (minecraft != null && minecraft.player != null) {
+            // In-game: use the real player's UUID
+            PlayerAppearanceService.getInstance()
+                .applyCape(minecraft.player.getUUID(), capeId);
+            QuickSkin.LOGGER.info("Applied cape to in-game player: {}", cape.getFriendlyName());
+        } else {
+            // Title screen: use a dummy UUID that matches the cached player if it exists
+            // This allows entity rendering to work on title screen with cached player
+            java.util.UUID dummyUUID = getDummyPlayerUUID();
+            if (dummyUUID != null) {
+                PlayerAppearanceService.getInstance()
+                    .applyCape(dummyUUID, capeId);
+                QuickSkin.LOGGER.info("Applied cape to cached player for preview: {}", cape.getFriendlyName());
+            } else {
+                QuickSkin.LOGGER.info("Applied cape to preview only (no cached player): {}", cape.getFriendlyName());
+            }
+        }
+    }
+
+    /**
+     * Get the UUID of the cached player entity used for rendering
+     */
+    private java.util.UUID getDummyPlayerUUID() {
+        // Access the cached player from PlayerModelRenderer
+        // This is a bit hacky but necessary for title screen rendering
+        try {
+            var cachedPlayerField = PlayerModelRenderer.class.getDeclaredField("cachedPlayer");
+            cachedPlayerField.setAccessible(true);
+            var cachedPlayer = (net.minecraft.world.entity.player.Player) cachedPlayerField.get(null);
+            return cachedPlayer != null ? cachedPlayer.getUUID() : null;
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Failed to get cached player UUID", e);
+            return null;
+        }
     }
 
     private void updateScrollFromMouse(double mouseY) {
