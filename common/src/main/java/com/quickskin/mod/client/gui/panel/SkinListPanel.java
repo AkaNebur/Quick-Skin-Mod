@@ -110,6 +110,17 @@ public class SkinListPanel extends AbstractWidget {
         return skinListWidget;
     }
 
+    /**
+     * Get the currently selected skin entry
+     */
+    @Nullable
+    public SkinEntry getSelected() {
+        if (skinListWidget == null) {
+            return null;
+        }
+        return skinListWidget.getSelected();
+    }
+
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // This panel doesn't render anything itself - child widgets handle rendering

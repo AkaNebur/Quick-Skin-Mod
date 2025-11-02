@@ -27,11 +27,11 @@ public class QuickSkin {
         // Phase 4: Register common events
         CommonEvents.init();
 
-        // TODO Phase 5: Initialize storage
-        // AssetService.init();
+        // Phase 5: Storage is initialized in CommonEvents.SERVER_STARTING
+        // This ensures server-side storage is ready when the server starts
 
-        // TODO Phase 9: Load server config
-        // ServerConfig.load();
+        // Phase 9: Pre-load server config (will be reloaded on server start)
+        com.quickskin.mod.config.ServerConfig.getInstance();
 
         LOGGER.info("{} Common initialization complete", MOD_NAME);
     }

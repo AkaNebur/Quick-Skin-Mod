@@ -152,4 +152,11 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
             graphics.fill(x + width - 1, y + i, x + width, y + i + segmentLength, color);
         }
     }
+
+    /**
+     * Request deletion confirmation for a skin
+     */
+    public void requestDeletion(SkinEntry entry) {
+        parentScreen.showDeleteConfirmation(entry.getMetadata());
+    }
 }

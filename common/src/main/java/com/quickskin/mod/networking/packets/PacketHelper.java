@@ -76,11 +76,24 @@ public class PacketHelper {
      * Creates a packet for syncing server config to client
      * Format: boolean (allowSkins) + boolean (allowCapes) + boolean (allowTransparent)
      */
-    public static FriendlyByteBuf createSyncServerConfigPacket(boolean allowSkins, boolean allowCapes, boolean allowTransparent) {
+    /**
+     * Create server config sync packet (Phase 9)
+     * Sends full server config as JSON to client
+     */
+    public static FriendlyByteBuf createSyncServerConfigPacket(String configJson) {
         FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-        buf.writeBoolean(allowSkins);
-        buf.writeBoolean(allowCapes);
-        buf.writeBoolean(allowTransparent);
+        buf.writeUtf(configJson);
+        return buf;
+    }
+
+    /**
+     * Creates a packet for sending animation metadata to client
+     * Format: String (hash) + String (metadataJson)
+     */
+    public static FriendlyByteBuf createSendAnimationMetadataPacket(String hash, String metadataJson) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+        buf.writeUtf(hash);
+        buf.writeUtf(metadataJson);
         return buf;
     }
 

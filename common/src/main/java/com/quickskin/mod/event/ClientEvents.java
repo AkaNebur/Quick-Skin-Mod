@@ -80,8 +80,11 @@ public class ClientEvents {
             // Clear cached player to reset rendering state (fixes invisible buttons)
             com.quickskin.mod.client.rendering.PlayerModelRenderer.clearCachedPlayer();
 
-            // TODO Phase 5: Save local preferences
-            // if (player != null) LocalAppearanceStorage.savePlayerPreferences(player.getUUID());
+            // Phase 5: Save local preferences
+            if (player != null) {
+                com.quickskin.mod.client.storage.LocalAppearanceStorage.getInstance()
+                    .savePlayerPreferences(player.getUUID());
+            }
         });
 
         // Respawn event (player dies and respawns)
@@ -89,7 +92,10 @@ public class ClientEvents {
             QuickSkin.LOGGER.debug("Player respawned");
 
             // Re-apply appearance after respawn
-            // TODO Phase 3: Request appearance from server again
+            // Phase 3: On respawn, the server should automatically re-send appearances
+            // via the CHANGE_DIMENSION or respawn handler on server side
+            // Client-side, we just need to ensure the appearance repository is maintained
+            // which happens automatically through the sync packets
         });
 
         // Screen init (after screen is initialized, before render)
@@ -300,10 +306,12 @@ public class ClientEvents {
 
         // HUD render (for potential skin preview overlay)
         ClientGuiEvent.RENDER_HUD.register((guiGraphics, tickDelta) -> {
-            // TODO Phase 8: Render skin preview overlay if enabled in config
-            // if (ClientConfig.get().showSkinPreviewOverlay) {
-            //     SkinPreviewOverlay.render(guiGraphics, tickDelta);
-            // }
+            // Phase 8: Render skin preview overlay (will be configurable in Phase 9)
+            // For now, disabled by default - can be enabled when config is implemented
+            boolean showOverlay = false; // Will be: ClientConfig.get().showSkinPreviewOverlay
+            if (showOverlay) {
+                com.quickskin.mod.client.gui.overlay.SkinPreviewOverlay.render(guiGraphics, tickDelta);
+            }
         });
 
         // Chat message receive

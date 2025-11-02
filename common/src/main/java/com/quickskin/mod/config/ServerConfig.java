@@ -97,4 +97,23 @@ public class ServerConfig {
     public static void reload() {
         instance = load();
     }
+
+    /**
+     * Convert to JSON for network transmission
+     */
+    public String toJson() {
+        return GSON.toJson(this);
+    }
+
+    /**
+     * Create from JSON (for network reception)
+     */
+    public static ServerConfig fromJson(String json) {
+        try {
+            return GSON.fromJson(json, ServerConfig.class);
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Failed to parse server config from JSON", e);
+            return new ServerConfig();
+        }
+    }
 }

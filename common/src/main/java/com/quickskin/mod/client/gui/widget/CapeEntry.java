@@ -17,22 +17,22 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 
 /**
- * Individual skin entry in the skin list
+ * Individual cape entry in the cape list
  */
 @Environment(EnvType.CLIENT)
-public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
+public class CapeEntry extends ContainerObjectSelectionList.Entry<CapeEntry> {
 
     private final Minecraft mc;
     private final AssetMetadata metadata;
     private final ResourceLocation textureLocation;
-    private final SkinListWidget parentList;
+    private final CapeListWidget parentList;
 
     // Action button state
     private final int actionButtonSize = 11;
     private int deleteButtonX, deleteButtonY;
     private boolean isDeleteHovered;
 
-    public SkinEntry(SkinListWidget parentList, AssetMetadata metadata) {
+    public CapeEntry(CapeListWidget parentList, AssetMetadata metadata) {
         this.parentList = parentList;
         this.metadata = metadata;
         this.mc = Minecraft.getInstance();
@@ -72,40 +72,41 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             graphics.fill(highlightLeft, highlightTop, highlightRight, highlightBottom, 0x30FFFFFF);
         }
 
-        // Render skin face preview
-        int faceSize = height - 8;
-        int faceX = left + 4;
-        int faceY = top + 4;
+        // Render cape preview (smaller than face preview)
+        int capeWidth = (height - 8) * 3 / 4; // Aspect ratio for cape
+        int capeHeight = height - 8;
+        int capeX = left + 4;
+        int capeY = top + 4;
 
         if (textureLocation != null) {
             RenderSystem.enableBlend();
 
-            // Get texture dimensions for proper UV mapping
-            int textureWidth = metadata.resolution().getWidth();
-            int textureHeight = metadata.resolution().getHeight();
+            // Render cape texture preview
+            // Cape texture dimensions: 64x32 (or HD multiples)
+            int textureWidth = 64;
+            int textureHeight = 32;
 
-            // Scale UV coordinates proportionally for HD textures
-            float scaleX = textureWidth / 64.0f;
-            float scaleY = textureHeight / 64.0f;
+            if (metadata.resolution().isHD()) {
+                int scale = metadata.resolution().getScale();
+                textureWidth *= scale;
+                textureHeight *= scale;
+            }
 
-            // Render face (front + overlay)
-            graphics.blit(textureLocation, faceX, faceY, faceSize, faceSize,
-                8.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
-                textureWidth, textureHeight);
-            graphics.blit(textureLocation, faceX, faceY, faceSize, faceSize,
-                40.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
+            // Draw cape preview (use middle section of cape)
+            graphics.blit(textureLocation, capeX, capeY, capeWidth, capeHeight,
+                1.0f, 1.0f, 10, 16,
                 textureWidth, textureHeight);
 
             RenderSystem.disableBlend();
         } else {
             // Fallback if texture not loaded
-            graphics.fill(faceX, faceY, faceX + faceSize, faceY + faceSize, 0xFF333333);
-            graphics.drawCenteredString(mc.font, "?", faceX + faceSize / 2,
-                faceY + faceSize / 2 - 4, 0xFFFFFF);
+            graphics.fill(capeX, capeY, capeX + capeWidth, capeY + capeHeight, 0xFF333333);
+            graphics.drawCenteredString(mc.font, "?", capeX + capeWidth / 2,
+                capeY + capeHeight / 2 - 4, 0xFFFFFF);
         }
 
         // Render text info
-        int textX = left + faceSize + 12;
+        int textX = left + capeWidth + 12;
 
         // Calculate max width for text to avoid overlapping buttons
         int buttonAreaWidth = actionButtonSize + 8;
@@ -118,13 +119,13 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         }
         graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFF);
 
-        // Model type and resolution
-        String modelText = "slim".equalsIgnoreCase(metadata.skinModel()) ? "Slim" : "Classic";
+        // Cape type and resolution
+        String typeText = metadata.isAnimated() ? "Animated" : "Static";
         if (metadata.resolution().isHD()) {
-            modelText += " • " + metadata.resolution().name();
+            typeText += " • " + metadata.resolution().name();
         }
-        graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
-            metadata.resolution().isHD() ? 0x55FF55 : 0xAAAAAA);
+        graphics.drawString(mc.font, typeText, textX, top + 6 + mc.font.lineHeight + 2,
+            metadata.isAnimated() ? 0xFFAA00 : 0xAAAAAA);
 
         // Render action buttons on hover
         this.isDeleteHovered = false;
@@ -148,18 +149,15 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            if (this.isDeleteHovered) {
-                // Request deletion confirmation from parent
+            // Check if delete button was clicked
+            if (isDeleteHovered) {
                 parentList.requestDeletion(this);
                 return true;
             }
 
-            // Select this skin
-            mc.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 1.0f, 0.25f
-            ));
+            // Otherwise, select this cape
             parentList.setSelected(this);
-            parentList.onSkinSelected(this);
+            parentList.onCapeSelected(this);
             return true;
         }
         return false;

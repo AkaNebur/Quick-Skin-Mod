@@ -1,7 +1,11 @@
 package com.quickskin.mod.networking;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.networking.packets.PacketHelper;
+import com.quickskin.mod.server.data.ServerPlayerAppearanceRepository;
+import com.quickskin.mod.server.storage.ServerAnimationCache;
+import com.quickskin.mod.server.storage.ServerTextureCache;
 import dev.architectury.networking.NetworkManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -36,11 +40,11 @@ public class ServerNetworkHandler {
             QuickSkin.LOGGER.info("Received {} upload from player: {} (size: {} bytes)",
                     textureType, player.getName().getString(), imageData.length);
 
-            // TODO Phase 5: Store texture to server-side storage
-            // ServerTextureCache.storeTexture(playerId, textureType, imageData);
+            // Phase 5: Store texture to server-side storage
+            ServerTextureCache.getInstance().storeTexture(playerId, textureType, imageData);
 
-            // TODO Phase 3: Sync to other players
-            // broadcastTextureToOtherPlayers(player, textureType, imageData);
+            // Phase 3: Sync to other players
+            broadcastTextureToOtherPlayers(player, textureType, imageData);
         });
     }
 
@@ -65,8 +69,11 @@ public class ServerNetworkHandler {
             QuickSkin.LOGGER.info("Player {} updated appearance: skin={}, cape={}, model={}",
                     player.getName().getString(), skinId, capeId, model);
 
-            // TODO Phase 3: Broadcast to other players
-            // broadcastAppearanceToOtherPlayers(player, skinId, capeId, model);
+            // Update server-side repository
+            ServerPlayerAppearanceRepository.getInstance().updateAppearance(playerId, skinId, capeId, model);
+
+            // Phase 3: Broadcast to other players
+            broadcastAppearanceToOtherPlayers(player, skinId, capeId, model);
         });
     }
 
@@ -89,11 +96,13 @@ public class ServerNetworkHandler {
             QuickSkin.LOGGER.info("Player {} requested {} texture: {}",
                     player.getName().getString(), textureType, hash);
 
-            // TODO Phase 5: Load texture from server storage and send to client
-            // byte[] textureData = ServerTextureCache.getTexture(hash);
-            // if (textureData != null) {
-            //     sendTextureToClient(player, textureType, hash, textureData);
-            // }
+            // Phase 5: Load texture from server storage and send to client
+            byte[] textureData = ServerTextureCache.getInstance().getTexture(hash);
+            if (textureData != null) {
+                sendTextureToClient(player, textureType, hash, textureData);
+            } else {
+                QuickSkin.LOGGER.warn("Requested texture not found: {}", hash);
+            }
         });
     }
 
@@ -115,8 +124,145 @@ public class ServerNetworkHandler {
             QuickSkin.LOGGER.info("Player {} uploaded animation metadata for: {}",
                     player.getName().getString(), hash);
 
-            // TODO Phase 7: Store animation metadata
-            // ServerAnimationCache.storeMetadata(hash, metadataJson);
+            // Phase 7: Store animation metadata
+            ServerAnimationCache.getInstance().storeMetadata(hash, metadataJson);
+
+            // Broadcast animation metadata to other players
+            broadcastAnimationMetadataToOtherPlayers(player, hash, metadataJson);
         });
+    }
+
+    /**
+     * Broadcasts a player's texture to all other players on the server
+     * @param player The player whose texture changed
+     * @param textureType The type of texture ("skin" or "cape")
+     * @param imageData The texture image data
+     */
+    private static void broadcastTextureToOtherPlayers(ServerPlayer player, String textureType, byte[] imageData) {
+        // Create a unique hash for this texture (for now just use player UUID + type)
+        String hash = player.getUUID().toString() + "_" + textureType;
+
+        FriendlyByteBuf packet = PacketHelper.createSendTexturePacket(textureType, hash, imageData);
+
+        // Send to all players except the sender
+        for (ServerPlayer otherPlayer : player.server.getPlayerList().getPlayers()) {
+            if (!otherPlayer.getUUID().equals(player.getUUID())) {
+                NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SEND_TEXTURE, packet);
+            }
+        }
+
+        QuickSkin.LOGGER.debug("Broadcasted {} texture from {} to {} players",
+                textureType, player.getName().getString(),
+                player.server.getPlayerList().getPlayerCount() - 1);
+    }
+
+    /**
+     * Broadcasts a player's appearance to all other players on the server
+     * @param player The player whose appearance changed
+     * @param skinId The skin ID
+     * @param capeId The cape ID
+     * @param model The model type
+     */
+    private static void broadcastAppearanceToOtherPlayers(ServerPlayer player, String skinId, String capeId, String model) {
+        FriendlyByteBuf packet = PacketHelper.createSyncAppearancePacket(
+                player.getUUID(), skinId, capeId, model
+        );
+
+        // Send to all players except the sender
+        for (ServerPlayer otherPlayer : player.server.getPlayerList().getPlayers()) {
+            if (!otherPlayer.getUUID().equals(player.getUUID())) {
+                NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SYNC_APPEARANCE, packet);
+            }
+        }
+
+        QuickSkin.LOGGER.debug("Broadcasted appearance from {} to {} players",
+                player.getName().getString(),
+                player.server.getPlayerList().getPlayerCount() - 1);
+    }
+
+    /**
+     * Sends a player's appearance to a specific client
+     * Used when players join or respawn
+     * @param recipient The player to send the appearance to
+     * @param targetPlayerId The player whose appearance to send
+     */
+    public static void sendAppearanceToPlayer(ServerPlayer recipient, UUID targetPlayerId) {
+        PlayerAppearance appearance = ServerPlayerAppearanceRepository.getInstance().getAppearance(targetPlayerId);
+
+        if (appearance != null) {
+            FriendlyByteBuf packet = PacketHelper.createSyncAppearancePacket(
+                    targetPlayerId,
+                    appearance.getSkinId(),
+                    appearance.getCapeId(),
+                    appearance.getModel()
+            );
+
+            NetworkManager.sendToPlayer(recipient, ModNetworking.SYNC_APPEARANCE, packet);
+
+            QuickSkin.LOGGER.debug("Sent appearance of {} to {}",
+                    targetPlayerId, recipient.getName().getString());
+        }
+    }
+
+    /**
+     * Sends all player appearances to a newly joined player
+     * @param player The player who just joined
+     */
+    public static void sendAllAppearancesToPlayer(ServerPlayer player) {
+        // Send appearance of every other player to the joining player
+        for (ServerPlayer otherPlayer : player.server.getPlayerList().getPlayers()) {
+            if (!otherPlayer.getUUID().equals(player.getUUID())) {
+                sendAppearanceToPlayer(player, otherPlayer.getUUID());
+            }
+        }
+
+        QuickSkin.LOGGER.debug("Sent all player appearances to {}", player.getName().getString());
+    }
+
+    /**
+     * Send a texture to a client
+     * @param player The player to send to
+     * @param textureType The texture type
+     * @param hash The texture hash
+     * @param textureData The texture data
+     */
+    private static void sendTextureToClient(ServerPlayer player, String textureType, String hash, byte[] textureData) {
+        FriendlyByteBuf packet = PacketHelper.createSendTexturePacket(textureType, hash, textureData);
+        NetworkManager.sendToPlayer(player, ModNetworking.SEND_TEXTURE, packet);
+        QuickSkin.LOGGER.debug("Sent {} texture {} to {}", textureType, hash, player.getName().getString());
+    }
+
+    /**
+     * Broadcasts animation metadata to all other players on the server
+     * @param player The player who uploaded the metadata
+     * @param hash The texture hash
+     * @param metadataJson The animation metadata JSON
+     */
+    private static void broadcastAnimationMetadataToOtherPlayers(ServerPlayer player, String hash, String metadataJson) {
+        FriendlyByteBuf packet = PacketHelper.createSendAnimationMetadataPacket(hash, metadataJson);
+
+        // Send to all players except the sender
+        for (ServerPlayer otherPlayer : player.server.getPlayerList().getPlayers()) {
+            if (!otherPlayer.getUUID().equals(player.getUUID())) {
+                NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SEND_ANIMATION_METADATA, packet);
+            }
+        }
+
+        QuickSkin.LOGGER.debug("Broadcasted animation metadata for {} to {} players",
+                hash, player.server.getPlayerList().getPlayerCount() - 1);
+    }
+
+    /**
+     * Sends server config to a specific player (called on player join)
+     * @param player The player to send config to
+     */
+    public static void sendServerConfigToPlayer(ServerPlayer player) {
+        com.quickskin.mod.config.ServerConfig serverConfig = com.quickskin.mod.config.ServerConfig.getInstance();
+        String configJson = serverConfig.toJson();
+
+        FriendlyByteBuf packet = PacketHelper.createSyncServerConfigPacket(configJson);
+
+        NetworkManager.sendToPlayer(player, ModNetworking.SYNC_SERVER_CONFIG, packet);
+        QuickSkin.LOGGER.debug("Sent server config to {}", player.getName().getString());
     }
 }

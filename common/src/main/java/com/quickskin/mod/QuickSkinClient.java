@@ -2,8 +2,10 @@ package com.quickskin.mod;
 
 import com.quickskin.mod.client.input.KeybindRegistry;
 import com.quickskin.mod.client.services.*;
+import com.quickskin.mod.client.storage.LocalAppearanceStorage;
 import com.quickskin.mod.event.ClientEvents;
 import com.quickskin.mod.networking.ClientNetworking;
+import com.quickskin.mod.platform.PlatformHelper;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
@@ -35,14 +37,15 @@ public class QuickSkinClient {
         ClientEvents.init();
         KeybindRegistry.init();
 
-        // Phase 5: Initialize asset service
+        // Phase 5: Initialize asset service and local storage
         LocalAssetManager.getInstance().init();
+        LocalAppearanceStorage.getInstance().init(PlatformHelper.getConfigDirectory());
 
         // Phase 7: Animation service (AnimatedTextureManager is lazy-initialized)
         // Ticking is handled in ClientEvents
 
-        // TODO Phase 9: Load client config
-        // ClientConfig.load();
+        // Phase 9: Load client config
+        com.quickskin.mod.config.ClientConfig.getInstance();
 
         QuickSkin.LOGGER.info("{} Client initialization complete", QuickSkin.MOD_NAME);
     }

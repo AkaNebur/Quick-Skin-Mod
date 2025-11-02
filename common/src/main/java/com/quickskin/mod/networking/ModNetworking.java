@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking;
 
 import com.quickskin.mod.QuickSkin;
+import dev.architectury.networking.NetworkManager;
 import net.minecraft.resources.ResourceLocation;
 
 /**
@@ -52,36 +53,35 @@ public class ModNetworking {
         QuickSkin.LOGGER.info("Initializing networking...");
 
         // Register server-side packet receivers (C2S)
-        // Note: Architectury's NetworkManager will be imported when we uncomment these
-        // NetworkManager.registerReceiver(
-        //     NetworkManager.c2s(),
-        //     UPLOAD_SKIN,
-        //     ServerNetworkHandler::handleUploadTexture
-        // );
-        //
-        // NetworkManager.registerReceiver(
-        //     NetworkManager.c2s(),
-        //     UPLOAD_CAPE,
-        //     ServerNetworkHandler::handleUploadTexture
-        // );
-        //
-        // NetworkManager.registerReceiver(
-        //     NetworkManager.c2s(),
-        //     UPDATE_APPEARANCE,
-        //     ServerNetworkHandler::handleUpdateAppearance
-        // );
-        //
-        // NetworkManager.registerReceiver(
-        //     NetworkManager.c2s(),
-        //     REQUEST_TEXTURE,
-        //     ServerNetworkHandler::handleRequestTexture
-        // );
-        //
-        // NetworkManager.registerReceiver(
-        //     NetworkManager.c2s(),
-        //     UPLOAD_ANIMATION_METADATA,
-        //     ServerNetworkHandler::handleUploadAnimationMetadata
-        // );
+        NetworkManager.registerReceiver(
+            NetworkManager.c2s(),
+            UPLOAD_SKIN,
+            ServerNetworkHandler::handleUploadTexture
+        );
+
+        NetworkManager.registerReceiver(
+            NetworkManager.c2s(),
+            UPLOAD_CAPE,
+            ServerNetworkHandler::handleUploadTexture
+        );
+
+        NetworkManager.registerReceiver(
+            NetworkManager.c2s(),
+            UPDATE_APPEARANCE,
+            ServerNetworkHandler::handleUpdateAppearance
+        );
+
+        NetworkManager.registerReceiver(
+            NetworkManager.c2s(),
+            REQUEST_TEXTURE,
+            ServerNetworkHandler::handleRequestTexture
+        );
+
+        NetworkManager.registerReceiver(
+            NetworkManager.c2s(),
+            UPLOAD_ANIMATION_METADATA,
+            ServerNetworkHandler::handleUploadAnimationMetadata
+        );
 
         QuickSkin.LOGGER.info("Networking initialized (server-side receivers ready)");
     }

@@ -9,6 +9,8 @@ import com.quickskin.mod.client.gui.panel.SkinListPanel;
 import com.quickskin.mod.client.gui.util.FileDialogHelper;
 import com.quickskin.mod.client.gui.util.GuiScaleManager;
 import com.quickskin.mod.client.gui.util.SkinImporter;
+import com.quickskin.mod.client.gui.widget.ConfirmationDialog;
+import com.quickskin.mod.client.gui.widget.ErrorToast;
 import com.quickskin.mod.client.gui.widget.SkinEntry;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -19,10 +21,14 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -60,6 +66,12 @@ public class PlayerSkinMenuScreen extends Screen {
     private static final ResourceLocation STAR_PATTERN_TEXTURE = new ResourceLocation(QuickSkin.MOD_ID, "textures/gui/background/star_pattern.png");
     private static final ResourceLocation VIGNETTE_LOCATION = new ResourceLocation("textures/misc/vignette.png");
 
+    // Error toasts
+    private final List<ErrorToast> errorToasts = new ArrayList<>();
+
+    // Confirmation dialog
+    @Nullable
+    private ConfirmationDialog confirmationDialog;
 
     public PlayerSkinMenuScreen(@Nullable Screen parent) {
         super(Component.literal("QuickSkin"));
@@ -139,6 +151,9 @@ public class PlayerSkinMenuScreen extends Screen {
         );
         playerPreviewPanel.initPlayerWidget(this);
 
+        // Set up model type change callback to apply model to actual player
+        playerPreviewPanel.setModelTypeChangeCallback(this::onModelTypeChanged);
+
         // Create model buttons positioned above the cape button
         playerPreviewPanel.initModelButtons(
                 this,
@@ -167,7 +182,8 @@ public class PlayerSkinMenuScreen extends Screen {
                     }
                 },
                 () -> {
-                    // TODO: Open cape selection screen
+                    // Open cape selection screen
+                    minecraft.setScreen(new PlayerCapeMenuScreen(this));
                 },
                 this::onClose
         );
@@ -193,6 +209,29 @@ public class PlayerSkinMenuScreen extends Screen {
                 scaledComponentHeight
         );
         linkButtonsPanel.init(this);
+
+        // Restore saved model type and active skin from config
+        restoreSavedState();
+    }
+
+    /**
+     * Restore the saved model type and active skin from config
+     */
+    private void restoreSavedState() {
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+
+        // Restore model type preference
+        if (playerPreviewPanel != null) {
+            playerPreviewPanel.setCurrentModelType(config.activeModelType);
+        }
+
+        // Restore active skin selection
+        if (!config.activeSkinHash.isEmpty() && skinListPanel != null) {
+            AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(config.activeSkinHash);
+            if (metadata != null) {
+                skinListPanel.setSelected(metadata);
+            }
+        }
     }
 
     /**
@@ -344,6 +383,14 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Render widgets (buttons, etc.)
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        // Render confirmation dialog (on top of everything)
+        if (confirmationDialog != null) {
+            confirmationDialog.render(graphics, mouseX, mouseY, partialTick);
+        }
+
+        // Render error toasts (on top of dialog)
+        renderErrorToasts(graphics);
     }
 
     /**
@@ -408,6 +455,11 @@ public class PlayerSkinMenuScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Handle confirmation dialog first
+        if (confirmationDialog != null) {
+            return confirmationDialog.mouseClicked(mouseX, mouseY, button);
+        }
+
         // Handle debug positioning mode
         if (com.quickskin.mod.client.rendering.PlayerModelRenderer.handleDebugMousePressed((int)mouseX, (int)mouseY, button)) {
             return true;
@@ -482,6 +534,48 @@ public class PlayerSkinMenuScreen extends Screen {
                     metadata,
                     LocalAssetManager.getInstance().getTextureLocation(metadata.hash(), TextureQuality.FULL)
             );
+
+            // Get the current model type preference from config
+            com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+            String modelType = config.activeModelType;
+
+            // Apply skin to the actual player in-game
+            if (this.minecraft != null && this.minecraft.player != null) {
+                String skinId = "local_skin:" + metadata.hash();
+                com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                        .applySkin(this.minecraft.player.getUUID(), skinId, modelType);
+                QuickSkin.LOGGER.info("Applied skin to player: {} with model type: {}", metadata.friendlyName(), modelType);
+            }
+
+            // Save the active skin hash to config
+            config.activeSkinHash = metadata.hash();
+            config.save();
+        }
+    }
+
+    /**
+     * Called when model type is changed via the model buttons
+     */
+    private void onModelTypeChanged(String newModelType) {
+        if (this.minecraft != null && this.minecraft.player != null) {
+            // Get the currently selected skin entry
+            SkinEntry selectedEntry = skinListPanel != null ? skinListPanel.getSelected() : null;
+
+            if (selectedEntry != null) {
+                AssetMetadata metadata = selectedEntry.getMetadata();
+                String skinId = "local_skin:" + metadata.hash();
+
+                // Apply the skin with the new model type
+                com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                        .applySkin(this.minecraft.player.getUUID(), skinId, newModelType);
+
+                QuickSkin.LOGGER.info("Changed model type to: {}", newModelType);
+
+                // Save the model type preference to config
+                com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+                config.activeModelType = newModelType;
+                config.save();
+            }
         }
     }
 
@@ -532,7 +626,8 @@ public class PlayerSkinMenuScreen extends Screen {
                     }
                 } else {
                     QuickSkin.LOGGER.error("Failed to import skin: {}", filePath);
-                    // TODO: Show error message to user
+                    // Show error message to user
+                    showError(Component.literal("Failed to import skin"));
                 }
             });
         }
@@ -544,6 +639,65 @@ public class PlayerSkinMenuScreen extends Screen {
     private void refreshSkinList() {
         if (skinListPanel != null) {
             skinListPanel.refresh();
+        }
+    }
+
+    /**
+     * Show an error toast message
+     */
+    public void showError(Component message) {
+        errorToasts.add(new ErrorToast(message));
+    }
+
+    /**
+     * Render error toasts
+     */
+    private void renderErrorToasts(GuiGraphics graphics) {
+        errorToasts.removeIf(toast -> !toast.render(graphics, width, height));
+    }
+
+    /**
+     * Show deletion confirmation dialog
+     */
+    public void showDeleteConfirmation(AssetMetadata metadata) {
+        confirmationDialog = new ConfirmationDialog(
+            Component.literal("Delete Skin?"),
+            Component.literal("Are you sure you want to delete \"" + metadata.friendlyName() + "\"?"),
+            () -> {
+                // Confirm deletion
+                deleteSkin(metadata);
+                confirmationDialog = null;
+            },
+            () -> {
+                // Cancel
+                confirmationDialog = null;
+            }
+        );
+        confirmationDialog.init(width, height);
+    }
+
+    /**
+     * Delete a skin from local storage
+     */
+    private void deleteSkin(AssetMetadata metadata) {
+        try {
+            // Delete the file
+            Files.deleteIfExists(metadata.path());
+
+            minecraft.getSoundManager().play(
+                net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                    SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
+                )
+            );
+
+            // Refresh the asset manager and skin list
+            LocalAssetManager.getInstance().discoverLocalAssets();
+            refreshSkinList();
+
+            QuickSkin.LOGGER.info("Deleted skin: {}", metadata.friendlyName());
+        } catch (IOException e) {
+            QuickSkin.LOGGER.error("Failed to delete skin: {}", metadata.friendlyName(), e);
+            showError(Component.literal("Failed to delete skin: " + e.getMessage()));
         }
     }
 }

@@ -93,7 +93,24 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         // Refresh player renderer
         refreshPlayerRenderer(playerId);
 
-        // TODO Phase 10: Fire PlayerAppearanceUpdateEvent
+        // Phase 10: Fire PlayerAppearanceUpdateEvent
+        com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType updateType;
+        if (skinId != null && capeId != null) {
+            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.FULL;
+        } else if (skinId != null) {
+            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.SKIN;
+        } else if (capeId != null) {
+            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.CAPE;
+        } else if (model != null) {
+            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.MODEL;
+        } else {
+            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.FULL;
+        }
+
+        com.quickskin.mod.common.event.InternalEventBus.getInstance().post(
+            new com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent(playerId, appearance, updateType)
+        );
+        QuickSkin.LOGGER.debug("Fired PlayerAppearanceUpdateEvent for {} (type: {})", playerId, updateType);
     }
 
     @Override
@@ -143,9 +160,37 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 BlockState state = mc.level.getBlockState(pos);
                 mc.levelRenderer.setBlockDirty(pos, state, state);
 
-                // TODO Phase 10: Add SkinLayers3D compatibility refresh
+                // Phase 10: SkinLayers3D compatibility refresh
+                if (com.quickskin.mod.config.ClientConfig.getInstance().skinLayers3DCompat) {
+                    refreshSkinLayers3D(player);
+                }
+
                 QuickSkin.LOGGER.debug("Refreshed renderer for player: {}", playerId);
             }
+        }
+    }
+
+    /**
+     * Refresh SkinLayers3D rendering for a player (if mod is present)
+     * SkinLayers3D adds 3D layers to player skins
+     */
+    private void refreshSkinLayers3D(AbstractClientPlayer player) {
+        try {
+            // Check if SkinLayers3D is loaded
+            Class<?> skinLayersClass = Class.forName("dev.tr7zw.skinlayers.SkinLayersModBase");
+
+            // Try to call the refresh method if it exists
+            // This is a safe approach - if the mod structure changes, it just won't refresh
+            java.lang.reflect.Method refreshMethod = skinLayersClass.getDeclaredMethod("refreshPlayer", net.minecraft.world.entity.player.Player.class);
+            refreshMethod.setAccessible(true);
+            refreshMethod.invoke(null, player);
+
+            QuickSkin.LOGGER.debug("Refreshed SkinLayers3D for player: {}", player.getUUID());
+        } catch (ClassNotFoundException e) {
+            // SkinLayers3D not installed - this is fine
+        } catch (Exception e) {
+            // Method signature changed or other issue - log but don't crash
+            QuickSkin.LOGGER.debug("Could not refresh SkinLayers3D (mod may have updated): {}", e.getMessage());
         }
     }
 

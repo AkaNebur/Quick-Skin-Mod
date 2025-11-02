@@ -11,6 +11,8 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.function.Consumer;
+
 /**
  * Panel that manages the player preview widget and model type selection buttons
  */
@@ -26,8 +28,30 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
     private String currentModelType = "classic";
 
+    @Nullable
+    private Consumer<String> modelTypeChangeCallback;
+
+    @Nullable
+    private AssetMetadata currentMetadata;
+
     public PlayerPreviewPanel(int x, int y, int width, int height) {
         super(x, y, width, height, Component.empty());
+    }
+
+    /**
+     * Set the callback to be called when model type changes
+     */
+    public void setModelTypeChangeCallback(Consumer<String> callback) {
+        this.modelTypeChangeCallback = callback;
+    }
+
+    /**
+     * Set the current model type (without triggering callback)
+     * Used for initialization
+     */
+    public void setCurrentModelType(String modelType) {
+        this.currentModelType = modelType;
+        updateModelButtonStates();
     }
 
     /**
@@ -35,7 +59,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     public void initPlayerWidget(com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen screen) {
         // Calculate player widget dimensions
-        int widgetSize = Math.min(144, Math.min(height, width));
+        int widgetSize = Math.min(120, Math.min(height, width));
         int playerWidgetX = getX() + 20;
         int playerWidgetY = getY();
 
@@ -116,6 +140,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     public void updateSkin(AssetMetadata metadata, net.minecraft.resources.ResourceLocation skinLocation) {
         if (playerWidget != null && metadata != null) {
+            this.currentMetadata = metadata;
             playerWidget.setSkin(skinLocation);
 
             // Update model type if auto-detect
@@ -130,9 +155,22 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     private void setModelType(String modelType) {
         this.currentModelType = modelType;
+
+        // Update preview widget
         if (playerWidget != null) {
-            playerWidget.setModelType(modelType);
+            // If auto mode, use the detected model from metadata
+            if ("auto".equals(modelType) && currentMetadata != null) {
+                playerWidget.setModelType(currentMetadata.skinModel());
+            } else {
+                playerWidget.setModelType(modelType);
+            }
         }
+
+        // Notify callback to apply to actual player
+        if (modelTypeChangeCallback != null) {
+            modelTypeChangeCallback.accept(modelType);
+        }
+
         updateModelButtonStates();
     }
 

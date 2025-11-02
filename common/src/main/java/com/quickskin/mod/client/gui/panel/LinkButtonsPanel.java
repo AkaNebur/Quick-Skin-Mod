@@ -2,6 +2,7 @@ package com.quickskin.mod.client.gui.panel;
 
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.widget.LinkButton;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
@@ -51,8 +52,10 @@ public class LinkButtonsPanel extends AbstractWidget {
         ) {
             @Override
             public void onPress() {
-                // TODO: Open settings screen
-                QuickSkin.LOGGER.info("Settings button pressed");
+                // Open settings screen
+                Minecraft.getInstance().setScreen(
+                    new com.quickskin.mod.client.gui.screen.SettingsScreen(screen)
+                );
             }
         });
 

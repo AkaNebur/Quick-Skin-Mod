@@ -1,12 +1,20 @@
 package com.quickskin.mod.client.services;
 
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 
 import org.jetbrains.annotations.Nullable;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Service for managing player capes
@@ -56,37 +64,72 @@ public class CapeService implements ICapeService {
     @Override
     @Nullable
     public ResourceLocation loadMojangCape(String username) {
-        // TODO Phase 5: Implement Mojang API cape loading
+        // Phase 5: Implement Mojang API cape loading
         QuickSkin.LOGGER.debug("Loading Mojang cape for: {}", username);
+
+        // In a full implementation, this would fetch the player's cape from Mojang's API
+        // using the PlayerInfo system to get the actual player's cape texture
+        // For now, return null as capes are optional and require online fetching
+        QuickSkin.LOGGER.debug("Mojang cape loading requires online API access - not implemented yet");
         return null;
     }
 
     @Override
     @Nullable
     public ResourceLocation loadLocalCape(String hash) {
-        // TODO Phase 5: Implement local cape loading
+        // Phase 5: Implement local cape loading
         QuickSkin.LOGGER.debug("Loading local cape: {}", hash);
-        return null;
+
+        // Use LocalAssetManager to load the cape texture
+        ResourceLocation capeLocation = LocalAssetManager.getInstance()
+            .getTextureLocation(hash, TextureQuality.FULL);
+
+        if (capeLocation != null) {
+            QuickSkin.LOGGER.debug("Loaded local cape: {}", hash);
+        }
+
+        return capeLocation;
     }
 
     @Override
     @Nullable
     public ResourceLocation loadKnownCape(String capeId) {
-        // TODO Phase 5: Implement known cape loading (e.g., Minecon capes)
+        // Phase 5: Implement known cape loading (e.g., Minecon capes)
         QuickSkin.LOGGER.debug("Loading known cape: {}", capeId);
+
+        // Known capes could be pre-registered capes like Minecon capes, Optifine capes, etc.
+        // For now, we just return null as this requires a cape registry
+        // In a full implementation, this would check a registry of well-known cape IDs
+
         return null;
     }
 
     @Override
     public boolean isAnimated(String capeId) {
-        // TODO Phase 7: Implement animation detection
-        // This will check if the cape has animation metadata
+        // Phase 7: Implement animation detection
+        if (capeId == null || capeId.isEmpty()) {
+            return false;
+        }
+
+        // Check if it's a local cape
+        if (capeId.startsWith("local_cape:")) {
+            String hash = capeId.substring("local_cape:".length());
+
+            // Check if the asset has animation metadata
+            AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(hash);
+            if (metadata != null && metadata.isAnimated()) {
+                QuickSkin.LOGGER.debug("Cape {} is animated", hash);
+                return true;
+            }
+        }
+
+        // Mojang capes and known capes are not animated
         return false;
     }
 
     @Override
     public boolean hasLocalCape(String hash) {
-        // TODO Phase 5: Implement check using AssetService
-        return false;
+        // Phase 5: Implement check using AssetService
+        return LocalAssetManager.getInstance().getMetadata(hash) != null;
     }
 }
