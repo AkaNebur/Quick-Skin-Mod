@@ -78,7 +78,7 @@ public class SkinListPanel extends AbstractWidget {
         }
 
         // Clear and reload
-        skinListWidget.removeAllEntries();
+        skinListWidget.clearSkinEntries();
         loadSkins();
     }
 
