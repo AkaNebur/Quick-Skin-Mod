@@ -58,11 +58,11 @@ public class ClientEvents {
             // Phase 5: Rescan assets in case files changed while not in-game
             // LocalAssetManager.getInstance().reload();
 
-            // TODO Phase 5b: Load player's local appearance preferences
-            // LocalAppearanceStorage.loadPlayerPreferences(player.getUUID());
-
             // Clear appearance repository on world join
             PlayerAppearanceRepository.getInstance().clear();
+
+            // Restore saved skin and model type from config
+            restoreSavedAppearance(player);
         });
 
         // Player quits world (client-side)
@@ -227,17 +227,57 @@ public class ClientEvents {
             int widgetX = buttonX + offsetX;
             int widgetY = buttonY + offsetY;
 
-            // Get player skin or use default Steve skin
+            // Get player skin and model type from saved config or player
             ResourceLocation skinLocation = null;
+            String modelType = "classic";
             LocalPlayer player = Minecraft.getInstance().player;
-            if (player != null) {
-                skinLocation = player.getSkinTextureLocation();
-            } else {
-                // Fallback to Steve skin if no player available
-                skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
+
+            com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+
+            // First priority: Use saved skin from config (works on title screen when player is null)
+            if (!config.activeSkinHash.isEmpty()) {
+                com.quickskin.mod.client.services.LocalAssetManager assetManager =
+                        com.quickskin.mod.client.services.LocalAssetManager.getInstance();
+                com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+
+                if (metadata != null) {
+                    // Load the saved skin texture
+                    skinLocation = assetManager.getTextureLocation(config.activeSkinHash, com.quickskin.mod.common.data.TextureQuality.FULL);
+
+                    // Get saved model type
+                    modelType = config.activeModelType;
+
+                    // If auto mode, use the detected model type from metadata
+                    if ("auto".equals(modelType)) {
+                        modelType = metadata.skinModel();
+                    }
+
+                    QuickSkin.LOGGER.debug("Using saved skin for title screen widget: {} with model type: {}",
+                            metadata.friendlyName(), modelType);
+                }
             }
 
-            playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, null, "classic");
+            // Second priority: Use current player skin (when in-game)
+            if (skinLocation == null && player != null) {
+                skinLocation = player.getSkinTextureLocation();
+                // Keep the saved model type from config
+                modelType = config.activeModelType;
+                if ("auto".equals(modelType)) {
+                    modelType = player.getModelName(); // "default" or "slim"
+                    // Convert Minecraft model names to our format
+                    if ("default".equals(modelType)) {
+                        modelType = "classic";
+                    }
+                }
+            }
+
+            // Fallback: Use default Steve skin
+            if (skinLocation == null) {
+                skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
+                modelType = "classic";
+            }
+
+            playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, null, modelType);
             screenAccess.addRenderableWidget(playerWidget);
 
             QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) and PlayerWidget at ({}, {}) for screen type '{}'",
@@ -318,5 +358,33 @@ public class ClientEvents {
         }
 
         return largest;
+    }
+
+    /**
+     * Restore saved skin and model type from config when player joins world
+     */
+    private static void restoreSavedAppearance(LocalPlayer player) {
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+
+        // Check if there's a saved skin
+        if (!config.activeSkinHash.isEmpty()) {
+            com.quickskin.mod.client.services.LocalAssetManager assetManager =
+                    com.quickskin.mod.client.services.LocalAssetManager.getInstance();
+            com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+
+            if (metadata != null) {
+                // Apply the saved skin with the saved model type
+                String skinId = "local_skin:" + metadata.hash();
+                String modelType = config.activeModelType;
+
+                com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                        .applySkin(player.getUUID(), skinId, modelType);
+
+                QuickSkin.LOGGER.info("Restored saved skin: {} with model type: {}",
+                        metadata.friendlyName(), modelType);
+            } else {
+                QuickSkin.LOGGER.warn("Saved skin hash not found in assets: {}", config.activeSkinHash);
+            }
+        }
     }
 }
