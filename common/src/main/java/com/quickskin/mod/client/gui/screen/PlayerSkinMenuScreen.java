@@ -200,7 +200,7 @@ public class PlayerSkinMenuScreen extends Screen {
         // Create Link Buttons Panel (top-right)
         int linkButtonY = panelY + scaledPadding;
         int linkPanelWidth = (scaledComponentHeight + scaledSpacing) * 4;
-        int linkPanelX = panelX + panelWidth - linkPanelWidth - scaledPadding + scaledSpacing;
+        int linkPanelX = panelX + panelWidth - linkPanelWidth - scaledPadding;
 
         linkButtonsPanel = new LinkButtonsPanel(
                 linkPanelX,
