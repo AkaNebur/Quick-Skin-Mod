@@ -297,11 +297,6 @@ public class PlayerModelRenderer {
 
         // Lighting.setupFor3DItems();
         Lighting.setupFor3DItems();
-
-        // DEBUG: Magenta square to show cape is being processed
-        if (playerData.getCapeLocation() != null) {
-            graphics.fill(x - 20, y - 150, x + 20, y - 130, 0xFFFF00FF);
-        }
     }
 
     /**
