@@ -3,6 +3,7 @@ package com.quickskin.mod.client.gui.screen;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.util.GuiScalingUtils;
+import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.client.gui.widget.ConfirmationDialog;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
@@ -146,9 +147,6 @@ public class PlayerCapeMenuScreen extends Screen {
         refreshCapeList();
         updateGridDimensions();
 
-        // Initialize selected cape based on currently equipped cape
-        initializeSelectedCape();
-
         // Create buttons
         int bottomY = this.height - scaleValue(60);
 
@@ -190,10 +188,46 @@ public class PlayerCapeMenuScreen extends Screen {
         }
 
         LocalPlayer player = Minecraft.getInstance().player;
-        ResourceLocation skinLocation = player != null ? player.getSkinTextureLocation()
-            : new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
-        String modelType = player != null ? player.getModelName() : "default";
-        if ("default".equals(modelType)) {
+        ResourceLocation skinLocation = null;
+        String modelType = "classic";
+
+        // First priority: Use saved skin from config (works on title screen when player is null)
+        ClientConfig config = ClientConfig.getInstance();
+        if (!config.activeSkinHash.isEmpty()) {
+            LocalAssetManager assetManager = LocalAssetManager.getInstance();
+            AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+
+            if (metadata != null) {
+                // Load the saved skin texture
+                skinLocation = assetManager.getTextureLocation(config.activeSkinHash, TextureQuality.FULL);
+
+                // Get saved model type
+                modelType = config.activeModelType;
+
+                // If auto mode, use the detected model type from metadata
+                if ("auto".equals(modelType)) {
+                    modelType = metadata.skinModel();
+                }
+            }
+        }
+
+        // Second priority: Use current player skin (when in-game)
+        if (skinLocation == null && player != null) {
+            skinLocation = player.getSkinTextureLocation();
+            // Keep the saved model type from config
+            modelType = config.activeModelType;
+            if ("auto".equals(modelType)) {
+                modelType = player.getModelName(); // "default" or "slim"
+                // Convert Minecraft model names to our format
+                if ("default".equals(modelType)) {
+                    modelType = "classic";
+                }
+            }
+        }
+
+        // Fallback: Use default Steve skin
+        if (skinLocation == null) {
+            skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
             modelType = "classic";
         }
 
@@ -206,6 +240,9 @@ public class PlayerCapeMenuScreen extends Screen {
         int referenceX = this.gridX + this.gridWidth + MODEL_OFFSET_X;
         int referenceY = this.gridY + (this.gridHeight / 2) + MODEL_OFFSET_Y;
         this.playerWidget.setCustomReferencePoint(referenceX, referenceY);
+
+        // Initialize selected cape based on config/currently equipped cape (AFTER widget is created)
+        initializeSelectedCape();
 
         // Trigger initial rotation animation on menu open
         this.playerWidget.toggleRotation();
@@ -269,30 +306,46 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     /**
-     * Initialize the selected cape based on the player's currently equipped cape
+     * Initialize the selected cape based on the saved config or player's currently equipped cape
      */
     private void initializeSelectedCape() {
-        if (minecraft == null || minecraft.player == null) {
-            QuickSkin.LOGGER.debug("No player available, cannot initialize selected cape");
-            return;
+        String activeCapeId = null;
+
+        // First priority: Check config (works on title screen)
+        ClientConfig config = ClientConfig.getInstance();
+        if (!config.activeCapeHash.isEmpty()) {
+            activeCapeId = config.activeCapeHash;
+            QuickSkin.LOGGER.debug("Found active cape in config: {}", activeCapeId);
         }
 
-        // Get the player's current appearance
-        java.util.UUID playerId = minecraft.player.getUUID();
-        com.quickskin.mod.common.data.PlayerAppearance appearance =
-            PlayerAppearanceService.getInstance().getAppearance(playerId);
+        // Second priority: Check PlayerAppearanceService (in-game only)
+        if (activeCapeId == null && minecraft != null && minecraft.player != null) {
+            java.util.UUID playerId = minecraft.player.getUUID();
+            com.quickskin.mod.common.data.PlayerAppearance appearance =
+                PlayerAppearanceService.getInstance().getAppearance(playerId);
 
-        if (appearance == null || appearance.getCapeId() == null || appearance.getCapeId().isEmpty()) {
-            QuickSkin.LOGGER.debug("No active cape for player");
+            if (appearance != null && appearance.getCapeId() != null && !appearance.getCapeId().isEmpty()) {
+                activeCapeId = appearance.getCapeId();
+                QuickSkin.LOGGER.debug("Found active cape in PlayerAppearanceService: {}", activeCapeId);
+            }
+        }
+
+        // No active cape found
+        if (activeCapeId == null || activeCapeId.isEmpty()) {
+            QuickSkin.LOGGER.debug("No active cape found");
             this.selectedCape = null;
             return;
         }
 
-        // Find the matching cape in the list
-        String activeCapeId = appearance.getCapeId();
+        // Find the matching cape in the list and update preview
         for (CapeEntry cape : this.capes) {
             if (cape.getCapeId().equals(activeCapeId)) {
                 this.selectedCape = cape;
+                // Update the preview widget with the saved cape
+                ResourceLocation capeLocation = cape.getTextureLocation();
+                if (capeLocation != null && playerWidget != null) {
+                    playerWidget.setCape(capeLocation);
+                }
                 QuickSkin.LOGGER.info("Initialized selected cape: {}", cape.getFriendlyName());
                 return;
             }
@@ -326,6 +379,12 @@ public class PlayerCapeMenuScreen extends Screen {
         // Always update preview widget (works both in-game and on title screen)
         playerWidget.setCape(null);
         this.selectedCape = null;
+
+        // Clear from config for persistence
+        ClientConfig config = ClientConfig.getInstance();
+        config.activeCapeHash = "";
+        config.save();
+        QuickSkin.LOGGER.info("Cleared cape from config");
 
         // Remove from PlayerAppearanceService
         if (minecraft != null && minecraft.player != null) {
@@ -886,6 +945,12 @@ public class PlayerCapeMenuScreen extends Screen {
         // Always update preview widget (works both in-game and on title screen)
         QuickSkin.LOGGER.info("[PlayerCapeMenuScreen] Setting cape in preview widget: {}", capeLocation);
         playerWidget.setCape(capeLocation);
+
+        // Save to config for persistence
+        ClientConfig config = ClientConfig.getInstance();
+        config.activeCapeHash = capeId;
+        config.save();
+        QuickSkin.LOGGER.info("Saved cape to config: {}", capeId);
 
         // Apply to PlayerAppearanceService
         if (minecraft != null && minecraft.player != null) {

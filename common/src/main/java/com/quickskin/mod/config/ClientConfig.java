@@ -49,6 +49,7 @@ public class ClientConfig {
     // Active Skin Settings (persisted state)
     public String activeSkinHash = "";
     public String activeModelType = "auto"; // "auto", "classic", "slim"
+    public String activeCapeHash = ""; // Active cape hash
 
     // Server Config Override (set by server, not saved to file)
     public transient ServerConfig serverOverride = null;

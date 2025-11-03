@@ -156,6 +156,15 @@ public class PlayerPreviewPanel extends AbstractWidget {
     }
 
     /**
+     * Update the cape displayed in the player preview
+     */
+    public void updateCape(@Nullable net.minecraft.resources.ResourceLocation capeLocation) {
+        if (playerWidget != null) {
+            playerWidget.setCape(capeLocation);
+        }
+    }
+
+    /**
      * Detect model type from texture data
      */
     private String detectModelFromTexture(AssetMetadata metadata) {

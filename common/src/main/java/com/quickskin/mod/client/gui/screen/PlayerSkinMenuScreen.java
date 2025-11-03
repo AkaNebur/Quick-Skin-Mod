@@ -285,6 +285,38 @@ public class PlayerSkinMenuScreen extends Screen {
                 skinListPanel.setSelected(metadata);
             }
         }
+
+        // Restore active cape selection
+        if (!config.activeCapeHash.isEmpty() && playerPreviewPanel != null) {
+            ResourceLocation capeLocation = getCapeLocationFromId(config.activeCapeHash);
+            if (capeLocation != null) {
+                playerPreviewPanel.updateCape(capeLocation);
+            }
+        }
+    }
+
+    /**
+     * Convert cape ID to ResourceLocation
+     * Cape ID format: "local_cape:hash" or "known:id"
+     */
+    @Nullable
+    private ResourceLocation getCapeLocationFromId(String capeId) {
+        if (capeId.startsWith("local_cape:")) {
+            // Local cape - extract hash and get texture location
+            String hash = capeId.substring("local_cape:".length());
+            return LocalAssetManager.getInstance().getTextureLocation(hash, com.quickskin.mod.common.data.TextureQuality.FULL);
+        } else if (capeId.startsWith("known:")) {
+            // Known cape - extract ID and get from KnownCapes enum
+            String id = capeId.substring("known:".length());
+            try {
+                com.quickskin.mod.common.data.KnownCapes knownCape = com.quickskin.mod.common.data.KnownCapes.valueOf(id);
+                return knownCape.getTextureLocation();
+            } catch (IllegalArgumentException e) {
+                QuickSkin.LOGGER.warn("Unknown cape ID: {}", id);
+                return null;
+            }
+        }
+        return null;
     }
 
     /**

@@ -283,7 +283,29 @@ public class ClientEvents {
                 modelType = "classic";
             }
 
-            playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, null, modelType);
+            // Load saved cape from config
+            ResourceLocation capeLocation = null;
+            if (!config.activeCapeHash.isEmpty()) {
+                String capeId = config.activeCapeHash;
+                if (capeId.startsWith("local_cape:")) {
+                    // Local cape - extract hash and get texture location
+                    String hash = capeId.substring("local_cape:".length());
+                    capeLocation = com.quickskin.mod.client.services.LocalAssetManager.getInstance()
+                            .getTextureLocation(hash, com.quickskin.mod.common.data.TextureQuality.FULL);
+                } else if (capeId.startsWith("known:")) {
+                    // Known cape - extract ID and get from KnownCapes enum
+                    String id = capeId.substring("known:".length());
+                    try {
+                        com.quickskin.mod.common.data.KnownCapes knownCape =
+                            com.quickskin.mod.common.data.KnownCapes.valueOf(id);
+                        capeLocation = knownCape.getTextureLocation();
+                    } catch (IllegalArgumentException e) {
+                        QuickSkin.LOGGER.warn("Unknown cape ID: {}", id);
+                    }
+                }
+            }
+
+            playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, capeLocation, modelType);
             screenAccess.addRenderableWidget(playerWidget);
 
             QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) and PlayerWidget at ({}, {}) for screen type '{}'",
