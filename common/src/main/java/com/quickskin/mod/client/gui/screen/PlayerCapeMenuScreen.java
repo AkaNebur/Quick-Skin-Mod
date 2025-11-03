@@ -82,6 +82,10 @@ public class PlayerCapeMenuScreen extends Screen {
 
     // Player widget positioning
     private int playerWidgetX, playerWidgetY;
+
+    // Player widget rotation state (preserved across resizes)
+    private float savedBodyYaw = 20.0f;
+    private float savedTargetRotation = 200.0f; // Default after initial toggleRotation()
     private int playerWidgetWidth, playerWidgetHeight;
 
     @Nullable
@@ -105,6 +109,12 @@ public class PlayerCapeMenuScreen extends Screen {
 
     @Override
     protected void init() {
+        // Save rotation state from existing widget before it's destroyed
+        if (this.playerWidget != null) {
+            this.savedBodyYaw = this.playerWidget.getBodyYaw();
+            this.savedTargetRotation = this.playerWidget.getTargetYRotation();
+        }
+
         super.init();
 
         // Calculate adaptive dimensions based on screen size
@@ -244,8 +254,8 @@ public class PlayerCapeMenuScreen extends Screen {
         // Initialize selected cape based on config/currently equipped cape (AFTER widget is created)
         initializeSelectedCape();
 
-        // Trigger initial rotation animation on menu open
-        this.playerWidget.toggleRotation();
+        // Restore saved rotation state
+        this.playerWidget.setRotationState(this.savedBodyYaw, this.savedTargetRotation);
     }
 
     private void calculateAdaptiveDimensions() {

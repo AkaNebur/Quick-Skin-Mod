@@ -123,18 +123,11 @@ public class PlayerModelRenderer {
         // Try to use cached player (works even on title screen after playing once)
         Player playerToRender = cachedPlayer;
 
-        QuickSkin.LOGGER.info("[PlayerModelRenderer] playerToRender: {}, mc.level: {}",
-            playerToRender != null ? "NOT NULL" : "NULL",
-            mc.level != null ? "NOT NULL" : "NULL");
-
         // If no cached player exists (fresh game launch), use manual rendering
         if (playerToRender == null) {
-            QuickSkin.LOGGER.info("[PlayerModelRenderer] Using MANUAL rendering path");
             renderPlayerModelManual(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);
             return;
         }
-
-        QuickSkin.LOGGER.info("[PlayerModelRenderer] Using ENTITY rendering path (InventoryScreen)");
 
         // Store original rotation
         float originalYRot = playerToRender.getYRot();
@@ -203,9 +196,6 @@ public class PlayerModelRenderer {
             int mouseY,
             boolean followMouse
     ) {
-        QuickSkin.LOGGER.info("[PlayerModelRenderer] ===== ENTERED renderPlayerModelManual() =====");
-        QuickSkin.LOGGER.info("[PlayerModelRenderer] x={}, y={}, capeLocation={}", x, y, playerData.getCapeLocation());
-
         ensureModelsLoaded();
 
         // Select model based on type
@@ -263,8 +253,6 @@ public class PlayerModelRenderer {
 
         // Render cape AFTER model if present
         if (playerData.getCapeLocation() != null) {
-            QuickSkin.LOGGER.info("[PlayerModelRenderer] Rendering cape with same method as skin");
-
             // Use the EXACT same render type as the skin (entityTranslucent)
             RenderType capeRenderType = RenderType.entityTranslucent(playerData.getCapeLocation());
             var capeVertexConsumer = bufferSource.getBuffer(capeRenderType);

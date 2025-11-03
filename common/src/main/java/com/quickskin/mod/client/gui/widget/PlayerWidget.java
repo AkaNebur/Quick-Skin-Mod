@@ -160,11 +160,6 @@ public class PlayerWidget extends AbstractWidget {
         previewData.setHeadYaw(0.0f);
         previewData.setHeadPitch(0.0f);
 
-        // DEBUG: Log cape location every frame when not null
-        if (previewData.getCapeLocation() != null) {
-            QuickSkin.LOGGER.info("[PlayerWidget] renderWidget: capeLocation = {}", previewData.getCapeLocation());
-        }
-
         // Render the player model
         // Use GuiGraphics directly for vanilla rendering method
         PlayerModelRenderer.renderPlayerModel(
@@ -221,6 +216,45 @@ public class PlayerWidget extends AbstractWidget {
      */
     public void toggleRotation() {
         targetYRotation += 180.0f;
+    }
+
+    /**
+     * Get current body yaw (current rotation)
+     */
+    public float getBodyYaw() {
+        return bodyYaw;
+    }
+
+    /**
+     * Get target rotation (where it's animating towards)
+     */
+    public float getTargetYRotation() {
+        return targetYRotation;
+    }
+
+    /**
+     * Set rotation state (for restoring after widget recreation)
+     */
+    public void setRotationState(float bodyYaw, float targetYRotation) {
+        this.bodyYaw = bodyYaw;
+        this.targetYRotation = targetYRotation;
+    }
+
+    @Override
+    public void onClick(double mouseX, double mouseY) {
+        // Do nothing - make widget non-clickable
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Return false to indicate the click was not handled
+        return false;
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        // Return false to indicate the release was not handled
+        return false;
     }
 
     @Override

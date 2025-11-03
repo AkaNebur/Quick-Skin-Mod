@@ -60,6 +60,10 @@ public class PlayerSkinMenuScreen extends Screen {
     private boolean guiScaleForced = false;
     private boolean isClosing = false;
 
+    // Player preview rotation state (preserved across resizes)
+    private float savedBodyYaw = 20.0f;
+    private float savedTargetRotation = 20.0f;
+
     // Constants
     private static final int MIN_PANEL_WIDTH = 340;
     private static final int MAX_PANEL_WIDTH = 600;
@@ -100,6 +104,15 @@ public class PlayerSkinMenuScreen extends Screen {
 
         super.init();
         clearWidgets();
+
+        // Save rotation state from existing player preview panel before it's destroyed
+        if (playerPreviewPanel != null) {
+            com.quickskin.mod.client.gui.widget.PlayerWidget widget = playerPreviewPanel.getPlayerWidget();
+            if (widget != null) {
+                savedBodyYaw = widget.getBodyYaw();
+                savedTargetRotation = widget.getTargetYRotation();
+            }
+        }
 
         // Calculate panel dimensions based on screen size
         calculatePanelDimensions();
@@ -293,6 +306,14 @@ public class PlayerSkinMenuScreen extends Screen {
                 playerPreviewPanel.updateCape(capeLocation);
             }
         }
+
+        // Restore rotation state
+        if (playerPreviewPanel != null) {
+            com.quickskin.mod.client.gui.widget.PlayerWidget widget = playerPreviewPanel.getPlayerWidget();
+            if (widget != null) {
+                widget.setRotationState(savedBodyYaw, savedTargetRotation);
+            }
+        }
     }
 
     /**
@@ -308,10 +329,10 @@ public class PlayerSkinMenuScreen extends Screen {
         } else if (capeId.startsWith("known:")) {
             // Known cape - extract ID and get from KnownCapes enum
             String id = capeId.substring("known:".length());
-            try {
-                com.quickskin.mod.common.data.KnownCapes knownCape = com.quickskin.mod.common.data.KnownCapes.valueOf(id);
+            com.quickskin.mod.common.data.KnownCapes knownCape = com.quickskin.mod.common.data.KnownCapes.getById(id);
+            if (knownCape != null) {
                 return knownCape.getTextureLocation();
-            } catch (IllegalArgumentException e) {
+            } else {
                 QuickSkin.LOGGER.warn("Unknown cape ID: {}", id);
                 return null;
             }

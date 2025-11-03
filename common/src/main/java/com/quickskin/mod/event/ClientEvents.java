@@ -31,6 +31,10 @@ public class ClientEvents {
     private static int tickCounter = 0;
     private static PlayerWidget playerWidget;
 
+    // Title screen rotation state (preserved across screen rebuilds)
+    private static float titleScreenBodyYaw = 20.0f;
+    private static float titleScreenTargetRotation = 20.0f;
+
     /**
      * Initializes client event listeners
      * Called from QuickSkinClient.init()
@@ -295,18 +299,39 @@ public class ClientEvents {
                 } else if (capeId.startsWith("known:")) {
                     // Known cape - extract ID and get from KnownCapes enum
                     String id = capeId.substring("known:".length());
-                    try {
-                        com.quickskin.mod.common.data.KnownCapes knownCape =
-                            com.quickskin.mod.common.data.KnownCapes.valueOf(id);
+                    com.quickskin.mod.common.data.KnownCapes knownCape =
+                        com.quickskin.mod.common.data.KnownCapes.getById(id);
+                    if (knownCape != null) {
                         capeLocation = knownCape.getTextureLocation();
-                    } catch (IllegalArgumentException e) {
-                        QuickSkin.LOGGER.warn("Unknown cape ID: {}", id);
                     }
                 }
             }
 
+            // Save rotation state from existing widget before creating new one
+            if (playerWidget != null) {
+                titleScreenBodyYaw = playerWidget.getBodyYaw();
+                titleScreenTargetRotation = playerWidget.getTargetYRotation();
+            }
+
             playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, capeLocation, modelType);
             screenAccess.addRenderableWidget(playerWidget);
+
+            // Restore saved rotation state
+            playerWidget.setRotationState(titleScreenBodyYaw, titleScreenTargetRotation);
+
+            // Create and add rotate button (above Change Skin button, aligned to the right edge)
+            int rotateButtonSize = 20;
+            int rotateButtonX = buttonX + buttonWidth - rotateButtonSize;
+            int rotateButtonY = buttonY - rotateButtonSize - spacing;
+
+            com.quickskin.mod.client.gui.widget.RotateButton rotateButton =
+                new com.quickskin.mod.client.gui.widget.RotateButton(
+                    rotateButtonX,
+                    rotateButtonY,
+                    rotateButtonSize,
+                    button -> playerWidget.toggleRotation()
+                );
+            screenAccess.addRenderableWidget(rotateButton);
 
             QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) and PlayerWidget at ({}, {}) for screen type '{}'",
                 buttonX, buttonY, widgetX, widgetY, screenType);

@@ -165,6 +165,14 @@ public class PlayerPreviewPanel extends AbstractWidget {
     }
 
     /**
+     * Get the player widget (for accessing rotation state)
+     */
+    @Nullable
+    public com.quickskin.mod.client.gui.widget.PlayerWidget getPlayerWidget() {
+        return playerWidget;
+    }
+
+    /**
      * Detect model type from texture data
      */
     private String detectModelFromTexture(AssetMetadata metadata) {
