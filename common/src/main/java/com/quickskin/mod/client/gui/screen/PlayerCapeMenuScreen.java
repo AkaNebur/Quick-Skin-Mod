@@ -94,8 +94,9 @@ public class PlayerCapeMenuScreen extends Screen {
     @Nullable
     private CapeEntry selectedCape;
 
-    // Cape list (both known and local capes)
-    private final List<CapeEntry> capes = new ArrayList<>();
+    // Sectioned cape lists
+    private final List<CapeEntry> localCapes = new ArrayList<>(); // Contains "None" and local capes
+    private final List<CapeEntry> knownCapes = new ArrayList<>(); // Contains known/default capes
 
     // Import feedback
     private String importMessage = "";
@@ -312,24 +313,30 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     private void refreshCapeList() {
-        this.capes.clear();
+        this.localCapes.clear();
+        this.knownCapes.clear();
 
-        // Add known capes first (exclude NONE)
+        // --- Section 1: My Capes ---
+        // Add "None" option first
+        this.localCapes.add(CapeEntry.fromKnown(KnownCapes.NONE));
+
+        // Then add local capes
+        List<AssetMetadata> localCapeAssets = LocalAssetManager.getInstance()
+            .getAssetsByType("cape");
+        for (AssetMetadata localCape : localCapeAssets) {
+            this.localCapes.add(CapeEntry.fromLocal(localCape));
+        }
+
+        // --- Section 2: Default Capes ---
+        // Add all known capes except NONE (that's in My Capes section)
         for (KnownCapes knownCape : KnownCapes.values()) {
             if (!knownCape.isNoCape()) {
-                this.capes.add(CapeEntry.fromKnown(knownCape));
+                this.knownCapes.add(CapeEntry.fromKnown(knownCape));
             }
         }
 
-        // Then add local capes
-        List<AssetMetadata> localCapes = LocalAssetManager.getInstance()
-            .getAssetsByType("cape");
-        for (AssetMetadata localCape : localCapes) {
-            this.capes.add(CapeEntry.fromLocal(localCape));
-        }
-
-        QuickSkin.LOGGER.debug("Loaded {} total capes ({} known + {} local)",
-            capes.size(), KnownCapes.values().length - 1, localCapes.size());
+        QuickSkin.LOGGER.debug("Loaded {} local capes (including None) + {} default capes",
+            localCapes.size(), knownCapes.size());
     }
 
     /**
@@ -364,8 +371,8 @@ public class PlayerCapeMenuScreen extends Screen {
             return;
         }
 
-        // Find the matching cape in the list and update preview
-        for (CapeEntry cape : this.capes) {
+        // Find the matching cape in both lists and update preview
+        for (CapeEntry cape : this.localCapes) {
             if (cape.getCapeId().equals(activeCapeId)) {
                 this.selectedCape = cape;
                 // Update the preview widget with the saved cape
@@ -378,19 +385,38 @@ public class PlayerCapeMenuScreen extends Screen {
             }
         }
 
-        QuickSkin.LOGGER.warn("Could not find cape with ID '{}' in capes list", activeCapeId);
+        for (CapeEntry cape : this.knownCapes) {
+            if (cape.getCapeId().equals(activeCapeId)) {
+                this.selectedCape = cape;
+                // Update the preview widget with the saved cape
+                ResourceLocation capeLocation = cape.getTextureLocation();
+                if (capeLocation != null && playerWidget != null) {
+                    playerWidget.setCape(capeLocation);
+                }
+                QuickSkin.LOGGER.info("Initialized selected cape: {}", cape.getFriendlyName());
+                return;
+            }
+        }
+
+        QuickSkin.LOGGER.warn("Could not find cape with ID '{}' in capes lists", activeCapeId);
         this.selectedCape = null;
     }
 
     private void updateGridDimensions() {
         int totalHeight = 0;
 
-        if (!this.capes.isEmpty()) {
+        // "My Capes" section height
+        if (!this.localCapes.isEmpty()) {
             totalHeight += HEADER_HEIGHT;
-            // Add 1 for "None" option
-            int totalItems = this.capes.size() + 1;
-            int rows = (int) Math.ceil((double) totalItems / capesPerRow);
-            totalHeight += rows * (capeDisplaySize + capePadding);
+            int localRows = (int) Math.ceil((double) this.localCapes.size() / capesPerRow);
+            totalHeight += localRows * (capeDisplaySize + capePadding);
+        }
+
+        // "Default Capes" section height
+        if (!this.knownCapes.isEmpty()) {
+            totalHeight += HEADER_HEIGHT + 20; // Extra spacing between sections
+            int knownRows = (int) Math.ceil((double) this.knownCapes.size() / capesPerRow);
+            totalHeight += knownRows * (capeDisplaySize + capePadding);
         }
 
         this.totalContentHeight = totalHeight + capePadding;
@@ -606,14 +632,6 @@ public class PlayerCapeMenuScreen extends Screen {
                 if (!deleteHovered) {
                     graphics.renderTooltip(this.font, getCapeTooltip(hoveredCape), Optional.empty(), mouseX, mouseY);
                 }
-            } else {
-                // Check if hovering over "None" option
-                if (isHoveringNoneOption(mouseX, mouseY)) {
-                    List<Component> tooltip = new ArrayList<>();
-                    tooltip.add(Component.literal("No Cape").withStyle(s -> s.withBold(true).withColor(0xFFFFFF)));
-                    tooltip.add(Component.literal("Remove your cape").withStyle(s -> s.withColor(0xAAAAAA)));
-                    graphics.renderTooltip(this.font, tooltip, Optional.empty(), mouseX, mouseY);
-                }
             }
         }
     }
@@ -621,82 +639,59 @@ public class PlayerCapeMenuScreen extends Screen {
     private void renderCapeGrid(GuiGraphics graphics, int mouseX, int mouseY) {
         int currentY = gridY - (int) scrollOffset;
 
-        // Render "My Capes" header
-        if (!capes.isEmpty() || true) { // Always show header
-            int headerY = currentY + HEADER_HEIGHT / 2 - 4;
-            if (headerY > gridY - 8 && headerY < gridY + gridHeight + 8) {
-                int gridCenterX = this.gridX + (this.gridWidth / 2);
-                graphics.drawCenteredString(this.font, "My Capes", gridCenterX, headerY, 0xFFFFFF);
-            }
-            currentY += HEADER_HEIGHT;
+        // --- SECTION 1: MY CAPES ---
+        if (!localCapes.isEmpty()) {
+            currentY = renderSection(graphics, "My Capes", localCapes, currentY, mouseX, mouseY, true);
+        }
 
-            // Render "None" option first
-            renderNoneOption(graphics, currentY, mouseX, mouseY);
-
-            // Render cape grid items
-            int totalItems = capes.size() + 1; // +1 for "None"
-            for (int i = 0; i < capes.size(); i++) {
-                CapeEntry cape = capes.get(i);
-                int itemIndex = i + 1; // +1 because "None" is at index 0
-                int row = itemIndex / capesPerRow;
-                int col = itemIndex % capesPerRow;
-
-                int x = gridX + capePadding + col * (capeDisplaySize + capePadding);
-                int y = currentY + capePadding + row * (capeDisplaySize + capePadding);
-
-                if (y + capeDisplaySize < gridY || y > gridY + gridHeight) {
-                    continue; // Cull capes outside visible area
-                }
-
-                renderCapeEntry(graphics, cape, x, y, mouseX, mouseY);
-            }
-
-            // Render drop zone if first row isn't full
-            if (totalItems < capesPerRow) {
-                int col = totalItems % capesPerRow;
-                int dropZoneX = gridX + capePadding + col * (capeDisplaySize + capePadding);
-                int dropZoneY = currentY + capePadding;
-                int dropZoneWidth = (gridX + gridWidth) - dropZoneX - capePadding;
-                int dropZoneHeight = capeDisplaySize;
-
-                if (dropZoneWidth > capePadding) {
-                    renderDropZone(graphics, dropZoneX, dropZoneY, dropZoneWidth, dropZoneHeight, mouseX, mouseY);
-                }
-            }
+        // --- SECTION 2: DEFAULT CAPES ---
+        if (!knownCapes.isEmpty()) {
+            renderSection(graphics, "Default Capes", knownCapes, currentY + 20, mouseX, mouseY, false);
         }
     }
 
-    private void renderNoneOption(GuiGraphics graphics, int baseY, int mouseX, int mouseY) {
-        int x = gridX + capePadding;
-        int y = baseY + capePadding;
+    private int renderSection(GuiGraphics graphics, String title, List<CapeEntry> capes, int startY, int mouseX, int mouseY, boolean isLocalSection) {
+        // Render Header (centered within the grid)
+        int headerY = startY + HEADER_HEIGHT / 2 - 4;
+        if (headerY > gridY - 8 && headerY < gridY + gridHeight + 8) {
+            int gridCenterX = this.gridX + (this.gridWidth / 2);
+            graphics.drawCenteredString(this.font, title, gridCenterX, headerY, 0xFFFFFF);
+        }
+        int currentY = startY + HEADER_HEIGHT;
 
-        if (y + capeDisplaySize < gridY || y > gridY + gridHeight) {
-            return; // Cull if outside visible area
+        // Render Grid Items
+        for (int i = 0; i < capes.size(); i++) {
+            CapeEntry cape = capes.get(i);
+            int row = i / capesPerRow;
+            int col = i % capesPerRow;
+
+            int x = gridX + capePadding + col * (capeDisplaySize + capePadding);
+            int y = currentY + capePadding + row * (capeDisplaySize + capePadding);
+
+            if (y + capeDisplaySize < gridY || y > gridY + gridHeight) {
+                continue; // Cull capes outside the visible area
+            }
+
+            renderCapeEntry(graphics, cape, x, y, mouseX, mouseY);
         }
 
-        boolean hovered = isMouseOver(mouseX, mouseY, x, y, capeDisplaySize, capeDisplaySize);
+        // For "My Capes", if the first row isn't full, render a drop zone in the remaining space
+        if (isLocalSection && capes.size() < capesPerRow) {
+            int col = capes.size() % capesPerRow;
+            int dropZoneX = gridX + capePadding + col * (capeDisplaySize + capePadding);
+            int dropZoneY = currentY + capePadding; // Y position of the first row
+            int dropZoneWidth = (gridX + gridWidth) - dropZoneX - capePadding;
+            int dropZoneHeight = capeDisplaySize;
 
-        // Draw background
-        graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0x90000000);
-
-        // Draw "None" text
-        graphics.drawCenteredString(this.font, "None", x + capeDisplaySize / 2,
-                y + capeDisplaySize / 2 - 4, 0xFFFFFF);
-
-        // Highlight if selected or hovered
-        if (selectedCape == null) {
-            graphics.renderOutline(x - 2, y - 2, capeDisplaySize + 4, capeDisplaySize + 4, 0xFFFFFF00);
-        } else if (hovered) {
-            graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0x33FFFFFF);
+            if (dropZoneWidth > capePadding) {
+                renderDropZone(graphics, dropZoneX, dropZoneY, dropZoneWidth, dropZoneHeight, mouseX, mouseY);
+            }
         }
+
+        int rows = (int) Math.ceil((double) capes.size() / capesPerRow);
+        return currentY + rows * (capeDisplaySize + capePadding);
     }
 
-    private boolean isHoveringNoneOption(int mouseX, int mouseY) {
-        int currentY = gridY - (int) scrollOffset + HEADER_HEIGHT;
-        int x = gridX + capePadding;
-        int y = currentY + capePadding;
-        return isMouseOver(mouseX, mouseY, x, y, capeDisplaySize, capeDisplaySize);
-    }
 
     private void renderDropZone(GuiGraphics graphics, int x, int y, int width, int height, int mouseX, int mouseY) {
         boolean isHovering = isMouseOver(mouseX, mouseY, x, y, width, height) &&
@@ -929,17 +924,10 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // Handle cape selection
         if (button == 0 && isMouseOverGrid((int) mouseX, (int) mouseY)) {
-            // Check if clicking "None" option
-            if (isHoveringNoneOption((int) mouseX, (int) mouseY)) {
-                this.selectedCape = null;
-                removeCape();
-                return true;
-            }
-
             CapeEntry clickedCape = getCapeAt((int) mouseX, (int) mouseY);
             if (clickedCape != null) {
-                // Check for delete button click (only for local capes)
-                if (clickedCape.isLocal()) {
+                // Check for delete button click (only for local capes, not "None")
+                if (clickedCape.isLocal() && !clickedCape.isKnown()) {
                     int[] pos = getCapePosition(clickedCape);
                     if (pos != null) {
                         int x = pos[0];
@@ -955,9 +943,13 @@ public class PlayerCapeMenuScreen extends Screen {
                     }
                 }
 
-                // Select cape
+                // Select cape (includes "None" option)
                 this.selectedCape = clickedCape;
-                applyCape(clickedCape);
+                if (clickedCape.isKnown() && clickedCape.getKnownCape().isNoCape()) {
+                    removeCape();
+                } else {
+                    applyCape(clickedCape);
+                }
                 return true;
             }
         }
@@ -1076,10 +1068,39 @@ public class PlayerCapeMenuScreen extends Screen {
         if (!isMouseOverGrid(mouseX, mouseY)) return null;
 
         int absoluteMouseY = mouseY + (int) scrollOffset;
-        int currentY = gridY + HEADER_HEIGHT;
+        int currentY = gridY;
 
+        // --- Check "My Capes" section ---
+        if (!localCapes.isEmpty()) {
+            currentY += HEADER_HEIGHT;
+            int rows = (int) Math.ceil((double) localCapes.size() / capesPerRow);
+            int sectionHeight = rows * (capeDisplaySize + capePadding) + capePadding;
+
+            if (absoluteMouseY >= currentY && absoluteMouseY < currentY + sectionHeight) {
+                CapeEntry cape = findCapeInGrid(mouseX, mouseY, absoluteMouseY, currentY, localCapes);
+                if (cape != null) return cape;
+            }
+            currentY += sectionHeight;
+        }
+
+        // --- Check "Default Capes" section ---
+        if (!knownCapes.isEmpty()) {
+            currentY += 20; // Extra spacing between sections
+            currentY += HEADER_HEIGHT;
+            int rows = (int) Math.ceil((double) knownCapes.size() / capesPerRow);
+            int sectionHeight = rows * (capeDisplaySize + capePadding) + capePadding;
+
+            if (absoluteMouseY >= currentY && absoluteMouseY < currentY + sectionHeight) {
+                return findCapeInGrid(mouseX, mouseY, absoluteMouseY, currentY, knownCapes);
+            }
+        }
+
+        return null;
+    }
+
+    private CapeEntry findCapeInGrid(int mouseX, int mouseY, int absoluteMouseY, int sectionTopY, List<CapeEntry> capes) {
         int relX = mouseX - this.gridX - capePadding;
-        int relY = absoluteMouseY - currentY - capePadding;
+        int relY = absoluteMouseY - sectionTopY - capePadding;
 
         int col = relX / (capeDisplaySize + capePadding);
         int row = relY / (capeDisplaySize + capePadding);
@@ -1087,12 +1108,10 @@ public class PlayerCapeMenuScreen extends Screen {
         if (col < 0 || col >= capesPerRow) return null;
 
         int index = row * capesPerRow + col;
-        // -1 because first slot is "None"
-        index = index - 1;
 
         if (index >= 0 && index < capes.size()) {
-            int capeX = this.gridX + capePadding + (col) * (capeDisplaySize + capePadding);
-            int capeY = currentY + capePadding + row * (capeDisplaySize + capePadding) - (int) this.scrollOffset;
+            int capeX = this.gridX + capePadding + col * (capeDisplaySize + capePadding);
+            int capeY = sectionTopY + capePadding + row * (capeDisplaySize + capePadding) - (int) this.scrollOffset;
             if (isMouseOver(mouseX, mouseY, capeX, capeY, capeDisplaySize, capeDisplaySize)) {
                 return capes.get(index);
             }
@@ -1102,27 +1121,37 @@ public class PlayerCapeMenuScreen extends Screen {
 
     @Nullable
     private int[] getCapePosition(CapeEntry cape) {
-        int currentY = gridY - (int) scrollOffset + HEADER_HEIGHT;
-        int index = -1;
+        int currentY = gridY - (int) scrollOffset;
 
-        // Find the index of this cape
-        for (int i = 0; i < capes.size(); i++) {
-            if (capes.get(i).getCapeId().equals(cape.getCapeId())) {
-                index = i;
-                break;
+        // Check "My Capes" section
+        if (!localCapes.isEmpty()) {
+            currentY += HEADER_HEIGHT;
+            int index = localCapes.indexOf(cape);
+            if (index != -1) {
+                int row = index / capesPerRow;
+                int col = index % capesPerRow;
+                int x = gridX + capePadding + col * (capeDisplaySize + capePadding);
+                int y = currentY + capePadding + row * (capeDisplaySize + capePadding);
+                return new int[]{x, y};
             }
+            int rows = (int) Math.ceil((double) localCapes.size() / capesPerRow);
+            currentY += rows * (capeDisplaySize + capePadding);
         }
 
-        if (index == -1) return null;
-
-        // +1 because "None" is at index 0
-        index = index + 1;
-
-        int row = index / capesPerRow;
-        int col = index % capesPerRow;
-        int x = gridX + capePadding + col * (capeDisplaySize + capePadding);
-        int y = currentY + capePadding + row * (capeDisplaySize + capePadding);
-        return new int[]{x, y};
+        // Check "Default Capes" section
+        if (!knownCapes.isEmpty()) {
+            currentY += 20; // Extra spacing
+            currentY += HEADER_HEIGHT;
+            int index = knownCapes.indexOf(cape);
+            if (index != -1) {
+                int row = index / capesPerRow;
+                int col = index % capesPerRow;
+                int x = gridX + capePadding + col * (capeDisplaySize + capePadding);
+                int y = currentY + capePadding + row * (capeDisplaySize + capePadding);
+                return new int[]{x, y};
+            }
+        }
+        return null;
     }
 
     private boolean isMouseOverGrid(int mouseX, int mouseY) {
