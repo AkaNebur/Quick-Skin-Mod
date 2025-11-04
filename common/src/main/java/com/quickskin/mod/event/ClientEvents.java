@@ -5,7 +5,9 @@ import com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen;
 import com.quickskin.mod.client.gui.util.DebugOffsetManager;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
+import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.ModelService;
+import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
 import dev.architectury.event.EventResult;
 import dev.architectury.event.events.client.*;
@@ -270,9 +272,26 @@ public class ClientEvents {
             // Second priority: Use current player skin (when in-game)
             if (skinLocation == null && player != null) {
                 skinLocation = player.getSkinTextureLocation();
-                // Keep the saved model type from config
                 modelType = config.activeModelType;
-                if ("auto".equals(modelType)) {
+
+                // If auto mode, detect from the active custom skin (if any)
+                if ("auto".equals(modelType) && !config.activeSkinHash.isEmpty()) {
+                    LocalAssetManager assetManager = LocalAssetManager.getInstance();
+                    AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+
+                    if (metadata != null) {
+                        // Use the detected model type from the custom skin metadata
+                        modelType = metadata.skinModel();
+                    } else {
+                        // Fallback: detect from the vanilla player's model
+                        modelType = player.getModelName(); // "default" or "slim"
+                        // Convert Minecraft model names to our format
+                        if ("default".equals(modelType)) {
+                            modelType = "classic";
+                        }
+                    }
+                } else if ("auto".equals(modelType)) {
+                    // No custom skin active, use vanilla player's model
                     modelType = player.getModelName(); // "default" or "slim"
                     // Convert Minecraft model names to our format
                     if ("default".equals(modelType)) {

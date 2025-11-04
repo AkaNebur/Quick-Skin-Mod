@@ -48,11 +48,35 @@ public class SkinPreviewOverlay {
 
         // Get current skin and model type
         ResourceLocation skinLocation = player.getSkinTextureLocation();
-        String modelType = player.getModelName(); // "default" or "slim"
+        String modelType = "classic";
 
-        // Convert to our model type format
-        if ("default".equals(modelType)) {
-            modelType = "classic";
+        // Check if there's an active custom skin
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        if (!config.activeSkinHash.isEmpty()) {
+            // Use custom skin
+            com.quickskin.mod.client.services.LocalAssetManager assetManager =
+                com.quickskin.mod.client.services.LocalAssetManager.getInstance();
+            com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+
+            if (metadata != null) {
+                skinLocation = assetManager.getTextureLocation(config.activeSkinHash,
+                    com.quickskin.mod.common.data.TextureQuality.FULL);
+
+                // Get model type (respecting auto mode)
+                String configModelType = config.activeModelType;
+                if ("auto".equals(configModelType)) {
+                    modelType = metadata.skinModel();
+                } else {
+                    modelType = configModelType;
+                }
+            }
+        } else {
+            // Use vanilla skin
+            modelType = player.getModelName(); // "default" or "slim"
+            // Convert to our model type format
+            if ("default".equals(modelType)) {
+                modelType = "classic";
+            }
         }
 
         // Calculate position based on overlay position setting

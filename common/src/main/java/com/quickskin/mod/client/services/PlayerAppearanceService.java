@@ -253,6 +253,16 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         // Check model override first (priority)
         String override = modelService.getModelOverride(playerId);
         if (override != null) {
+            // If override is "auto", resolve it to the actual model type
+            if ("auto".equalsIgnoreCase(override)) {
+                PlayerAppearance appearance = repository.getAppearance(playerId);
+                if (appearance != null) {
+                    String skinId = appearance.getSkinId();
+                    // Resolve "auto" to actual model type
+                    String resolvedModel = modelService.getModelType(playerId, skinId, "auto");
+                    return resolvedModel;
+                }
+            }
             return override;
         }
 
