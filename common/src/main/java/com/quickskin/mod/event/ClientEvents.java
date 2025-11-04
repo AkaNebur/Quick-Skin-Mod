@@ -98,10 +98,7 @@ public class ClientEvents {
             QuickSkin.LOGGER.debug("Player respawned");
 
             // Re-apply appearance after respawn
-            // Phase 3: On respawn, the server should automatically re-send appearances
-            // via the CHANGE_DIMENSION or respawn handler on server side
-            // Client-side, we just need to ensure the appearance repository is maintained
-            // which happens automatically through the sync packets
+            restoreSavedAppearance(newPlayer);
         });
 
         // Screen init (after screen is initialized, before render)
@@ -435,7 +432,7 @@ public class ClientEvents {
     }
 
     /**
-     * Restore saved skin and model type from config when player joins world
+     * Restore saved skin and cape from config when player joins world
      */
     private static void restoreSavedAppearance(LocalPlayer player) {
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
@@ -459,6 +456,16 @@ public class ClientEvents {
             } else {
                 QuickSkin.LOGGER.warn("Saved skin hash not found in assets: {}", config.activeSkinHash);
             }
+        }
+
+        // Check if there's a saved cape
+        if (!config.activeCapeHash.isEmpty()) {
+            String capeId = config.activeCapeHash;
+
+            com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                    .applyCape(player.getUUID(), capeId);
+
+            QuickSkin.LOGGER.info("Restored saved cape: {}", capeId);
         }
     }
 }
