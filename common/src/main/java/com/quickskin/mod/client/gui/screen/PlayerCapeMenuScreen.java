@@ -1155,6 +1155,12 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     @Override
+    public boolean isPauseScreen() {
+        // Don't pause game when this screen is open
+        return false;
+    }
+
+    @Override
     public void onClose() {
         if (minecraft != null) {
             minecraft.setScreen(parent);
