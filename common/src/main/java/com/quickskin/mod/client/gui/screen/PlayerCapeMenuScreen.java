@@ -752,9 +752,28 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     private void renderCapeEntry(GuiGraphics graphics, CapeEntry cape, int x, int y, int mouseX, int mouseY) {
-        ResourceLocation texture = cape.getTextureLocation();
-
         boolean hovered = isMouseOver(mouseX, mouseY, x, y, capeDisplaySize, capeDisplaySize);
+
+        // Special handling for "None" option
+        if (cape.isKnown() && cape.getKnownCape() != null && cape.getKnownCape().isNoCape()) {
+            // Render black background
+            graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0x90000000);
+
+            // Render "None" text centered
+            graphics.drawCenteredString(this.font, "None", x + capeDisplaySize / 2,
+                y + capeDisplaySize / 2 - 4, 0xFFFFFF);
+
+            // Highlight if selected or hovered
+            if (isSelected(cape)) {
+                graphics.renderOutline(x - 2, y - 2, capeDisplaySize + 4, capeDisplaySize + 4, 0xFFFFFF00);
+            } else if (hovered) {
+                graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0x33FFFFFF);
+            }
+            return;
+        }
+
+        // Regular cape rendering
+        ResourceLocation texture = cape.getTextureLocation();
 
         // Render cape texture
         if (texture != null) {
@@ -780,8 +799,8 @@ public class PlayerCapeMenuScreen extends Screen {
             graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0x33FFFFFF);
         }
 
-        // Render delete button on hover (only for local capes)
-        if (hovered && cape.isLocal()) {
+        // Render delete button on hover (only for local capes, not "None")
+        if (hovered && cape.isLocal() && !cape.isKnown()) {
             int margin = 2;
             int deleteButtonX = x + capeDisplaySize - ACTION_BUTTON_SIZE - margin;
             int deleteButtonY = y + margin;
@@ -859,7 +878,13 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     private boolean isSelected(CapeEntry cape) {
-        if (selectedCape == null || cape == null) return false;
+        if (cape == null) return false;
+
+        // If no cape is selected and this is the "None" option, it's selected
+        if (selectedCape == null) {
+            return cape.isKnown() && cape.getKnownCape() != null && cape.getKnownCape().isNoCape();
+        }
+
         return cape.getCapeId().equals(selectedCape.getCapeId());
     }
 
