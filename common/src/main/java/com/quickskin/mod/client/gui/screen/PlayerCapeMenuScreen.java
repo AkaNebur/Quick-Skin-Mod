@@ -473,6 +473,9 @@ public class PlayerCapeMenuScreen extends Screen {
                 () -> deleteCape(capeEntry),
                 () -> confirmationDialog = null
         );
+
+        // Add this line to initialize the dialog's buttons and layout
+        confirmationDialog.init(this.width, this.height);
     }
 
     private void deleteCape(CapeEntry capeEntry) {
@@ -480,13 +483,22 @@ public class PlayerCapeMenuScreen extends Screen {
             return;
         }
 
+        // Check if the cape being deleted is the one currently selected for preview.
+        final boolean wasSelected = this.selectedCape != null && this.selectedCape.getCapeId().equals(capeEntry.getCapeId());
+
         try {
             Files.deleteIfExists(capeEntry.getPath());
             LocalAssetManager.getInstance().discoverLocalAssets();
             refreshCapeList();
             updateGridDimensions();
             confirmationDialog = null;
-            selectedCape = null;
+
+            // If the deleted cape was the one being previewed, call removeCape()
+            // to update the preview widget and clear the active cape from the config.
+            if (wasSelected) {
+                removeCape();
+            }
+
             QuickSkin.LOGGER.info("Deleted cape: {}", capeEntry.getFriendlyName());
             showImportMessage("✓ Deleted cape", 0x55FF55, 100);
         } catch (Exception e) {
