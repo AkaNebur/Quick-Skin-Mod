@@ -53,15 +53,8 @@ public class ClientEvents {
 
         // Client tick (fires every game tick, ~20 times per second)
         ClientTickEvent.CLIENT_POST.register(client -> {
-            tickCounter++;
-
-            // Every second (20 ticks)
-            if (tickCounter >= 20) {
-                tickCounter = 0;
-
-                // Phase 7: Tick animation service
-                AnimatedTextureManager.getInstance().tick();
-            }
+            // This also ensures the singleton instance is created.
+            AnimatedTextureManager.getInstance().tick();
         });
 
         // Player joins world (client-side)
@@ -96,7 +89,7 @@ public class ClientEvents {
             // Phase 5: Save local preferences
             if (player != null) {
                 com.quickskin.mod.client.storage.LocalAppearanceStorage.getInstance()
-                    .savePlayerPreferences(player.getUUID());
+                        .savePlayerPreferences(player.getUUID());
             }
         });
 
@@ -229,8 +222,8 @@ public class ClientEvents {
 
             // Create and add the "Change Skin" button
             Button changeSkinButton = Button.builder(
-                Component.literal("Change Skin"),
-                button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen))
+                    Component.literal("Change Skin"),
+                    button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen))
             ).bounds(buttonX, buttonY, buttonWidth, buttonHeight).build();
 
             screenAccess.addRenderableWidget(changeSkinButton);
@@ -323,7 +316,7 @@ public class ClientEvents {
                     // Known cape - extract ID and get from KnownCapes enum
                     String id = capeId.substring("known:".length());
                     com.quickskin.mod.common.data.KnownCapes knownCape =
-                        com.quickskin.mod.common.data.KnownCapes.getById(id);
+                            com.quickskin.mod.common.data.KnownCapes.getById(id);
                     if (knownCape != null) {
                         capeLocation = knownCape.getTextureLocation();
                     }
@@ -348,16 +341,16 @@ public class ClientEvents {
             int rotateButtonY = buttonY - rotateButtonSize - spacing;
 
             com.quickskin.mod.client.gui.widget.RotateButton rotateButton =
-                new com.quickskin.mod.client.gui.widget.RotateButton(
-                    rotateButtonX,
-                    rotateButtonY,
-                    rotateButtonSize,
-                    button -> playerWidget.toggleRotation()
-                );
+                    new com.quickskin.mod.client.gui.widget.RotateButton(
+                            rotateButtonX,
+                            rotateButtonY,
+                            rotateButtonSize,
+                            button -> playerWidget.toggleRotation()
+                    );
             screenAccess.addRenderableWidget(rotateButton);
 
             QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) and PlayerWidget at ({}, {}) for screen type '{}'",
-                buttonX, buttonY, widgetX, widgetY, screenType);
+                    buttonX, buttonY, widgetX, widgetY, screenType);
         });
 
         // Debug screen toggle (F3)
@@ -382,13 +375,6 @@ public class ClientEvents {
                 com.quickskin.mod.client.gui.overlay.SkinPreviewOverlay.render(guiGraphics, tickDelta);
             }
         });
-
-        // Chat message receive
-        // TODO: Determine correct signature for ClientChatEvent.RECEIVED in Architectury
-        // May be useful for chat commands or notifications in future phases
-        // ClientChatEvent.RECEIVED.register(message -> {
-        //     return EventResult.pass();
-        // });
 
         QuickSkin.LOGGER.info("Client events registered");
     }

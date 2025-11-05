@@ -1,7 +1,7 @@
 package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
-import com.quickskin.mod.common.data.AnimationMetadata; // ### ADD THIS IMPORT
+import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
 import net.fabricmc.api.EnvType;
@@ -86,44 +86,54 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
         // Update cape
         if (capeId != null) {
-            appearance.setCapeId(capeId);
-            appearance.setCapeLocation(null); // ### Invalidate cached location
-
-            // ### START FIX: ADDED ANIMATION REGISTRATION ###
-            if (capeService.isAnimated(capeId)) {
-                String hash = null;
-                if (capeId.startsWith("local_cape:")) {
-                    hash = capeId.substring("local_cape:".length());
-                } else if (capeId.startsWith("known:")) {
-                    // Handle known animated capes if you add them later
+            // Unregister old animation if cape is changing
+            String oldCapeId = appearance.getCapeId();
+            if (oldCapeId != null && !oldCapeId.equals(capeId) && (oldCapeId.startsWith("local_cape:") || oldCapeId.startsWith("known:"))) {
+                String animationId = null;
+                if (oldCapeId.startsWith("local_cape:")) {
+                    animationId = "cape_" + oldCapeId.substring("local_cape:".length());
+                } else if (oldCapeId.startsWith("known:")) {
+                    animationId = "cape_known_" + oldCapeId.substring("known:".length());
                 }
-
-                if (hash != null) {
-                    String animationId = "cape_" + hash;
-                    AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
-                    ResourceLocation atlasLocation = capeService.loadLocalCape(hash);
-
-                    if (metadata != null && atlasLocation != null) {
-                        AnimatedTextureManager.getInstance().registerAnimation(animationId, atlasLocation, metadata);
-                        // For animated capes, we don't set a static capeLocation, as it will be handled dynamically.
-                    } else {
-                        QuickSkin.LOGGER.warn("Could not register animation for cape {}: metadata or atlas missing.", hash);
-                    }
-                }
-            } else {
-                // Not animated, just set static location
-                ResourceLocation capeLocation = capeService.getCapeLocation(playerId, capeId);
-                if (capeLocation != null) {
-                    appearance.setCapeLocation(capeLocation);
+                if (animationId != null) {
+                    AnimatedTextureManager.getInstance().unregisterAnimation(animationId);
                 }
             }
-            // ### END FIX ###
+
+            appearance.setCapeId(capeId);
+            appearance.setCapeLocation(null);
+
+            // Load the cape texture (static or atlas)
+            ResourceLocation capeLocation = capeService.getCapeLocation(playerId, capeId);
+            if (capeLocation != null) {
+                appearance.setCapeLocation(capeLocation);
+
+                // If animated, ensure the animation is registered
+                if (capeService.isAnimated(capeId)) {
+                    String hash = null;
+                    String animationId = null;
+
+                    if (capeId.startsWith("local_cape:")) {
+                        hash = capeId.substring("local_cape:".length());
+                        animationId = "cape_" + hash;
+                    } else if (capeId.startsWith("known:")) {
+                        // Logic in CapeService already handles registering known capes
+                    }
+
+                    if (hash != null && animationId != null) {
+                        AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
+                        if (metadata != null) {
+                            AnimatedTextureManager.getInstance().registerAnimation(animationId, capeLocation, metadata);
+                        }
+                    }
+                }
+            }
         }
+
 
         // Refresh player renderer
         refreshPlayerRenderer(playerId);
 
-        // Phase 10: Fire PlayerAppearanceUpdateEvent
         com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType updateType;
         if (skinId != null && capeId != null) {
             updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.FULL;
@@ -143,8 +153,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         QuickSkin.LOGGER.debug("Fired PlayerAppearanceUpdateEvent for {} (type: {})", playerId, updateType);
     }
 
-    // ... rest of the file is unchanged
-    // ...
     @Override
     public void applySkin(UUID playerId, String skinId, @Nullable String model) {
         applyLook(playerId, skinId, null, model);
@@ -169,6 +177,20 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     public void removeCape(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
         if (appearance != null) {
+            // Unregister animation when removing cape
+            String oldCapeId = appearance.getCapeId();
+            if (oldCapeId != null && (oldCapeId.startsWith("local_cape:") || oldCapeId.startsWith("known:"))) {
+                String animationId = null;
+                if (oldCapeId.startsWith("local_cape:")) {
+                    animationId = "cape_" + oldCapeId.substring("local_cape:".length());
+                } else if (oldCapeId.startsWith("known:")) {
+                    animationId = "cape_known_" + oldCapeId.substring("known:".length());
+                }
+                if (animationId != null) {
+                    AnimatedTextureManager.getInstance().unregisterAnimation(animationId);
+                }
+            }
+
             appearance.setCapeId("");
             appearance.setCapeLocation(null);
             refreshPlayerRenderer(playerId);
@@ -192,7 +214,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 BlockState state = mc.level.getBlockState(pos);
                 mc.levelRenderer.setBlockDirty(pos, state, state);
 
-                // Phase 10: SkinLayers3D compatibility refresh
                 if (com.quickskin.mod.config.ClientConfig.getInstance().skinLayers3DCompat) {
                     refreshSkinLayers3D(player);
                 }
@@ -202,70 +223,40 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         }
     }
 
-    /**
-     * Refresh SkinLayers3D rendering for a player (if mod is present)
-     * SkinLayers3D adds 3D layers to player skins
-     */
     private void refreshSkinLayers3D(AbstractClientPlayer player) {
         try {
-            // Check if SkinLayers3D is loaded
             Class<?> skinLayersClass = Class.forName("dev.tr7zw.skinlayers.SkinLayersModBase");
-
-            // Try to call the refresh method if it exists
-            // This is a safe approach - if the mod structure changes, it just won't refresh
             java.lang.reflect.Method refreshMethod = skinLayersClass.getDeclaredMethod("refreshPlayer", net.minecraft.world.entity.player.Player.class);
             refreshMethod.setAccessible(true);
             refreshMethod.invoke(null, player);
-
             QuickSkin.LOGGER.debug("Refreshed SkinLayers3D for player: {}", player.getUUID());
         } catch (ClassNotFoundException e) {
-            // SkinLayers3D not installed - this is fine
+            // Mod not installed
         } catch (Exception e) {
-            // Method signature changed or other issue - log but don't crash
             QuickSkin.LOGGER.debug("Could not refresh SkinLayers3D (mod may have updated): {}", e.getMessage());
         }
     }
 
-    /**
-     * Check if player has an active custom skin
-     * Used by mixins to determine if QuickSkin should override
-     */
     public boolean hasActiveSkin(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
         return appearance != null && appearance.getSkinLocation() != null;
     }
 
-    /**
-     * Check if player has an active custom cape
-     * Used by mixins to determine if QuickSkin should override
-     */
     public boolean hasActiveCape(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
         return appearance != null && appearance.getCapeId() != null && !appearance.getCapeId().isEmpty();
     }
 
-    /**
-     * Check if player has a model override
-     * Used by mixins to determine if QuickSkin should override
-     */
     public boolean hasModelOverride(UUID playerId) {
         return modelService.hasModelOverride(playerId);
     }
 
-    /**
-     * Get skin ResourceLocation for a player
-     * Used by mixins
-     */
     @Nullable
     public ResourceLocation getSkinLocation(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
         return appearance != null ? appearance.getSkinLocation() : null;
     }
 
-    /**
-     * Get cape ResourceLocation for a player
-     * Used by mixins
-     */
     @Nullable
     public ResourceLocation getCapeLocation(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
@@ -278,7 +269,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             return appearance.getCapeLocation();
         }
 
-        // If not cached, try to resolve it now. This ensures the mixin gets the texture as soon as it's ready.
+        // If not cached, try to resolve it now.
         if (appearance.getCapeId() != null && !appearance.getCapeId().isEmpty()) {
             ResourceLocation location = capeService.getCapeLocation(playerId, appearance.getCapeId());
             if (location != null) {
@@ -290,29 +281,20 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         return null;
     }
 
-    /**
-     * Get model name for a player
-     * Used by mixins
-     */
     @Nullable
     public String getModelName(UUID playerId) {
-        // Check model override first (priority)
         String override = modelService.getModelOverride(playerId);
         if (override != null) {
-            // If override is "auto", resolve it to the actual model type
             if ("auto".equalsIgnoreCase(override)) {
                 PlayerAppearance appearance = repository.getAppearance(playerId);
                 if (appearance != null) {
                     String skinId = appearance.getSkinId();
-                    // Resolve "auto" to actual model type
-                    String resolvedModel = modelService.getModelType(playerId, skinId, "auto");
-                    return resolvedModel;
+                    return modelService.getModelType(playerId, skinId, "auto");
                 }
             }
             return override;
         }
 
-        // Fall back to appearance model
         PlayerAppearance appearance = repository.getAppearance(playerId);
         return appearance != null ? appearance.getModel() : null;
     }

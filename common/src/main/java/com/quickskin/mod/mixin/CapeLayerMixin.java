@@ -1,6 +1,7 @@
 package com.quickskin.mod.mixin;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.services.AnimatedTextureManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -48,27 +49,24 @@ public class CapeLayerMixin {
             return;
         }
 
-        // --- THE CORRECTED LOGIC ---
+        // Check if this cape is animated. If so, get the current frame texture.
+        ResourceLocation finalTexture = AnimatedTextureManager.getInstance()
+                .getAnimationFrame(capeTexture)
+                .orElse(capeTexture);
+
         RenderType renderType;
 
-        // Check if the texture is one of our dynamically registered local assets.
-        // This is a robust check that verifies both the namespace and the path prefix.
-        if (capeTexture.getNamespace().equals(QuickSkin.MOD_ID) && capeTexture.getPath().startsWith("local/")) {
-            // It's our texture. Force translucent rendering because the ResourceManager cannot detect its transparency.
-            renderType = RenderType.entityTranslucentCull(capeTexture);
+        // Use the final texture (either frame or atlas) for the checks.
+        if (finalTexture.getNamespace().equals(QuickSkin.MOD_ID) && (finalTexture.getPath().startsWith("local/") || finalTexture.getPath().startsWith("animated/"))) {
+            renderType = RenderType.entityTranslucentCull(finalTexture);
         } else {
-            // It's a vanilla cape or from another mod. Use the alpha detector.
-            boolean hasTransparency = TextureAlphaDetector.hasTransparency(capeTexture);
-            // Your debug log:
-            // QuickSkin.LOGGER.info("Rendering cape for {}. Texture: {}, Has Transparency: {}", player.getName().getString(), capeTexture, hasTransparency);
-
+            boolean hasTransparency = TextureAlphaDetector.hasTransparency(finalTexture);
             if (hasTransparency) {
-                renderType = RenderType.entityTranslucentCull(capeTexture);
+                renderType = RenderType.entityTranslucentCull(finalTexture);
             } else {
-                renderType = RenderType.entitySolid(capeTexture);
+                renderType = RenderType.entitySolid(finalTexture);
             }
         }
-        // --- End of Fix ---
 
         VertexConsumer vertexconsumer = buffer.getBuffer(renderType);
 

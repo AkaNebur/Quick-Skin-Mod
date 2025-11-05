@@ -3,7 +3,9 @@ package com.quickskin.mod.client.services;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.KnownCapes;
 import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -11,7 +13,13 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 
 import org.jetbrains.annotations.Nullable;
+
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -82,7 +90,7 @@ public class CapeService implements ICapeService {
 
         // Use LocalAssetManager to load the cape texture
         ResourceLocation capeLocation = LocalAssetManager.getInstance()
-            .getTextureLocation(hash, TextureQuality.FULL);
+                .getTextureLocation(hash, TextureQuality.FULL);
 
         if (capeLocation != null) {
             QuickSkin.LOGGER.debug("Loaded local cape: {}", hash);
@@ -97,9 +105,46 @@ public class CapeService implements ICapeService {
         QuickSkin.LOGGER.debug("Loading known cape: {}", capeId);
 
         // Look up the cape in the KnownCapes enum
-        com.quickskin.mod.common.data.KnownCapes cape = com.quickskin.mod.common.data.KnownCapes.getById(capeId);
+        KnownCapes cape = KnownCapes.getById(capeId);
 
         if (cape != null && !cape.isNoCape()) {
+            if (cape.isAnimated()) {
+                String animationId = "cape_known_" + capeId;
+                AnimatedTextureManager animManager = AnimatedTextureManager.getInstance();
+
+                // Only register the animation if it's not already running
+                if (!animManager.isAnimated(animationId)) {
+                    try {
+                        ResourceLocation capeTexture = cape.getTextureLocation();
+                        InputStream stream = Minecraft.getInstance().getResourceManager()
+                                .getResource(capeTexture).get().open();
+                        BufferedImage atlasImage = ImageIO.read(stream);
+                        stream.close();
+
+                        if (atlasImage != null) {
+                            int width = atlasImage.getWidth();
+                            int height = atlasImage.getHeight();
+                            int frameHeight = width / 2; // Cape frames are 2:1 ratio
+                            int frameCount = height / frameHeight;
+
+                            if (frameCount > 1) {
+                                // Create default frame metadata (50ms per frame)
+                                List<AnimationMetadata.FrameData> frames = new ArrayList<>();
+                                for (int i = 0; i < frameCount; i++) {
+                                    frames.add(new AnimationMetadata.FrameData(50, i));
+                                }
+                                AnimationMetadata metadata = new AnimationMetadata(frames, frameCount);
+
+                                animManager.registerAnimation(animationId, capeTexture, metadata);
+                                QuickSkin.LOGGER.info("Registered animation for KnownCape: {} ({} frames)", capeId, frameCount);
+                            }
+                        }
+                    } catch (Exception e) {
+                        QuickSkin.LOGGER.error("Error loading animated KnownCape texture: {}", capeId, e);
+                    }
+                }
+            }
+
             ResourceLocation location = cape.getTextureLocation();
             QuickSkin.LOGGER.debug("Found known cape {} at {}", capeId, location);
             return location;
