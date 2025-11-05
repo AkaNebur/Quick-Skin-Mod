@@ -3,6 +3,7 @@ package com.quickskin.mod.client.gui.screen;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.util.GuiScalingUtils;
+import com.quickskin.mod.common.util.HashUtil; // ### ADDED IMPORT ###
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.client.gui.widget.ConfirmationDialog;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
@@ -1282,17 +1283,18 @@ public class PlayerCapeMenuScreen extends Screen {
             java.awt.image.BufferedImage sourceAtlas;
             int frameCount = 1;
             boolean isStandardFormat;
+            com.quickskin.mod.common.data.AnimationMetadata animationMetadata = null;
+            byte[] finalAtlasBytes = null;
 
             // Step 1: Load image into a source atlas and determine its format
             if (isGif) {
                 try (java.io.InputStream is = Files.newInputStream(sourceFile)) {
-                    // The new GifUtil returns a different result object. We need to adapt.
                     com.quickskin.mod.common.util.GifUtil.GifProcessResult gifResult = com.quickskin.mod.common.util.GifUtil.processGif(is);
                     if (gifResult == null || gifResult.atlasImageData() == null) return false;
 
-                    // Convert byte[] atlas back to BufferedImage for processing
                     sourceAtlas = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(gifResult.atlasImageData()));
                     frameCount = gifResult.metadata().frameCount();
+                    animationMetadata = gifResult.metadata();
                     isStandardFormat = true;
                 }
             } else { // Is PNG
@@ -1320,10 +1322,16 @@ public class PlayerCapeMenuScreen extends Screen {
             if (isStandardFormat) {
                 QuickSkin.LOGGER.info("Processing as a standard cape format ({} frames): {}", frameCount, sourceFile.getFileName());
 
-                // Normalize atlas to 64px width while maintaining animation strip
-                int normalizedWidth = 64;
-                int normalizedHeight = 32 * frameCount;
-                java.awt.image.BufferedImage normalizedAtlas = com.quickskin.mod.common.util.HDTextureProcessor.downsample(sourceAtlas, normalizedWidth);
+                // ### START FIX: Use resizeAnimationStrip for multi-frame images ###
+                java.awt.image.BufferedImage normalizedAtlas;
+                if (frameCount > 1) {
+                    // This is an animation strip, resize it while preserving the vertical frames.
+                    normalizedAtlas = com.quickskin.mod.common.util.HDTextureProcessor.resizeAnimationStrip(sourceAtlas, 64);
+                } else {
+                    // This is a single static image, use the standard downsampler.
+                    normalizedAtlas = com.quickskin.mod.common.util.HDTextureProcessor.downsample(sourceAtlas, 64);
+                }
+                // ### END FIX ###
 
                 // Check if the elytra area is transparent
                 if (isElytraAreaTransparent(normalizedAtlas)) {
@@ -1332,11 +1340,11 @@ public class PlayerCapeMenuScreen extends Screen {
                     if (vanillaElytraBase == null) { // Fallback if vanilla elytra fails to load
                         finalAtlas = normalizedAtlas;
                     } else {
-                        java.awt.image.BufferedImage compositeAtlas = new java.awt.image.BufferedImage(normalizedWidth, normalizedHeight, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                        java.awt.image.BufferedImage compositeAtlas = new java.awt.image.BufferedImage(normalizedAtlas.getWidth(), normalizedAtlas.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
                         java.awt.Graphics2D g = compositeAtlas.createGraphics();
 
                         g.setComposite(java.awt.AlphaComposite.Clear);
-                        g.fillRect(0, 0, normalizedWidth, normalizedHeight);
+                        g.fillRect(0, 0, normalizedAtlas.getWidth(), normalizedAtlas.getHeight());
                         g.setComposite(java.awt.AlphaComposite.SrcOver);
 
                         for(int i = 0; i < frameCount; i++) {
@@ -1374,6 +1382,20 @@ public class PlayerCapeMenuScreen extends Screen {
             }
 
             if (finalAtlas != null) {
+                try (var baos = new java.io.ByteArrayOutputStream()) {
+                    javax.imageio.ImageIO.write(finalAtlas, "png", baos);
+                    finalAtlasBytes = baos.toByteArray();
+                }
+
+                if (finalAtlasBytes != null && animationMetadata != null) {
+                    String hash = HashUtil.computeHash(finalAtlasBytes);
+                    if (hash != null) {
+                        Path metadataPath = LocalAssetManager.getInstance().getCacheDirectory().resolve(hash + ".json");
+                        Files.writeString(metadataPath, animationMetadata.toJson());
+                        QuickSkin.LOGGER.info("Saved animation metadata for imported GIF: {}", metadataPath);
+                    }
+                }
+
                 Path targetPath = resolveTargetPath(sourceFile, targetDir);
                 saveImageWithAlpha(finalAtlas, targetPath);
                 return true;

@@ -1,6 +1,7 @@
 package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.SkinResolution;
 import com.quickskin.mod.common.data.TextureQuality;
@@ -152,6 +153,18 @@ public class LocalAssetManager {
                 return null;
             }
 
+            // Check for animation metadata first
+            Path metadataPath = cacheDirectory.resolve(hash + ".json");
+            AnimationMetadata animMeta = null;
+            if (Files.exists(metadataPath)) {
+                try {
+                    String json = Files.readString(metadataPath);
+                    animMeta = AnimationMetadata.fromJson(json);
+                } catch (IOException e) {
+                    QuickSkin.LOGGER.warn("Found metadata file for {} but failed to read it.", hash, e);
+                }
+            }
+
             // Read image to get dimensions
             BufferedImage image = ImageIO.read(path.toFile());
             if (image == null) {
@@ -162,25 +175,47 @@ public class LocalAssetManager {
             int width = image.getWidth();
             int height = image.getHeight();
 
-            // Validate dimensions
             SkinResolution resolution;
-            if ("skin".equals(type)) {
-                resolution = SkinResolution.fromDimensions(width, height);
+            String skinModel = null;
+            boolean isAnimated = false;
+            int frameCount = 1;
+
+            if (animMeta != null) {
+                // This is an animated asset (cape) identified by its metadata file.
+                isAnimated = true;
+                frameCount = animMeta.frameCount();
+                int frameHeight = (frameCount > 0) ? height / frameCount : height;
+                resolution = SkinResolution.fromDimensions(width, frameHeight);
                 if (resolution == null) {
-                    QuickSkin.LOGGER.warn("Invalid skin dimensions {}x{}: {}", width, height, path);
+                    QuickSkin.LOGGER.warn("Invalid frame dimensions {}x{} for animated asset: {}", width, frameHeight, path);
                     return null;
                 }
             } else {
-                // Cape
-                if (!SkinResolution.isValidCapeDimension(width, height)) {
-                    QuickSkin.LOGGER.warn("Invalid cape dimensions {}x{}: {}", width, height, path);
-                    return null;
-                }
-                resolution = SkinResolution.fromDimensions(width, height);
-                if (resolution == null) {
-                    resolution = SkinResolution.STANDARD; // Default for capes
+                // This is a static asset or a PNG animation strip without metadata.
+                if ("skin".equals(type)) {
+                    resolution = SkinResolution.fromDimensions(width, height);
+                    if (resolution == null) {
+                        QuickSkin.LOGGER.warn("Invalid skin dimensions {}x{}: {}", width, height, path);
+                        return null;
+                    }
+                    skinModel = SkinModelDetector.detectSkinModel(image);
+                } else { // Cape logic for static capes or PNG strips
+                    int frameHeight = width / 2;
+                    if (width > 0 && frameHeight > 0 && height % frameHeight == 0) {
+                        frameCount = height / frameHeight;
+                        isAnimated = frameCount > 1;
+                        resolution = SkinResolution.fromDimensions(width, frameHeight);
+                        if (resolution == null) {
+                            QuickSkin.LOGGER.warn("Invalid cape frame dimensions {}x{}: {}", width, frameHeight, path);
+                            return null;
+                        }
+                    } else {
+                        QuickSkin.LOGGER.warn("Invalid cape dimensions {}x{}: {}", width, height, path);
+                        return null;
+                    }
                 }
             }
+
 
             // Get friendly name (filename without extension)
             String friendlyName = path.getFileName().toString();
@@ -192,17 +227,15 @@ public class LocalAssetManager {
             // Get file size
             long fileSize = Files.size(path);
 
-            // For skins, detect model type
-            String skinModel = null;
-            if ("skin".equals(type)) {
-                skinModel = SkinModelDetector.detectSkinModel(image);
-            }
-
             // Create metadata
             if ("skin".equals(type)) {
                 return AssetMetadata.forSkin(hash, friendlyName, path, resolution, fileSize, skinModel);
             } else {
-                return AssetMetadata.forCape(hash, friendlyName, path, resolution, fileSize);
+                if (isAnimated) {
+                    return AssetMetadata.forAnimatedCape(hash, friendlyName, path, resolution, fileSize, frameCount);
+                } else {
+                    return AssetMetadata.forCape(hash, friendlyName, path, resolution, fileSize);
+                }
             }
 
         } catch (Exception e) {
@@ -238,7 +271,7 @@ public class LocalAssetManager {
             Files.write(atlasPath, result.atlasImageData());
 
             // Save animation metadata to cache
-            Path metadataPath = cacheDir.resolve(hash + ".json");
+            Path metadataPath = cacheDirectory.resolve(hash + ".json");
             Files.writeString(metadataPath, result.metadata().toJson());
 
             // Get friendly name
@@ -276,6 +309,29 @@ public class LocalAssetManager {
             QuickSkin.LOGGER.error("Failed to process GIF asset: {}", path, e);
             return null;
         }
+    }
+
+    /**
+     * Get animation metadata for a texture hash
+     * @param hash The texture hash
+     * @return The metadata, or null if not found or not animated
+     */
+    public AnimationMetadata getAnimationMetadata(String hash) {
+        AssetMetadata assetMeta = getMetadata(hash);
+        if (assetMeta == null || !assetMeta.isAnimated()) {
+            return null;
+        }
+
+        Path metadataPath = cacheDirectory.resolve(hash + ".json");
+        if (Files.exists(metadataPath)) {
+            try {
+                String json = Files.readString(metadataPath);
+                return AnimationMetadata.fromJson(json);
+            } catch (IOException e) {
+                QuickSkin.LOGGER.error("Failed to read animation metadata for {}", hash, e);
+            }
+        }
+        return null;
     }
 
     /**
@@ -485,8 +541,8 @@ public class LocalAssetManager {
 
             // Register with texture manager
             ResourceLocation location = new ResourceLocation(
-                QuickSkin.MOD_ID,
-                "local/" + hash + "_" + quality.name().toLowerCase()
+                    QuickSkin.MOD_ID,
+                    "local/" + hash + "_" + quality.name().toLowerCase()
             );
 
             Minecraft.getInstance().getTextureManager().register(location, dynamicTexture);
@@ -538,6 +594,13 @@ public class LocalAssetManager {
      */
     public Path getCapesDirectory() {
         return capesDirectory;
+    }
+
+    /**
+     * Gets the cache directory for processed assets.
+     */
+    public Path getCacheDirectory() {
+        return cacheDirectory;
     }
 
     /**

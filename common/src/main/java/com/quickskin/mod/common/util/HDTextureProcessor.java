@@ -223,6 +223,50 @@ public class HDTextureProcessor {
         return downsampled;
     }
 
+    // ### START NEW METHOD ###
+    /**
+     * Resizes an animation strip (vertical frames) to a new width, preserving the strip's aspect ratio.
+     * @param source The original animation strip.
+     * @param targetWidth The desired width for each frame.
+     * @return A new, resized animation strip.
+     */
+    public static BufferedImage resizeAnimationStrip(BufferedImage source, int targetWidth) {
+        int originalWidth = source.getWidth();
+        if (originalWidth == targetWidth) {
+            return source; // No resize needed
+        }
+
+        // Calculate the aspect ratio of a single frame (e.g., 2:1 for capes)
+        double singleFrameAspectRatio = (double)originalWidth / (double)(originalWidth / 2);
+
+        // Calculate the height of a single frame in the original image
+        int originalFrameHeight = (int)(originalWidth / singleFrameAspectRatio);
+        if (originalFrameHeight <= 0) return source; // Avoid division by zero
+
+        // Calculate the number of frames
+        int frameCount = source.getHeight() / originalFrameHeight;
+        if (frameCount <= 0) return source; // Invalid strip
+
+        // Calculate new dimensions
+        int targetFrameHeight = (int)(targetWidth / singleFrameAspectRatio);
+        int targetHeight = targetFrameHeight * frameCount;
+
+        BufferedImage resizedStrip = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = resizedStrip.createGraphics();
+
+        // Use high-quality rendering hints for downscaling
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        // Draw the entire original strip into the new, resized strip
+        g.drawImage(source, 0, 0, targetWidth, targetHeight, null);
+        g.dispose();
+
+        return resizedStrip;
+    }
+    // ### END NEW METHOD ###
+
     /**
      * Create thumbnail (64x64) for GUI lists
      */

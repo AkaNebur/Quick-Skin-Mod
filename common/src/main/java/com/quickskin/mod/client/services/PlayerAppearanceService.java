@@ -1,6 +1,7 @@
 package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.AnimationMetadata; // ### ADD THIS IMPORT
 import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
 import net.fabricmc.api.EnvType;
@@ -86,12 +87,37 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         // Update cape
         if (capeId != null) {
             appearance.setCapeId(capeId);
+            appearance.setCapeLocation(null); // ### Invalidate cached location
 
-            // Load cape ResourceLocation
-            ResourceLocation capeLocation = capeService.getCapeLocation(playerId, capeId);
-            if (capeLocation != null) {
-                appearance.setCapeLocation(capeLocation);
+            // ### START FIX: ADDED ANIMATION REGISTRATION ###
+            if (capeService.isAnimated(capeId)) {
+                String hash = null;
+                if (capeId.startsWith("local_cape:")) {
+                    hash = capeId.substring("local_cape:".length());
+                } else if (capeId.startsWith("known:")) {
+                    // Handle known animated capes if you add them later
+                }
+
+                if (hash != null) {
+                    String animationId = "cape_" + hash;
+                    AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
+                    ResourceLocation atlasLocation = capeService.loadLocalCape(hash);
+
+                    if (metadata != null && atlasLocation != null) {
+                        AnimatedTextureManager.getInstance().registerAnimation(animationId, atlasLocation, metadata);
+                        // For animated capes, we don't set a static capeLocation, as it will be handled dynamically.
+                    } else {
+                        QuickSkin.LOGGER.warn("Could not register animation for cape {}: metadata or atlas missing.", hash);
+                    }
+                }
+            } else {
+                // Not animated, just set static location
+                ResourceLocation capeLocation = capeService.getCapeLocation(playerId, capeId);
+                if (capeLocation != null) {
+                    appearance.setCapeLocation(capeLocation);
+                }
             }
+            // ### END FIX ###
         }
 
         // Refresh player renderer
@@ -112,11 +138,13 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         }
 
         com.quickskin.mod.common.event.InternalEventBus.getInstance().post(
-            new com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent(playerId, appearance, updateType)
+                new com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent(playerId, appearance, updateType)
         );
         QuickSkin.LOGGER.debug("Fired PlayerAppearanceUpdateEvent for {} (type: {})", playerId, updateType);
     }
 
+    // ... rest of the file is unchanged
+    // ...
     @Override
     public void applySkin(UUID playerId, String skinId, @Nullable String model) {
         applyLook(playerId, skinId, null, model);
