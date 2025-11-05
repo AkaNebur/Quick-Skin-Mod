@@ -5,6 +5,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.services.AnimatedTextureManager;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -160,13 +161,13 @@ public class PlayerModelRenderer {
         // Use vanilla InventoryScreen rendering method
         try {
             InventoryScreen.renderEntityInInventory(
-                graphics,
-                x,
-                y,
-                (int)scale,
-                quaternionXZ,
-                quaternionY,
-                playerToRender
+                    graphics,
+                    x,
+                    y,
+                    (int)scale,
+                    quaternionXZ,
+                    quaternionY,
+                    playerToRender
             );
         } catch (Exception e) {
             // If rendering fails (e.g., entity no longer valid), fall back to manual rendering
@@ -244,48 +245,50 @@ public class PlayerModelRenderer {
 
         // Render model
         model.renderToBuffer(
-            poseStack,
-            vertexConsumer,
-            15728880, // Full brightness (light level) - same as InventoryScreen
-            OverlayTexture.NO_OVERLAY,
-            1.0f, 1.0f, 1.0f, 1.0f // RGBA
+                poseStack,
+                vertexConsumer,
+                15728880, // Full brightness (light level) - same as InventoryScreen
+                OverlayTexture.NO_OVERLAY,
+                1.0f, 1.0f, 1.0f, 1.0f // RGBA
         );
 
         // Render cape AFTER model if present
         if (playerData.getCapeLocation() != null) {
-            // Use the EXACT same render type as the skin (entityTranslucent)
-            RenderType capeRenderType = RenderType.entityTranslucent(playerData.getCapeLocation());
+            ResourceLocation capeAtlasLocation = playerData.getCapeLocation();
+            String capeId = playerData.getCapeId();
+
+            ResourceLocation finalCapeTexture = capeAtlasLocation;
+            String animationId = null;
+            if (capeId != null) {
+                if (capeId.startsWith("local_cape:")) {
+                    animationId = "cape_" + capeId.substring("local_cape:".length());
+                } else if (capeId.startsWith("known:")) {
+                    animationId = "cape_known_" + capeId.substring("known:".length());
+                }
+            }
+
+            if (animationId != null) {
+                // Attempt to get the current frame. If it's not ready, we'll just fall back to the atlas.
+                ResourceLocation currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);
+                if (currentFrame != null) {
+                    finalCapeTexture = currentFrame;
+                }
+            }
+
+            // Now render the cape using the final texture
+            RenderType capeRenderType = RenderType.entityTranslucent(finalCapeTexture);
             var capeVertexConsumer = bufferSource.getBuffer(capeRenderType);
 
-            // Render a simple quad behind the player
             poseStack.pushPose();
-
-            // Apply body transformations
+            // Position the cloak correctly relative to the body
             model.body.translateAndRotate(poseStack);
+            poseStack.translate(0.0, 0.0, 0.125); // Move behind the player
 
-            // Position at back of shoulders
-            // Y: shoulder height, Z: behind the body
-            poseStack.translate(0.0, 0.0, 0.25);
+            // Add some basic swing/angle to make it look like a cape
+            poseStack.mulPose(Axis.XP.rotationDegrees(6.0F));
+            poseStack.mulPose(Axis.YP.rotationDegrees(180.0F)); // The cloak model part is drawn facing backwards
 
-            PoseStack.Pose pose = poseStack.last();
-            Matrix4f matrix = pose.pose();
-
-            // Cape dimensions
-            float capeWidth = 0.625f;  // 10/16
-            float capeHeight = 1.0f;   // 16/16
-            float capeX = -capeWidth / 2;
-
-            // UV coords - cape texture is at (1,1) to (11,17) on 64x32 texture
-            float u0 = 1.0f / 64.0f;
-            float v0 = 1.0f / 32.0f;
-            float u1 = 11.0f / 64.0f;
-            float v1 = 17.0f / 32.0f;
-
-            // Render quad using same method as PlayerModel (flip UVs horizontally to correct mirroring)
-            capeVertexConsumer.vertex(matrix, capeX, 0, 0).color(255, 255, 255, 255).uv(u1, v0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(pose.normal(), 0, 0, 1).endVertex();
-            capeVertexConsumer.vertex(matrix, capeX + capeWidth, 0, 0).color(255, 255, 255, 255).uv(u0, v0).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(pose.normal(), 0, 0, 1).endVertex();
-            capeVertexConsumer.vertex(matrix, capeX + capeWidth, capeHeight, 0).color(255, 255, 255, 255).uv(u0, v1).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(pose.normal(), 0, 0, 1).endVertex();
-            capeVertexConsumer.vertex(matrix, capeX, capeHeight, 0).color(255, 255, 255, 255).uv(u1, v1).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(pose.normal(), 0, 0, 1).endVertex();
+            model.renderCloak(poseStack, capeVertexConsumer, 15728880, OverlayTexture.NO_OVERLAY);
 
             poseStack.popPose();
         }
@@ -318,7 +321,7 @@ public class PlayerModelRenderer {
         // Create GuiGraphics wrapper
         Minecraft mc = Minecraft.getInstance();
         GuiGraphics graphics = new GuiGraphics(mc, buffer instanceof MultiBufferSource.BufferSource ?
-            (MultiBufferSource.BufferSource)buffer : mc.renderBuffers().bufferSource());
+                (MultiBufferSource.BufferSource)buffer : mc.renderBuffers().bufferSource());
 
         // Forward to new method
         renderPlayerModel(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);

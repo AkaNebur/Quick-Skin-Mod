@@ -135,7 +135,7 @@ public class CapeService implements ICapeService {
                                 }
                                 AnimationMetadata metadata = new AnimationMetadata(frames, frameCount);
 
-                                animManager.registerAnimation(animationId, capeTexture, metadata);
+                                animManager.registerAnimation(animationId, capeTexture, atlasImage, metadata);
                                 QuickSkin.LOGGER.info("Registered animation for KnownCape: {} ({} frames)", capeId, frameCount);
                             }
                         }

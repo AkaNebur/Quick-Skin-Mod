@@ -65,13 +65,13 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
         // Create player widget
         playerWidget = new PlayerWidget(
-            playerWidgetX,
-            playerWidgetY,
-            widgetSize,
-            widgetSize,
-            null, // Will use default Steve skin
-            null, // No cape initially
-            "classic" // Default model type
+                playerWidgetX,
+                playerWidgetY,
+                widgetSize,
+                widgetSize,
+                null, // Will use default Steve skin
+                null, // No cape initially
+                "classic" // Default model type
         );
         screen.registerWidget(playerWidget);
     }
@@ -80,12 +80,12 @@ public class PlayerPreviewPanel extends AbstractWidget {
      * Initialize the model buttons at the specified position (above cape button)
      */
     public void initModelButtons(
-        com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen screen,
-        int modelButtonsX,
-        int modelButtonsY,
-        int modelButtonsTotalWidth,
-        int componentHeight,
-        int spacing
+            com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen screen,
+            int modelButtonsX,
+            int modelButtonsY,
+            int modelButtonsTotalWidth,
+            int componentHeight,
+            int spacing
     ) {
         // Auto button is smaller (square button for the emoji), Classic/Slim share the rest equally
         int autoButtonWidth = componentHeight; // Square button
@@ -122,14 +122,14 @@ public class PlayerPreviewPanel extends AbstractWidget {
         int rotateButtonY = modelButtonsY - rotateButtonSize - spacing;
 
         rotateButton = new RotateButton(
-            rotateButtonX,
-            rotateButtonY,
-            rotateButtonSize,
-            b -> {
-                if (playerWidget != null) {
-                    playerWidget.toggleRotation();
+                rotateButtonX,
+                rotateButtonY,
+                rotateButtonSize,
+                b -> {
+                    if (playerWidget != null) {
+                        playerWidget.toggleRotation();
+                    }
                 }
-            }
         );
         rotateButton.setTooltip(Tooltip.create(Component.literal("Rotate Preview")));
         screen.registerWidget(rotateButton);
@@ -158,9 +158,9 @@ public class PlayerPreviewPanel extends AbstractWidget {
     /**
      * Update the cape displayed in the player preview
      */
-    public void updateCape(@Nullable net.minecraft.resources.ResourceLocation capeLocation) {
+    public void updateCape(@Nullable net.minecraft.resources.ResourceLocation capeLocation, @Nullable String capeId) {
         if (playerWidget != null) {
-            playerWidget.setCape(capeLocation);
+            playerWidget.setCape(capeLocation, capeId);
         }
     }
 

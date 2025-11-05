@@ -75,9 +75,9 @@ public class CapeEntry {
     public ResourceLocation getTextureLocation() {
         if (isLocal) {
             return localCape != null ?
-                com.quickskin.mod.client.services.LocalAssetManager.getInstance()
-                    .getTextureLocation(localCape.hash(), com.quickskin.mod.common.data.TextureQuality.FULL)
-                : null;
+                    com.quickskin.mod.client.services.LocalAssetManager.getInstance()
+                            .getTextureLocation(localCape.hash(), com.quickskin.mod.common.data.TextureQuality.FULL)
+                    : null;
         } else {
             return knownCape != null ? knownCape.getTextureLocation() : null;
         }

@@ -56,14 +56,14 @@ public class PlayerWidget extends AbstractWidget {
      * @param modelType "slim" or "classic"
      */
     public PlayerWidget(int x, int y, int width, int height,
-                       @Nullable ResourceLocation skinLocation,
-                       @Nullable ResourceLocation capeLocation,
-                       String modelType) {
+                        @Nullable ResourceLocation skinLocation,
+                        @Nullable ResourceLocation capeLocation,
+                        String modelType) {
         super(x, y, width, height, Component.empty());
 
         this.previewData = new PreviewPlayerData();
         this.previewData.setSkinLocation(
-            skinLocation != null ? skinLocation : new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png")
+                skinLocation != null ? skinLocation : new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png")
         );
         this.previewData.setCapeLocation(capeLocation);
         this.previewData.setModelType(modelType != null ? modelType : "classic");
@@ -163,15 +163,15 @@ public class PlayerWidget extends AbstractWidget {
         // Render the player model
         // Use GuiGraphics directly for vanilla rendering method
         PlayerModelRenderer.renderPlayerModel(
-            graphics,
-            modelCenterX,
-            modelCenterY,
-            scale,
-            bodyYaw,
-            previewData,
-            mouseX,
-            mouseY,
-            false
+                graphics,
+                modelCenterX,
+                modelCenterY,
+                scale,
+                bodyYaw,
+                previewData,
+                mouseX,
+                mouseY,
+                false
         );
     }
 
@@ -186,12 +186,12 @@ public class PlayerWidget extends AbstractWidget {
     }
 
     /**
-     * Update the cape texture
+     * Update the cape texture and ID
      */
-    public void setCape(@Nullable ResourceLocation capeLocation) {
-        QuickSkin.LOGGER.info("[PlayerWidget] setCape called with: {}", capeLocation);
-        QuickSkin.LOGGER.info("[PlayerWidget] previewData instance: {}", previewData);
+    public void setCape(@Nullable ResourceLocation capeLocation, @Nullable String capeId) {
+        QuickSkin.LOGGER.info("[PlayerWidget] setCape called with: {}, id: {}", capeLocation, capeId);
         previewData.setCapeLocation(capeLocation);
+        previewData.setCapeId(capeId);
         QuickSkin.LOGGER.info("[PlayerWidget] After setCape, getCapeLocation returns: {}", previewData.getCapeLocation());
     }
 
@@ -261,6 +261,6 @@ public class PlayerWidget extends AbstractWidget {
     protected void updateWidgetNarration(NarrationElementOutput narrationElementOutput) {
         // Add accessibility narration
         narrationElementOutput.add(net.minecraft.client.gui.narration.NarratedElementType.TITLE,
-            Component.literal("Player preview"));
+                Component.literal("Player preview"));
     }
 }

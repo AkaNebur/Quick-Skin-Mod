@@ -13,6 +13,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.BlockState;
 
 import org.jetbrains.annotations.Nullable;
+
+import java.awt.image.BufferedImage;
 import java.util.UUID;
 
 /**
@@ -122,8 +124,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
                     if (hash != null && animationId != null) {
                         AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
-                        if (metadata != null) {
-                            AnimatedTextureManager.getInstance().registerAnimation(animationId, capeLocation, metadata);
+                        BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
+                        if (metadata != null && atlasImage != null) {
+                            AnimatedTextureManager.getInstance().registerAnimation(animationId, capeLocation, atlasImage, metadata);
                         }
                     }
                 }

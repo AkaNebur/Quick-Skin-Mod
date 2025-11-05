@@ -304,9 +304,10 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Restore active cape selection
         if (!config.activeCapeHash.isEmpty() && playerPreviewPanel != null) {
-            ResourceLocation capeLocation = getCapeLocationFromId(config.activeCapeHash);
+            String capeId = config.activeCapeHash;
+            ResourceLocation capeLocation = getCapeLocationFromId(capeId);
             if (capeLocation != null) {
-                playerPreviewPanel.updateCape(capeLocation);
+                playerPreviewPanel.updateCape(capeLocation, capeId);
             }
         }
 

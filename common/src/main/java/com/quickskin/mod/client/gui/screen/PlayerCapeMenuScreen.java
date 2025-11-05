@@ -382,7 +382,7 @@ public class PlayerCapeMenuScreen extends Screen {
                 // Update the preview widget with the saved cape
                 ResourceLocation capeLocation = cape.getTextureLocation();
                 if (capeLocation != null && playerWidget != null) {
-                    playerWidget.setCape(capeLocation);
+                    playerWidget.setCape(capeLocation, cape.getCapeId());
                 }
                 QuickSkin.LOGGER.info("Initialized selected cape: {}", cape.getFriendlyName());
                 return;
@@ -395,7 +395,7 @@ public class PlayerCapeMenuScreen extends Screen {
                 // Update the preview widget with the saved cape
                 ResourceLocation capeLocation = cape.getTextureLocation();
                 if (capeLocation != null && playerWidget != null) {
-                    playerWidget.setCape(capeLocation);
+                    playerWidget.setCape(capeLocation, cape.getCapeId());
                 }
                 QuickSkin.LOGGER.info("Initialized selected cape: {}", cape.getFriendlyName());
                 return;
@@ -434,7 +434,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
     private void removeCape() {
         // Always update preview widget (works both in-game and on title screen)
-        playerWidget.setCape(null);
+        playerWidget.setCape(null, null);
         this.selectedCape = null;
 
         // Clear from config for persistence
@@ -1004,7 +1004,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // Always update preview widget (works both in-game and on title screen)
         QuickSkin.LOGGER.info("[PlayerCapeMenuScreen] Setting cape in preview widget: {}", capeLocation);
-        playerWidget.setCape(capeLocation);
+        playerWidget.setCape(capeLocation, capeId);
 
         // Save to config for persistence
         ClientConfig config = ClientConfig.getInstance();
@@ -1126,7 +1126,10 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // --- Check "Default Capes" section ---
         if (!knownCapes.isEmpty()) {
-            currentY += 20; // Extra spacing between sections
+            // The rendering logic in renderCapeGridOptimized adds a 20px gap before this section.
+            // We must add it here as well to keep the click detection synchronized with the visuals.
+            currentY += 20;
+
             currentY += HEADER_HEIGHT;
             int rows = (int) Math.ceil((double) knownCapes.size() / capesPerRow);
             int sectionHeight = rows * (capeDisplaySize + capePadding) + capePadding;
@@ -1152,6 +1155,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         if (index >= 0 && index < capes.size()) {
             int capeX = this.gridX + capePadding + col * (capeDisplaySize + capePadding);
+            // We need the on-screen Y to check bounds, not the absolute Y
             int capeY = sectionTopY + capePadding + row * (capeDisplaySize + capePadding) - (int) this.scrollOffset;
             if (isMouseOver(mouseX, mouseY, capeX, capeY, capeDisplaySize, capeDisplaySize)) {
                 return capes.get(index);

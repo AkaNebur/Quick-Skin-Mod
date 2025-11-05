@@ -15,6 +15,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -556,6 +557,26 @@ public class LocalAssetManager {
 
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to register texture: {}", hash, e);
+            return null;
+        }
+    }
+
+    @Nullable
+    public BufferedImage getSourceImage(String hash) {
+        Path sourcePath = getSourcePath(hash);
+        if (sourcePath == null) {
+            // Also check cache for animated capes converted from GIFs
+            Path cachedAtlas = cacheDirectory.resolve("animated_capes").resolve(hash + ".png");
+            if (Files.exists(cachedAtlas)) {
+                sourcePath = cachedAtlas;
+            } else {
+                return null;
+            }
+        }
+        try {
+            return ImageIO.read(sourcePath.toFile());
+        } catch (IOException e) {
+            QuickSkin.LOGGER.error("Failed to read source image for hash {}: {}", hash, e.getMessage());
             return null;
         }
     }

@@ -38,19 +38,18 @@ public class AnimatedTextureManager {
         private final ResourceLocation[] frameResourceLocations;
         private int currentFrame = 0;
 
-        AnimationState(ResourceLocation textureLocation, AnimationMetadata metadata) {
+        AnimationState(String animationId, ResourceLocation textureLocation, BufferedImage atlasImage, AnimationMetadata metadata) {
             this.atlasTextureLocation = textureLocation;
             this.metadata = metadata;
             this.startTime = System.currentTimeMillis();
 
             this.frameTextures = new DynamicTexture[metadata.frameCount()];
             this.frameResourceLocations = new ResourceLocation[metadata.frameCount()];
-            loadFrames();
+            loadFrames(animationId, atlasImage);
         }
 
-        private void loadFrames() {
-            try (InputStream stream = Minecraft.getInstance().getResourceManager().getResource(atlasTextureLocation).get().open()) {
-                BufferedImage atlasImage = ImageIO.read(stream);
+        private void loadFrames(String animationId, BufferedImage atlasImage) {
+            try {
                 if (atlasImage == null) {
                     QuickSkin.LOGGER.error("Could not read atlas image for animation: {}", atlasTextureLocation);
                     return;
@@ -65,7 +64,7 @@ public class AnimatedTextureManager {
 
                     frameTextures[i] = new DynamicTexture(nativeImage);
                     // Create a unique name for the frame texture to avoid conflicts
-                    String frameId = "quickskin/animated/" + atlasTextureLocation.getPath().replaceAll("[^a-zA-Z0-9/._-]", "_") + "_frame_" + i;
+                    String frameId = "quickskin/animated/" + animationId.replaceAll("[^a-zA-Z0-9/._-]", "_") + "_frame_" + i;
                     frameResourceLocations[i] = Minecraft.getInstance().getTextureManager().register(frameId, frameTextures[i]);
                 }
             } catch (Exception e) {
@@ -109,7 +108,7 @@ public class AnimatedTextureManager {
         }
 
         ResourceLocation getCurrentFrameTexture() {
-            if (frameResourceLocations == null || currentFrame < 0 || currentFrame >= frameResourceLocations.length) {
+            if (frameResourceLocations == null || currentFrame < 0 || currentFrame >= frameResourceLocations.length || frameResourceLocations[currentFrame] == null) {
                 return atlasTextureLocation; // Fallback to full atlas
             }
             return frameResourceLocations[currentFrame];
@@ -151,9 +150,10 @@ public class AnimatedTextureManager {
      * Register an animated texture
      * @param animationId Unique ID for this animation (e.g., "cape_<hash>")
      * @param textureLocation Location of the atlas texture
+     * @param atlasImage The BufferedImage of the atlas
      * @param metadata Animation metadata with frame timing
      */
-    public void registerAnimation(String animationId, ResourceLocation textureLocation, AnimationMetadata metadata) {
+    public void registerAnimation(String animationId, ResourceLocation textureLocation, BufferedImage atlasImage, AnimationMetadata metadata) {
         if (metadata == null || metadata.frameCount() <= 1) {
             QuickSkin.LOGGER.warn("Cannot register animation with invalid metadata (frameCount <= 1): {}", animationId);
             return;
@@ -162,7 +162,7 @@ public class AnimatedTextureManager {
         // If an old animation exists, clean it up first.
         unregisterAnimation(animationId);
 
-        AnimationState state = new AnimationState(textureLocation, metadata);
+        AnimationState state = new AnimationState(animationId, textureLocation, atlasImage, metadata);
         animations.put(animationId, state);
 
         QuickSkin.LOGGER.debug("Registered animation: {} with {} frames", animationId, metadata.frameCount());

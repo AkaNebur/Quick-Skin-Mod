@@ -15,6 +15,7 @@ public class PreviewPlayerData {
     private ResourceLocation skinLocation;
     private ResourceLocation capeLocation;
     private String modelType; // "classic" or "slim"
+    private String capeId;
     private SkinResolution resolution;
     private float yRotation; // Y-axis rotation in degrees
     private float headYaw; // Head yaw for looking around
@@ -89,6 +90,14 @@ public class PreviewPlayerData {
 
     public void setCapeLocation(ResourceLocation capeLocation) {
         this.capeLocation = capeLocation;
+    }
+
+    public String getCapeId() {
+        return capeId;
+    }
+
+    public void setCapeId(String capeId) {
+        this.capeId = capeId;
     }
 
     public String getModelType() {
