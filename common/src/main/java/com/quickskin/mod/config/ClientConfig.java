@@ -20,27 +20,18 @@ public class ClientConfig {
     // GUI Settings
     public boolean showSkinPreviewOverlay = false;
     public String overlayPosition = "BOTTOM_RIGHT"; // TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
-    public boolean autoRotatePreview = true;
     public int previewScale = 30;
     public int guiScale = 1; // GUI scaling factor (1-4)
 
     // Animation Settings
-    public boolean enableAnimations = true;
-    public boolean enableSmoothRotation = true;
-    public boolean enableIdleAnimation = true;
     public float animationSpeed = 1.0f;
-
-    // Keybind Settings
-    public boolean enableKeybinds = true;
+    public boolean enableSmoothRotation = true;
 
     // Performance Settings
-    public boolean cacheTextures = true;
     public int maxCachedTextures = 100;
-    public boolean enableHDSkins = true;
     public int maxSkinResolution = 2048;
 
     // Network Settings
-    public boolean autoSyncSkins = true;
     public int networkTimeout = 5000; // milliseconds
 
     // Compatibility Settings
@@ -136,7 +127,7 @@ public class ClientConfig {
         if (serverOverride != null && !serverOverride.allowHDSkins) {
             return false;
         }
-        return enableHDSkins;
+        return true;
     }
 
     /**
@@ -166,6 +157,6 @@ public class ClientConfig {
         if (serverOverride != null && !serverOverride.allowAnimatedCapes) {
             return false;
         }
-        return enableAnimations;
+        return true;
     }
 }

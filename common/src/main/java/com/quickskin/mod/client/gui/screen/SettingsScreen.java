@@ -1,12 +1,15 @@
 package com.quickskin.mod.client.gui.screen;
 
-import com.quickskin.mod.client.gui.overlay.SkinPreviewOverlay;
+import com.mojang.blaze3d.platform.InputConstants;
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import com.quickskin.mod.client.gui.widget.TabButton;
+import com.quickskin.mod.client.input.KeybindRegistry;
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.config.ServerConfig;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -64,16 +67,14 @@ public class SettingsScreen extends Screen {
     private final List<AbstractWidget> clientSettingWidgets = new ArrayList<>();
     private final List<AbstractWidget> serverSettingWidgets = new ArrayList<>();
 
-    // Client setting checkboxes
+    // Client setting widgets
     private Checkbox showOverlayCheckbox;
-    private Checkbox enableAnimationsCheckbox;
-    private Checkbox enableIdleAnimationCheckbox;
-    private Checkbox autoRotatePreviewCheckbox;
-    private Checkbox cacheTexturesCheckbox;
-    private Checkbox enableHDSkinsCheckbox;
-    private Checkbox autoSyncSkinsCheckbox;
     private Checkbox skinLayers3DCompatCheckbox;
-    private Checkbox enableKeybindsCheckbox;
+    private Button keybindButton;
+
+    // State for keybind editing
+    @Nullable
+    private KeyMapping selectedKey;
 
     // Server setting checkboxes
     private Checkbox allowCustomSkinsCheckbox;
@@ -108,20 +109,20 @@ public class SettingsScreen extends Screen {
         int tabStartX = dialogX;
 
         clientTabButton = (TabButton) ButtonFactory.createTab(
-            tabStartX, tabY,
-            TAB_WIDTH, TAB_HEIGHT,
-            Component.literal(Tab.CLIENT.getDisplayName()),
-            activeTab == Tab.CLIENT,
-            btn -> switchTab(Tab.CLIENT)
+                tabStartX, tabY,
+                TAB_WIDTH, TAB_HEIGHT,
+                Component.literal(Tab.CLIENT.getDisplayName()),
+                activeTab == Tab.CLIENT,
+                btn -> switchTab(Tab.CLIENT)
         );
         this.addRenderableWidget(clientTabButton);
 
         serverTabButton = (TabButton) ButtonFactory.createTab(
-            tabStartX + TAB_WIDTH + TAB_SPACING, tabY,
-            TAB_WIDTH, TAB_HEIGHT,
-            Component.literal(Tab.SERVER.getDisplayName()),
-            activeTab == Tab.SERVER,
-            btn -> switchTab(Tab.SERVER)
+                tabStartX + TAB_WIDTH + TAB_SPACING, tabY,
+                TAB_WIDTH, TAB_HEIGHT,
+                Component.literal(Tab.SERVER.getDisplayName()),
+                activeTab == Tab.SERVER,
+                btn -> switchTab(Tab.SERVER)
         );
         this.addRenderableWidget(serverTabButton);
 
@@ -131,8 +132,8 @@ public class SettingsScreen extends Screen {
 
         // Create Done button
         Button doneButton = Button.builder(
-            Component.literal("Done"),
-            btn -> this.onClose()
+                Component.literal("Done"),
+                btn -> this.onClose()
         ).bounds(dialogX + dialogWidth / 2 - 50, dialogY + dialogHeight - 30, 100, 20).build();
         this.addRenderableWidget(doneButton);
 
@@ -154,86 +155,56 @@ public class SettingsScreen extends Screen {
         // Left Column
         // HUD Overlay Settings
         showOverlayCheckbox = new Checkbox(
-            leftColumnX, currentLeftY,
-            checkboxSize, checkboxSize,
-            Component.literal("Show HUD Overlay"),
-            config.showSkinPreviewOverlay
+                leftColumnX, currentLeftY,
+                checkboxSize, checkboxSize,
+                Component.literal("Show HUD Overlay"),
+                config.showSkinPreviewOverlay
         );
         clientSettingWidgets.add(showOverlayCheckbox);
         currentLeftY += spacing;
 
-        // Animation Settings
-        enableAnimationsCheckbox = new Checkbox(
-            leftColumnX, currentLeftY,
-            checkboxSize, checkboxSize,
-            Component.literal("Enable Animations"),
-            config.enableAnimations
-        );
-        clientSettingWidgets.add(enableAnimationsCheckbox);
-        currentLeftY += spacing;
+        // Keybind button and label
+        int keybindButtonWidth = 75;
+        int keybindButtonSpacing = 5;
 
-        enableIdleAnimationCheckbox = new Checkbox(
-            leftColumnX, currentLeftY,
-            checkboxSize, checkboxSize,
-            Component.literal("Enable Idle Animation"),
-            config.enableIdleAnimation
-        );
-        clientSettingWidgets.add(enableIdleAnimationCheckbox);
-        currentLeftY += spacing;
+        keybindButton = Button.builder(
+                KeybindRegistry.OPEN_SKIN_MENU.getTranslatedKeyMessage(),
+                button -> this.selectedKey = KeybindRegistry.OPEN_SKIN_MENU
+        ).bounds(leftColumnX, currentLeftY, keybindButtonWidth, 20).build();
+        clientSettingWidgets.add(keybindButton);
 
-        autoRotatePreviewCheckbox = new Checkbox(
-            leftColumnX, currentLeftY,
-            checkboxSize, checkboxSize,
-            Component.literal("Auto-Rotate Preview"),
-            config.autoRotatePreview
-        );
-        clientSettingWidgets.add(autoRotatePreviewCheckbox);
-        currentLeftY += spacing;
+        clientSettingWidgets.add(new AbstractWidget(leftColumnX + keybindButtonWidth + keybindButtonSpacing, currentLeftY, 100, 20, Component.literal("Open Skin Menu")) {
+            @Override
+            public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+                // Draw the string vertically centered with the standard UI text color.
+                guiGraphics.drawString(
+                        Minecraft.getInstance().font,
+                        this.getMessage(),
+                        this.getX(),
+                        this.getY() + (this.height - 8) / 2,
+                        0xE0E0E0 // Standard light gray text color
+                );
+            }
 
-        enableKeybindsCheckbox = new Checkbox(
-            leftColumnX, currentLeftY,
-            checkboxSize, checkboxSize,
-            Component.literal("Enable Keybinds"),
-            config.enableKeybinds
-        );
-        clientSettingWidgets.add(enableKeybindsCheckbox);
+            @Override
+            public void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput narrationElementOutput) {
+                narrationElementOutput.add(net.minecraft.client.gui.narration.NarratedElementType.TITLE, this.getMessage());
+            }
+
+            @Override
+            public boolean mouseClicked(double pMouseX, double pMouseY, int pButton) {
+                return false; // Make the label non-interactive
+            }
+        });
+
 
         // Right Column
-        // Performance Settings
-        cacheTexturesCheckbox = new Checkbox(
-            rightColumnX, currentRightY,
-            checkboxSize, checkboxSize,
-            Component.literal("Cache Textures"),
-            config.cacheTextures
-        );
-        clientSettingWidgets.add(cacheTexturesCheckbox);
-        currentRightY += spacing;
-
-        enableHDSkinsCheckbox = new Checkbox(
-            rightColumnX, currentRightY,
-            checkboxSize, checkboxSize,
-            Component.literal("Enable HD Skins"),
-            config.enableHDSkins
-        );
-        clientSettingWidgets.add(enableHDSkinsCheckbox);
-        currentRightY += spacing;
-
-        // Network Settings
-        autoSyncSkinsCheckbox = new Checkbox(
-            rightColumnX, currentRightY,
-            checkboxSize, checkboxSize,
-            Component.literal("Auto-Sync Skins"),
-            config.autoSyncSkins
-        );
-        clientSettingWidgets.add(autoSyncSkinsCheckbox);
-        currentRightY += spacing;
-
         // Compatibility Settings
         skinLayers3DCompatCheckbox = new Checkbox(
-            rightColumnX, currentRightY,
-            checkboxSize, checkboxSize,
-            Component.literal("SkinLayers3D Compatibility"),
-            config.skinLayers3DCompat
+                rightColumnX, currentRightY,
+                checkboxSize, checkboxSize,
+                Component.literal("SkinLayers3D Compatibility"),
+                config.skinLayers3DCompat
         );
         clientSettingWidgets.add(skinLayers3DCompatCheckbox);
     }
@@ -255,20 +226,20 @@ public class SettingsScreen extends Screen {
         // Left Column
         // Skin Settings
         allowCustomSkinsCheckbox = new Checkbox(
-            leftColumnX, currentLeftY,
-            checkboxSize, checkboxSize,
-            Component.literal("Allow Custom Skins"),
-            config.allowCustomSkins
+                leftColumnX, currentLeftY,
+                checkboxSize, checkboxSize,
+                Component.literal("Allow Custom Skins"),
+                config.allowCustomSkins
         );
         allowCustomSkinsCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(allowCustomSkinsCheckbox);
         currentLeftY += spacing;
 
         allowHDSkinsCheckbox = new Checkbox(
-            leftColumnX, currentLeftY,
-            checkboxSize, checkboxSize,
-            Component.literal("Allow HD Skins"),
-            config.allowHDSkins
+                leftColumnX, currentLeftY,
+                checkboxSize, checkboxSize,
+                Component.literal("Allow HD Skins"),
+                config.allowHDSkins
         );
         allowHDSkinsCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(allowHDSkinsCheckbox);
@@ -276,20 +247,20 @@ public class SettingsScreen extends Screen {
 
         // Cape Settings
         allowCustomCapesCheckbox = new Checkbox(
-            leftColumnX, currentLeftY,
-            checkboxSize, checkboxSize,
-            Component.literal("Allow Custom Capes"),
-            config.allowCustomCapes
+                leftColumnX, currentLeftY,
+                checkboxSize, checkboxSize,
+                Component.literal("Allow Custom Capes"),
+                config.allowCustomCapes
         );
         allowCustomCapesCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(allowCustomCapesCheckbox);
 
         // Right Column
         allowAnimatedCapesCheckbox = new Checkbox(
-            rightColumnX, currentRightY,
-            checkboxSize, checkboxSize,
-            Component.literal("Allow Animated Capes"),
-            config.allowAnimatedCapes
+                rightColumnX, currentRightY,
+                checkboxSize, checkboxSize,
+                Component.literal("Allow Animated Capes"),
+                config.allowAnimatedCapes
         );
         allowAnimatedCapesCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(allowAnimatedCapesCheckbox);
@@ -297,10 +268,10 @@ public class SettingsScreen extends Screen {
 
         // Security Settings
         requireAuthenticationCheckbox = new Checkbox(
-            rightColumnX, currentRightY,
-            checkboxSize, checkboxSize,
-            Component.literal("Require Authentication"),
-            config.requireAuthentication
+                rightColumnX, currentRightY,
+                checkboxSize, checkboxSize,
+                Component.literal("Require Authentication"),
+                config.requireAuthentication
         );
         requireAuthenticationCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(requireAuthenticationCheckbox);
@@ -335,6 +306,13 @@ public class SettingsScreen extends Screen {
             this.parent.render(graphics, -1, -1, partialTick);
         }
 
+        // Update keybind button text before rendering
+        if (this.selectedKey == KeybindRegistry.OPEN_SKIN_MENU) {
+            this.keybindButton.setMessage(Component.literal("> ").append(Component.literal("???").withStyle(ChatFormatting.YELLOW)).append(" <"));
+        } else {
+            this.keybindButton.setMessage(KeybindRegistry.OPEN_SKIN_MENU.getTranslatedKeyMessage());
+        }
+
         // Push pose to ensure modal renders on a higher layer
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 100); // Move modal forward in Z
@@ -348,27 +326,27 @@ public class SettingsScreen extends Screen {
 
         // Draw main content panel background with frosted glass styling
         graphics.fill(dialogX, contentPanelY,
-                     dialogX + dialogWidth,
-                     contentPanelY + contentPanelHeight,
-                     PANEL_BG);
+                dialogX + dialogWidth,
+                contentPanelY + contentPanelHeight,
+                PANEL_BG);
 
         // Draw outline around content panel
         // Top line (connects tabs to content)
         graphics.fill(dialogX, contentPanelY,
-                     dialogX + dialogWidth, contentPanelY + 1,
-                     PANEL_OUTLINE);
+                dialogX + dialogWidth, contentPanelY + 1,
+                PANEL_OUTLINE);
         // Bottom
         graphics.fill(dialogX, contentPanelY + contentPanelHeight - 1,
-                     dialogX + dialogWidth, contentPanelY + contentPanelHeight,
-                     PANEL_OUTLINE);
+                dialogX + dialogWidth, contentPanelY + contentPanelHeight,
+                PANEL_OUTLINE);
         // Left
         graphics.fill(dialogX, contentPanelY,
-                     dialogX + 1, contentPanelY + contentPanelHeight,
-                     PANEL_OUTLINE);
+                dialogX + 1, contentPanelY + contentPanelHeight,
+                PANEL_OUTLINE);
         // Right
         graphics.fill(dialogX + dialogWidth - 1, contentPanelY,
-                     dialogX + dialogWidth, contentPanelY + contentPanelHeight,
-                     PANEL_OUTLINE);
+                dialogX + dialogWidth, contentPanelY + contentPanelHeight,
+                PANEL_OUTLINE);
 
         // Render widgets (buttons, tabs, etc.) - this ensures they render AFTER everything above
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -386,9 +364,17 @@ public class SettingsScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Handle setting a keybind with a mouse click
+        if (this.selectedKey != null) {
+            this.selectedKey.setKey(InputConstants.Type.MOUSE.getOrCreate(button));
+            KeyMapping.resetMapping();
+            this.selectedKey = null;
+            return true;
+        }
+
         // Click outside dialog (including tabs) = close
         if (mouseX < dialogX || mouseX > dialogX + dialogWidth ||
-            mouseY < dialogY || mouseY > dialogY + dialogHeight) {
+                mouseY < dialogY || mouseY > dialogY + dialogHeight) {
             this.onClose();
             return true;
         }
@@ -405,7 +391,7 @@ public class SettingsScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         // Allow scrolling only within modal
         if (mouseX >= dialogX && mouseX <= dialogX + dialogWidth &&
-            mouseY >= dialogY && mouseY <= dialogY + dialogHeight) {
+                mouseY >= dialogY && mouseY <= dialogY + dialogHeight) {
             return super.mouseScrolled(mouseX, mouseY, delta);
         }
         return false;
@@ -413,6 +399,18 @@ public class SettingsScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Handle setting a keybind with a keyboard press
+        if (this.selectedKey != null) {
+            if (keyCode == InputConstants.KEY_ESCAPE) {
+                this.selectedKey.setKey(InputConstants.UNKNOWN);
+            } else {
+                this.selectedKey.setKey(InputConstants.getKey(keyCode, scanCode));
+            }
+            KeyMapping.resetMapping();
+            this.selectedKey = null;
+            return true;
+        }
+
         // ESC key closes dialog
         if (keyCode == 256) { // ESC
             this.onClose();
@@ -428,19 +426,18 @@ public class SettingsScreen extends Screen {
 
     @Override
     public void onClose() {
+        // If we were editing a keybind, cancel it and save changes
+        if(this.selectedKey != null) {
+            KeyMapping.resetMapping();
+            this.selectedKey = null;
+        }
+
         // Save client settings
         if (showOverlayCheckbox != null) {
             ClientConfig config = ClientConfig.getInstance();
 
             config.showSkinPreviewOverlay = showOverlayCheckbox.selected();
-            config.enableAnimations = enableAnimationsCheckbox.selected();
-            config.enableIdleAnimation = enableIdleAnimationCheckbox.selected();
-            config.autoRotatePreview = autoRotatePreviewCheckbox.selected();
-            config.cacheTextures = cacheTexturesCheckbox.selected();
-            config.enableHDSkins = enableHDSkinsCheckbox.selected();
-            config.autoSyncSkins = autoSyncSkinsCheckbox.selected();
             config.skinLayers3DCompat = skinLayers3DCompatCheckbox.selected();
-            config.enableKeybinds = enableKeybindsCheckbox.selected();
 
             config.save();
         }

@@ -369,9 +369,8 @@ public class ClientEvents {
 
         // HUD render (for potential skin preview overlay)
         ClientGuiEvent.RENDER_HUD.register((guiGraphics, tickDelta) -> {
-            // Phase 8: Render skin preview overlay (will be configurable in Phase 9)
-            // For now, disabled by default - can be enabled when config is implemented
-            boolean showOverlay = false; // Will be: ClientConfig.get().showSkinPreviewOverlay
+            // Get the setting from the client configuration
+            boolean showOverlay = com.quickskin.mod.config.ClientConfig.getInstance().showSkinPreviewOverlay;
             if (showOverlay) {
                 com.quickskin.mod.client.gui.overlay.SkinPreviewOverlay.render(guiGraphics, tickDelta);
             }

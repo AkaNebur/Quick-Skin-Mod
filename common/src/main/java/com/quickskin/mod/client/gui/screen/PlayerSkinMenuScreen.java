@@ -27,6 +27,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
+import net.minecraft.Util;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -157,16 +158,16 @@ public class PlayerSkinMenuScreen extends Screen {
         addRenderableWidget(usernameSearchField);
 
         searchButton = Button.builder(
-                Component.literal("Search"),
-                button -> searchMojangSkin()
-        )
-        .bounds(
-                searchFieldX + searchFieldWidth - searchButtonWidth,
-                yPos,
-                searchButtonWidth,
-                scaledComponentHeight
-        )
-        .build();
+                        Component.literal("Search"),
+                        button -> searchMojangSkin()
+                )
+                .bounds(
+                        searchFieldX + searchFieldWidth - searchButtonWidth,
+                        yPos,
+                        searchButtonWidth,
+                        scaledComponentHeight
+                )
+                .build();
         addRenderableWidget(searchButton);
         searchButton.active = false;
 
@@ -239,12 +240,14 @@ public class PlayerSkinMenuScreen extends Screen {
                     // HD Skin Website
                     if (this.minecraft != null) {
                         this.minecraft.options.chatLinksPrompt().set(false);
+                        Util.getPlatform().openUri("https://mcskins.top/128x128/");
                     }
                 },
                 () -> {
                     // Skin Website
                     if (this.minecraft != null) {
                         this.minecraft.options.chatLinksPrompt().set(false);
+                        Util.getPlatform().openUri("https://laby.net/skins?order=trending_30d");
                     }
                 },
                 () -> {
@@ -770,17 +773,17 @@ public class PlayerSkinMenuScreen extends Screen {
      */
     public void showDeleteConfirmation(AssetMetadata metadata) {
         confirmationDialog = new ConfirmationDialog(
-            Component.literal("Delete Skin?"),
-            Component.literal("Are you sure you want to delete \"" + metadata.friendlyName() + "\"?"),
-            () -> {
-                // Confirm deletion
-                deleteSkin(metadata);
-                confirmationDialog = null;
-            },
-            () -> {
-                // Cancel
-                confirmationDialog = null;
-            }
+                Component.literal("Delete Skin?"),
+                Component.literal("Are you sure you want to delete \"" + metadata.friendlyName() + "\"?"),
+                () -> {
+                    // Confirm deletion
+                    deleteSkin(metadata);
+                    confirmationDialog = null;
+                },
+                () -> {
+                    // Cancel
+                    confirmationDialog = null;
+                }
         );
         confirmationDialog.init(width, height);
     }
@@ -794,9 +797,9 @@ public class PlayerSkinMenuScreen extends Screen {
             Files.deleteIfExists(metadata.path());
 
             minecraft.getSoundManager().play(
-                net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                    SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
-                )
+                    net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                            SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
+                    )
             );
 
             // Refresh the asset manager and skin list
@@ -841,29 +844,29 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Fetch skin asynchronously
         MojangApiService.getInstance().fetchSkinByUsername(username)
-            .thenAccept(skinData -> {
-                // Execute on main thread
-                if (this.minecraft != null) {
-                    this.minecraft.execute(() -> {
-                        if (skinData != null) {
-                            handleMojangSkinFetched(skinData);
-                        } else {
-                            showError(Component.literal("Player not found: " + username));
+                .thenAccept(skinData -> {
+                    // Execute on main thread
+                    if (this.minecraft != null) {
+                        this.minecraft.execute(() -> {
+                            if (skinData != null) {
+                                handleMojangSkinFetched(skinData);
+                            } else {
+                                showError(Component.literal("Player not found: " + username));
+                                resetSearchButton();
+                            }
+                        });
+                    }
+                })
+                .exceptionally(throwable -> {
+                    QuickSkin.LOGGER.error("Error fetching Mojang skin", throwable);
+                    if (this.minecraft != null) {
+                        this.minecraft.execute(() -> {
+                            showError(Component.literal("Failed to fetch skin: " + throwable.getMessage()));
                             resetSearchButton();
-                        }
-                    });
-                }
-            })
-            .exceptionally(throwable -> {
-                QuickSkin.LOGGER.error("Error fetching Mojang skin", throwable);
-                if (this.minecraft != null) {
-                    this.minecraft.execute(() -> {
-                        showError(Component.literal("Failed to fetch skin: " + throwable.getMessage()));
-                        resetSearchButton();
-                    });
-                }
-                return null;
-            });
+                        });
+                    }
+                    return null;
+                });
     }
 
     /**
@@ -899,9 +902,9 @@ public class PlayerSkinMenuScreen extends Screen {
 
                         // Play success sound
                         minecraft.getSoundManager().play(
-                            net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                                SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
-                            )
+                                net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                                        SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
+                                )
                         );
                     } else {
                         showError(Component.literal("Failed to load skin metadata"));
