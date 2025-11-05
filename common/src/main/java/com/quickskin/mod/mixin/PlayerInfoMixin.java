@@ -65,15 +65,19 @@ public abstract class PlayerInfoMixin {
 
         // Only override if QuickSkin has an active custom cape for this player
         if (service.hasActiveCape(this.profile.getId())) {
+            com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(this.profile.getId());
+
+            // Check for the explicit "hide cape" identifier
+            if (appearance != null && ("__NONE__".equals(appearance.getCapeId()) || appearance.getCapeId().isEmpty())) {
+                cir.setReturnValue(null); // Return null to hide the cape completely
+                return;
+            }
+
             ResourceLocation customCape = service.getCapeLocation(this.profile.getId());
 
-            if (customCape != null) {
-                // Use the custom cape texture
-                cir.setReturnValue(customCape);
-            } else {
-                // Null means hide the cape
-                cir.setReturnValue(null);
-            }
+            // If a custom cape is found (or still loading but intended), set it.
+            // If it's still loading, getCapeLocation will return null, correctly hiding the vanilla cape in the meantime.
+            cir.setReturnValue(customCape);
         }
         // If no active QuickSkin cape, let vanilla or other mods handle it
     }

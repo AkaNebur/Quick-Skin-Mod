@@ -36,10 +36,12 @@ public class TextureAlphaDetector {
         // Check cache first
         Boolean cached = transparencyCache.get(textureLocation);
         if (cached != null) {
+            QuickSkin.LOGGER.info("Transparency for {} from cache: {}", textureLocation, cached);
             return cached;
         }
 
         boolean hasAlpha = detectTransparency(textureLocation);
+        QuickSkin.LOGGER.info("Detected transparency for {}: {}", textureLocation, hasAlpha);
         transparencyCache.put(textureLocation, hasAlpha);
         return hasAlpha;
     }

@@ -24,6 +24,9 @@ public class CapeTransparencyEvents implements PreparableReloadListener {
 
     @Override
     public final CompletableFuture<Void> reload(PreparationBarrier preparationBarrier, ResourceManager resourceManager, ProfilerFiller preparationsProfiler, ProfilerFiller reloadProfiler, Executor backgroundExecutor, Executor gameExecutor) {
-        return preparationBarrier.wait(null).thenRunAsync(TextureAlphaDetector::clearCache, gameExecutor);
+        return preparationBarrier.wait(null).thenRunAsync(() -> {
+            TextureAlphaDetector.clearCache();
+            com.quickskin.mod.client.services.LocalAssetManager.getInstance().reload();
+        }, gameExecutor);
     }
 }

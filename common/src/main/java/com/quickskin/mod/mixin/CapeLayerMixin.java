@@ -1,5 +1,6 @@
 package com.quickskin.mod.mixin;
 
+import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -29,7 +30,7 @@ public class CapeLayerMixin {
                                             AbstractClientPlayer player, float limbSwing, float limbSwingAmount,
                                             float partialTicks, float ageInTicks, float netHeadYaw, float headPitch,
                                             CallbackInfo ci) {
-        
+
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
         if (!service.hasActiveCape(player.getUUID())) {
             return; // No custom cape, let vanilla logic run
@@ -43,26 +44,31 @@ public class CapeLayerMixin {
         }
 
         if (player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) {
-            // Let vanilla handle elytra rendering, but we still need to cancel our cape logic
-            ci.cancel(); 
+            ci.cancel();
             return;
         }
 
-        // Logic to choose the correct RenderType
+        // --- THE CORRECTED LOGIC ---
         RenderType renderType;
-        String texturePath = capeTexture.getPath();
 
-        // Force translucent for our local/dynamic textures
-        if (texturePath.contains("quickskin/local/")) {
+        // Check if the texture is one of our dynamically registered local assets.
+        // This is a robust check that verifies both the namespace and the path prefix.
+        if (capeTexture.getNamespace().equals(QuickSkin.MOD_ID) && capeTexture.getPath().startsWith("local/")) {
+            // It's our texture. Force translucent rendering because the ResourceManager cannot detect its transparency.
             renderType = RenderType.entityTranslucentCull(capeTexture);
         } else {
-            // For all other capes (vanilla, other mods), check for transparency
-            if (TextureAlphaDetector.hasTransparency(capeTexture)) {
+            // It's a vanilla cape or from another mod. Use the alpha detector.
+            boolean hasTransparency = TextureAlphaDetector.hasTransparency(capeTexture);
+            // Your debug log:
+            // QuickSkin.LOGGER.info("Rendering cape for {}. Texture: {}, Has Transparency: {}", player.getName().getString(), capeTexture, hasTransparency);
+
+            if (hasTransparency) {
                 renderType = RenderType.entityTranslucentCull(capeTexture);
             } else {
                 renderType = RenderType.entitySolid(capeTexture);
             }
         }
+        // --- End of Fix ---
 
         VertexConsumer vertexconsumer = buffer.getBuffer(renderType);
 
@@ -94,10 +100,10 @@ public class CapeLayerMixin {
         poseStack.mulPose(Axis.XP.rotationDegrees(6.0F + f2 / 2.0F + f1));
         poseStack.mulPose(Axis.ZP.rotationDegrees(f3 / 2.0F));
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - f3 / 2.0F));
-        
+
         // Render the cloak part of the model
         ((CapeLayer)(Object)this).getParentModel().renderCloak(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY);
-        
+
         poseStack.popPose();
 
         // Cancel the original vanilla method to prevent it from rendering a second time

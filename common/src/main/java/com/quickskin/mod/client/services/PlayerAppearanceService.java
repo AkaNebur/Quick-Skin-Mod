@@ -213,7 +213,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
      */
     public boolean hasActiveCape(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
-        return appearance != null && appearance.getCapeLocation() != null;
+        return appearance != null && appearance.getCapeId() != null && !appearance.getCapeId().isEmpty();
     }
 
     /**
@@ -241,7 +241,25 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     @Nullable
     public ResourceLocation getCapeLocation(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
-        return appearance != null ? appearance.getCapeLocation() : null;
+        if (appearance == null) {
+            return null;
+        }
+
+        // If the location is already cached, return it.
+        if (appearance.getCapeLocation() != null) {
+            return appearance.getCapeLocation();
+        }
+
+        // If not cached, try to resolve it now. This ensures the mixin gets the texture as soon as it's ready.
+        if (appearance.getCapeId() != null && !appearance.getCapeId().isEmpty()) {
+            ResourceLocation location = capeService.getCapeLocation(playerId, appearance.getCapeId());
+            if (location != null) {
+                appearance.setCapeLocation(location); // Cache it for next time
+                return location;
+            }
+        }
+
+        return null;
     }
 
     /**
