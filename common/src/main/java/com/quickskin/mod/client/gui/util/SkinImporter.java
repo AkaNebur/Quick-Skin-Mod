@@ -4,15 +4,16 @@ import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.util.HashUtil;
+import com.quickskin.mod.common.util.HDTextureProcessor;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,51 +35,38 @@ public class SkinImporter {
         }
 
         // Validate it's a PNG file
-        String fileName = sourcePath.getFileName().toString().toLowerCase();
-        if (!fileName.endsWith(".png")) {
+        String fileName = sourcePath.getFileName().toString();
+        if (!fileName.toLowerCase().endsWith(".png")) {
             QuickSkin.LOGGER.error("File is not a PNG: {}", fileName);
             return null;
         }
 
-        // Validate image dimensions
-        try {
-            BufferedImage image = ImageIO.read(sourcePath.toFile());
-            if (image == null) {
-                QuickSkin.LOGGER.error("Failed to read image: {}", sourcePath);
+        try (InputStream inputStream = Files.newInputStream(sourcePath)) {
+            // Process the skin using the new HDTextureProcessor
+            byte[] processedImageBytes = HDTextureProcessor.processHDSkin(inputStream, true);
+
+            if (processedImageBytes == null) {
+                QuickSkin.LOGGER.error("Failed to process skin file: {}", fileName);
                 return null;
             }
 
-            int width = image.getWidth();
-            int height = image.getHeight();
+            QuickSkin.LOGGER.info("Importing skin: {}", fileName);
 
-            // Check if valid skin dimensions
-            if (!isValidSkinDimension(width, height)) {
-                QuickSkin.LOGGER.error("Invalid skin dimensions {}x{}: {}", width, height, fileName);
-                return null;
-            }
+            // Copy file to skins directory
+            LocalAssetManager assetManager = LocalAssetManager.getInstance();
+            Path targetPath = assetManager.getSkinsDirectory().resolve(fileName);
 
-            QuickSkin.LOGGER.info("Importing skin {}x{}: {}", width, height, fileName);
-
-        } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to validate image: {}", sourcePath, e);
-            return null;
-        }
-
-        // Copy file to skins directory
-        LocalAssetManager assetManager = LocalAssetManager.getInstance();
-        Path targetPath = assetManager.getSkinsDirectory().resolve(fileName);
-
-        // If file already exists, add a number
-        int counter = 1;
-        while (Files.exists(targetPath)) {
+            // If file already exists, add a number
+            int counter = 1;
             String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
-            targetPath = assetManager.getSkinsDirectory().resolve(nameWithoutExt + "_" + counter + ".png");
-            counter++;
-        }
+            while (Files.exists(targetPath)) {
+                targetPath = assetManager.getSkinsDirectory().resolve(nameWithoutExt + "_" + counter + ".png");
+                counter++;
+            }
 
-        try {
-            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            QuickSkin.LOGGER.info("Copied skin to: {}", targetPath);
+            // Save the processed image
+            Files.write(targetPath, processedImageBytes);
+            QuickSkin.LOGGER.info("Saved processed skin to: {}", targetPath);
 
             // Reload assets to pick up the new file
             assetManager.reload();
@@ -90,7 +78,7 @@ public class SkinImporter {
             }
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to copy skin file", e);
+            QuickSkin.LOGGER.error("Failed to process skin file", e);
         }
 
         return null;

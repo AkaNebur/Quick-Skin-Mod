@@ -24,11 +24,14 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -322,7 +325,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // Then add local capes
         List<AssetMetadata> localCapeAssets = LocalAssetManager.getInstance()
-            .getAssetsByType("cape");
+                .getAssetsByType("cape");
         for (AssetMetadata localCape : localCapeAssets) {
             this.localCapes.add(CapeEntry.fromLocal(localCape));
         }
@@ -336,7 +339,7 @@ public class PlayerCapeMenuScreen extends Screen {
         }
 
         QuickSkin.LOGGER.debug("Loaded {} local capes (including None) + {} default capes",
-            localCapes.size(), knownCapes.size());
+                localCapes.size(), knownCapes.size());
     }
 
     /**
@@ -356,7 +359,7 @@ public class PlayerCapeMenuScreen extends Screen {
         if (activeCapeId == null && minecraft != null && minecraft.player != null) {
             java.util.UUID playerId = minecraft.player.getUUID();
             com.quickskin.mod.common.data.PlayerAppearance appearance =
-                PlayerAppearanceService.getInstance().getAppearance(playerId);
+                    PlayerAppearanceService.getInstance().getAppearance(playerId);
 
             if (appearance != null && appearance.getCapeId() != null && !appearance.getCapeId().isEmpty()) {
                 activeCapeId = appearance.getCapeId();
@@ -443,14 +446,14 @@ public class PlayerCapeMenuScreen extends Screen {
         if (minecraft != null && minecraft.player != null) {
             // In-game: use the real player's UUID
             PlayerAppearanceService.getInstance()
-                .applyCape(minecraft.player.getUUID(), "");
+                    .applyCape(minecraft.player.getUUID(), "");
             QuickSkin.LOGGER.info("Removed cape from in-game player");
         } else {
             // Title screen: use cached player UUID if available
             java.util.UUID dummyUUID = getDummyPlayerUUID();
             if (dummyUUID != null) {
                 PlayerAppearanceService.getInstance()
-                    .applyCape(dummyUUID, "");
+                        .applyCape(dummyUUID, "");
                 QuickSkin.LOGGER.info("Removed cape from cached player");
             } else {
                 QuickSkin.LOGGER.info("Removed cape from preview only");
@@ -465,10 +468,10 @@ public class PlayerCapeMenuScreen extends Screen {
         }
 
         confirmationDialog = new ConfirmationDialog(
-            Component.literal("Delete Cape?"),
-            Component.literal("Are you sure you want to delete '" + capeEntry.getFriendlyName() + "'?"),
-            () -> deleteCape(capeEntry),
-            () -> confirmationDialog = null
+                Component.literal("Delete Cape?"),
+                Component.literal("Are you sure you want to delete '" + capeEntry.getFriendlyName() + "'?"),
+                () -> deleteCape(capeEntry),
+                () -> confirmationDialog = null
         );
     }
 
@@ -761,7 +764,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
             // Render "None" text centered
             graphics.drawCenteredString(this.font, "None", x + capeDisplaySize / 2,
-                y + capeDisplaySize / 2 - 4, 0xFFFFFF);
+                    y + capeDisplaySize / 2 - 4, 0xFFFFFF);
 
             // Highlight if selected or hovered
             if (isSelected(cape)) {
@@ -818,7 +821,7 @@ public class PlayerCapeMenuScreen extends Screen {
         int textureHeight = 32;
 
         // Check if it's a high resolution cape
-        if (cape.isLocal() && cape.getLocalCape() != null && cape.getLocalCape().resolution().isHD()) {
+        if (cape.isLocal() && cape.getLocalCape() != null && cape.getLocalCape().resolution() != null && cape.getLocalCape().resolution().isHD()) {
             int scale = cape.getLocalCape().resolution().getScale();
             textureWidth *= scale;
             textureHeight *= scale;
@@ -1000,7 +1003,7 @@ public class PlayerCapeMenuScreen extends Screen {
         if (minecraft != null && minecraft.player != null) {
             // In-game: use the real player's UUID
             PlayerAppearanceService.getInstance()
-                .applyCape(minecraft.player.getUUID(), capeId);
+                    .applyCape(minecraft.player.getUUID(), capeId);
             QuickSkin.LOGGER.info("Applied cape to in-game player: {}", cape.getFriendlyName());
         } else {
             // Title screen: use a dummy UUID that matches the cached player if it exists
@@ -1008,7 +1011,7 @@ public class PlayerCapeMenuScreen extends Screen {
             java.util.UUID dummyUUID = getDummyPlayerUUID();
             if (dummyUUID != null) {
                 PlayerAppearanceService.getInstance()
-                    .applyCape(dummyUUID, capeId);
+                        .applyCape(dummyUUID, capeId);
                 QuickSkin.LOGGER.info("Applied cape to cached player for preview: {}", cape.getFriendlyName());
             } else {
                 QuickSkin.LOGGER.info("Applied cape to preview only (no cached player): {}", cape.getFriendlyName());
@@ -1198,14 +1201,243 @@ public class PlayerCapeMenuScreen extends Screen {
                 .collect(Collectors.toList());
 
         if (validFiles.isEmpty()) {
-            showImportMessage("⚠ No PNG or GIF files found", 0xFFAA00, 100);
+            showImportMessage("No PNG or GIF files found", 0xFFAA00, 100);
             return;
         }
 
         showImportMessage("Processing " + validFiles.size() + " file(s)...", 0x55AAFF, 60);
 
-        // TODO: Implement file processing
-        QuickSkin.LOGGER.info("Received {} files for import", validFiles.size());
+        CompletableFuture.runAsync(() -> {
+            int successCount = 0;
+            int invalidCount = 0;
+
+            Path capesDir = LocalAssetManager.getInstance().getCapesDirectory();
+            try {
+                Files.createDirectories(capesDir);
+            } catch (IOException e) {
+                if (Minecraft.getInstance() != null) {
+                    Minecraft.getInstance().execute(() ->
+                            showImportMessage("Error: Could not create capes directory", 0xFF5555, 100));
+                }
+                return;
+            }
+
+            for (Path file : validFiles) {
+                if (processDroppedFile(file, capesDir)) {
+                    successCount++;
+                } else {
+                    invalidCount++;
+                }
+            }
+
+            int finalSuccessCount = successCount;
+            int finalInvalidCount = invalidCount;
+
+            if (Minecraft.getInstance() != null) {
+                Minecraft.getInstance().execute(() -> {
+                    if (finalSuccessCount > 0) {
+                        // THIS IS THE FIX: Reload assets BEFORE refreshing the list
+                        LocalAssetManager.getInstance().reload();
+
+                        refreshCapeList();
+                        updateGridDimensions();
+
+                        String message = String.format("✓ Imported %d cape%s", finalSuccessCount,
+                                finalSuccessCount == 1 ? "" : "s");
+                        if (finalInvalidCount > 0) {
+                            message += String.format(" (%d invalid)", finalInvalidCount);
+                        }
+                        showImportMessage(message, finalSuccessCount > finalInvalidCount ? 0x55FF55 : 0xFFAA00, 200);
+                    } else {
+                        showImportMessage("⚠ No valid capes found (must be 2:1 ratio or animation strip)", 0xFF5555, 200);
+                    }
+                });
+            }
+        }).exceptionally(throwable -> {
+            if (Minecraft.getInstance() != null) {
+                Minecraft.getInstance().execute(() ->
+                        showImportMessage("Error processing files: " + throwable.getMessage(), 0xFF5555, 200));
+            }
+            return null;
+        });
+    }
+
+    private boolean processDroppedFile(Path sourceFile, Path targetDir) {
+        try {
+            String lowerCaseName = sourceFile.toString().toLowerCase();
+            boolean isGif = lowerCaseName.endsWith(".gif");
+
+            java.awt.image.BufferedImage sourceAtlas;
+            int frameCount = 1;
+            boolean isStandardFormat;
+
+            // Step 1: Load image into a source atlas and determine its format
+            if (isGif) {
+                try (java.io.InputStream is = Files.newInputStream(sourceFile)) {
+                    // The new GifUtil returns a different result object. We need to adapt.
+                    com.quickskin.mod.common.util.GifUtil.GifProcessResult gifResult = com.quickskin.mod.common.util.GifUtil.processGif(is);
+                    if (gifResult == null || gifResult.atlasImageData() == null) return false;
+
+                    // Convert byte[] atlas back to BufferedImage for processing
+                    sourceAtlas = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(gifResult.atlasImageData()));
+                    frameCount = gifResult.metadata().frameCount();
+                    isStandardFormat = true;
+                }
+            } else { // Is PNG
+                java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(sourceFile.toFile());
+                if (image == null) return false;
+                sourceAtlas = image;
+
+                int w = image.getWidth();
+                int h = image.getHeight();
+                int frameHeightIfCape = w / 2;
+
+                isStandardFormat = false;
+                if (w > 0 && h > 0 && w % 2 == 0 && h % frameHeightIfCape == 0) {
+                    com.quickskin.mod.common.data.SkinResolution frameRes = com.quickskin.mod.common.data.SkinResolution.fromDimensions(w, frameHeightIfCape);
+                    if (frameRes != null) {
+                        isStandardFormat = true;
+                        frameCount = h / frameHeightIfCape;
+                    }
+                }
+            }
+
+            java.awt.image.BufferedImage finalAtlas;
+
+            // Step 2: Process the source atlas based on its format
+            if (isStandardFormat) {
+                QuickSkin.LOGGER.info("Processing as a standard cape format ({} frames): {}", frameCount, sourceFile.getFileName());
+
+                // Normalize atlas to 64px width while maintaining animation strip
+                int normalizedWidth = 64;
+                int normalizedHeight = 32 * frameCount;
+                java.awt.image.BufferedImage normalizedAtlas = com.quickskin.mod.common.util.HDTextureProcessor.downsample(sourceAtlas, normalizedWidth);
+
+                // Check if the elytra area is transparent
+                if (isElytraAreaTransparent(normalizedAtlas)) {
+                    QuickSkin.LOGGER.info("Detected transparent elytra. Compositing with vanilla elytra.");
+                    java.awt.image.BufferedImage vanillaElytraBase = getVanillaElytraImage();
+                    if (vanillaElytraBase == null) { // Fallback if vanilla elytra fails to load
+                        finalAtlas = normalizedAtlas;
+                    } else {
+                        java.awt.image.BufferedImage compositeAtlas = new java.awt.image.BufferedImage(normalizedWidth, normalizedHeight, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                        java.awt.Graphics2D g = compositeAtlas.createGraphics();
+
+                        g.setComposite(java.awt.AlphaComposite.Clear);
+                        g.fillRect(0, 0, normalizedWidth, normalizedHeight);
+                        g.setComposite(java.awt.AlphaComposite.SrcOver);
+
+                        for(int i = 0; i < frameCount; i++) {
+                            int yOffset = i * 32;
+                            g.drawImage(vanillaElytraBase, 0, yOffset, null);
+                            g.drawImage(normalizedAtlas.getSubimage(0, yOffset, 64, 32), 0, yOffset, null);
+                        }
+                        g.dispose();
+                        finalAtlas = compositeAtlas;
+                    }
+                } else {
+                    finalAtlas = normalizedAtlas;
+                }
+            } else {
+                QuickSkin.LOGGER.info("Processing non-standard image as a custom static cape: {}", sourceFile.getFileName());
+                java.awt.image.BufferedImage vanillaElytraBase = getVanillaElytraImage();
+                if (vanillaElytraBase == null) {
+                    vanillaElytraBase = new java.awt.image.BufferedImage(64, 32, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                }
+
+                java.awt.image.BufferedImage newCapeTexture = new java.awt.image.BufferedImage(64, 32, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                java.awt.Graphics2D g = newCapeTexture.createGraphics();
+
+                g.setComposite(java.awt.AlphaComposite.Clear);
+                g.fillRect(0, 0, 64, 32);
+                g.setComposite(java.awt.AlphaComposite.SrcOver);
+
+                g.drawImage(vanillaElytraBase, 0, 0, null);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ALPHA_INTERPOLATION, java.awt.RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
+                g.drawImage(sourceAtlas, 0, 0, 22, 17, null);
+                g.dispose();
+
+                finalAtlas = newCapeTexture;
+            }
+
+            if (finalAtlas != null) {
+                Path targetPath = resolveTargetPath(sourceFile, targetDir);
+                saveImageWithAlpha(finalAtlas, targetPath);
+                return true;
+            }
+
+        } catch (IOException e) {
+            QuickSkin.LOGGER.error("Error processing dropped file {}: {}", sourceFile.getFileName(), e.getMessage());
+        }
+        return false;
+    }
+
+    private boolean isElytraAreaTransparent(java.awt.image.BufferedImage image) {
+        double scale = image.getWidth() / 64.0;
+        int elytraX = (int) (22 * scale);
+        int elytraY = 0;
+        int elytraWidth = (int) (32 * scale);
+        int elytraHeight = (int) (16 * scale);
+
+        int samplePoints = 5;
+        for (int i = 0; i < samplePoints; i++) {
+            for (int j = 0; j < samplePoints; j++) {
+                int x = elytraX + (i * elytraWidth / (samplePoints - 1));
+                int y = elytraY + (j * elytraHeight / (samplePoints - 1));
+                x = Math.min(x, image.getWidth() - 1);
+                y = Math.min(y, image.getHeight() - 1);
+                int pixel = image.getRGB(x, y);
+                int alpha = (pixel >> 24) & 0xFF;
+                if (alpha > 10) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    @Nullable
+    private java.awt.image.BufferedImage getVanillaElytraImage() {
+        try {
+            ResourceLocation VANILLA_ELYTRA_TEXTURE = new ResourceLocation("minecraft", "textures/entity/elytra.png");
+            java.io.InputStream stream = Minecraft.getInstance().getResourceManager().getResource(VANILLA_ELYTRA_TEXTURE).get().open();
+            java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(stream);
+            stream.close();
+            return image;
+        } catch (IOException e) {
+            QuickSkin.LOGGER.error("Failed to load vanilla elytra texture for custom cape creation", e);
+            return null;
+        }
+    }
+
+    private Path resolveTargetPath(Path sourceFile, Path targetDir) {
+        String fileName = sourceFile.getFileName().toString();
+        String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+        String ext = ".png";
+
+        Path targetPath = targetDir.resolve(nameWithoutExt + ext);
+        int counter = 1;
+        while (Files.exists(targetPath)) {
+            targetPath = targetDir.resolve(nameWithoutExt + "_" + counter + ext);
+            counter++;
+        }
+        return targetPath;
+    }
+
+    private void saveImageWithAlpha(java.awt.image.BufferedImage image, Path outputPath) throws IOException {
+        java.awt.image.BufferedImage argbImage;
+        if (image.getType() != java.awt.image.BufferedImage.TYPE_INT_ARGB) {
+            argbImage = new java.awt.image.BufferedImage(image.getWidth(), image.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            java.awt.Graphics2D g = argbImage.createGraphics();
+            g.setComposite(java.awt.AlphaComposite.Src);
+            g.drawImage(image, 0, 0, null);
+            g.dispose();
+        } else {
+            argbImage = image;
+        }
+
+        javax.imageio.ImageIO.write(argbImage, "png", outputPath.toFile());
     }
 
     @Override
