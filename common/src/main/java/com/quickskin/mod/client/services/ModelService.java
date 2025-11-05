@@ -37,12 +37,8 @@ public class ModelService implements IModelService {
 
     @Override
     public String getModelType(UUID playerId, String skinId, String requestedModel) {
-        QuickSkin.LOGGER.info("ModelService.getModelType called: playerId={}, skinId={}, requestedModel={}",
-                playerId, skinId, requestedModel);
-
         // If a specific model is explicitly requested (not "auto"), honor that request
         if (requestedModel != null && !"auto".equalsIgnoreCase(requestedModel)) {
-            QuickSkin.LOGGER.info("Using explicitly requested model: {}", requestedModel);
             return requestedModel;
         }
 
@@ -51,19 +47,16 @@ public class ModelService implements IModelService {
             // Auto-detect from skin texture
             if (skinId != null && skinId.startsWith("local_skin:")) {
                 String hash = skinId.substring("local_skin:".length());
-                QuickSkin.LOGGER.info("Auto-detecting model type for skin hash: {}", hash);
 
                 // Detect from texture
                 byte[] skinData = LocalAssetManager.getInstance().loadTexture(hash, TextureQuality.PREVIEW);
                 if (skinData != null) {
                     String detected = detectModelType(skinData);
-                    QuickSkin.LOGGER.info("Auto-detected model type: {}", detected);
                     return detected;
                 }
             }
 
             // Default to classic if detection fails
-            QuickSkin.LOGGER.warn("Failed to auto-detect model type, defaulting to classic");
             return "classic";
         }
 
@@ -71,7 +64,6 @@ public class ModelService implements IModelService {
         if (modelOverrides.containsKey(playerId)) {
             String override = modelOverrides.get(playerId);
             if (!"auto".equalsIgnoreCase(override)) {
-                QuickSkin.LOGGER.info("Using model override: {}", override);
                 return override;
             }
         }
