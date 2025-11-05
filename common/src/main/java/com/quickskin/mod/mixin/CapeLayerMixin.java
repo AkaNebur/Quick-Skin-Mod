@@ -1,0 +1,106 @@
+package com.quickskin.mod.mixin;
+
+import com.quickskin.mod.client.services.PlayerAppearanceService;
+import com.quickskin.mod.common.util.TextureAlphaDetector;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.entity.layers.CapeLayer;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Items;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+@Mixin(CapeLayer.class)
+public class CapeLayerMixin {
+
+    @Inject(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;FFFFFF)V",
+            at = @At("HEAD"),
+            cancellable = true)
+    private void quickskin$renderCustomCape(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+                                            AbstractClientPlayer player, float limbSwing, float limbSwingAmount,
+                                            float partialTicks, float ageInTicks, float netHeadYaw, float headPitch,
+                                            CallbackInfo ci) {
+        
+        PlayerAppearanceService service = PlayerAppearanceService.getInstance();
+        if (!service.hasActiveCape(player.getUUID())) {
+            return; // No custom cape, let vanilla logic run
+        }
+
+        ResourceLocation capeTexture = player.getCloakTextureLocation();
+
+        if (capeTexture == null) {
+            ci.cancel(); // Don't render anything if QuickSkin wants to hide the cape
+            return;
+        }
+
+        if (player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) {
+            // Let vanilla handle elytra rendering, but we still need to cancel our cape logic
+            ci.cancel(); 
+            return;
+        }
+
+        // Logic to choose the correct RenderType
+        RenderType renderType;
+        String texturePath = capeTexture.getPath();
+
+        // Force translucent for our local/dynamic textures
+        if (texturePath.contains("quickskin/local/")) {
+            renderType = RenderType.entityTranslucentCull(capeTexture);
+        } else {
+            // For all other capes (vanilla, other mods), check for transparency
+            if (TextureAlphaDetector.hasTransparency(capeTexture)) {
+                renderType = RenderType.entityTranslucentCull(capeTexture);
+            } else {
+                renderType = RenderType.entitySolid(capeTexture);
+            }
+        }
+
+        VertexConsumer vertexconsumer = buffer.getBuffer(renderType);
+
+        // Replicate the vanilla cape rendering logic with our custom render type
+        poseStack.pushPose();
+        poseStack.translate(0.0D, 0.0D, 0.125D);
+        double d0 = Mth.lerp(partialTicks, player.xCloakO, player.xCloak) - Mth.lerp(partialTicks, player.xo, player.getX());
+        double d1 = Mth.lerp(partialTicks, player.yCloakO, player.yCloak) - Mth.lerp(partialTicks, player.yo, player.getY());
+        double d2 = Mth.lerp(partialTicks, player.zCloakO, player.zCloak) - Mth.lerp(partialTicks, player.zo, player.getZ());
+        float f = player.yBodyRotO + (player.yBodyRot - player.yBodyRotO);
+        double d3 = Mth.sin(f * ((float)Math.PI / 180F));
+        double d4 = -Mth.cos(f * ((float)Math.PI / 180F));
+        float f1 = (float)d1 * 10.0F;
+        f1 = Mth.clamp(f1, -6.0F, 32.0F);
+        float f2 = (float)(d0 * d3 + d2 * d4) * 100.0F;
+        f2 = Mth.clamp(f2, 0.0F, 150.0F);
+        float f3 = (float)(d0 * d4 - d2 * d3) * 100.0F;
+        f3 = Mth.clamp(f3, -20.0F, 20.0F);
+        if (f2 < 0.0F) {
+            f2 = 0.0F;
+        }
+
+        float f4 = Mth.lerp(partialTicks, player.oBob, player.bob);
+        f1 += Mth.sin(Mth.lerp(partialTicks, player.walkDistO, player.walkDist) * 6.0F) * 32.0F * f4;
+        if (player.isCrouching()) {
+            f1 += 25.0F;
+        }
+
+        poseStack.mulPose(Axis.XP.rotationDegrees(6.0F + f2 / 2.0F + f1));
+        poseStack.mulPose(Axis.ZP.rotationDegrees(f3 / 2.0F));
+        poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - f3 / 2.0F));
+        
+        // Render the cloak part of the model
+        ((CapeLayer)(Object)this).getParentModel().renderCloak(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY);
+        
+        poseStack.popPose();
+
+        // Cancel the original vanilla method to prevent it from rendering a second time
+        ci.cancel();
+    }
+}

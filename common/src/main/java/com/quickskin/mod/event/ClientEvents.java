@@ -9,8 +9,13 @@ import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.ModelService;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
+import com.quickskin.mod.event.CapeTransparencyEvents;
 import dev.architectury.event.EventResult;
-import dev.architectury.event.events.client.*;
+import dev.architectury.event.events.client.ClientGuiEvent;
+import dev.architectury.event.events.client.ClientPlayerEvent;
+import dev.architectury.event.events.client.ClientRawInputEvent;
+import dev.architectury.event.events.client.ClientScreenInputEvent;
+import dev.architectury.event.events.client.ClientTickEvent;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -43,6 +48,8 @@ public class ClientEvents {
      */
     public static void init() {
         QuickSkin.LOGGER.info("Registering client events...");
+
+        CapeTransparencyEvents.register();
 
         // Client tick (fires every game tick, ~20 times per second)
         ClientTickEvent.CLIENT_POST.register(client -> {
