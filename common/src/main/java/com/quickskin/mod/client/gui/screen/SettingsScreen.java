@@ -40,8 +40,8 @@ public class SettingsScreen extends Screen {
 
     private int dialogX;
     private int dialogY;
-    private int dialogWidth = 400;
-    private int dialogHeight = 380;
+    private int dialogWidth = 480;
+    private int dialogHeight = 280;
 
     private enum Tab {
         CLIENT("Client"),
@@ -96,8 +96,8 @@ public class SettingsScreen extends Screen {
         serverSettingWidgets.clear();
 
         // Make dialog responsive to screen size
-        dialogWidth = Math.min(400, this.width - 40);
-        dialogHeight = Math.min(380, this.height - 40);
+        dialogWidth = Math.min(480, this.width - 40);
+        dialogHeight = Math.min(280, this.height - 40);
 
         // Center the dialog
         dialogX = (this.width - dialogWidth) / 2;
@@ -146,94 +146,96 @@ public class SettingsScreen extends Screen {
         int spacing = 30;
         // Settings content area starts below tabs
         int startY = dialogY + TAB_HEIGHT + 20;
-        int currentY = startY;
-        int contentX = dialogX + 20;
+        int leftColumnX = dialogX + 20;
+        int rightColumnX = dialogX + dialogWidth / 2 + 10;
+        int currentLeftY = startY;
+        int currentRightY = startY;
 
+        // Left Column
         // HUD Overlay Settings
         showOverlayCheckbox = new Checkbox(
-            contentX, currentY,
+            leftColumnX, currentLeftY,
             checkboxSize, checkboxSize,
             Component.literal("Show HUD Overlay"),
             config.showSkinPreviewOverlay
         );
         clientSettingWidgets.add(showOverlayCheckbox);
-        currentY += spacing;
+        currentLeftY += spacing;
 
         // Animation Settings
         enableAnimationsCheckbox = new Checkbox(
-            contentX, currentY,
+            leftColumnX, currentLeftY,
             checkboxSize, checkboxSize,
             Component.literal("Enable Animations"),
             config.enableAnimations
         );
         clientSettingWidgets.add(enableAnimationsCheckbox);
-        currentY += spacing;
+        currentLeftY += spacing;
 
         enableIdleAnimationCheckbox = new Checkbox(
-            contentX, currentY,
+            leftColumnX, currentLeftY,
             checkboxSize, checkboxSize,
             Component.literal("Enable Idle Animation"),
             config.enableIdleAnimation
         );
         clientSettingWidgets.add(enableIdleAnimationCheckbox);
-        currentY += spacing;
+        currentLeftY += spacing;
 
         autoRotatePreviewCheckbox = new Checkbox(
-            contentX, currentY,
+            leftColumnX, currentLeftY,
             checkboxSize, checkboxSize,
             Component.literal("Auto-Rotate Preview"),
             config.autoRotatePreview
         );
         clientSettingWidgets.add(autoRotatePreviewCheckbox);
-        currentY += spacing;
+        currentLeftY += spacing;
 
-        // Performance Settings
-        cacheTexturesCheckbox = new Checkbox(
-            contentX, currentY,
-            checkboxSize, checkboxSize,
-            Component.literal("Cache Textures"),
-            config.cacheTextures
-        );
-        clientSettingWidgets.add(cacheTexturesCheckbox);
-        currentY += spacing;
-
-        enableHDSkinsCheckbox = new Checkbox(
-            contentX, currentY,
-            checkboxSize, checkboxSize,
-            Component.literal("Enable HD Skins"),
-            config.enableHDSkins
-        );
-        clientSettingWidgets.add(enableHDSkinsCheckbox);
-        currentY += spacing;
-
-        // Network Settings
-        autoSyncSkinsCheckbox = new Checkbox(
-            contentX, currentY,
-            checkboxSize, checkboxSize,
-            Component.literal("Auto-Sync Skins"),
-            config.autoSyncSkins
-        );
-        clientSettingWidgets.add(autoSyncSkinsCheckbox);
-        currentY += spacing;
-
-        // Compatibility Settings
-        skinLayers3DCompatCheckbox = new Checkbox(
-            contentX, currentY,
-            checkboxSize, checkboxSize,
-            Component.literal("SkinLayers3D Compatibility"),
-            config.skinLayers3DCompat
-        );
-        clientSettingWidgets.add(skinLayers3DCompatCheckbox);
-        currentY += spacing;
-
-        // Keybinds
         enableKeybindsCheckbox = new Checkbox(
-            contentX, currentY,
+            leftColumnX, currentLeftY,
             checkboxSize, checkboxSize,
             Component.literal("Enable Keybinds"),
             config.enableKeybinds
         );
         clientSettingWidgets.add(enableKeybindsCheckbox);
+
+        // Right Column
+        // Performance Settings
+        cacheTexturesCheckbox = new Checkbox(
+            rightColumnX, currentRightY,
+            checkboxSize, checkboxSize,
+            Component.literal("Cache Textures"),
+            config.cacheTextures
+        );
+        clientSettingWidgets.add(cacheTexturesCheckbox);
+        currentRightY += spacing;
+
+        enableHDSkinsCheckbox = new Checkbox(
+            rightColumnX, currentRightY,
+            checkboxSize, checkboxSize,
+            Component.literal("Enable HD Skins"),
+            config.enableHDSkins
+        );
+        clientSettingWidgets.add(enableHDSkinsCheckbox);
+        currentRightY += spacing;
+
+        // Network Settings
+        autoSyncSkinsCheckbox = new Checkbox(
+            rightColumnX, currentRightY,
+            checkboxSize, checkboxSize,
+            Component.literal("Auto-Sync Skins"),
+            config.autoSyncSkins
+        );
+        clientSettingWidgets.add(autoSyncSkinsCheckbox);
+        currentRightY += spacing;
+
+        // Compatibility Settings
+        skinLayers3DCompatCheckbox = new Checkbox(
+            rightColumnX, currentRightY,
+            checkboxSize, checkboxSize,
+            Component.literal("SkinLayers3D Compatibility"),
+            config.skinLayers3DCompat
+        );
+        clientSettingWidgets.add(skinLayers3DCompatCheckbox);
     }
 
     private void createServerSettings() {
@@ -242,57 +244,60 @@ public class SettingsScreen extends Screen {
         int spacing = 30;
         // Settings content area starts below tabs
         int startY = dialogY + TAB_HEIGHT + 20;
-        int currentY = startY;
-        int contentX = dialogX + 20;
+        int leftColumnX = dialogX + 20;
+        int rightColumnX = dialogX + dialogWidth / 2 + 10;
+        int currentLeftY = startY;
+        int currentRightY = startY;
 
         // Check if player is on a server or in singleplayer
         boolean isServerAdmin = minecraft != null && minecraft.hasSingleplayerServer();
 
+        // Left Column
         // Skin Settings
         allowCustomSkinsCheckbox = new Checkbox(
-            contentX, currentY,
+            leftColumnX, currentLeftY,
             checkboxSize, checkboxSize,
             Component.literal("Allow Custom Skins"),
             config.allowCustomSkins
         );
         allowCustomSkinsCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(allowCustomSkinsCheckbox);
-        currentY += spacing;
+        currentLeftY += spacing;
 
         allowHDSkinsCheckbox = new Checkbox(
-            contentX, currentY,
+            leftColumnX, currentLeftY,
             checkboxSize, checkboxSize,
             Component.literal("Allow HD Skins"),
             config.allowHDSkins
         );
         allowHDSkinsCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(allowHDSkinsCheckbox);
-        currentY += spacing;
+        currentLeftY += spacing;
 
         // Cape Settings
         allowCustomCapesCheckbox = new Checkbox(
-            contentX, currentY,
+            leftColumnX, currentLeftY,
             checkboxSize, checkboxSize,
             Component.literal("Allow Custom Capes"),
             config.allowCustomCapes
         );
         allowCustomCapesCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(allowCustomCapesCheckbox);
-        currentY += spacing;
 
+        // Right Column
         allowAnimatedCapesCheckbox = new Checkbox(
-            contentX, currentY,
+            rightColumnX, currentRightY,
             checkboxSize, checkboxSize,
             Component.literal("Allow Animated Capes"),
             config.allowAnimatedCapes
         );
         allowAnimatedCapesCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(allowAnimatedCapesCheckbox);
-        currentY += spacing;
+        currentRightY += spacing;
 
         // Security Settings
         requireAuthenticationCheckbox = new Checkbox(
-            contentX, currentY,
+            rightColumnX, currentRightY,
             checkboxSize, checkboxSize,
             Component.literal("Require Authentication"),
             config.requireAuthentication
