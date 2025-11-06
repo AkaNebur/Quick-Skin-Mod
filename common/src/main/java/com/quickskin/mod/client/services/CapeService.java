@@ -93,6 +93,23 @@ public class CapeService implements ICapeService {
                 .getTextureLocation(hash, TextureQuality.FULL);
 
         if (capeLocation != null) {
+            // Check if this cape is animated and register it if not already running.
+            AssetMetadata assetMeta = LocalAssetManager.getInstance().getMetadata(hash);
+            if (assetMeta != null && assetMeta.isAnimated()) {
+                String animationId = "cape_" + hash;
+                AnimatedTextureManager animManager = AnimatedTextureManager.getInstance();
+
+                if (!animManager.isAnimated(animationId)) {
+                    AnimationMetadata animMeta = LocalAssetManager.getInstance().getAnimationMetadata(hash);
+                    BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
+                    if (animMeta != null && atlasImage != null) {
+                        animManager.registerAnimation(animationId, capeLocation, atlasImage, animMeta);
+                        QuickSkin.LOGGER.info("Registered animation for local cape: {}", hash);
+                    } else {
+                        QuickSkin.LOGGER.warn("Could not register animation for local cape {}: metadata or image was null.", hash);
+                    }
+                }
+            }
             QuickSkin.LOGGER.debug("Loaded local cape: {}", hash);
         }
 

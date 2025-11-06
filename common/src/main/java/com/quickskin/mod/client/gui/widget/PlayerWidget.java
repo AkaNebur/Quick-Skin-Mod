@@ -53,11 +53,13 @@ public class PlayerWidget extends AbstractWidget {
      * @param height Widget height
      * @param skinLocation Initial skin texture (can be null)
      * @param capeLocation Initial cape texture (can be null)
+     * @param capeId ID of the cape, for animations (can be null)
      * @param modelType "slim" or "classic"
      */
     public PlayerWidget(int x, int y, int width, int height,
                         @Nullable ResourceLocation skinLocation,
                         @Nullable ResourceLocation capeLocation,
+                        @Nullable String capeId,
                         String modelType) {
         super(x, y, width, height, Component.empty());
 
@@ -66,6 +68,7 @@ public class PlayerWidget extends AbstractWidget {
                 skinLocation != null ? skinLocation : new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png")
         );
         this.previewData.setCapeLocation(capeLocation);
+        this.previewData.setCapeId(capeId);
         this.previewData.setModelType(modelType != null ? modelType : "classic");
 
         // Ensure widget is visible and active

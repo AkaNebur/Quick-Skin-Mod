@@ -3,7 +3,7 @@ package com.quickskin.mod.client.gui.screen;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.util.GuiScalingUtils;
-import com.quickskin.mod.common.util.HashUtil; // ### ADDED IMPORT ###
+import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.client.gui.widget.ConfirmationDialog;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
@@ -266,7 +266,7 @@ public class PlayerCapeMenuScreen extends Screen {
         this.playerWidget = addRenderableWidget(new PlayerWidget(
                 this.playerWidgetX, this.playerWidgetY,
                 this.playerWidgetWidth, this.playerWidgetHeight,
-                skinLocation, null, modelType));
+                skinLocation, null, null, modelType));
 
         // Set custom reference point to right side center of capes grid with fixed offset
         int referenceX = this.gridX + this.gridWidth + MODEL_OFFSET_X;

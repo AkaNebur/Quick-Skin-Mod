@@ -71,6 +71,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 widgetSize,
                 null, // Will use default Steve skin
                 null, // No cape initially
+                null, // No cape ID initially
                 "classic" // Default model type
         );
         screen.registerWidget(playerWidget);
