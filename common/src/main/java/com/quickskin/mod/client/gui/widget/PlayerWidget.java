@@ -145,6 +145,31 @@ public class PlayerWidget extends AbstractWidget {
 
     @Override
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Tick animations (updates frame indices for animated capes)
+        // This is necessary because ClientTickEvent.CLIENT_POST doesn't fire in menus
+        com.quickskin.mod.client.services.AnimatedTextureManager animManager =
+            com.quickskin.mod.client.services.AnimatedTextureManager.getInstance();
+        animManager.tick();
+
+        // Debug: Log animation state
+        if (previewData.getCapeId() != null) {
+            String capeId = previewData.getCapeId();
+            String animationId = null;
+            if (capeId.startsWith("local_cape:")) {
+                animationId = "cape_" + capeId.substring("local_cape:".length());
+            } else if (capeId.startsWith("known:")) {
+                animationId = "cape_known_" + capeId.substring("known:".length());
+            }
+
+            if (animationId != null) {
+                boolean isAnimated = animManager.isAnimated(animationId);
+                int frameCount = animManager.getFrameCount(animationId);
+                int currentFrame = animManager.getCurrentFrame(animationId);
+                QuickSkin.LOGGER.info("[PlayerWidget] CapeId={}, AnimId={}, IsAnimated={}, FrameCount={}, CurrentFrame={}",
+                    capeId, animationId, isAnimated, frameCount, currentFrame);
+            }
+        }
+
         // Smoothly animate rotation towards target
         if (Math.abs(targetYRotation - bodyYaw) > 0.1f) {
             float diff = targetYRotation - bodyYaw;

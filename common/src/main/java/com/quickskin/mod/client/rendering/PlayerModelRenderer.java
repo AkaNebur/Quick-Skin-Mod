@@ -125,10 +125,18 @@ public class PlayerModelRenderer {
         Player playerToRender = cachedPlayer;
 
         // If no cached player exists (fresh game launch), use manual rendering
-        if (playerToRender == null) {
+        // OR if we have a preview cape to show (cached player path doesn't support preview capes)
+        if (playerToRender == null || playerData.getCapeLocation() != null) {
+            if (playerToRender == null) {
+                QuickSkin.LOGGER.info("[PlayerModelRenderer] Using MANUAL rendering (no cached player)");
+            } else {
+                QuickSkin.LOGGER.info("[PlayerModelRenderer] Using MANUAL rendering (preview cape: {})", playerData.getCapeLocation());
+            }
             renderPlayerModelManual(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);
             return;
         }
+
+        QuickSkin.LOGGER.info("[PlayerModelRenderer] Using CACHED PLAYER rendering");
 
         // Store original rotation
         float originalYRot = playerToRender.getYRot();
@@ -267,13 +275,19 @@ public class PlayerModelRenderer {
                 }
             }
 
+            QuickSkin.LOGGER.info("[PlayerModelRenderer] Manual render - CapeId={}, AnimId={}, AtlasLocation={}",
+                capeId, animationId, capeAtlasLocation);
+
             if (animationId != null) {
                 // Attempt to get the current frame. If it's not ready, we'll just fall back to the atlas.
                 ResourceLocation currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);
+                QuickSkin.LOGGER.info("[PlayerModelRenderer] getCurrentFrameTexture({}) returned: {}", animationId, currentFrame);
                 if (currentFrame != null) {
                     finalCapeTexture = currentFrame;
                 }
             }
+
+            QuickSkin.LOGGER.info("[PlayerModelRenderer] Final cape texture: {}", finalCapeTexture);
 
             // Now render the cape using the final texture
             RenderType capeRenderType = RenderType.entityTranslucent(finalCapeTexture);

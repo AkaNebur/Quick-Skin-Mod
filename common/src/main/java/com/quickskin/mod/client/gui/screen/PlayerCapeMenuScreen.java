@@ -341,6 +341,37 @@ public class PlayerCapeMenuScreen extends Screen {
 
         QuickSkin.LOGGER.debug("Loaded {} local capes (including None) + {} default capes",
                 localCapes.size(), knownCapes.size());
+
+        // Pre-register animations for all animated capes (for thumbnail rendering)
+        registerAllAnimations();
+    }
+
+    /**
+     * Pre-register animations for all animated capes so thumbnails can display them
+     */
+    private void registerAllAnimations() {
+        com.quickskin.mod.client.services.CapeService capeService =
+            com.quickskin.mod.client.services.CapeService.getInstance();
+
+        // Register animations for local capes
+        for (CapeEntry cape : localCapes) {
+            if (cape.isAnimated()) {
+                String capeId = cape.getCapeId();
+                // Call getCapeLocation to trigger animation registration
+                capeService.getCapeLocation(null, capeId);
+            }
+        }
+
+        // Register animations for known capes
+        for (CapeEntry cape : knownCapes) {
+            if (cape.isAnimated()) {
+                String capeId = cape.getCapeId();
+                // Call getCapeLocation to trigger animation registration
+                capeService.getCapeLocation(null, capeId);
+            }
+        }
+
+        QuickSkin.LOGGER.info("Pre-registered animations for all animated capes in the menu");
     }
 
     /**
@@ -595,6 +626,9 @@ public class PlayerCapeMenuScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Tick animations for animated cape thumbnails
+        com.quickskin.mod.client.services.AnimatedTextureManager.getInstance().tick();
+
         // Render the animated star background
         this.renderBackgroundEffects(graphics, partialTick);
 
@@ -790,6 +824,26 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // Regular cape rendering
         ResourceLocation texture = cape.getTextureLocation();
+
+        // If animated, get the current frame texture instead of the atlas
+        if (texture != null && cape.isAnimated()) {
+            String capeId = cape.getCapeId();
+            String animationId = null;
+
+            if (capeId.startsWith("local_cape:")) {
+                animationId = "cape_" + capeId.substring("local_cape:".length());
+            } else if (capeId.startsWith("known:")) {
+                animationId = "cape_known_" + capeId.substring("known:".length());
+            }
+
+            if (animationId != null) {
+                ResourceLocation frameTexture = com.quickskin.mod.client.services.AnimatedTextureManager
+                    .getInstance().getCurrentFrameTexture(animationId);
+                if (frameTexture != null) {
+                    texture = frameTexture;
+                }
+            }
+        }
 
         // Render cape texture
         if (texture != null) {
@@ -999,8 +1053,17 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     private void applyCape(CapeEntry cape) {
-        ResourceLocation capeLocation = cape.getTextureLocation();
         String capeId = cape.getCapeId();
+
+        // IMPORTANT: Call CapeService.getCapeLocation() to trigger animation registration
+        // This must be done BEFORE setting the preview widget
+        ResourceLocation capeLocation = com.quickskin.mod.client.services.CapeService.getInstance()
+                .getCapeLocation(null, capeId);
+
+        // Fallback to direct texture if service returns null
+        if (capeLocation == null) {
+            capeLocation = cape.getTextureLocation();
+        }
 
         // Always update preview widget (works both in-game and on title screen)
         QuickSkin.LOGGER.info("[PlayerCapeMenuScreen] Setting cape in preview widget: {}", capeLocation);
