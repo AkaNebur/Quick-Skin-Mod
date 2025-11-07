@@ -3,6 +3,7 @@ package com.quickskin.mod.client.services;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.AnimationMetadata;
+import com.quickskin.mod.config.ClientConfig;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -37,11 +38,13 @@ public class AnimatedTextureManager {
         private final DynamicTexture[] frameTextures;
         private final ResourceLocation[] frameResourceLocations;
         private int currentFrame = 0;
+        private float speedMultiplier; // Per-animation speed multiplier
 
-        AnimationState(String animationId, ResourceLocation textureLocation, BufferedImage atlasImage, AnimationMetadata metadata) {
+        AnimationState(String animationId, ResourceLocation textureLocation, BufferedImage atlasImage, AnimationMetadata metadata, float speedMultiplier) {
             this.atlasTextureLocation = textureLocation;
             this.metadata = metadata;
             this.startTime = System.currentTimeMillis();
+            this.speedMultiplier = speedMultiplier;
 
             this.frameTextures = new DynamicTexture[metadata.frameCount()];
             this.frameResourceLocations = new ResourceLocation[metadata.frameCount()];
@@ -94,7 +97,9 @@ public class AnimatedTextureManager {
             if (metadata.frameCount() <= 1) return 0;
 
             long elapsed = System.currentTimeMillis() - startTime;
-            return metadata.getFrameAtTime(elapsed);
+            // Apply per-animation speed multiplier
+            long adjustedElapsed = (long)(elapsed * speedMultiplier);
+            return metadata.getFrameAtTime(adjustedElapsed);
         }
 
         void tick() {
@@ -104,7 +109,16 @@ public class AnimatedTextureManager {
             }
 
             long elapsed = System.currentTimeMillis() - startTime;
-            currentFrame = metadata.getFrameAtTime(elapsed);
+            // Apply per-animation speed multiplier
+            long adjustedElapsed = (long)(elapsed * speedMultiplier);
+            currentFrame = metadata.getFrameAtTime(adjustedElapsed);
+        }
+
+        /**
+         * Update the speed multiplier for this animation
+         */
+        void setSpeedMultiplier(float speed) {
+            this.speedMultiplier = speed;
         }
 
         ResourceLocation getCurrentFrameTexture() {
@@ -149,11 +163,12 @@ public class AnimatedTextureManager {
     /**
      * Register an animated texture
      * @param animationId Unique ID for this animation (e.g., "cape_<hash>")
+     * @param capeId The cape ID (e.g., "local_cape:hash" or "known:cape_name") for loading speed settings
      * @param textureLocation Location of the atlas texture
      * @param atlasImage The BufferedImage of the atlas
      * @param metadata Animation metadata with frame timing
      */
-    public void registerAnimation(String animationId, ResourceLocation textureLocation, BufferedImage atlasImage, AnimationMetadata metadata) {
+    public void registerAnimation(String animationId, String capeId, ResourceLocation textureLocation, BufferedImage atlasImage, AnimationMetadata metadata) {
         if (metadata == null || metadata.frameCount() <= 1) {
             QuickSkin.LOGGER.warn("Cannot register animation with invalid metadata (frameCount <= 1): {}", animationId);
             return;
@@ -162,10 +177,13 @@ public class AnimatedTextureManager {
         // If an old animation exists, clean it up first.
         unregisterAnimation(animationId);
 
-        AnimationState state = new AnimationState(animationId, textureLocation, atlasImage, metadata);
+        // Load the speed for this specific cape from config
+        float speedMultiplier = ClientConfig.getInstance().getCapeAnimationSpeed(capeId);
+
+        AnimationState state = new AnimationState(animationId, textureLocation, atlasImage, metadata, speedMultiplier);
         animations.put(animationId, state);
 
-        QuickSkin.LOGGER.debug("Registered animation: {} with {} frames", animationId, metadata.frameCount());
+        QuickSkin.LOGGER.debug("Registered animation: {} with {} frames at speed {}x", animationId, metadata.frameCount(), speedMultiplier);
     }
 
     /**
@@ -176,6 +194,19 @@ public class AnimatedTextureManager {
         if (removed != null) {
             removed.cleanup();
             QuickSkin.LOGGER.debug("Unregistered and cleaned up animation: {}", animationId);
+        }
+    }
+
+    /**
+     * Update the animation speed for a registered animation
+     * @param animationId The animation ID
+     * @param speed The new speed multiplier
+     */
+    public void setAnimationSpeed(String animationId, float speed) {
+        AnimationState state = animations.get(animationId);
+        if (state != null) {
+            state.setSpeedMultiplier(speed);
+            QuickSkin.LOGGER.debug("Updated animation speed for {}: {}x", animationId, speed);
         }
     }
 

@@ -17,7 +17,9 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
@@ -71,6 +73,7 @@ public class PlayerCapeMenuScreen extends Screen {
     private Button importButton;
     private Button removeButton;
     private Button closeButton;
+    private SpeedSlider animationSpeedSlider;
 
     // Model position offsets from grid edge
     private static final int MODEL_OFFSET_X = 80;
@@ -180,6 +183,16 @@ public class PlayerCapeMenuScreen extends Screen {
                 button -> this.onClose()
         ).bounds(buttonStartX + (buttonWidth + buttonSpacing) * 2, bottomY, buttonWidth, scaleValue(20)).build());
 
+        // Create animation speed slider (centered, below buttons)
+        int sliderWidth = 200;
+        int sliderHeight = 20;
+        int sliderX = (this.width - sliderWidth) / 2;
+        int sliderY = bottomY + scaleValue(20) + 5; // Position below the buttons
+        this.animationSpeedSlider = this.addRenderableWidget(new SpeedSlider(sliderX, sliderY, sliderWidth, sliderHeight));
+        // Initially hidden - will be shown when an animated cape is selected
+        this.animationSpeedSlider.visible = false;
+        this.animationSpeedSlider.active = false;
+
         // Create player preview widget
         int availableWidthForWidget = this.width - (this.gridX + this.gridWidth) - scaleValue(40);
         int availableHeightForWidget = this.closeButton.getY() - this.gridY - scaleValue(20);
@@ -275,6 +288,9 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // Initialize selected cape based on config/currently equipped cape (AFTER widget is created)
         initializeSelectedCape();
+
+        // Update speed slider visibility based on selected cape
+        updateSpeedSliderVisibility();
 
         // Restore saved rotation state
         this.playerWidget.setRotationState(this.savedBodyYaw, this.savedTargetRotation);
@@ -437,6 +453,23 @@ public class PlayerCapeMenuScreen extends Screen {
         this.selectedCape = null;
     }
 
+    /**
+     * Update the animation speed slider visibility and value based on selected cape
+     */
+    private void updateSpeedSliderVisibility() {
+        if (this.animationSpeedSlider == null) return;
+
+        boolean show = false;
+        if (this.selectedCape != null && this.selectedCape.isAnimated()) {
+            show = true;
+            // Load the speed for the newly selected cape
+            this.animationSpeedSlider.loadSpeedForCurrentCape();
+        }
+
+        this.animationSpeedSlider.visible = show;
+        this.animationSpeedSlider.active = show;
+    }
+
     private void updateGridDimensions() {
         int totalHeight = 0;
 
@@ -467,6 +500,9 @@ public class PlayerCapeMenuScreen extends Screen {
         // Always update preview widget (works both in-game and on title screen)
         playerWidget.setCape(null, null);
         this.selectedCape = null;
+
+        // Update speed slider visibility (hide it since no cape is selected)
+        updateSpeedSliderVisibility();
 
         // Clear from config for persistence
         ClientConfig config = ClientConfig.getInstance();
@@ -1130,6 +1166,9 @@ public class PlayerCapeMenuScreen extends Screen {
                 QuickSkin.LOGGER.info("Applied cape to preview only (no cached player): {}", cape.getFriendlyName());
             }
         }
+
+        // Update speed slider visibility based on whether the selected cape is animated
+        updateSpeedSliderVisibility();
     }
 
     /**
@@ -1660,6 +1699,106 @@ public class PlayerCapeMenuScreen extends Screen {
                     QuickSkin.LOGGER.debug("[PlayerCapeMenuScreen] Unregistered animation on close: {}", animationId);
                 }
             }
+        }
+    }
+
+    /**
+     * Speed slider for controlling per-cape animation speed
+     * Uses quadratic mapping for finer control at lower speeds
+     */
+    private class SpeedSlider extends AbstractSliderButton {
+        // Speed range: 0.1 (10%) to 3.0 (300%)
+        final double minSpeed = 0.1;
+        final double maxSpeed = 3.0;
+
+        public SpeedSlider(int x, int y, int width, int height) {
+            super(x, y, width, height, Component.empty(), 0);
+
+            this.setTooltip(Tooltip.create(Component.literal("Controls animation speed for this cape (10% - 300%)")));
+            loadSpeedForCurrentCape();
+        }
+
+        /**
+         * Load the speed for the currently selected cape
+         */
+        public void loadSpeedForCurrentCape() {
+            if (selectedCape == null || !selectedCape.isAnimated()) {
+                this.value = 0.5; // Default to middle (100%)
+                updateMessage();
+                return;
+            }
+
+            // Get speed for this specific cape
+            String capeId = selectedCape.getCapeId();
+            double currentSpeed = ClientConfig.getInstance().getCapeAnimationSpeed(capeId);
+            double clampedSpeed = Mth.clamp(currentSpeed, minSpeed, maxSpeed);
+
+            // Reverse the quadratic mapping to find the slider position
+            // speed = minSpeed + (v^2) * (maxSpeed - minSpeed)
+            // v = sqrt((speed - minSpeed) / (maxSpeed - minSpeed))
+            this.value = Math.sqrt((clampedSpeed - minSpeed) / (maxSpeed - minSpeed));
+
+            updateMessage();
+        }
+
+        @Override
+        protected void updateMessage() {
+            // Display percentage (10% to 300%)
+            int percentage = (int) Math.round(10 + this.value * this.value * 290);
+            setMessage(Component.literal(String.format("Animation Speed: %d%%", percentage)));
+        }
+
+        @Override
+        protected void applyValue() {
+            if (selectedCape == null || !selectedCape.isAnimated()) {
+                return;
+            }
+
+            // Apply quadratic mapping for finer control at lower speeds
+            double v = this.value;
+            double speed = minSpeed + (v * v) * (maxSpeed - minSpeed);
+            // Clamp to prevent invalid values
+            speed = Math.max(0.01, Math.min(speed, 10.0));
+
+            // Save to config for this specific cape
+            String capeId = selectedCape.getCapeId();
+            ClientConfig.getInstance().setCapeAnimationSpeed(capeId, (float) speed);
+
+            // Update the active animation's speed in real-time
+            String animationId = getAnimationIdForCape(capeId);
+            if (animationId != null) {
+                com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
+                    .setAnimationSpeed(animationId, (float) speed);
+            }
+        }
+
+        @Override
+        public void onRelease(double mouseX, double mouseY) {
+            super.onRelease(mouseX, mouseY);
+            // Save config when slider is released
+            ClientConfig.getInstance().save();
+
+            if (selectedCape != null) {
+                float speed = ClientConfig.getInstance().getCapeAnimationSpeed(selectedCape.getCapeId());
+                QuickSkin.LOGGER.info("Saved animation speed for {}: {}x", selectedCape.getCapeId(), speed);
+            }
+        }
+
+        /**
+         * Get the animation ID for a given cape ID
+         */
+        private String getAnimationIdForCape(String capeId) {
+            if (capeId == null) return null;
+
+            if (capeId.startsWith("local_cape:")) {
+                String hash = capeId.substring("local_cape:".length());
+                return "cape_" + hash;
+            } else if (capeId.startsWith("known:")) {
+                String knownId = capeId.substring("known:".length());
+                return "cape_known_" + knownId;
+            }
+
+            return null;
         }
     }
 }

@@ -172,7 +172,7 @@ public class PlayerWidget extends AbstractWidget {
 
                         if (metadata != null && atlasImage != null) {
                             QuickSkin.LOGGER.info("[PlayerWidget] On-demand registration of local cape animation: {}", animationId);
-                            animManager.registerAnimation(animationId, previewData.getCapeLocation(), atlasImage, metadata);
+                            animManager.registerAnimation(animationId, capeId, previewData.getCapeLocation(), atlasImage, metadata);
                         }
                     } else if (capeId.startsWith("known:")) {
                         String knownId = capeId.substring("known:".length());

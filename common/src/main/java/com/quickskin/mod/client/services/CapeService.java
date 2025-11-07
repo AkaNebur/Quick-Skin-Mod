@@ -103,13 +103,14 @@ public class CapeService implements ICapeService {
             AssetMetadata assetMeta = LocalAssetManager.getInstance().getMetadata(hash);
             if (assetMeta != null && assetMeta.isAnimated()) {
                 String animationId = "cape_" + hash;
+                String capeId = "local_cape:" + hash;
                 AnimatedTextureManager animManager = AnimatedTextureManager.getInstance();
 
                 if (!animManager.isAnimated(animationId)) {
                     AnimationMetadata animMeta = LocalAssetManager.getInstance().getAnimationMetadata(hash);
                     BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
                     if (animMeta != null && atlasImage != null) {
-                        animManager.registerAnimation(animationId, capeLocation, atlasImage, animMeta);
+                        animManager.registerAnimation(animationId, capeId, capeLocation, atlasImage, animMeta);
                         QuickSkin.LOGGER.info("Registered animation for local cape: {}", hash);
                     } else {
                         QuickSkin.LOGGER.warn("Could not register animation for local cape {}: metadata or image was null.", hash);
@@ -174,7 +175,8 @@ public class CapeService implements ICapeService {
                                 AnimationMetadata metadata = new AnimationMetadata(frames, frameCount);
 
                                 QuickSkin.LOGGER.info("[CapeService] Calling registerAnimation...");
-                                animManager.registerAnimation(animationId, capeTexture, atlasImage, metadata);
+                                String fullCapeId = "known:" + capeId;
+                                animManager.registerAnimation(animationId, fullCapeId, capeTexture, atlasImage, metadata);
                                 QuickSkin.LOGGER.info("[CapeService] SUCCESS! Registered animation for KnownCape: {} ({} frames)", capeId, frameCount);
                             } else {
                                 QuickSkin.LOGGER.warn("[CapeService] FAILED: frameCount <= 1, cannot register animation");

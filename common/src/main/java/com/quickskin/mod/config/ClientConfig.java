@@ -8,6 +8,8 @@ import com.quickskin.mod.platform.PlatformHelper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Client-side configuration for QuickSkin
@@ -24,8 +26,9 @@ public class ClientConfig {
     public int guiScale = 1; // GUI scaling factor (1-4)
 
     // Animation Settings
-    public float animationSpeed = 1.0f;
+    public float animationSpeed = 1.0f; // Default animation speed (deprecated, use per-cape speeds)
     public boolean enableSmoothRotation = true;
+    public Map<String, Float> capeAnimationSpeeds = new HashMap<>(); // Per-cape animation speeds (capeId -> speed)
 
     // Performance Settings
     public int maxCachedTextures = 100;
@@ -158,5 +161,61 @@ public class ClientConfig {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Get animation speed with clamping to prevent invalid values (deprecated)
+     * @return Clamped animation speed (0.01 to 10.0)
+     * @deprecated Use getCapeAnimationSpeed(String capeId) instead
+     */
+    @Deprecated
+    public float getAnimationSpeed() {
+        return Math.max(0.01f, Math.min(animationSpeed, 10.0f));
+    }
+
+    /**
+     * Get animation speed for a specific cape
+     * @param capeId The cape ID (e.g., "local_cape:hash" or "known:cape_name")
+     * @return Clamped animation speed (0.01 to 10.0), defaults to 1.0 if not set
+     */
+    public float getCapeAnimationSpeed(String capeId) {
+        if (capeId == null || capeId.isEmpty()) {
+            return 1.0f;
+        }
+
+        // Ensure the map is initialized (in case it's null after deserialization)
+        if (capeAnimationSpeeds == null) {
+            capeAnimationSpeeds = new HashMap<>();
+        }
+
+        Float speed = capeAnimationSpeeds.get(capeId);
+        if (speed == null) {
+            return 1.0f; // Default speed
+        }
+
+        // Clamp to prevent invalid values
+        return Math.max(0.01f, Math.min(speed, 10.0f));
+    }
+
+    /**
+     * Set animation speed for a specific cape
+     * @param capeId The cape ID
+     * @param speed The animation speed (will be clamped to 0.01-10.0)
+     */
+    public void setCapeAnimationSpeed(String capeId, float speed) {
+        if (capeId == null || capeId.isEmpty()) {
+            return;
+        }
+
+        // Ensure the map is initialized
+        if (capeAnimationSpeeds == null) {
+            capeAnimationSpeeds = new HashMap<>();
+        }
+
+        // Clamp and store
+        float clampedSpeed = Math.max(0.01f, Math.min(speed, 10.0f));
+        capeAnimationSpeeds.put(capeId, clampedSpeed);
+
+        QuickSkin.LOGGER.debug("Set animation speed for cape {}: {}", capeId, clampedSpeed);
     }
 }

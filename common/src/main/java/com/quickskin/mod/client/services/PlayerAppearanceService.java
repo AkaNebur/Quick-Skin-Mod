@@ -124,7 +124,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                         if (metadata != null && atlasImage != null) {
                             QuickSkin.LOGGER.info("[PlayerAppearanceService] Registering local cape animation {} for player {}",
                                 animationId, playerId);
-                            AnimatedTextureManager.getInstance().registerAnimation(animationId, capeLocation, atlasImage, metadata);
+                            AnimatedTextureManager.getInstance().registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
                         } else {
                             QuickSkin.LOGGER.warn("[PlayerAppearanceService] Failed to register local cape animation {} - metadata={}, atlasImage={}",
                                 animationId, metadata != null, atlasImage != null);

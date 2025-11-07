@@ -373,7 +373,7 @@ public class PlayerSkinMenuScreen extends Screen {
                     // Register animation
                     QuickSkin.LOGGER.info("Registering animation for cape in skin menu: {}", animationId);
                     com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
-                        .registerAnimation(animationId, capeLocation, atlasImage, metadata);
+                        .registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
                 }
             }
         } else if (capeId.startsWith("known:")) {
