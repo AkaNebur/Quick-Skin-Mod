@@ -307,6 +307,9 @@ public class PlayerSkinMenuScreen extends Screen {
             String capeId = config.activeCapeHash;
             ResourceLocation capeLocation = getCapeLocationFromId(capeId);
             if (capeLocation != null) {
+                // Register animation if this is an animated cape
+                registerCapeAnimationIfNeeded(capeId, capeLocation);
+
                 playerPreviewPanel.updateCape(capeLocation, capeId);
             }
         }
@@ -342,6 +345,45 @@ public class PlayerSkinMenuScreen extends Screen {
             }
         }
         return null;
+    }
+
+    /**
+     * Register cape animation if the cape is animated
+     * @param capeId Cape ID (format: "local_cape:hash" or "known:id")
+     * @param capeLocation Texture location (atlas)
+     */
+    private void registerCapeAnimationIfNeeded(String capeId, ResourceLocation capeLocation) {
+        String animationId = null;
+
+        // Determine animation ID from cape ID
+        if (capeId.startsWith("local_cape:")) {
+            String hash = capeId.substring("local_cape:".length());
+            animationId = "cape_" + hash;
+
+            // Check if this local cape has animation metadata
+            com.quickskin.mod.common.data.AnimationMetadata metadata =
+                LocalAssetManager.getInstance().getAnimationMetadata(hash);
+
+            if (metadata != null && metadata.frameCount() > 1) {
+                // Load atlas image from cache
+                java.awt.image.BufferedImage atlasImage =
+                    LocalAssetManager.getInstance().getSourceImage(hash);
+
+                if (atlasImage != null) {
+                    // Register animation
+                    QuickSkin.LOGGER.info("Registering animation for cape in skin menu: {}", animationId);
+                    com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
+                        .registerAnimation(animationId, capeLocation, atlasImage, metadata);
+                }
+            }
+        } else if (capeId.startsWith("known:")) {
+            String id = capeId.substring("known:".length());
+            animationId = "cape_known_" + id;
+
+            // Known capes might also be animated
+            // For now, we'll skip this as known capes use a different system
+            // but you could add similar logic if needed
+        }
     }
 
     /**

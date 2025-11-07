@@ -145,30 +145,49 @@ public class PlayerWidget extends AbstractWidget {
 
     @Override
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Tick animations (updates frame indices for animated capes)
-        // This is necessary because ClientTickEvent.CLIENT_POST doesn't fire in menus
-        com.quickskin.mod.client.services.AnimatedTextureManager animManager =
-            com.quickskin.mod.client.services.AnimatedTextureManager.getInstance();
-        animManager.tick();
-
-        // Debug: Log animation state
-        if (previewData.getCapeId() != null) {
+        // Ensure cape animation is registered before rendering
+        if (previewData.getCapeId() != null && previewData.getCapeLocation() != null) {
             String capeId = previewData.getCapeId();
             String animationId = null;
+
             if (capeId.startsWith("local_cape:")) {
                 animationId = "cape_" + capeId.substring("local_cape:".length());
             } else if (capeId.startsWith("known:")) {
                 animationId = "cape_known_" + capeId.substring("known:".length());
             }
 
+            // Check if animation should exist but isn't registered yet
             if (animationId != null) {
-                boolean isAnimated = animManager.isAnimated(animationId);
-                int frameCount = animManager.getFrameCount(animationId);
-                int currentFrame = animManager.getCurrentFrame(animationId);
-                QuickSkin.LOGGER.info("[PlayerWidget] CapeId={}, AnimId={}, IsAnimated={}, FrameCount={}, CurrentFrame={}",
-                    capeId, animationId, isAnimated, frameCount, currentFrame);
+                com.quickskin.mod.client.services.AnimatedTextureManager animManager =
+                    com.quickskin.mod.client.services.AnimatedTextureManager.getInstance();
+
+                if (!animManager.isAnimated(animationId)) {
+                    // Animation not registered yet - try to register it now
+                    if (capeId.startsWith("local_cape:")) {
+                        String hash = capeId.substring("local_cape:".length());
+                        com.quickskin.mod.common.data.AnimationMetadata metadata =
+                            com.quickskin.mod.client.services.LocalAssetManager.getInstance().getAnimationMetadata(hash);
+                        java.awt.image.BufferedImage atlasImage =
+                            com.quickskin.mod.client.services.LocalAssetManager.getInstance().getSourceImage(hash);
+
+                        if (metadata != null && atlasImage != null) {
+                            QuickSkin.LOGGER.info("[PlayerWidget] On-demand registration of local cape animation: {}", animationId);
+                            animManager.registerAnimation(animationId, previewData.getCapeLocation(), atlasImage, metadata);
+                        }
+                    } else if (capeId.startsWith("known:")) {
+                        String knownId = capeId.substring("known:".length());
+                        QuickSkin.LOGGER.info("[PlayerWidget] On-demand registration of known cape animation: {}", knownId);
+                        com.quickskin.mod.client.services.CapeService.getInstance().loadKnownCape(knownId);
+                    }
+                }
             }
         }
+
+        // Tick animations (updates frame indices for animated capes)
+        // This is necessary because ClientTickEvent.CLIENT_POST doesn't fire in menus
+        com.quickskin.mod.client.services.AnimatedTextureManager animManager =
+            com.quickskin.mod.client.services.AnimatedTextureManager.getInstance();
+        animManager.tick();
 
         // Smoothly animate rotation towards target
         if (Math.abs(targetYRotation - bodyYaw) > 0.1f) {
@@ -217,10 +236,8 @@ public class PlayerWidget extends AbstractWidget {
      * Update the cape texture and ID
      */
     public void setCape(@Nullable ResourceLocation capeLocation, @Nullable String capeId) {
-        QuickSkin.LOGGER.info("[PlayerWidget] setCape called with: {}, id: {}", capeLocation, capeId);
         previewData.setCapeLocation(capeLocation);
         previewData.setCapeId(capeId);
-        QuickSkin.LOGGER.info("[PlayerWidget] After setCape, getCapeLocation returns: {}", previewData.getCapeLocation());
     }
 
     /**

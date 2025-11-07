@@ -118,16 +118,22 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                     if (capeId.startsWith("local_cape:")) {
                         hash = capeId.substring("local_cape:".length());
                         animationId = "cape_" + hash;
-                    } else if (capeId.startsWith("known:")) {
-                        // Logic in CapeService already handles registering known capes
-                    }
 
-                    if (hash != null && animationId != null) {
                         AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
                         BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
                         if (metadata != null && atlasImage != null) {
+                            QuickSkin.LOGGER.info("[PlayerAppearanceService] Registering local cape animation {} for player {}",
+                                animationId, playerId);
                             AnimatedTextureManager.getInstance().registerAnimation(animationId, capeLocation, atlasImage, metadata);
+                        } else {
+                            QuickSkin.LOGGER.warn("[PlayerAppearanceService] Failed to register local cape animation {} - metadata={}, atlasImage={}",
+                                animationId, metadata != null, atlasImage != null);
                         }
+                    } else if (capeId.startsWith("known:")) {
+                        // Register known cape animation
+                        String knownId = capeId.substring("known:".length());
+                        capeService.loadKnownCape(knownId);
+                        QuickSkin.LOGGER.info("[PlayerAppearanceService] Registered known cape animation for player {}: {}", playerId, knownId);
                     }
                 }
             }
