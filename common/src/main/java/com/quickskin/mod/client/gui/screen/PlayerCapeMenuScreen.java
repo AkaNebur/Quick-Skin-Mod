@@ -1055,23 +1055,8 @@ public class PlayerCapeMenuScreen extends Screen {
     private void applyCape(CapeEntry cape) {
         String capeId = cape.getCapeId();
 
-        // Unregister old animation if cape is changing
+        // Get the config
         ClientConfig config = ClientConfig.getInstance();
-        String oldCapeId = config.activeCapeHash;
-        if (oldCapeId != null && !oldCapeId.equals(capeId) &&
-            (oldCapeId.startsWith("local_cape:") || oldCapeId.startsWith("known:"))) {
-            String animationId = null;
-            if (oldCapeId.startsWith("local_cape:")) {
-                animationId = "cape_" + oldCapeId.substring("local_cape:".length());
-            } else if (oldCapeId.startsWith("known:")) {
-                animationId = "cape_known_" + oldCapeId.substring("known:".length());
-            }
-            if (animationId != null) {
-                com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
-                        .unregisterAnimation(animationId);
-                QuickSkin.LOGGER.info("[PlayerCapeMenuScreen] Unregistered old animation: {}", animationId);
-            }
-        }
 
         // IMPORTANT: Call CapeService.getCapeLocation() to trigger animation registration
         // This must be done BEFORE setting the preview widget
@@ -1566,8 +1551,53 @@ public class PlayerCapeMenuScreen extends Screen {
 
     @Override
     public void onClose() {
+        // Unregister all animations when closing the menu
+        unregisterAllAnimations();
+
         if (minecraft != null) {
             minecraft.setScreen(parent);
+        }
+    }
+
+    /**
+     * Unregister all animations when the menu is closed to clean up resources
+     */
+    private void unregisterAllAnimations() {
+        com.quickskin.mod.client.services.AnimatedTextureManager animManager =
+            com.quickskin.mod.client.services.AnimatedTextureManager.getInstance();
+
+        // Unregister animations for all local capes
+        for (CapeEntry cape : localCapes) {
+            if (cape.isAnimated()) {
+                String capeId = cape.getCapeId();
+                String animationId = null;
+
+                if (capeId.startsWith("local_cape:")) {
+                    animationId = "cape_" + capeId.substring("local_cape:".length());
+                }
+
+                if (animationId != null) {
+                    animManager.unregisterAnimation(animationId);
+                    QuickSkin.LOGGER.debug("[PlayerCapeMenuScreen] Unregistered animation on close: {}", animationId);
+                }
+            }
+        }
+
+        // Unregister animations for all known capes
+        for (CapeEntry cape : knownCapes) {
+            if (cape.isAnimated()) {
+                String capeId = cape.getCapeId();
+                String animationId = null;
+
+                if (capeId.startsWith("known:")) {
+                    animationId = "cape_known_" + capeId.substring("known:".length());
+                }
+
+                if (animationId != null) {
+                    animManager.unregisterAnimation(animationId);
+                    QuickSkin.LOGGER.debug("[PlayerCapeMenuScreen] Unregistered animation on close: {}", animationId);
+                }
+            }
         }
     }
 }
