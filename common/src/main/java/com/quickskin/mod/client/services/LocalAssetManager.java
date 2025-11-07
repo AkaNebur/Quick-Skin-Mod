@@ -247,16 +247,16 @@ public class LocalAssetManager {
 
     /**
      * Process GIF asset (animated cape) and create metadata
-     * Converts GIF to PNG atlas and stores animation data
+     * Loads GIF frames directly using STB Image
      */
     private AssetMetadata processGifAsset(Path path, String type) {
+        com.quickskin.mod.common.util.StbGifLoader.GifLoadResult result = null;
         try {
             QuickSkin.LOGGER.info("Processing GIF cape: {}", path);
 
-            // Process GIF to extract frames
-            com.quickskin.mod.common.util.GifUtil.GifProcessResult result;
+            // Load GIF using STB Image
             try (var inputStream = Files.newInputStream(path)) {
-                result = com.quickskin.mod.common.util.GifUtil.processGif(inputStream);
+                result = com.quickskin.mod.common.util.StbGifLoader.loadGif(inputStream);
             }
 
             // Compute hash of original GIF
@@ -265,11 +265,30 @@ public class LocalAssetManager {
                 return null;
             }
 
+            // Create PNG atlas from frames (stack vertically)
+            int width = result.frameWidth();
+            int height = result.frameHeight();
+            int frameCount = result.frames().length;
+            int atlasHeight = height * frameCount;
+
+            NativeImage atlas = new NativeImage(width, atlasHeight, false);
+
+            // Copy each frame into the atlas
+            for (int i = 0; i < frameCount; i++) {
+                NativeImage frame = result.frames()[i];
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        atlas.setPixelRGBA(x, i * height + y, frame.getPixelRGBA(x, y));
+                    }
+                }
+            }
+
             // Save PNG atlas to cache
             Path cacheDir = cacheDirectory.resolve("animated_capes");
             Files.createDirectories(cacheDir);
             Path atlasPath = cacheDir.resolve(hash + ".png");
-            Files.write(atlasPath, result.atlasImageData());
+            atlas.writeToFile(atlasPath);
+            atlas.close();
 
             // Save animation metadata to cache
             Path metadataPath = cacheDirectory.resolve(hash + ".json");
@@ -286,15 +305,12 @@ public class LocalAssetManager {
             long fileSize = Files.size(path);
 
             // Get resolution from first frame
-            SkinResolution resolution = SkinResolution.fromDimensions(
-                    result.frameWidth(),
-                    result.frameHeight()
-            );
+            SkinResolution resolution = SkinResolution.fromDimensions(width, height);
             if (resolution == null) {
                 resolution = SkinResolution.STANDARD;
             }
 
-            QuickSkin.LOGGER.info("GIF cape processed: {} frames, hash: {}", result.metadata().frameCount(), hash);
+            QuickSkin.LOGGER.info("GIF cape processed with STBImage: {} frames, hash: {}", frameCount, hash);
 
             // Create metadata for animated cape
             return AssetMetadata.forAnimatedCape(
@@ -303,12 +319,17 @@ public class LocalAssetManager {
                     path,
                     resolution,
                     fileSize,
-                    result.metadata().frameCount()
+                    frameCount
             );
 
         } catch (Exception e) {
             QuickSkin.LOGGER.error("Failed to process GIF asset: {}", path, e);
             return null;
+        } finally {
+            // Clean up frames
+            if (result != null) {
+                result.close();
+            }
         }
     }
 

@@ -475,6 +475,8 @@ public class PlayerCapeMenuScreen extends Screen {
         QuickSkin.LOGGER.info("Cleared cape from config");
 
         // Remove from PlayerAppearanceService
+        // Note: We use applyCape with empty string instead of removeCape
+        // to avoid unregistering animations while the menu is open
         if (minecraft != null && minecraft.player != null) {
             // In-game: use the real player's UUID
             PlayerAppearanceService.getInstance()
@@ -1357,14 +1359,41 @@ public class PlayerCapeMenuScreen extends Screen {
 
             // Step 1: Load image into a source atlas and determine its format
             if (isGif) {
+                com.quickskin.mod.common.util.StbGifLoader.GifLoadResult gifResult = null;
                 try (java.io.InputStream is = Files.newInputStream(sourceFile)) {
-                    com.quickskin.mod.common.util.GifUtil.GifProcessResult gifResult = com.quickskin.mod.common.util.GifUtil.processGif(is);
-                    if (gifResult == null || gifResult.atlasImageData() == null) return false;
+                    gifResult = com.quickskin.mod.common.util.StbGifLoader.loadGif(is);
+                    if (gifResult == null || gifResult.frames() == null) return false;
 
-                    sourceAtlas = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(gifResult.atlasImageData()));
-                    frameCount = gifResult.metadata().frameCount();
+                    // Convert NativeImage frames to BufferedImage atlas
+                    int width = gifResult.frameWidth();
+                    int height = gifResult.frameHeight();
+                    frameCount = gifResult.frames().length;
+                    int atlasHeight = height * frameCount;
+
+                    sourceAtlas = new java.awt.image.BufferedImage(width, atlasHeight, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                    for (int i = 0; i < frameCount; i++) {
+                        com.mojang.blaze3d.platform.NativeImage frame = gifResult.frames()[i];
+                        for (int y = 0; y < height; y++) {
+                            for (int x = 0; x < width; x++) {
+                                int abgr = frame.getPixelRGBA(x, y);
+                                // Convert ABGR to ARGB for BufferedImage
+                                int a = (abgr >> 24) & 0xFF;
+                                int b = (abgr >> 16) & 0xFF;
+                                int g = (abgr >> 8) & 0xFF;
+                                int r = abgr & 0xFF;
+                                int argb = (a << 24) | (r << 16) | (g << 8) | b;
+                                sourceAtlas.setRGB(x, i * height + y, argb);
+                            }
+                        }
+                    }
+
                     animationMetadata = gifResult.metadata();
                     isStandardFormat = true;
+                } finally {
+                    // Clean up NativeImage frames
+                    if (gifResult != null) {
+                        gifResult.close();
+                    }
                 }
             } else { // Is PNG
                 java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(sourceFile.toFile());
