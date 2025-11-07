@@ -411,9 +411,28 @@ public class LocalAssetManager {
                 return null;
             }
 
+            // Check if this is a skin and transparency should be disabled
+            AssetMetadata metadata = getMetadata(hash);
+            boolean isSkin = metadata != null && "skin".equals(metadata.type());
+            boolean shouldRemoveTransparency = isSkin &&
+                com.quickskin.mod.config.ClientConfig.getInstance().shouldDisableSkinTransparency();
+
+            // Apply transparency removal if needed
+            if (shouldRemoveTransparency) {
+                image = HDTextureProcessor.removeTransparency(image);
+            }
+
             // Process based on quality
             return switch (quality) {
-                case FULL -> Files.readAllBytes(sourcePath); // Original
+                case FULL -> {
+                    // For FULL quality, we need to convert the image back to bytes
+                    // since we may have modified it (transparency removal)
+                    if (shouldRemoveTransparency) {
+                        yield HDTextureProcessor.imageToPng(image);
+                    } else {
+                        yield Files.readAllBytes(sourcePath); // Original
+                    }
+                }
                 case PREVIEW -> HDTextureProcessor.createPreview(image);
                 case THUMBNAIL -> HDTextureProcessor.createThumbnail(image);
                 case NORMALIZED -> HDTextureProcessor.normalizeForVanilla(image);
@@ -512,6 +531,33 @@ public class LocalAssetManager {
     public void reload() {
         QuickSkin.LOGGER.info("Reloading local assets...");
         discoverLocalAssets();
+    }
+
+    /**
+     * Clear texture cache to force re-registration with new settings
+     * Call this when transparency settings change
+     */
+    public void clearTextureCache() {
+        QuickSkin.LOGGER.info("Clearing texture cache (will re-register with current settings)...");
+
+        // Unregister all textures from Minecraft's texture manager
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null && mc.getTextureManager() != null) {
+            for (Map<TextureQuality, ResourceLocation> qualityMap : textureRegistry.values()) {
+                for (ResourceLocation location : qualityMap.values()) {
+                    try {
+                        mc.getTextureManager().release(location);
+                    } catch (Exception e) {
+                        QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
+                    }
+                }
+            }
+        }
+
+        // Clear our cache
+        textureRegistry.clear();
+
+        QuickSkin.LOGGER.info("Texture cache cleared. Textures will reload on next use.");
     }
 
     /**

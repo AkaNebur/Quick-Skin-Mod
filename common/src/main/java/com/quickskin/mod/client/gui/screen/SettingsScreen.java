@@ -70,6 +70,7 @@ public class SettingsScreen extends Screen {
     // Client setting widgets
     private Checkbox showOverlayCheckbox;
     private Checkbox skinLayers3DCompatCheckbox;
+    private Checkbox disableSkinTransparencyCheckbox;
     private Button keybindButton;
 
     // State for keybind editing
@@ -82,6 +83,7 @@ public class SettingsScreen extends Screen {
     private Checkbox allowCustomCapesCheckbox;
     private Checkbox allowAnimatedCapesCheckbox;
     private Checkbox requireAuthenticationCheckbox;
+    private Checkbox serverDisableSkinTransparencyCheckbox;
 
     public SettingsScreen(@Nullable Screen parent) {
         super(Component.literal("QuickSkin Settings"));
@@ -207,6 +209,16 @@ public class SettingsScreen extends Screen {
                 config.skinLayers3DCompat
         );
         clientSettingWidgets.add(skinLayers3DCompatCheckbox);
+        currentRightY += spacing;
+
+        // Skin Transparency Settings
+        disableSkinTransparencyCheckbox = new Checkbox(
+                rightColumnX, currentRightY,
+                checkboxSize, checkboxSize,
+                Component.literal("Disable Skin Transparency"),
+                config.disableSkinTransparency
+        );
+        clientSettingWidgets.add(disableSkinTransparencyCheckbox);
     }
 
     private void createServerSettings() {
@@ -243,6 +255,17 @@ public class SettingsScreen extends Screen {
         );
         allowHDSkinsCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(allowHDSkinsCheckbox);
+        currentLeftY += spacing;
+
+        // Transparency Settings
+        serverDisableSkinTransparencyCheckbox = new Checkbox(
+                leftColumnX, currentLeftY,
+                checkboxSize, checkboxSize,
+                Component.literal("Disable Skin Transparency"),
+                config.disableSkinTransparency
+        );
+        serverDisableSkinTransparencyCheckbox.active = isServerAdmin;
+        serverSettingWidgets.add(serverDisableSkinTransparencyCheckbox);
         currentLeftY += spacing;
 
         // Cape Settings
@@ -436,8 +459,23 @@ public class SettingsScreen extends Screen {
         if (showOverlayCheckbox != null) {
             ClientConfig config = ClientConfig.getInstance();
 
+            // Check if transparency setting changed
+            boolean oldTransparencySetting = config.disableSkinTransparency;
+
             config.showSkinPreviewOverlay = showOverlayCheckbox.selected();
             config.skinLayers3DCompat = skinLayers3DCompatCheckbox.selected();
+            config.disableSkinTransparency = disableSkinTransparencyCheckbox.selected();
+
+            // If transparency setting changed, clear texture cache and refresh player
+            if (oldTransparencySetting != config.disableSkinTransparency) {
+                com.quickskin.mod.client.services.LocalAssetManager.getInstance().clearTextureCache();
+
+                // Refresh the player's appearance to apply the new transparency setting
+                if (minecraft != null && minecraft.player != null) {
+                    com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                        .refreshPlayerRenderer(minecraft.player.getUUID());
+                }
+            }
 
             config.save();
         }
@@ -446,11 +484,26 @@ public class SettingsScreen extends Screen {
         if (allowCustomSkinsCheckbox != null) {
             ServerConfig config = ServerConfig.getInstance();
 
+            // Check if transparency setting changed
+            boolean oldServerTransparencySetting = config.disableSkinTransparency;
+
             config.allowCustomSkins = allowCustomSkinsCheckbox.selected();
             config.allowHDSkins = allowHDSkinsCheckbox.selected();
+            config.disableSkinTransparency = serverDisableSkinTransparencyCheckbox.selected();
             config.allowCustomCapes = allowCustomCapesCheckbox.selected();
             config.allowAnimatedCapes = allowAnimatedCapesCheckbox.selected();
             config.requireAuthentication = requireAuthenticationCheckbox.selected();
+
+            // If transparency setting changed, clear texture cache and refresh player
+            if (oldServerTransparencySetting != config.disableSkinTransparency) {
+                com.quickskin.mod.client.services.LocalAssetManager.getInstance().clearTextureCache();
+
+                // Refresh the player's appearance to apply the new transparency setting
+                if (minecraft != null && minecraft.player != null) {
+                    com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                        .refreshPlayerRenderer(minecraft.player.getUUID());
+                }
+            }
 
             config.save();
         }

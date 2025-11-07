@@ -141,8 +141,8 @@ public class HDTextureProcessor {
                 if (isOverlayLayerPixel(x / scale, y / scale)) {
                     opaque.setRGB(x, y, argb); // Keep original (with transparency)
                 } else if (alpha == 0) {
-                    // Make fully transparent pixels white
-                    opaque.setRGB(x, y, 0xFFFFFFFF);
+                    // Make fully transparent pixels black
+                    opaque.setRGB(x, y, 0xFF000000);
                 } else {
                     // Make semi-transparent pixels fully opaque
                     opaque.setRGB(x, y, argb | 0xFF000000);
