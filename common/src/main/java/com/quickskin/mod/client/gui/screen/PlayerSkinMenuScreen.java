@@ -133,9 +133,11 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Create Mojang username search field (below title)
         // Match the width of the skin list panel
-        int searchFieldWidth = leftPanelWidth;
         int searchButtonWidth = 60;
-        int searchFieldX = componentX;
+        // Align with skin entry highlight containers
+        // Entry highlights: left = getRowLeft() (list x + ~4px), highlightLeft = left - 4px
+        int searchFieldX = componentX + 4;
+        int searchFieldWidth = leftPanelWidth - 4;
 
         usernameSearchField = new EditBox(
                 this.font,
