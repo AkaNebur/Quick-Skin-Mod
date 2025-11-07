@@ -5,6 +5,7 @@ import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.common.util.HDTextureProcessor;
+import com.quickskin.mod.config.ClientConfig;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
@@ -43,7 +44,9 @@ public class SkinImporter {
 
         try (InputStream inputStream = Files.newInputStream(sourcePath)) {
             // Process the skin using the new HDTextureProcessor
-            byte[] processedImageBytes = HDTextureProcessor.processHDSkin(inputStream, true);
+            // Allow transparency unless disabled in config (client or server)
+            boolean allowTransparency = !ClientConfig.getInstance().shouldDisableSkinTransparency();
+            byte[] processedImageBytes = HDTextureProcessor.processHDSkin(inputStream, allowTransparency);
 
             if (processedImageBytes == null) {
                 QuickSkin.LOGGER.error("Failed to process skin file: {}", fileName);
@@ -147,6 +150,13 @@ public class SkinImporter {
             if (!isValidSkinDimension(width, height)) {
                 QuickSkin.LOGGER.error("Invalid skin dimensions {}x{} for {}", width, height, username);
                 return null;
+            }
+
+            // Apply transparency settings if needed
+            boolean disableTransparency = ClientConfig.getInstance().shouldDisableSkinTransparency();
+            if (disableTransparency) {
+                image = HDTextureProcessor.removeTransparency(image);
+                QuickSkin.LOGGER.debug("Removed transparency from skin for: {}", username);
             }
 
             // Create filename from username

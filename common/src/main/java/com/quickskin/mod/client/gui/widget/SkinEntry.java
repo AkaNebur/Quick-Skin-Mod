@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.TextureQuality;
+import com.quickskin.mod.config.ClientConfig;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -126,9 +127,14 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
             metadata.resolution().isHD() ? 0x55FF55 : 0xAAAAAA);
 
-        // Render action buttons on hover
+        // Render action buttons on hover (but not for player's own skin)
         this.isDeleteHovered = false;
-        if (isHovered) {
+
+        // Check if this is the player's own skin
+        ClientConfig config = ClientConfig.getInstance();
+        boolean isPlayerOwnSkin = metadata.hash().equals(config.playerOwnSkinHash);
+
+        if (isHovered && !isPlayerOwnSkin) {
             int margin = 4;
             this.deleteButtonX = highlightRight - actionButtonSize - margin;
             this.deleteButtonY = highlightTop + margin;

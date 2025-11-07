@@ -5,7 +5,6 @@ import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.util.GuiScalingUtils;
 import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.config.ClientConfig;
-import com.quickskin.mod.client.gui.widget.ConfirmationDialog;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import com.quickskin.mod.client.services.LocalAssetManager;
@@ -94,9 +93,6 @@ public class PlayerCapeMenuScreen extends Screen {
     private float savedBodyYaw = 20.0f;
     private float savedTargetRotation = 200.0f; // Default after initial toggleRotation()
     private int playerWidgetWidth, playerWidgetHeight;
-
-    @Nullable
-    private ConfirmationDialog confirmationDialog;
 
     @Nullable
     private CapeEntry selectedCape;
@@ -537,15 +533,30 @@ public class PlayerCapeMenuScreen extends Screen {
             return;
         }
 
-        confirmationDialog = new ConfirmationDialog(
+        String displayName = truncateFileName(capeEntry.getFriendlyName(), 35);
+        minecraft.setScreen(new DeletionConfirmScreen(
+                this,
                 Component.literal("Delete Cape?"),
-                Component.literal("Are you sure you want to delete '" + capeEntry.getFriendlyName() + "'?"),
-                () -> deleteCape(capeEntry),
-                () -> confirmationDialog = null
-        );
+                Component.literal("Are you sure you want to delete '" + displayName + "'?"),
+                (confirmed) -> {
+                    if (confirmed) {
+                        deleteCape(capeEntry);
+                    }
+                    // Return to cape menu screen
+                    minecraft.setScreen(this);
+                },
+                true
+        ));
+    }
 
-        // Add this line to initialize the dialog's buttons and layout
-        confirmationDialog.init(this.width, this.height);
+    /**
+     * Truncate filename to specified length, adding ellipsis if needed
+     */
+    private String truncateFileName(String name, int maxLength) {
+        if (name.length() <= maxLength) {
+            return name;
+        }
+        return name.substring(0, maxLength - 3) + "...";
     }
 
     private void deleteCape(CapeEntry capeEntry) {
@@ -561,7 +572,6 @@ public class PlayerCapeMenuScreen extends Screen {
             LocalAssetManager.getInstance().discoverLocalAssets();
             refreshCapeList();
             updateGridDimensions();
-            confirmationDialog = null;
 
             // If the deleted cape was the one being previewed, call removeCape()
             // to update the preview widget and clear the active cape from the config.
@@ -692,11 +702,6 @@ public class PlayerCapeMenuScreen extends Screen {
         if (importMessageTimer > 0 && !importMessage.isEmpty()) {
             int messageY = this.gridY + this.gridHeight + 10;
             graphics.drawCenteredString(this.font, importMessage, this.width / 2, messageY, importMessageColor);
-        }
-
-        // Render confirmation dialog if present
-        if (confirmationDialog != null) {
-            confirmationDialog.render(graphics, mouseX, mouseY, 0);
         }
 
         // Tooltip logic
@@ -1023,11 +1028,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Handle confirmation dialog clicks first
-        if (confirmationDialog != null) {
-            return confirmationDialog.mouseClicked(mouseX, mouseY, button);
-        }
-
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
 
         // Handle scrollbar dragging
@@ -1075,6 +1075,11 @@ public class PlayerCapeMenuScreen extends Screen {
                         }
                     }
                 }
+
+                // Play selection sound
+                minecraft.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                    net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 1.0f, 0.25f
+                ));
 
                 // Select cape (includes "None" option)
                 this.selectedCape = clickedCape;

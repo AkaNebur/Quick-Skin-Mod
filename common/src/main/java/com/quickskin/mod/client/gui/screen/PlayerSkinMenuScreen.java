@@ -9,7 +9,6 @@ import com.quickskin.mod.client.gui.panel.SkinListPanel;
 import com.quickskin.mod.client.gui.util.FileDialogHelper;
 import com.quickskin.mod.client.gui.util.GuiScaleManager;
 import com.quickskin.mod.client.gui.util.SkinImporter;
-import com.quickskin.mod.client.gui.widget.ConfirmationDialog;
 import com.quickskin.mod.client.gui.widget.ErrorToast;
 import com.quickskin.mod.client.gui.widget.SkinEntry;
 import com.quickskin.mod.client.services.LocalAssetManager;
@@ -77,9 +76,6 @@ public class PlayerSkinMenuScreen extends Screen {
     // Error toasts
     private final List<ErrorToast> errorToasts = new ArrayList<>();
 
-    // Confirmation dialog
-    @Nullable
-    private ConfirmationDialog confirmationDialog;
 
     // Mojang search widgets
     private EditBox usernameSearchField;
@@ -299,6 +295,13 @@ public class PlayerSkinMenuScreen extends Screen {
             AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(config.activeSkinHash);
             if (metadata != null) {
                 skinListPanel.setSelected(metadata);
+            }
+        } else if (config.activeSkinHash.isEmpty() && !config.playerOwnSkinHash.isEmpty() && skinListPanel != null) {
+            // If no active skin is set, auto-select the player's own skin
+            AssetMetadata playerOwnSkin = LocalAssetManager.getInstance().getMetadata(config.playerOwnSkinHash);
+            if (playerOwnSkin != null) {
+                skinListPanel.setSelected(playerOwnSkin);
+                QuickSkin.LOGGER.info("Auto-selected player's own skin in menu");
             }
         }
 
@@ -536,12 +539,7 @@ public class PlayerSkinMenuScreen extends Screen {
         // Render widgets (buttons, etc.)
         super.render(graphics, mouseX, mouseY, partialTick);
 
-        // Render confirmation dialog (on top of everything)
-        if (confirmationDialog != null) {
-            confirmationDialog.render(graphics, mouseX, mouseY, partialTick);
-        }
-
-        // Render error toasts (on top of dialog)
+        // Render error toasts (on top of everything)
         renderErrorToasts(graphics);
     }
 
@@ -607,11 +605,6 @@ public class PlayerSkinMenuScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Handle confirmation dialog first
-        if (confirmationDialog != null) {
-            return confirmationDialog.mouseClicked(mouseX, mouseY, button);
-        }
-
         // Handle debug positioning mode
         if (com.quickskin.mod.client.rendering.PlayerModelRenderer.handleDebugMousePressed((int)mouseX, (int)mouseY, button)) {
             return true;
@@ -815,26 +808,46 @@ public class PlayerSkinMenuScreen extends Screen {
      * Show deletion confirmation dialog
      */
     public void showDeleteConfirmation(AssetMetadata metadata) {
-        confirmationDialog = new ConfirmationDialog(
+        String displayName = truncateFileName(metadata.friendlyName(), 35);
+        minecraft.setScreen(new DeletionConfirmScreen(
+                this,
                 Component.literal("Delete Skin?"),
-                Component.literal("Are you sure you want to delete \"" + metadata.friendlyName() + "\"?"),
-                () -> {
-                    // Confirm deletion
-                    deleteSkin(metadata);
-                    confirmationDialog = null;
+                Component.literal("Are you sure you want to delete \"" + displayName + "\"?"),
+                (confirmed) -> {
+                    if (confirmed) {
+                        // Confirm deletion
+                        deleteSkin(metadata);
+                    }
+                    // Return to skin menu screen
+                    minecraft.setScreen(this);
                 },
-                () -> {
-                    // Cancel
-                    confirmationDialog = null;
-                }
-        );
-        confirmationDialog.init(width, height);
+                true
+        ));
+    }
+
+    /**
+     * Truncate filename to specified length, adding ellipsis if needed
+     */
+    private String truncateFileName(String name, int maxLength) {
+        if (name.length() <= maxLength) {
+            return name;
+        }
+        return name.substring(0, maxLength - 3) + "...";
     }
 
     /**
      * Delete a skin from local storage
      */
     private void deleteSkin(AssetMetadata metadata) {
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+
+        // Prevent deletion of the player's own skin
+        if (metadata.hash().equals(config.playerOwnSkinHash)) {
+            QuickSkin.LOGGER.warn("Cannot delete player's own skin: {}", metadata.friendlyName());
+            showError(Component.literal("Cannot delete your own skin!"));
+            return;
+        }
+
         try {
             // Delete the file
             Files.deleteIfExists(metadata.path());

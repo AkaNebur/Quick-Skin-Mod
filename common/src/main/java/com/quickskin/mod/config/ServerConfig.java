@@ -21,6 +21,7 @@ public class ServerConfig {
     public boolean allowCustomSkins = true;
     public boolean allowHDSkins = true;
     public int maxSkinResolution = 2048;
+    public boolean disableSkinTransparency = false; // Disable transparency in player skins
 
     // Cape Settings
     public boolean allowCustomCapes = true;

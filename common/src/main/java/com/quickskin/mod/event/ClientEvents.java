@@ -57,6 +57,9 @@ public class ClientEvents {
             AnimatedTextureManager.getInstance().tick();
         });
 
+        // Download player's own skin on startup (async, won't block)
+        ensurePlayerOwnSkinExists();
+
         // Player joins world (client-side)
         ClientPlayerEvent.CLIENT_PLAYER_JOIN.register(player -> {
             QuickSkin.LOGGER.info("Local player joined world: {}", player.getName().getString());
@@ -410,6 +413,144 @@ public class ClientEvents {
         }
 
         return largest;
+    }
+
+    /**
+     * Ensure player's own skin exists in the list
+     * Downloads it from Mojang if not present
+     * Can be called at any time (even before joining a world)
+     */
+    private static void ensurePlayerOwnSkinExists() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft == null || minecraft.getUser() == null) {
+            QuickSkin.LOGGER.warn("Cannot download player skin: Minecraft user not available");
+            return;
+        }
+
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        String playerName = minecraft.getUser().getName();
+
+        // Check if we already have the player's skin hash and it exists
+        if (!config.playerOwnSkinHash.isEmpty()) {
+            AssetMetadata existingMetadata = LocalAssetManager.getInstance().getMetadata(config.playerOwnSkinHash);
+            if (existingMetadata != null) {
+                // Player's skin already exists
+                QuickSkin.LOGGER.info("Player's own skin already exists: {}", existingMetadata.friendlyName());
+                return;
+            }
+        }
+
+        // Download player's own skin (async, won't block startup)
+        QuickSkin.LOGGER.info("Downloading player's own skin: {}", playerName);
+        com.quickskin.mod.client.services.MojangApiService.getInstance().fetchSkinByUsername(playerName)
+            .thenAccept(skinData -> {
+                if (minecraft != null) {
+                    minecraft.execute(() -> {
+                        if (skinData != null) {
+                            handlePlayerOwnSkinFetched(skinData);
+                        } else {
+                            QuickSkin.LOGGER.warn("Failed to fetch player's own skin");
+                        }
+                    });
+                }
+            })
+            .exceptionally(throwable -> {
+                QuickSkin.LOGGER.error("Error fetching player's own skin", throwable);
+                return null;
+            });
+    }
+
+    /**
+     * Handle the fetched player's own skin data
+     * Smart mode: checks if skin already exists before saving a duplicate
+     */
+    private static void handlePlayerOwnSkinFetched(com.quickskin.mod.client.services.MojangApiService.MojangSkinData skinData) {
+        try {
+            // Convert BufferedImage to byte array for hash computation
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            javax.imageio.ImageIO.write(skinData.image, "PNG", baos);
+            byte[] imageBytes = baos.toByteArray();
+
+            // Compute hash of the downloaded skin
+            String downloadedHash = com.quickskin.mod.common.util.HashUtil.computeHash(imageBytes);
+            if (downloadedHash == null) {
+                QuickSkin.LOGGER.error("Failed to compute hash for downloaded skin");
+                return;
+            }
+
+            com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+            String hash;
+            boolean wasAlreadyInList = false;
+
+            // Smart check: see if this skin already exists in the list
+            AssetMetadata existingSkin = LocalAssetManager.getInstance().getMetadata(downloadedHash);
+            if (existingSkin != null) {
+                // Skin already exists! Just mark it as the player's own skin
+                hash = downloadedHash;
+                wasAlreadyInList = true;
+                QuickSkin.LOGGER.info("Player's skin already exists in list as '{}' - marking it as player's own skin",
+                    existingSkin.friendlyName());
+            } else {
+                // Skin doesn't exist, save it
+                java.nio.file.Path skinPath = com.quickskin.mod.client.gui.util.SkinImporter.saveSkinImage(skinData.image, skinData.username);
+                if (skinPath != null) {
+                    QuickSkin.LOGGER.info("Successfully saved player's own skin: {}", skinData.username);
+
+                    // Reload the asset manager to pick up the new file
+                    LocalAssetManager.getInstance().reload();
+
+                    // Verify the hash matches what we computed
+                    hash = com.quickskin.mod.common.util.HashUtil.computeFileHash(skinPath);
+                    if (hash == null || !hash.equals(downloadedHash)) {
+                        QuickSkin.LOGGER.error("Hash mismatch after saving player's own skin");
+                        return;
+                    }
+                } else {
+                    QuickSkin.LOGGER.error("Failed to save player's own skin image");
+                    return;
+                }
+            }
+
+            // Store the hash as the player's own skin
+            config.playerOwnSkinHash = hash;
+
+            // If no active skin is set, auto-select the player's own skin
+            if (config.activeSkinHash.isEmpty()) {
+                config.activeSkinHash = hash;
+
+                // Apply it to the player if they're in a world
+                net.minecraft.client.player.LocalPlayer player = net.minecraft.client.Minecraft.getInstance().player;
+                if (player != null) {
+                    AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(hash);
+                    if (metadata != null) {
+                        String skinId = "local_skin:" + hash;
+                        String modelType = config.activeModelType;
+
+                        // If auto mode, use the detected model from the skin
+                        if ("auto".equals(modelType)) {
+                            modelType = metadata.skinModel();
+                        }
+
+                        com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                            .applySkin(player.getUUID(), skinId, modelType);
+
+                        QuickSkin.LOGGER.info("Auto-selected and applied player's own skin: {}", skinData.username);
+                    }
+                } else {
+                    // Player not in world yet, skin will be applied when they join
+                    QuickSkin.LOGGER.info("Auto-selected player's own skin (will apply on world join): {}", skinData.username);
+                }
+            }
+
+            config.save();
+            if (wasAlreadyInList) {
+                QuickSkin.LOGGER.info("Player's own skin marked (already in list): hash {}", hash);
+            } else {
+                QuickSkin.LOGGER.info("Player's own skin added to list: hash {}", hash);
+            }
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Error handling player's own skin", e);
+        }
     }
 
     /**

@@ -40,10 +40,14 @@ public class ClientConfig {
     // Compatibility Settings
     public boolean skinLayers3DCompat = true;
 
+    // Transparency Settings
+    public boolean disableSkinTransparency = false; // Disable transparency in player skins
+
     // Active Skin Settings (persisted state)
     public String activeSkinHash = "";
     public String activeModelType = "auto"; // "auto", "classic", "slim"
     public String activeCapeHash = ""; // Active cape hash
+    public String playerOwnSkinHash = ""; // Hash of the player's own Mojang skin (protected from deletion)
 
     // Server Config Override (set by server, not saved to file)
     public transient ServerConfig serverOverride = null;
@@ -161,6 +165,24 @@ public class ClientConfig {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Check if skin transparency should be disabled
+     * Uses OR logic: if either client OR server disables transparency, it's disabled
+     */
+    public boolean shouldDisableSkinTransparency() {
+        // Client wants to disable transparency
+        if (disableSkinTransparency) {
+            return true;
+        }
+
+        // Server wants to disable transparency
+        if (serverOverride != null && serverOverride.disableSkinTransparency) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

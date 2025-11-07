@@ -122,7 +122,7 @@ public class ClientNetworkHandler {
                 new ServerConfigSyncEvent(
                     serverConfig.allowCustomSkins,
                     serverConfig.allowCustomCapes,
-                    true // allowTransparent (legacy compatibility)
+                    !serverConfig.disableSkinTransparency // allowTransparent
                 )
             );
 
