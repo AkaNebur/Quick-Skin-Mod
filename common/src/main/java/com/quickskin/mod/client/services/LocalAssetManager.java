@@ -3,6 +3,7 @@ package com.quickskin.mod.client.services;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.SkinPreferences;
 import com.quickskin.mod.common.data.SkinResolution;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.common.util.HashUtil;
@@ -47,6 +48,10 @@ public class LocalAssetManager {
     private Path capesDirectory;
     private Path cacheDirectory;
 
+    // Per-skin preferences
+    private SkinPreferences skinPreferences;
+    private Path preferencesFile;
+
     private LocalAssetManager() {
         // Private constructor for singleton
     }
@@ -77,6 +82,11 @@ public class LocalAssetManager {
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to create asset directories", e);
         }
+
+        // Load skin preferences
+        preferencesFile = PlatformHelper.getConfigDirectory().resolve("skin-preferences.json");
+        skinPreferences = SkinPreferences.load(preferencesFile);
+        QuickSkin.LOGGER.info("Loaded {} skin preferences", skinPreferences.size());
 
         // Discover assets
         discoverLocalAssets();
@@ -517,6 +527,13 @@ public class LocalAssetManager {
             Files.delete(path);
             metadataCache.remove(hash);
             hashToSourcePath.remove(hash);
+
+            // Also remove preferences for this skin
+            if (skinPreferences != null) {
+                skinPreferences.remove(hash);
+                savePreferences();
+            }
+
             QuickSkin.LOGGER.info("Deleted asset: {}", path);
             return true;
         } catch (IOException e) {
@@ -714,5 +731,45 @@ public class LocalAssetManager {
         }
 
         return nativeImage;
+    }
+
+    /**
+     * Get model type preference for a skin
+     * @param hash Skin hash
+     * @return Model type preference ("auto", "classic", or "slim")
+     */
+    public String getSkinModelPreference(String hash) {
+        if (skinPreferences == null) {
+            QuickSkin.LOGGER.warn("Cannot get model preference - skinPreferences is null, returning default 'auto'");
+            return "auto";
+        }
+        String pref = skinPreferences.getModelType(hash);
+        QuickSkin.LOGGER.debug("Getting model preference for skin {}: {}", hash, pref);
+        return pref;
+    }
+
+    /**
+     * Set model type preference for a skin
+     * @param hash Skin hash
+     * @param modelType Model type ("auto", "classic", or "slim")
+     */
+    public void setSkinModelPreference(String hash, String modelType) {
+        if (skinPreferences != null) {
+            QuickSkin.LOGGER.info("Setting model preference for skin {}: {}", hash, modelType);
+            skinPreferences.setModelType(hash, modelType);
+            savePreferences();
+            QuickSkin.LOGGER.info("Saved preferences to: {}", preferencesFile);
+        } else {
+            QuickSkin.LOGGER.warn("Cannot set model preference - skinPreferences is null");
+        }
+    }
+
+    /**
+     * Save skin preferences to disk
+     */
+    private void savePreferences() {
+        if (skinPreferences != null && preferencesFile != null) {
+            skinPreferences.save(preferencesFile);
+        }
     }
 }

@@ -202,6 +202,8 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     private void setModelType(String modelType) {
         this.currentModelType = modelType;
+        com.quickskin.mod.QuickSkin.LOGGER.info("[PlayerPreviewPanel] setModelType called: {}, callback is null: {}",
+            modelType, modelTypeChangeCallback == null);
 
         // Update preview widget
         if (playerWidget != null) {
@@ -216,10 +218,20 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
         // Notify callback to apply to actual player
         if (modelTypeChangeCallback != null) {
+            com.quickskin.mod.QuickSkin.LOGGER.info("[PlayerPreviewPanel] Calling callback for model type: {}", modelType);
             modelTypeChangeCallback.accept(modelType);
+        } else {
+            com.quickskin.mod.QuickSkin.LOGGER.warn("[PlayerPreviewPanel] Callback is NULL! Cannot save model preference!");
         }
 
         updateModelButtonStates();
+    }
+
+    /**
+     * Get the current model type
+     */
+    public String getCurrentModelType() {
+        return currentModelType;
     }
 
     /**

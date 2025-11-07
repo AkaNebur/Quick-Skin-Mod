@@ -256,8 +256,8 @@ public class ClientEvents {
                     // Load the saved skin texture
                     skinLocation = assetManager.getTextureLocation(config.activeSkinHash, com.quickskin.mod.common.data.TextureQuality.FULL);
 
-                    // Get saved model type
-                    modelType = config.activeModelType;
+                    // Get saved model type preference for this skin
+                    modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
 
                     // If auto mode, use the detected model type from metadata
                     if ("auto".equals(modelType)) {
@@ -272,14 +272,15 @@ public class ClientEvents {
             // Second priority: Use current player skin (when in-game)
             if (skinLocation == null && player != null) {
                 skinLocation = player.getSkinTextureLocation();
-                modelType = config.activeModelType;
 
-                // If auto mode, detect from the active custom skin (if any)
-                if ("auto".equals(modelType) && !config.activeSkinHash.isEmpty()) {
+                // Get model type from the active skin if available
+                if (!config.activeSkinHash.isEmpty()) {
                     LocalAssetManager assetManager = LocalAssetManager.getInstance();
+                    modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
                     AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
 
-                    if (metadata != null) {
+                    // If auto mode, detect from the active custom skin (if any)
+                    if ("auto".equals(modelType) && metadata != null) {
                         // Use the detected model type from the custom skin metadata
                         modelType = metadata.skinModel();
                     } else {
@@ -521,10 +522,11 @@ public class ClientEvents {
                 // Apply it to the player if they're in a world
                 net.minecraft.client.player.LocalPlayer player = net.minecraft.client.Minecraft.getInstance().player;
                 if (player != null) {
-                    AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(hash);
+                    LocalAssetManager assetManager = LocalAssetManager.getInstance();
+                    AssetMetadata metadata = assetManager.getMetadata(hash);
                     if (metadata != null) {
                         String skinId = "local_skin:" + hash;
-                        String modelType = config.activeModelType;
+                        String modelType = assetManager.getSkinModelPreference(hash);
 
                         // If auto mode, use the detected model from the skin
                         if ("auto".equals(modelType)) {
@@ -566,9 +568,9 @@ public class ClientEvents {
             com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
 
             if (metadata != null) {
-                // Apply the saved skin with the saved model type
+                // Apply the saved skin with the saved model type preference for this skin
                 String skinId = "local_skin:" + metadata.hash();
-                String modelType = config.activeModelType;
+                String modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
 
                 com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                         .applySkin(player.getUUID(), skinId, modelType);

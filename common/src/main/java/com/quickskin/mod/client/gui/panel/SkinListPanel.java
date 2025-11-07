@@ -84,8 +84,18 @@ public class SkinListPanel extends AbstractWidget {
 
     /**
      * Set the selected skin programmatically
+     * @param metadata The skin metadata to select
      */
     public void setSelected(AssetMetadata metadata) {
+        setSelected(metadata, true);
+    }
+
+    /**
+     * Set the selected skin programmatically
+     * @param metadata The skin metadata to select
+     * @param triggerCallback Whether to trigger the selection callback
+     */
+    public void setSelected(AssetMetadata metadata, boolean triggerCallback) {
         if (skinListWidget == null || metadata == null) {
             return;
         }
@@ -95,7 +105,9 @@ public class SkinListPanel extends AbstractWidget {
             SkinEntry entry = (SkinEntry) skinListWidget.children().get(i);
             if (entry.getMetadata().hash().equals(metadata.hash())) {
                 skinListWidget.setSelected(entry);
-                onSkinSelectedCallback.accept(entry);
+                if (triggerCallback) {
+                    onSkinSelectedCallback.accept(entry);
+                }
                 skinListWidget.makeVisible(entry);
                 break;
             }

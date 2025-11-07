@@ -225,8 +225,8 @@ public class PlayerCapeMenuScreen extends Screen {
                 // Load the saved skin texture
                 skinLocation = assetManager.getTextureLocation(config.activeSkinHash, TextureQuality.FULL);
 
-                // Get saved model type
-                modelType = config.activeModelType;
+                // Get saved model type preference for this skin
+                modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
 
                 // If auto mode, use the detected model type from metadata
                 if ("auto".equals(modelType)) {
@@ -238,14 +238,15 @@ public class PlayerCapeMenuScreen extends Screen {
         // Second priority: Use current player skin (when in-game)
         if (skinLocation == null && player != null) {
             skinLocation = player.getSkinTextureLocation();
-            modelType = config.activeModelType;
 
-            // If auto mode, detect from the active custom skin (if any)
-            if ("auto".equals(modelType) && !config.activeSkinHash.isEmpty()) {
+            // Get model type from the active skin if available
+            if (!config.activeSkinHash.isEmpty()) {
                 LocalAssetManager assetManager = LocalAssetManager.getInstance();
+                modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
                 AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
 
-                if (metadata != null) {
+                // If auto mode, detect from the active custom skin (if any)
+                if ("auto".equals(modelType) && metadata != null) {
                     // Use the detected model type from the custom skin metadata
                     modelType = metadata.skinModel();
                 } else {

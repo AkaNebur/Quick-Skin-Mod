@@ -132,7 +132,7 @@ public class CapeService implements ICapeService {
         KnownCapes cape = KnownCapes.getById(capeId);
 
         if (cape != null && !cape.isNoCape()) {
-            QuickSkin.LOGGER.info("[CapeService] loadKnownCape: capeId={}, isAnimated={}", capeId, cape.isAnimated());
+            QuickSkin.LOGGER.debug("[CapeService] loadKnownCape: capeId={}, isAnimated={}", capeId, cape.isAnimated());
 
             if (cape.isAnimated()) {
                 String animationId = "cape_known_" + capeId;

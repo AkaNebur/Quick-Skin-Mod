@@ -171,12 +171,12 @@ public class PlayerWidget extends AbstractWidget {
                             com.quickskin.mod.client.services.LocalAssetManager.getInstance().getSourceImage(hash);
 
                         if (metadata != null && atlasImage != null) {
-                            QuickSkin.LOGGER.info("[PlayerWidget] On-demand registration of local cape animation: {}", animationId);
+                            QuickSkin.LOGGER.debug("[PlayerWidget] On-demand registration of local cape animation: {}", animationId);
                             animManager.registerAnimation(animationId, capeId, previewData.getCapeLocation(), atlasImage, metadata);
                         }
                     } else if (capeId.startsWith("known:")) {
                         String knownId = capeId.substring("known:".length());
-                        QuickSkin.LOGGER.info("[PlayerWidget] On-demand registration of known cape animation: {}", knownId);
+                        QuickSkin.LOGGER.debug("[PlayerWidget] On-demand registration of known cape animation: {}", knownId);
                         com.quickskin.mod.client.services.CapeService.getInstance().loadKnownCape(knownId);
                     }
                 }

@@ -85,10 +85,18 @@ public class LocalAppearanceStorage {
             k -> new PlayerPreferences()
         );
 
-        // Update from config (the active skin/model are stored in ClientConfig)
+        // Update from config (the active skin is stored in ClientConfig)
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
         prefs.lastSkinId = config.activeSkinHash;
-        prefs.lastModelType = config.activeModelType;
+
+        // Get model type from the skin's preference
+        if (!config.activeSkinHash.isEmpty()) {
+            com.quickskin.mod.client.services.LocalAssetManager assetManager =
+                com.quickskin.mod.client.services.LocalAssetManager.getInstance();
+            prefs.lastModelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+        } else {
+            prefs.lastModelType = "auto"; // Default if no skin is active
+        }
 
         // Save to disk
         savePreferencesData(data);

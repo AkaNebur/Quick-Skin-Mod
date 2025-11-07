@@ -45,7 +45,8 @@ public class ClientConfig {
 
     // Active Skin Settings (persisted state)
     public String activeSkinHash = "";
-    public String activeModelType = "auto"; // "auto", "classic", "slim"
+    @Deprecated // Now using per-skin model preferences stored in skin-preferences.json
+    public String activeModelType = "auto"; // "auto", "classic", "slim" (deprecated - kept for compatibility)
     public String activeCapeHash = ""; // Active cape hash
     public String playerOwnSkinHash = ""; // Hash of the player's own Mojang skin (protected from deletion)
 

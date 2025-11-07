@@ -62,12 +62,12 @@ public class SkinPreviewOverlay {
                 skinLocation = assetManager.getTextureLocation(config.activeSkinHash,
                     com.quickskin.mod.common.data.TextureQuality.FULL);
 
-                // Get model type (respecting auto mode)
-                String configModelType = config.activeModelType;
-                if ("auto".equals(configModelType)) {
+                // Get model type preference for this skin (respecting auto mode)
+                String skinModelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+                if ("auto".equals(skinModelType)) {
                     modelType = metadata.skinModel();
                 } else {
-                    modelType = configModelType;
+                    modelType = skinModelType;
                 }
             }
         } else {

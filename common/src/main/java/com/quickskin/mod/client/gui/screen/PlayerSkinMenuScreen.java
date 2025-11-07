@@ -64,6 +64,9 @@ public class PlayerSkinMenuScreen extends Screen {
     private float savedBodyYaw = 20.0f;
     private float savedTargetRotation = 20.0f;
 
+    // Current model type (preserved across resizes)
+    private String savedModelType = null;
+
     // Constants
     private static final int MIN_PANEL_WIDTH = 340;
     private static final int MAX_PANEL_WIDTH = 600;
@@ -102,13 +105,15 @@ public class PlayerSkinMenuScreen extends Screen {
         super.init();
         clearWidgets();
 
-        // Save rotation state from existing player preview panel before it's destroyed
+        // Save rotation state and model type from existing player preview panel before it's destroyed
         if (playerPreviewPanel != null) {
             com.quickskin.mod.client.gui.widget.PlayerWidget widget = playerPreviewPanel.getPlayerWidget();
             if (widget != null) {
                 savedBodyYaw = widget.getBodyYaw();
                 savedTargetRotation = widget.getTargetYRotation();
             }
+            // Save the current model type to preserve it across resizes
+            savedModelType = playerPreviewPanel.getCurrentModelType();
         }
 
         // Calculate panel dimensions based on screen size
@@ -285,25 +290,45 @@ public class PlayerSkinMenuScreen extends Screen {
     private void restoreSavedState() {
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
 
-        // Restore model type preference
-        if (playerPreviewPanel != null) {
-            playerPreviewPanel.setCurrentModelType(config.activeModelType);
-        }
+        // Check if we're restoring from a resize (savedModelType is not null)
+        boolean isResizing = savedModelType != null;
 
-        // Restore active skin selection
+        // Restore active skin selection first
+        AssetMetadata selectedSkin = null;
         if (!config.activeSkinHash.isEmpty() && skinListPanel != null) {
             AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(config.activeSkinHash);
             if (metadata != null) {
-                skinListPanel.setSelected(metadata);
+                // Don't trigger callback during resize - we'll set model type manually
+                skinListPanel.setSelected(metadata, !isResizing);
+                selectedSkin = metadata;
             }
         } else if (config.activeSkinHash.isEmpty() && !config.playerOwnSkinHash.isEmpty() && skinListPanel != null) {
             // If no active skin is set, auto-select the player's own skin
             AssetMetadata playerOwnSkin = LocalAssetManager.getInstance().getMetadata(config.playerOwnSkinHash);
             if (playerOwnSkin != null) {
-                skinListPanel.setSelected(playerOwnSkin);
+                // Don't trigger callback during resize - we'll set model type manually
+                skinListPanel.setSelected(playerOwnSkin, !isResizing);
+                selectedSkin = playerOwnSkin;
                 QuickSkin.LOGGER.info("Auto-selected player's own skin in menu");
             }
         }
+
+        // Restore model type preference for the selected skin
+        if (playerPreviewPanel != null && selectedSkin != null && isResizing) {
+            // During resize, use the saved model type
+            playerPreviewPanel.setCurrentModelType(savedModelType);
+            QuickSkin.LOGGER.debug("Restoring model type from resize state: {}", savedModelType);
+
+            // Update the preview with the correct skin
+            playerPreviewPanel.updateSkin(
+                    selectedSkin,
+                    LocalAssetManager.getInstance().getTextureLocation(selectedSkin.hash(), com.quickskin.mod.common.data.TextureQuality.FULL)
+            );
+
+            // Clear saved model type after using it
+            savedModelType = null;
+        }
+        // Note: If not resizing, onSkinSelected callback will handle loading the preference
 
         // Restore active cape selection
         if (!config.activeCapeHash.isEmpty() && playerPreviewPanel != null) {
@@ -674,15 +699,18 @@ public class PlayerSkinMenuScreen extends Screen {
         if (playerPreviewPanel != null && entry != null) {
             AssetMetadata metadata = entry.getMetadata();
 
+            // Get the model type preference for this specific skin
+            String modelType = LocalAssetManager.getInstance().getSkinModelPreference(metadata.hash());
+            QuickSkin.LOGGER.info("onSkinSelected: Loading model preference for skin {}: {}", metadata.friendlyName(), modelType);
+
+            // Update the model buttons to reflect this skin's preference
+            playerPreviewPanel.setCurrentModelType(modelType);
+
             // Update player preview with selected skin
             playerPreviewPanel.updateSkin(
                     metadata,
                     LocalAssetManager.getInstance().getTextureLocation(metadata.hash(), TextureQuality.FULL)
             );
-
-            // Get the current model type preference from config
-            com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
-            String modelType = config.activeModelType;
 
             // Apply skin to the actual player in-game
             if (this.minecraft != null && this.minecraft.player != null) {
@@ -696,6 +724,7 @@ public class PlayerSkinMenuScreen extends Screen {
             }
 
             // Save the active skin hash to config
+            com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
             config.activeSkinHash = metadata.hash();
             config.save();
         }
@@ -705,24 +734,23 @@ public class PlayerSkinMenuScreen extends Screen {
      * Called when model type is changed via the model buttons
      */
     private void onModelTypeChanged(String newModelType) {
-        if (this.minecraft != null && this.minecraft.player != null) {
-            // Get the currently selected skin entry
-            SkinEntry selectedEntry = skinListPanel != null ? skinListPanel.getSelected() : null;
+        // Get the currently selected skin entry
+        SkinEntry selectedEntry = skinListPanel != null ? skinListPanel.getSelected() : null;
 
-            if (selectedEntry != null) {
-                AssetMetadata metadata = selectedEntry.getMetadata();
-                String skinId = "local_skin:" + metadata.hash();
+        if (selectedEntry != null) {
+            AssetMetadata metadata = selectedEntry.getMetadata();
+            String skinId = "local_skin:" + metadata.hash();
 
+            QuickSkin.LOGGER.info("Changed model type to: {} for skin: {}", newModelType, metadata.friendlyName());
+
+            // Save the model type preference for THIS SPECIFIC SKIN
+            LocalAssetManager.getInstance().setSkinModelPreference(metadata.hash(), newModelType);
+
+            // Apply to the actual player in-game (if in-game)
+            if (this.minecraft != null && this.minecraft.player != null) {
                 // Pass the model type directly - ModelService will handle "auto" detection
                 com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                         .applySkin(this.minecraft.player.getUUID(), skinId, newModelType);
-
-                QuickSkin.LOGGER.info("Changed model type to: {}", newModelType);
-
-                // Save the model type preference to config
-                com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
-                config.activeModelType = newModelType;
-                config.save();
             }
         }
     }
