@@ -1055,6 +1055,24 @@ public class PlayerCapeMenuScreen extends Screen {
     private void applyCape(CapeEntry cape) {
         String capeId = cape.getCapeId();
 
+        // Unregister old animation if cape is changing
+        ClientConfig config = ClientConfig.getInstance();
+        String oldCapeId = config.activeCapeHash;
+        if (oldCapeId != null && !oldCapeId.equals(capeId) &&
+            (oldCapeId.startsWith("local_cape:") || oldCapeId.startsWith("known:"))) {
+            String animationId = null;
+            if (oldCapeId.startsWith("local_cape:")) {
+                animationId = "cape_" + oldCapeId.substring("local_cape:".length());
+            } else if (oldCapeId.startsWith("known:")) {
+                animationId = "cape_known_" + oldCapeId.substring("known:".length());
+            }
+            if (animationId != null) {
+                com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
+                        .unregisterAnimation(animationId);
+                QuickSkin.LOGGER.info("[PlayerCapeMenuScreen] Unregistered old animation: {}", animationId);
+            }
+        }
+
         // IMPORTANT: Call CapeService.getCapeLocation() to trigger animation registration
         // This must be done BEFORE setting the preview widget
         ResourceLocation capeLocation = com.quickskin.mod.client.services.CapeService.getInstance()
@@ -1070,7 +1088,6 @@ public class PlayerCapeMenuScreen extends Screen {
         playerWidget.setCape(capeLocation, capeId);
 
         // Save to config for persistence
-        ClientConfig config = ClientConfig.getInstance();
         config.activeCapeHash = capeId;
         config.save();
         QuickSkin.LOGGER.info("Saved cape to config: {}", capeId);
