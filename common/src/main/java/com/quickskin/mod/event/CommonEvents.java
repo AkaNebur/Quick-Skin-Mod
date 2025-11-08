@@ -27,10 +27,24 @@ public class CommonEvents {
             QuickSkin.LOGGER.info("Player joined: {}", player.getName().getString());
 
             // Phase 5: Load player's saved appearance from server storage
-            ServerAppearanceStorage.getInstance().loadPlayerAppearance(player.getUUID());
+            com.quickskin.mod.common.data.PlayerAppearance savedAppearance =
+                ServerAppearanceStorage.getInstance().loadPlayerAppearance(player.getUUID());
+
+            // If no saved appearance exists, create a default entry in the repository
+            // This ensures all connected players have an entry that can be synced to joining players
+            if (savedAppearance == null) {
+                QuickSkin.LOGGER.debug("No saved appearance for {}, creating default entry", player.getName().getString());
+                com.quickskin.mod.server.data.ServerPlayerAppearanceRepository.getInstance()
+                    .updateAppearance(player.getUUID(), "", "", "classic");
+            }
 
             // Phase 3: Send all other players' appearances to the joining player
             ServerNetworkHandler.sendAllAppearancesToPlayer((ServerPlayer) player);
+
+            // CRITICAL FIX: Also send THIS player's appearance to all OTHER players
+            // This ensures that existing players (like the host) see the joining player's appearance
+            // AND when the host first starts the server, future joining players will see the host
+            ServerNetworkHandler.sendAppearanceToAllPlayers((ServerPlayer) player);
 
             // Phase 9: Sync server config to client
             ServerNetworkHandler.sendServerConfigToPlayer((ServerPlayer) player);

@@ -22,8 +22,9 @@ public class NetworkSyncService {
 
     private static NetworkSyncService instance;
 
-    // Maximum chunk size for texture uploads (2MB)
-    private static final int MAX_CHUNK_SIZE = 2 * 1024 * 1024;
+    // Maximum chunk size for texture uploads (30KB - safe for network transmission)
+    // This matches the old mod's chunk size for better compatibility
+    private static final int MAX_CHUNK_SIZE = 30 * 1024;
 
     private NetworkSyncService() {
     }
@@ -169,5 +170,24 @@ public class NetworkSyncService {
 
         FriendlyByteBuf buf = PacketHelper.createUpdateAppearancePacket(playerId, "", "", "classic");
         NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
+    }
+
+    /**
+     * Request a texture from the server (fallback mechanism for missed broadcasts)
+     * @param playerId Player UUID making the request
+     * @param textureType Type of texture ("skin" or "cape")
+     * @param hash Texture hash to request
+     */
+    public void requestTexture(UUID playerId, String textureType, String hash) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.getConnection() == null) {
+            QuickSkin.LOGGER.warn("Cannot request texture from server (not connected)");
+            return;
+        }
+
+        QuickSkin.LOGGER.info("Requesting {} texture from server: {}", textureType, hash);
+
+        FriendlyByteBuf buf = PacketHelper.createRequestTexturePacket(playerId, textureType, hash);
+        NetworkManager.sendToServer(ModNetworking.REQUEST_TEXTURE, buf);
     }
 }

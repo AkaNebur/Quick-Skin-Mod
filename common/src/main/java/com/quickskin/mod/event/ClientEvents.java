@@ -86,6 +86,9 @@ public class ClientEvents {
             PlayerAppearanceRepository.getInstance().clear();
             ModelService.getInstance().clearAll();
 
+            // Clear incomplete texture chunks
+            com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance().clear();
+
             // Clear cached player to reset rendering state (fixes invisible buttons)
             com.quickskin.mod.client.rendering.PlayerModelRenderer.clearCachedPlayer();
 

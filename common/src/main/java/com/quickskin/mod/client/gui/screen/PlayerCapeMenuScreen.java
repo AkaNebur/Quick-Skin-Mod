@@ -2,6 +2,7 @@ package com.quickskin.mod.client.gui.screen;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.gui.util.FileDialogHelper;
 import com.quickskin.mod.client.gui.util.GuiScalingUtils;
 import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.config.ClientConfig;
@@ -489,8 +490,50 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     private void importCape() {
-        // TODO: Implement file picker for cape import
-        QuickSkin.LOGGER.info("Import cape clicked (file picker not implemented yet)");
+        FileDialogHelper.openCapeFileDialog("Select Cape File", this::handleCapeImport);
+    }
+
+    /**
+     * Handle imported cape file
+     */
+    private void handleCapeImport(Path filePath) {
+        if (filePath == null) {
+            return;
+        }
+
+        QuickSkin.LOGGER.info("Importing cape: {}", filePath);
+
+        // Show processing message
+        showImportMessage("Processing cape...", 0x55AAFF, 60);
+
+        // Import on main thread
+        if (this.minecraft != null) {
+            this.minecraft.execute(() -> {
+                Path capesDir = LocalAssetManager.getInstance().getCapesDirectory();
+                try {
+                    Files.createDirectories(capesDir);
+
+                    if (processDroppedFile(filePath, capesDir)) {
+                        QuickSkin.LOGGER.info("Successfully imported cape: {}", filePath.getFileName());
+
+                        // Reload assets
+                        LocalAssetManager.getInstance().reload();
+
+                        // Refresh the cape list
+                        refreshCapeList();
+                        updateGridDimensions();
+
+                        showImportMessage("✓ Imported cape", 0x55FF55, 100);
+                    } else {
+                        QuickSkin.LOGGER.error("Failed to import cape: {}", filePath);
+                        showImportMessage("⚠ Invalid cape file (must be 2:1 ratio or animation strip)", 0xFF5555, 150);
+                    }
+                } catch (IOException e) {
+                    QuickSkin.LOGGER.error("Failed to import cape", e);
+                    showImportMessage("⚠ Error: " + e.getMessage(), 0xFF5555, 150);
+                }
+            });
+        }
     }
 
     private void removeCape() {

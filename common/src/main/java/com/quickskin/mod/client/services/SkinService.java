@@ -95,8 +95,20 @@ public class SkinService implements ISkinService {
             }
         }
 
-        // Fall back to local assets (for user's own skins)
-        return LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL);
+        // Try local assets (for user's own skins)
+        ResourceLocation localLocation = LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL);
+
+        // If not found locally and we're connected to a server, request it
+        if (localLocation == null) {
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.player != null && mc.getConnection() != null) {
+                QuickSkin.LOGGER.info("Skin {} not found locally, requesting from server", hash);
+                com.quickskin.mod.networking.NetworkSyncService.getInstance()
+                    .requestTexture(mc.player.getUUID(), "skin", hash);
+            }
+        }
+
+        return localLocation;
     }
 
     @Override

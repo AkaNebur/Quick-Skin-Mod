@@ -97,7 +97,41 @@ public class CapeService implements ICapeService {
                     .getTextureLocation(hash);
             if (capeLocation != null) {
                 QuickSkin.LOGGER.debug("Loaded cape from network cache: {}", hash);
-                return capeLocation; // Network capes don't have animations (yet)
+
+                // Check if this network cape has animation metadata
+                com.quickskin.mod.common.data.AnimationMetadata animMeta =
+                    com.quickskin.mod.client.storage.ClientAnimationMetadataCache.getInstance().getMetadata(hash);
+
+                if (animMeta != null) {
+                    // Network cape is animated - register animation
+                    // Use same animation ID format as local capes for consistency with renderer
+                    String animationId = "cape_" + hash;
+                    String capeId = "local_cape:" + hash;
+                    AnimatedTextureManager animManager = AnimatedTextureManager.getInstance();
+
+                    if (!animManager.isAnimated(animationId)) {
+                        try {
+                            // Get texture data and convert to BufferedImage
+                            byte[] textureData = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                                .getTextureData(hash);
+                            if (textureData != null) {
+                                java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(textureData);
+                                BufferedImage atlasImage = javax.imageio.ImageIO.read(bais);
+
+                                if (atlasImage != null) {
+                                    animManager.registerAnimation(animationId, capeId, capeLocation, atlasImage, animMeta);
+                                    QuickSkin.LOGGER.info("Registered animation for network cape: {}", hash);
+                                } else {
+                                    QuickSkin.LOGGER.warn("Could not read image for network cape animation: {}", hash);
+                                }
+                            }
+                        } catch (Exception e) {
+                            QuickSkin.LOGGER.error("Failed to register animation for network cape: {}", hash, e);
+                        }
+                    }
+                }
+
+                return capeLocation;
             }
         }
 
@@ -125,6 +159,14 @@ public class CapeService implements ICapeService {
                 }
             }
             QuickSkin.LOGGER.debug("Loaded local cape: {}", hash);
+        } else {
+            // If not found locally and we're connected to a server, request it
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.player != null && mc.getConnection() != null) {
+                QuickSkin.LOGGER.info("Cape {} not found locally, requesting from server", hash);
+                com.quickskin.mod.networking.NetworkSyncService.getInstance()
+                    .requestTexture(mc.player.getUUID(), "cape", hash);
+            }
         }
 
         return capeLocation;

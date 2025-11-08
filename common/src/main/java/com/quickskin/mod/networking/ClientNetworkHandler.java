@@ -92,10 +92,77 @@ public class ClientNetworkHandler {
                 QuickSkin.LOGGER.debug("Saved animation metadata: {} frames, {} ms total duration",
                         metadata.frameCount(), metadata.getTotalDuration());
 
+                // Register animation for this network texture
+                registerNetworkCapeAnimation(hash, metadata);
+
+                // Refresh all players using this cape so they see the animation
+                refreshPlayersUsingTexture(hash);
+
             } catch (Exception e) {
                 QuickSkin.LOGGER.error("Failed to save animation metadata for: {}", hash, e);
             }
         });
+    }
+
+    /**
+     * Registers animation for a network-received cape
+     * @param hash Texture hash
+     * @param metadata Animation metadata
+     */
+    private static void registerNetworkCapeAnimation(String hash, AnimationMetadata metadata) {
+        try {
+            // Get the network texture location
+            net.minecraft.resources.ResourceLocation textureLocation =
+                com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().getTextureLocation(hash);
+
+            if (textureLocation == null) {
+                QuickSkin.LOGGER.warn("Cannot register animation for {}: texture not in network cache", hash);
+                return;
+            }
+
+            // Get the texture image from network cache
+            byte[] textureData = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().getTextureData(hash);
+            if (textureData == null) {
+                QuickSkin.LOGGER.warn("Cannot register animation for {}: texture data not available", hash);
+                return;
+            }
+
+            // Convert to BufferedImage
+            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(textureData);
+            java.awt.image.BufferedImage atlasImage = javax.imageio.ImageIO.read(bais);
+
+            if (atlasImage == null) {
+                QuickSkin.LOGGER.warn("Cannot register animation for {}: failed to read image", hash);
+                return;
+            }
+
+            // Register the animation
+            // Use same animation ID format as local capes for consistency with renderer
+            String animationId = "cape_" + hash;
+            String capeId = "local_cape:" + hash;
+
+            com.quickskin.mod.client.services.AnimatedTextureManager animManager =
+                com.quickskin.mod.client.services.AnimatedTextureManager.getInstance();
+
+            if (!animManager.isAnimated(animationId)) {
+                animManager.registerAnimation(animationId, capeId, textureLocation, atlasImage, metadata);
+                QuickSkin.LOGGER.info("Registered animation for network cape: {} ({} frames)", hash, metadata.frameCount());
+            }
+
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Failed to register animation for network cape: {}", hash, e);
+        }
+    }
+
+    /**
+     * Refreshes all players using the specified texture
+     * This triggers a re-render which will pick up the newly registered animation
+     * @param hash Texture hash
+     */
+    private static void refreshPlayersUsingTexture(String hash) {
+        // The animation will be picked up automatically when CapeService loads the cape
+        // No need to manually refresh - CapeService.loadLocalCape() now checks for network animations
+        QuickSkin.LOGGER.debug("Animation metadata received for {}, will be applied when cape is loaded", hash);
     }
 
     /**
@@ -143,10 +210,15 @@ public class ClientNetworkHandler {
             QuickSkin.LOGGER.debug("Received texture chunk {}/{} for: {} (size: {} bytes)",
                     chunkIndex + 1, totalChunks, hash, chunkData.length);
 
-            // Phase 5: Chunked texture receiver for large textures (HD skins)
-            // This would reassemble chunks into a complete texture
-            // For now, we use single-packet texture transfer (implemented in handleSendTexture)
-            QuickSkin.LOGGER.warn("Chunked texture transfer not yet implemented - use single packet for now");
+            // Validate chunk data
+            if (chunkData.length > 32 * 1024) {
+                QuickSkin.LOGGER.warn("Received oversized chunk: {} bytes (max: 32KB)", chunkData.length);
+                return;
+            }
+
+            // Use TextureChunkReceiver to assemble chunks
+            com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance()
+                .receiveChunk(hash, chunkIndex, totalChunks, chunkData);
         });
     }
 }

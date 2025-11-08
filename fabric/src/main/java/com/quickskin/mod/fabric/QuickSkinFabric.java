@@ -15,5 +15,7 @@ public class QuickSkinFabric implements ModInitializer {
 
         // Initialize common code
         QuickSkin.init();
+
+        QuickSkin.LOGGER.info("QuickSkin Fabric initialization complete");
     }
 }
