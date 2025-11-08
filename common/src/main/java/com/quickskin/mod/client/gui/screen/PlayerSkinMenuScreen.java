@@ -909,6 +909,15 @@ public class PlayerSkinMenuScreen extends Screen {
             LocalAssetManager.getInstance().discoverLocalAssets();
             refreshSkinList();
 
+            // Auto-select the player's own skin after deletion
+            if (!config.playerOwnSkinHash.isEmpty() && skinListPanel != null) {
+                AssetMetadata playerOwnSkin = LocalAssetManager.getInstance().getMetadata(config.playerOwnSkinHash);
+                if (playerOwnSkin != null) {
+                    skinListPanel.setSelected(playerOwnSkin, true);
+                    QuickSkin.LOGGER.info("Auto-selected player's own skin after deletion");
+                }
+            }
+
             QuickSkin.LOGGER.info("Deleted skin: {}", metadata.friendlyName());
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to delete skin: {}", metadata.friendlyName(), e);
