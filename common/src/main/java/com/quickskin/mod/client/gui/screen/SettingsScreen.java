@@ -78,11 +78,6 @@ public class SettingsScreen extends Screen {
     private KeyMapping selectedKey;
 
     // Server setting checkboxes
-    private Checkbox allowCustomSkinsCheckbox;
-    private Checkbox allowHDSkinsCheckbox;
-    private Checkbox allowCustomCapesCheckbox;
-    private Checkbox allowAnimatedCapesCheckbox;
-    private Checkbox requireAuthenticationCheckbox;
     private Checkbox serverDisableSkinTransparencyCheckbox;
 
     public SettingsScreen(@Nullable Screen parent) {
@@ -224,80 +219,22 @@ public class SettingsScreen extends Screen {
     private void createServerSettings() {
         ServerConfig config = ServerConfig.getInstance();
         int checkboxSize = 20;
-        int spacing = 30;
         // Settings content area starts below tabs
         int startY = dialogY + TAB_HEIGHT + 20;
         int leftColumnX = dialogX + 20;
-        int rightColumnX = dialogX + dialogWidth / 2 + 10;
-        int currentLeftY = startY;
-        int currentRightY = startY;
 
         // Check if player is on a server or in singleplayer
         boolean isServerAdmin = minecraft != null && minecraft.hasSingleplayerServer();
 
-        // Left Column
-        // Skin Settings
-        allowCustomSkinsCheckbox = new Checkbox(
-                leftColumnX, currentLeftY,
-                checkboxSize, checkboxSize,
-                Component.literal("Allow Custom Skins"),
-                config.allowCustomSkins
-        );
-        allowCustomSkinsCheckbox.active = isServerAdmin;
-        serverSettingWidgets.add(allowCustomSkinsCheckbox);
-        currentLeftY += spacing;
-
-        allowHDSkinsCheckbox = new Checkbox(
-                leftColumnX, currentLeftY,
-                checkboxSize, checkboxSize,
-                Component.literal("Allow HD Skins"),
-                config.allowHDSkins
-        );
-        allowHDSkinsCheckbox.active = isServerAdmin;
-        serverSettingWidgets.add(allowHDSkinsCheckbox);
-        currentLeftY += spacing;
-
         // Transparency Settings
         serverDisableSkinTransparencyCheckbox = new Checkbox(
-                leftColumnX, currentLeftY,
+                leftColumnX, startY,
                 checkboxSize, checkboxSize,
                 Component.literal("Disable Skin Transparency"),
                 config.disableSkinTransparency
         );
         serverDisableSkinTransparencyCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(serverDisableSkinTransparencyCheckbox);
-        currentLeftY += spacing;
-
-        // Cape Settings
-        allowCustomCapesCheckbox = new Checkbox(
-                leftColumnX, currentLeftY,
-                checkboxSize, checkboxSize,
-                Component.literal("Allow Custom Capes"),
-                config.allowCustomCapes
-        );
-        allowCustomCapesCheckbox.active = isServerAdmin;
-        serverSettingWidgets.add(allowCustomCapesCheckbox);
-
-        // Right Column
-        allowAnimatedCapesCheckbox = new Checkbox(
-                rightColumnX, currentRightY,
-                checkboxSize, checkboxSize,
-                Component.literal("Allow Animated Capes"),
-                config.allowAnimatedCapes
-        );
-        allowAnimatedCapesCheckbox.active = isServerAdmin;
-        serverSettingWidgets.add(allowAnimatedCapesCheckbox);
-        currentRightY += spacing;
-
-        // Security Settings
-        requireAuthenticationCheckbox = new Checkbox(
-                rightColumnX, currentRightY,
-                checkboxSize, checkboxSize,
-                Component.literal("Require Authentication"),
-                config.requireAuthentication
-        );
-        requireAuthenticationCheckbox.active = isServerAdmin;
-        serverSettingWidgets.add(requireAuthenticationCheckbox);
     }
 
     private void switchTab(Tab tab) {
@@ -481,18 +418,13 @@ public class SettingsScreen extends Screen {
         }
 
         // Save server settings
-        if (allowCustomSkinsCheckbox != null) {
+        if (serverDisableSkinTransparencyCheckbox != null) {
             ServerConfig config = ServerConfig.getInstance();
 
             // Check if transparency setting changed
             boolean oldServerTransparencySetting = config.disableSkinTransparency;
 
-            config.allowCustomSkins = allowCustomSkinsCheckbox.selected();
-            config.allowHDSkins = allowHDSkinsCheckbox.selected();
             config.disableSkinTransparency = serverDisableSkinTransparencyCheckbox.selected();
-            config.allowCustomCapes = allowCustomCapesCheckbox.selected();
-            config.allowAnimatedCapes = allowAnimatedCapesCheckbox.selected();
-            config.requireAuthentication = requireAuthenticationCheckbox.selected();
 
             // If transparency setting changed, clear texture cache and refresh player
             if (oldServerTransparencySetting != config.disableSkinTransparency) {
