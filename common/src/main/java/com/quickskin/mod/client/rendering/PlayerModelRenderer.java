@@ -169,6 +169,48 @@ public class PlayerModelRenderer {
                     quaternionY,
                     playerToRender
             );
+
+            // Render 3D skin layers on top of the vanilla rendering
+            // Note: The 3D Skin Layers mod normally renders via entity layers,
+            // but since we're using a custom skin texture, we need to manually trigger it
+            if (SkinLayers3DIntegration.isAvailable() && playerData.getSkinLocation() != null) {
+                ensureModelsLoaded(); // Ensure models are initialized
+
+                PoseStack poseStack = graphics.pose();
+                MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
+
+                // Get the model based on player type
+                PlayerModel<?> model = playerData.getModelType().equalsIgnoreCase("slim") ? slimModel : classicModel;
+                boolean isSlimModel = playerData.getModelType().equalsIgnoreCase("slim");
+
+                // Setup model pose to match the vanilla rendering
+                setupModelPoseWithAnimation(model, playerData, mouseX, mouseY, followMouse, x, y, mc);
+
+                // Setup the same transformations as vanilla rendering
+                poseStack.pushPose();
+                poseStack.translate((double)x, (double)y, 50.0);
+                float scaleCasted = (float)(int)scale;
+                Matrix4f scaleMatrix = (new Matrix4f()).scaling(scaleCasted, scaleCasted, -scaleCasted);
+                poseStack.mulPoseMatrix(scaleMatrix);
+                poseStack.mulPose(quaternionXZ);
+                poseStack.mulPose(Axis.YP.rotationDegrees(-targetRotation));
+                poseStack.scale(-1.0F, -1.0F, 1.0F);
+                poseStack.translate(0.0F, -1.501F, 0.0F);
+
+                // Render 3D layers
+                SkinLayers3DIntegration.render3DLayers(
+                        poseStack,
+                        bufferSource,
+                        15728880,
+                        OverlayTexture.NO_OVERLAY,
+                        model,
+                        playerData.getSkinLocation(),
+                        isSlimModel
+                );
+
+                bufferSource.endBatch();
+                poseStack.popPose();
+            }
         } catch (Exception e) {
             // If rendering fails (e.g., entity no longer valid), fall back to manual rendering
             renderPlayerModelManual(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);
@@ -245,6 +287,9 @@ public class PlayerModelRenderer {
         RenderType renderType = RenderType.entityTranslucent(playerData.getSkinLocation());
         var vertexConsumer = bufferSource.getBuffer(renderType);
 
+        // Determine if using slim model
+        boolean isSlimModel = playerData.getModelType().equalsIgnoreCase("slim");
+
         // Render model
         model.renderToBuffer(
                 poseStack,
@@ -252,6 +297,18 @@ public class PlayerModelRenderer {
                 15728880, // Full brightness (light level) - same as InventoryScreen
                 OverlayTexture.NO_OVERLAY,
                 1.0f, 1.0f, 1.0f, 1.0f // RGBA
+        );
+
+        // Render 3D skin layers (if mod is installed)
+        // The integration class handles all mod detection and graceful fallback
+        SkinLayers3DIntegration.render3DLayers(
+                poseStack,
+                bufferSource,
+                15728880,
+                OverlayTexture.NO_OVERLAY,
+                model,
+                playerData.getSkinLocation(),
+                isSlimModel
         );
 
         // Render cape AFTER model if present

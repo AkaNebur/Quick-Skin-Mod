@@ -81,6 +81,10 @@ public class PreviewPlayerData {
     }
 
     public void setSkinLocation(ResourceLocation skinLocation) {
+        // Clear 3D mesh cache if skin is changing
+        if (this.skinLocation != null && !this.skinLocation.equals(skinLocation)) {
+            SkinLayers3DIntegration.clearCache();
+        }
         this.skinLocation = skinLocation;
     }
 
