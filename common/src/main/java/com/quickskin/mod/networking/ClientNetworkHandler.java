@@ -193,6 +193,26 @@ public class ClientNetworkHandler {
 
             QuickSkin.LOGGER.debug("Server config override applied: allowCustomSkins={}, allowHDSkins={}, maxSkinResolution={}",
                 serverConfig.allowCustomSkins, serverConfig.allowHDSkins, serverConfig.maxSkinResolution);
+
+            // CRITICAL FIX: Sync current appearance to server after receiving config
+            // This ensures that when a player joins, existing players see their CURRENT appearance
+            // rather than the old saved appearance that was loaded from disk
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                UUID playerId = mc.player.getUUID();
+                com.quickskin.mod.common.data.PlayerAppearance currentAppearance =
+                    com.quickskin.mod.common.data.PlayerAppearanceRepository.getInstance().getAppearance(playerId);
+
+                if (currentAppearance != null) {
+                    QuickSkin.LOGGER.info("Syncing current appearance to server after config received");
+                    NetworkSyncService.getInstance().syncAppearance(
+                        playerId,
+                        currentAppearance.getSkinId(),
+                        currentAppearance.getCapeId(),
+                        currentAppearance.getModel()
+                    );
+                }
+            }
         });
     }
 
