@@ -9,6 +9,7 @@ import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.common.util.HDTextureProcessor;
 import com.quickskin.mod.common.util.SkinModelDetector;
+import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.platform.PlatformHelper;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -381,9 +382,15 @@ public class LocalAssetManager {
      * Get all assets of a specific type
      */
     public List<AssetMetadata> getAssetsByType(String type) {
+        String playerOwnSkinHash = ClientConfig.getInstance().playerOwnSkinHash;
+
         return metadataCache.values().stream()
                 .filter(meta -> type.equals(meta.type()))
-                .sorted(Comparator.comparing(AssetMetadata::friendlyName))
+                .sorted(Comparator
+                    // First, sort by whether it's the player's own skin (player's skin first)
+                    .comparing((AssetMetadata meta) -> !meta.hash().equals(playerOwnSkinHash))
+                    // Then, sort alphabetically by friendly name
+                    .thenComparing(AssetMetadata::friendlyName))
                 .toList();
     }
 

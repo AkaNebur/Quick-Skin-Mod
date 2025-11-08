@@ -65,11 +65,22 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         int highlightTop = top - highlightPaddingV;
         int highlightBottom = top + height + highlightPaddingV;
 
+        // Check if this is the player's own skin
+        ClientConfig config = ClientConfig.getInstance();
+        boolean isPlayerOwnSkin = metadata.hash().equals(config.playerOwnSkinHash);
+
         if (parentList.getSelected() == this) {
-            // Selected state - blue highlight with border
-            graphics.fill(highlightLeft, highlightTop, highlightRight, highlightBottom, 0x80308CC0);
-            graphics.renderOutline(highlightLeft, highlightTop, highlightRight - highlightLeft,
-                highlightBottom - highlightTop, 0xFF4080FF);
+            if (isPlayerOwnSkin) {
+                // Selected state for player's own skin - purple highlight with border
+                graphics.fill(highlightLeft, highlightTop, highlightRight, highlightBottom, 0x80A020F0);
+                graphics.renderOutline(highlightLeft, highlightTop, highlightRight - highlightLeft,
+                    highlightBottom - highlightTop, 0xFFA020F0);
+            } else {
+                // Selected state - blue highlight with border
+                graphics.fill(highlightLeft, highlightTop, highlightRight, highlightBottom, 0x80308CC0);
+                graphics.renderOutline(highlightLeft, highlightTop, highlightRight - highlightLeft,
+                    highlightBottom - highlightTop, 0xFF4080FF);
+            }
         } else if (isHovered) {
             // Hover state - subtle white highlight
             graphics.fill(highlightLeft, highlightTop, highlightRight, highlightBottom, 0x30FFFFFF);
@@ -132,10 +143,6 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         // Render action buttons on hover (but not for player's own skin)
         this.isDeleteHovered = false;
         this.isEditHovered = false;
-
-        // Check if this is the player's own skin
-        ClientConfig config = ClientConfig.getInstance();
-        boolean isPlayerOwnSkin = metadata.hash().equals(config.playerOwnSkinHash);
 
         if (isHovered && !isPlayerOwnSkin) {
             int margin = 4;

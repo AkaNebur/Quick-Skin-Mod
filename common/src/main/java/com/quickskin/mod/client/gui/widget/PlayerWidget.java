@@ -433,6 +433,18 @@ public class PlayerWidget extends AbstractWidget {
         int top = centerY - modelHeight;
         int bottom = centerY;
 
+        // Draw instructional text above the border
+        net.minecraft.client.gui.Font font = net.minecraft.client.Minecraft.getInstance().font;
+        String instructionText = "Mouse wheel: resize | Left click: move";
+        int textWidth = font.width(instructionText);
+        int textX = centerX - textWidth / 2; // Center the text horizontally
+        int textY = top - 12; // Position text 12 pixels above the border
+        int textColor = 0xFFFFFFFF; // White text
+        int shadowColor = 0xFF000000; // Black shadow
+
+        // Draw text with shadow for better readability
+        graphics.drawString(font, instructionText, textX, textY, textColor, true);
+
         // Draw border (2 pixels thick for visibility) in bright green
         int borderColor = 0xFF00FF00; // Bright green
 
