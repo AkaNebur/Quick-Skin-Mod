@@ -83,6 +83,12 @@ public class ModNetworking {
             ServerNetworkHandler::handleUploadAnimationMetadata
         );
 
+        NetworkManager.registerReceiver(
+            NetworkManager.c2s(),
+            TEXTURE_CHUNK,
+            ServerNetworkHandler::handleTextureChunk
+        );
+
         QuickSkin.LOGGER.info("Networking initialized (server-side receivers ready)");
     }
 }

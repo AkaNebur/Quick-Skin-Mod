@@ -160,6 +160,17 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 new com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent(playerId, appearance, updateType)
         );
         QuickSkin.LOGGER.debug("Fired PlayerAppearanceUpdateEvent for {} (type: {})", playerId, updateType);
+
+        // Sync to server if this is the local player
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && playerId.equals(mc.player.getUUID())) {
+            com.quickskin.mod.networking.NetworkSyncService.getInstance().syncAppearance(
+                playerId,
+                appearance.getSkinId(),
+                appearance.getCapeId(),
+                appearance.getModel()
+            );
+        }
     }
 
     @Override
@@ -179,6 +190,17 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             appearance.setSkinId("");
             appearance.setSkinLocation(null);
             refreshPlayerRenderer(playerId);
+
+            // Sync to server if this is the local player
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null && playerId.equals(mc.player.getUUID())) {
+                com.quickskin.mod.networking.NetworkSyncService.getInstance().syncAppearance(
+                    playerId,
+                    "",
+                    appearance.getCapeId(),
+                    appearance.getModel()
+                );
+            }
         }
     }
 
@@ -203,6 +225,17 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             appearance.setCapeId("");
             appearance.setCapeLocation(null);
             refreshPlayerRenderer(playerId);
+
+            // Sync to server if this is the local player
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null && playerId.equals(mc.player.getUUID())) {
+                com.quickskin.mod.networking.NetworkSyncService.getInstance().syncAppearance(
+                    playerId,
+                    appearance.getSkinId(),
+                    "",
+                    appearance.getModel()
+                );
+            }
         }
     }
 

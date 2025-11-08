@@ -86,34 +86,6 @@ public class ServerTextureCache {
     }
 
     /**
-     * Retrieve a player's texture
-     * @param playerId The player's UUID
-     * @param textureType "skin" or "cape"
-     * @return The texture data, or null if not found
-     */
-    @Nullable
-    public byte[] getTexture(UUID playerId, String textureType) {
-        String hash = generateHash(playerId, textureType);
-        return getTexture(hash);
-    }
-
-    /**
-     * Check if a texture exists in cache
-     */
-    public boolean hasTexture(String hash) {
-        return textureCache.containsKey(hash);
-    }
-
-    /**
-     * Clear a player's cached textures
-     */
-    public void clearPlayerData(UUID playerId) {
-        textureCache.remove(generateHash(playerId, "skin"));
-        textureCache.remove(generateHash(playerId, "cape"));
-        QuickSkin.LOGGER.debug("Cleared texture cache for player: {}", playerId);
-    }
-
-    /**
      * Save all cached textures to disk
      */
     public void saveAll() {

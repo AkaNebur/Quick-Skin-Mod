@@ -21,11 +21,11 @@ public class PlatformHelperImpl {
     }
 
     public static Path getSkinsDirectory() {
-        return FMLPaths.GAMEDIR.get().resolve("quickskin").resolve("skins");
+        return FMLPaths.GAMEDIR.get().resolve("quickskin").resolve("uploads").resolve("skins");
     }
 
     public static Path getCapesDirectory() {
-        return FMLPaths.GAMEDIR.get().resolve("quickskin").resolve("capes");
+        return FMLPaths.GAMEDIR.get().resolve("quickskin").resolve("uploads").resolve("capes");
     }
 
     public static Path getConfigDirectory() {

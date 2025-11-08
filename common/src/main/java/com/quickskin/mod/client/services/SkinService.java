@@ -84,7 +84,18 @@ public class SkinService implements ISkinService {
     @Nullable
     public ResourceLocation loadLocalSkin(String hash) {
         QuickSkin.LOGGER.debug("Loading local skin: {}", hash);
-        // Use LocalAssetManager to get the texture location
+
+        // Check network cache first (for textures received from server)
+        if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().hasTexture(hash)) {
+            ResourceLocation networkLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                    .getTextureLocation(hash);
+            if (networkLocation != null) {
+                QuickSkin.LOGGER.debug("Loaded skin from network cache: {}", hash);
+                return networkLocation;
+            }
+        }
+
+        // Fall back to local assets (for user's own skins)
         return LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL);
     }
 

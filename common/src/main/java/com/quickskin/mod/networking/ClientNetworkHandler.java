@@ -56,16 +56,11 @@ public class ClientNetworkHandler {
             QuickSkin.LOGGER.info("Received {} texture from server: {} (size: {} bytes)",
                     textureType, hash, imageData.length);
 
-            // Phase 5: Store texture to client-side storage (in-memory for now)
-            // Note: In a full implementation, this would be saved to disk via LocalAssetManager
-            // For now, the texture will be sent when needed and cached by Minecraft's texture manager
+            // Store in network texture cache (not local assets, so it won't appear in skin list)
+            com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                    .storeTexture(hash, imageData);
 
-            // Phase 5: Update player appearance if needed
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                // The appearance will be updated automatically when the SYNC_APPEARANCE packet arrives
-                QuickSkin.LOGGER.debug("Texture received, appearance will be refreshed on next sync");
-            }
+            QuickSkin.LOGGER.debug("Cached {} texture from server: {}", textureType, hash);
         });
     }
 
@@ -80,22 +75,25 @@ public class ClientNetworkHandler {
         context.queue(() -> {
             QuickSkin.LOGGER.info("Received animation metadata for: {}", hash);
 
-            // Phase 7: Store and register animation metadata
+            // Store animation metadata both in memory cache and to disk
             try {
                 // Parse the JSON metadata
                 AnimationMetadata metadata = AnimationMetadata.fromJson(metadataJson);
 
-                // Store in client-side cache
+                // Store in client-side memory cache
                 ClientAnimationMetadataCache.getInstance().storeMetadata(hash, metadata);
 
-                QuickSkin.LOGGER.debug("Cached animation metadata: {} frames, {} ms total duration",
+                // Also save to disk so LocalAssetManager can find it
+                java.nio.file.Path cacheDir = com.quickskin.mod.client.services.LocalAssetManager.getInstance()
+                        .getCacheDirectory();
+                java.nio.file.Path metadataPath = cacheDir.resolve(hash + ".json");
+                java.nio.file.Files.writeString(metadataPath, metadataJson);
+
+                QuickSkin.LOGGER.debug("Saved animation metadata: {} frames, {} ms total duration",
                         metadata.frameCount(), metadata.getTotalDuration());
 
-                // The texture location will be registered with AnimatedTextureManager
-                // when the actual texture is loaded and associated with this hash
-
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to parse animation metadata for: {}", hash, e);
+                QuickSkin.LOGGER.error("Failed to save animation metadata for: {}", hash, e);
             }
         });
     }

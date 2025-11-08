@@ -99,7 +99,6 @@ public class ClientConfig {
 
             String json = GSON.toJson(this);
             Files.writeString(configPath, json);
-            QuickSkin.LOGGER.debug("Saved client configuration");
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to save client configuration", e);
         }

@@ -51,7 +51,6 @@ public class CommonEvents {
         PlayerEvent.PLAYER_RESPAWN.register((player, conqueredEnd) -> {
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
-                QuickSkin.LOGGER.debug("Player {} respawned", serverPlayer.getName().getString());
 
                 // Phase 3: Re-send all appearances to the respawned player
                 ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
@@ -60,8 +59,6 @@ public class CommonEvents {
 
         // Player changes dimension
         PlayerEvent.CHANGE_DIMENSION.register((player, oldLevel, newLevel) -> {
-            QuickSkin.LOGGER.debug("Player {} changed dimension: {} -> {}",
-                    player.getName().getString(), oldLevel.location(), newLevel.location());
 
             // Re-sync appearance if needed (sometimes skins don't transfer across dimensions)
             if (player instanceof ServerPlayer) {

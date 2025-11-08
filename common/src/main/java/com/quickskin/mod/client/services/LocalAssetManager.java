@@ -422,7 +422,7 @@ public class LocalAssetManager {
     public byte[] loadTexture(String hash, TextureQuality quality) {
         Path sourcePath = hashToSourcePath.get(hash);
         if (sourcePath == null || !Files.exists(sourcePath)) {
-            QuickSkin.LOGGER.warn("Asset not found for hash: {}", hash);
+            QuickSkin.LOGGER.debug("Asset not found for hash: {}", hash);
             return null;
         }
 

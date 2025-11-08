@@ -41,7 +41,6 @@ public class FileDialogHelper {
 
                 if (file != null && !file.isEmpty()) {
                     Path filePath = Path.of(file);
-                    QuickSkin.LOGGER.info("File selected: {}", filePath);
                     onFileSelected.accept(filePath);
                 } else {
                     QuickSkin.LOGGER.debug("File dialog cancelled");

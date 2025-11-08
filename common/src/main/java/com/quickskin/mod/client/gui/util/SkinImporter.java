@@ -156,7 +156,6 @@ public class SkinImporter {
             boolean disableTransparency = ClientConfig.getInstance().shouldDisableSkinTransparency();
             if (disableTransparency) {
                 image = HDTextureProcessor.removeTransparency(image);
-                QuickSkin.LOGGER.debug("Removed transparency from skin for: {}", username);
             }
 
             // Create filename from username

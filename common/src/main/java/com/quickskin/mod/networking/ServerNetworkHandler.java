@@ -40,11 +40,14 @@ public class ServerNetworkHandler {
             QuickSkin.LOGGER.info("Received {} upload from player: {} (size: {} bytes)",
                     textureType, player.getName().getString(), imageData.length);
 
+            // Generate hash for this texture
+            String hash = playerId.toString() + "_" + textureType;
+
             // Phase 5: Store texture to server-side storage
-            ServerTextureCache.getInstance().storeTexture(playerId, textureType, imageData);
+            ServerTextureCache.getInstance().storeTexture(hash, imageData);
 
             // Phase 3: Sync to other players
-            broadcastTextureToOtherPlayers(player, textureType, imageData);
+            broadcastTextureToOtherPlayers(player, textureType, hash, imageData);
         });
     }
 
@@ -107,6 +110,45 @@ public class ServerNetworkHandler {
     }
 
     /**
+     * Handles chunked texture upload from client
+     * Packet format: String (hash) + String (textureType) + int (chunkIndex) + int (totalChunks) + byte[] (chunkData)
+     */
+    public static void handleTextureChunk(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String hash = PacketHelper.readString(buf);
+        String textureType = PacketHelper.readString(buf);
+        int chunkIndex = buf.readInt();
+        int totalChunks = buf.readInt();
+        byte[] chunkData = PacketHelper.readByteArray(buf);
+
+        context.queue(() -> {
+            ServerPlayer player = (ServerPlayer) context.getPlayer();
+
+            if (player == null) {
+                return;
+            }
+
+            QuickSkin.LOGGER.debug("Received texture chunk {}/{} from {} (type: {}, hash: {})",
+                chunkIndex + 1, totalChunks, player.getName().getString(), textureType, hash);
+
+            // Add chunk to assembler
+            byte[] completeTexture = com.quickskin.mod.server.storage.TextureChunkAssembler.getInstance()
+                .addChunk(hash, chunkIndex, totalChunks, chunkData);
+
+            // If all chunks received, store and broadcast
+            if (completeTexture != null) {
+                QuickSkin.LOGGER.info("Received complete {} texture from player: {} (size: {} bytes)",
+                    textureType, player.getName().getString(), completeTexture.length);
+
+                // Store texture in server cache
+                ServerTextureCache.getInstance().storeTexture(hash, completeTexture);
+
+                // Broadcast texture to other players
+                broadcastTextureToOtherPlayers(player, textureType, hash, completeTexture);
+            }
+        });
+    }
+
+    /**
      * Handles animation metadata upload from client
      * Packet format: String (hash) + String (metadataJson)
      */
@@ -136,12 +178,10 @@ public class ServerNetworkHandler {
      * Broadcasts a player's texture to all other players on the server
      * @param player The player whose texture changed
      * @param textureType The type of texture ("skin" or "cape")
+     * @param hash The texture hash
      * @param imageData The texture image data
      */
-    private static void broadcastTextureToOtherPlayers(ServerPlayer player, String textureType, byte[] imageData) {
-        // Create a unique hash for this texture (for now just use player UUID + type)
-        String hash = player.getUUID().toString() + "_" + textureType;
-
+    private static void broadcastTextureToOtherPlayers(ServerPlayer player, String textureType, String hash, byte[] imageData) {
         FriendlyByteBuf packet = PacketHelper.createSendTexturePacket(textureType, hash, imageData);
 
         // Send to all players except the sender

@@ -319,7 +319,6 @@ public class PlayerSkinMenuScreen extends Screen {
         if (playerPreviewPanel != null && selectedSkin != null && isResizing) {
             // During resize, use the saved model type
             playerPreviewPanel.setCurrentModelType(savedModelType);
-            QuickSkin.LOGGER.debug("Restoring model type from resize state: {}", savedModelType);
 
             // Update the preview with the correct skin
             playerPreviewPanel.updateSkin(

@@ -49,29 +49,25 @@ public class CapeService implements ICapeService {
     @Override
     @Nullable
     public ResourceLocation getCapeLocation(UUID playerId, String capeId) {
-        QuickSkin.LOGGER.info("[CapeService] getCapeLocation called: playerId={}, capeId={}", playerId, capeId);
 
         if (capeId == null || capeId.isEmpty()) {
-            QuickSkin.LOGGER.info("[CapeService] capeId is null or empty, returning null");
+            QuickSkin.LOGGER.debug("[CapeService] capeId is null or empty, returning null");
             return null;
         }
 
         // Check if it's a local cape
         if (capeId.startsWith("local_cape:")) {
-            QuickSkin.LOGGER.info("[CapeService] Loading local cape");
             String hash = capeId.substring("local_cape:".length());
             return loadLocalCape(hash);
         }
 
         // Check if it's a known cape
         if (capeId.startsWith("known:")) {
-            QuickSkin.LOGGER.info("[CapeService] Loading known cape");
             String knownId = capeId.substring("known:".length());
             return loadKnownCape(knownId);
         }
 
         // Otherwise, it's a Mojang username
-        QuickSkin.LOGGER.info("[CapeService] Loading Mojang cape");
         return loadMojangCape(capeId);
     }
 
@@ -94,8 +90,19 @@ public class CapeService implements ICapeService {
         // Phase 5: Implement local cape loading
         QuickSkin.LOGGER.debug("Loading local cape: {}", hash);
 
-        // Use LocalAssetManager to load the cape texture
-        ResourceLocation capeLocation = LocalAssetManager.getInstance()
+        // Check network cache first (for capes received from server)
+        ResourceLocation capeLocation = null;
+        if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().hasTexture(hash)) {
+            capeLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                    .getTextureLocation(hash);
+            if (capeLocation != null) {
+                QuickSkin.LOGGER.debug("Loaded cape from network cache: {}", hash);
+                return capeLocation; // Network capes don't have animations (yet)
+            }
+        }
+
+        // Fall back to local assets (for user's own capes)
+        capeLocation = LocalAssetManager.getInstance()
                 .getTextureLocation(hash, TextureQuality.FULL);
 
         if (capeLocation != null) {

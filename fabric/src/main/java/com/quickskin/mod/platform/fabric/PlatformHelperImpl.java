@@ -19,11 +19,11 @@ public class PlatformHelperImpl {
     }
 
     public static Path getSkinsDirectory() {
-        return FabricLoader.getInstance().getGameDir().resolve("quickskin").resolve("skins");
+        return FabricLoader.getInstance().getGameDir().resolve("quickskin").resolve("uploads").resolve("skins");
     }
 
     public static Path getCapesDirectory() {
-        return FabricLoader.getInstance().getGameDir().resolve("quickskin").resolve("capes");
+        return FabricLoader.getInstance().getGameDir().resolve("quickskin").resolve("uploads").resolve("capes");
     }
 
     public static Path getConfigDirectory() {

@@ -13,7 +13,7 @@ import java.io.InputStream;
 
 /**
  * Handles HD skin processing, legacy skin conversion, and texture scaling
- * Supports skins up to 2048x1024 (32x scale factor)
+ * Supports skins up to 2048x2048 (32x scale factor)
  */
 public class HDTextureProcessor {
 
@@ -36,7 +36,6 @@ public class HDTextureProcessor {
             int width = image.getWidth();
             int height = image.getHeight();
 
-            QuickSkin.LOGGER.debug("Processing skin: {}x{}", width, height);
 
             // Check if valid resolution
             SkinResolution resolution = SkinResolution.fromDimensions(width, height);

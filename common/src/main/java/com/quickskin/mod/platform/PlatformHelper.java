@@ -27,7 +27,7 @@ public class PlatformHelper {
 
     /**
      * Gets the directory where custom skins should be stored
-     * Default: <game_dir>/quickskin/skins
+     * Default: <game_dir>/quickskin/uploads/skins
      */
     @ExpectPlatform
     public static Path getSkinsDirectory() {
@@ -36,7 +36,7 @@ public class PlatformHelper {
 
     /**
      * Gets the directory where custom capes should be stored
-     * Default: <game_dir>/quickskin/capes
+     * Default: <game_dir>/quickskin/uploads/capes
      */
     @ExpectPlatform
     public static Path getCapesDirectory() {
