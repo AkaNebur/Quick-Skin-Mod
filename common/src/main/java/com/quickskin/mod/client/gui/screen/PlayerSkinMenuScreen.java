@@ -856,6 +856,24 @@ public class PlayerSkinMenuScreen extends Screen {
     }
 
     /**
+     * Show rename dialog for a skin
+     */
+    public void showRenameDialog(AssetMetadata metadata) {
+        minecraft.setScreen(new RenameScreen(
+                this,
+                Component.literal("Rename Skin File"),
+                Component.empty(),
+                metadata.friendlyName(),
+                (newName) -> {
+                    // Rename the skin
+                    renameSkin(metadata, newName);
+                    // Return to skin menu screen
+                    minecraft.setScreen(this);
+                }
+        ));
+    }
+
+    /**
      * Truncate filename to specified length, adding ellipsis if needed
      */
     private String truncateFileName(String name, int maxLength) {
@@ -896,6 +914,58 @@ public class PlayerSkinMenuScreen extends Screen {
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to delete skin: {}", metadata.friendlyName(), e);
             showError(Component.literal("Failed to delete skin: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Rename a skin file
+     */
+    private void renameSkin(AssetMetadata metadata, String newName) {
+        LocalAssetManager.RenameResult result = LocalAssetManager.getInstance()
+                .renameLocalAsset(metadata.hash(), newName);
+
+        switch (result) {
+            case SUCCESS:
+                QuickSkin.LOGGER.info("Successfully renamed skin to: {}", newName);
+
+                // Play success sound
+                minecraft.getSoundManager().play(
+                        net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                                SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
+                        )
+                );
+
+                // Refresh the skin list to show the new name
+                refreshSkinList();
+
+                // Re-select the renamed skin
+                if (skinListPanel != null) {
+                    AssetMetadata updatedMetadata = LocalAssetManager.getInstance().getMetadata(metadata.hash());
+                    if (updatedMetadata != null) {
+                        skinListPanel.setSelected(updatedMetadata);
+                    }
+                }
+                break;
+
+            case NAME_TAKEN:
+                QuickSkin.LOGGER.warn("Rename failed: Name already exists");
+                showError(Component.literal("Error: A skin file with that name already exists."));
+                break;
+
+            case INVALID_NAME:
+                QuickSkin.LOGGER.warn("Rename failed: Invalid name");
+                showError(Component.literal("Error: The name contains invalid characters or is empty."));
+                break;
+
+            case IO_ERROR:
+                QuickSkin.LOGGER.error("Rename failed: IO error");
+                showError(Component.literal("Error: Could not rename the file. See logs."));
+                break;
+
+            case NOT_FOUND:
+                QuickSkin.LOGGER.error("Rename failed: File not found");
+                showError(Component.literal("Error: Could not find the original file."));
+                break;
         }
     }
 

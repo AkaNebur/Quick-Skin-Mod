@@ -52,6 +52,17 @@ public class LocalAssetManager {
     private SkinPreferences skinPreferences;
     private Path preferencesFile;
 
+    /**
+     * Result enum for rename operations
+     */
+    public enum RenameResult {
+        SUCCESS,
+        NAME_TAKEN,
+        INVALID_NAME,
+        IO_ERROR,
+        NOT_FOUND
+    }
+
     private LocalAssetManager() {
         // Private constructor for singleton
     }
@@ -539,6 +550,100 @@ public class LocalAssetManager {
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to delete asset: {}", path, e);
             return false;
+        }
+    }
+
+    /**
+     * Rename a local asset file
+     * @param hash The hash of the asset to rename
+     * @param newFriendlyName The new friendly name (without extension)
+     * @return RenameResult indicating success or failure reason
+     */
+    public RenameResult renameLocalAsset(String hash, String newFriendlyName) {
+        // Validate the new name
+        if (newFriendlyName == null || newFriendlyName.trim().isEmpty()) {
+            return RenameResult.INVALID_NAME;
+        }
+
+        // Check for invalid characters in filename
+        String sanitizedName = newFriendlyName.trim();
+        if (sanitizedName.matches(".*[<>:\"/\\\\|?*].*")) {
+            return RenameResult.INVALID_NAME;
+        }
+
+        // Get the metadata for this asset
+        AssetMetadata metadata = metadataCache.get(hash);
+        if (metadata == null) {
+            return RenameResult.NOT_FOUND;
+        }
+
+        // Get the current file path
+        Path currentPath = hashToSourcePath.get(hash);
+        if (currentPath == null || !Files.exists(currentPath)) {
+            return RenameResult.NOT_FOUND;
+        }
+
+        // Determine the parent directory and file extension
+        Path parentDir = currentPath.getParent();
+        String extension = currentPath.getFileName().toString();
+        int dotIndex = extension.lastIndexOf('.');
+        if (dotIndex > 0) {
+            extension = extension.substring(dotIndex);
+        } else {
+            extension = ".png"; // Default to .png if no extension found
+        }
+
+        // Create the new file path
+        Path newPath = parentDir.resolve(sanitizedName + extension);
+
+        // Check if a file with the new name already exists
+        if (Files.exists(newPath) && !newPath.equals(currentPath)) {
+            return RenameResult.NAME_TAKEN;
+        }
+
+        try {
+            // Rename the file
+            Files.move(currentPath, newPath, StandardCopyOption.REPLACE_EXISTING);
+
+            // Update the metadata cache with new friendly name and path
+            AssetMetadata updatedMetadata;
+            if ("skin".equals(metadata.type())) {
+                updatedMetadata = AssetMetadata.forSkin(
+                    metadata.hash(),
+                    sanitizedName,
+                    newPath,
+                    metadata.resolution(),
+                    metadata.fileSize(),
+                    metadata.skinModel()
+                );
+            } else if (metadata.isAnimated()) {
+                updatedMetadata = AssetMetadata.forAnimatedCape(
+                    metadata.hash(),
+                    sanitizedName,
+                    newPath,
+                    metadata.resolution(),
+                    metadata.fileSize(),
+                    metadata.frameCount()
+                );
+            } else {
+                updatedMetadata = AssetMetadata.forCape(
+                    metadata.hash(),
+                    sanitizedName,
+                    newPath,
+                    metadata.resolution(),
+                    metadata.fileSize()
+                );
+            }
+
+            metadataCache.put(hash, updatedMetadata);
+            hashToSourcePath.put(hash, newPath);
+
+            QuickSkin.LOGGER.info("Renamed asset from '{}' to '{}'", currentPath, newPath);
+            return RenameResult.SUCCESS;
+
+        } catch (IOException e) {
+            QuickSkin.LOGGER.error("Failed to rename asset: {}", currentPath, e);
+            return RenameResult.IO_ERROR;
         }
     }
 

@@ -159,4 +159,11 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
     public void requestDeletion(SkinEntry entry) {
         parentScreen.showDeleteConfirmation(entry.getMetadata());
     }
+
+    /**
+     * Request rename dialog for a skin
+     */
+    public void requestRename(SkinEntry entry) {
+        parentScreen.showRenameDialog(entry.getMetadata());
+    }
 }

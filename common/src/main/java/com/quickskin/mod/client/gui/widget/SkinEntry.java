@@ -31,7 +31,9 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     // Action button state
     private final int actionButtonSize = 11;
     private int deleteButtonX, deleteButtonY;
+    private int editButtonX, editButtonY;
     private boolean isDeleteHovered;
+    private boolean isEditHovered;
 
     public SkinEntry(SkinListWidget parentList, AssetMetadata metadata) {
         this.parentList = parentList;
@@ -129,6 +131,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
 
         // Render action buttons on hover (but not for player's own skin)
         this.isDeleteHovered = false;
+        this.isEditHovered = false;
 
         // Check if this is the player's own skin
         ClientConfig config = ClientConfig.getInstance();
@@ -148,6 +151,20 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             graphics.drawString(mc.font, "x", deleteButtonX + 3, deleteButtonY + 1, 0xFFFFFF);
 
             this.isDeleteHovered = deleteHovered;
+
+            // Render edit/rename button below delete button
+            this.editButtonX = this.deleteButtonX;
+            this.editButtonY = this.deleteButtonY + this.actionButtonSize + 2;
+
+            boolean editHovered = mouseX >= editButtonX && mouseX < editButtonX + actionButtonSize &&
+                                 mouseY >= editButtonY && mouseY < editButtonY + actionButtonSize;
+
+            graphics.fill(editButtonX, editButtonY,
+                editButtonX + actionButtonSize, editButtonY + actionButtonSize,
+                editHovered ? 0xA040C0C0 : 0x80408080);
+            graphics.drawString(mc.font, "✎", editButtonX + 2, editButtonY + 1, 0xFFFFFFFF);
+
+            this.isEditHovered = editHovered;
         }
     }
 
@@ -157,6 +174,12 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             if (this.isDeleteHovered) {
                 // Request deletion confirmation from parent
                 parentList.requestDeletion(this);
+                return true;
+            }
+
+            if (this.isEditHovered) {
+                // Request rename from parent
+                parentList.requestRename(this);
                 return true;
             }
 
