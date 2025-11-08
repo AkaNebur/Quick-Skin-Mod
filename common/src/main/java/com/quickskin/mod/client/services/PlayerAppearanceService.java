@@ -88,19 +88,11 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
         // Update cape
         if (capeId != null) {
-            // Unregister old animation if cape is changing
-            String oldCapeId = appearance.getCapeId();
-            if (oldCapeId != null && !oldCapeId.equals(capeId) && (oldCapeId.startsWith("local_cape:") || oldCapeId.startsWith("known:"))) {
-                String animationId = null;
-                if (oldCapeId.startsWith("local_cape:")) {
-                    animationId = "cape_" + oldCapeId.substring("local_cape:".length());
-                } else if (oldCapeId.startsWith("known:")) {
-                    animationId = "cape_known_" + oldCapeId.substring("known:".length());
-                }
-                if (animationId != null) {
-                    AnimatedTextureManager.getInstance().unregisterAnimation(animationId);
-                }
-            }
+            // NOTE: We do NOT unregister the old animation when switching capes.
+            // Animations are needed for thumbnail rendering in the capes menu, and unregistering
+            // them would cause thumbnails to fall back to the full atlas texture, displaying
+            // all frames at once. Animations will be cleaned up when appropriate (e.g., when
+            // the player disconnects or leaves the world).
 
             appearance.setCapeId(capeId);
             appearance.setCapeLocation(null);
@@ -208,19 +200,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     public void removeCape(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
         if (appearance != null) {
-            // Unregister animation when removing cape
-            String oldCapeId = appearance.getCapeId();
-            if (oldCapeId != null && (oldCapeId.startsWith("local_cape:") || oldCapeId.startsWith("known:"))) {
-                String animationId = null;
-                if (oldCapeId.startsWith("local_cape:")) {
-                    animationId = "cape_" + oldCapeId.substring("local_cape:".length());
-                } else if (oldCapeId.startsWith("known:")) {
-                    animationId = "cape_known_" + oldCapeId.substring("known:".length());
-                }
-                if (animationId != null) {
-                    AnimatedTextureManager.getInstance().unregisterAnimation(animationId);
-                }
-            }
+            // NOTE: We do NOT unregister animations when removing a cape.
+            // Animations are needed for thumbnail rendering in the capes menu.
+            // They will be cleaned up when appropriate (e.g., menu closes, player disconnects).
 
             appearance.setCapeId("");
             appearance.setCapeLocation(null);

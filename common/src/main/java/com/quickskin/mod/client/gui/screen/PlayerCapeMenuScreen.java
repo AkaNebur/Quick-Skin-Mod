@@ -1145,38 +1145,12 @@ public class PlayerCapeMenuScreen extends Screen {
         // Get the config
         ClientConfig config = ClientConfig.getInstance();
 
-        // Unregister old animation if cape is changing
-        String oldCapeId = config.activeCapeHash;
-        if (oldCapeId != null && !oldCapeId.equals(capeId) &&
-            (oldCapeId.startsWith("local_cape:") || oldCapeId.startsWith("known:"))) {
-            String animationId = null;
-            if (oldCapeId.startsWith("local_cape:")) {
-                animationId = "cape_" + oldCapeId.substring("local_cape:".length());
-            } else if (oldCapeId.startsWith("known:")) {
-                animationId = "cape_known_" + oldCapeId.substring("known:".length());
-            }
-            if (animationId != null) {
-                com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
-                        .unregisterAnimation(animationId);
-                QuickSkin.LOGGER.info("[PlayerCapeMenuScreen] Unregistered old animation: {}", animationId);
-
-                // Re-register the old cape's animation for thumbnail display
-                // This ensures thumbnails don't glitch when switching capes
-                if (oldCapeId.startsWith("local_cape:")) {
-                    String hash = oldCapeId.substring("local_cape:".length());
-                    ResourceLocation oldCapeLocation = com.quickskin.mod.client.services.LocalAssetManager.getInstance()
-                        .getTextureLocation(hash, com.quickskin.mod.common.data.TextureQuality.FULL);
-                    if (oldCapeLocation != null) {
-                        com.quickskin.mod.client.services.CapeService.getInstance()
-                            .getCapeLocation(null, oldCapeId);
-                    }
-                } else if (oldCapeId.startsWith("known:")) {
-                    String knownId = oldCapeId.substring("known:".length());
-                    com.quickskin.mod.client.services.CapeService.getInstance()
-                        .loadKnownCape(knownId);
-                }
-            }
-        }
+        // NOTE: We do NOT unregister the old animation while the menu is open.
+        // All animated capes are pre-registered in registerAllAnimations() for thumbnail display.
+        // If we unregister an animation when switching capes, the old cape's thumbnail will
+        // fall back to using the full atlas texture, displaying all frames at once instead of
+        // animating properly. Animations will be cleaned up appropriately when the menu closes
+        // or when the game state changes (e.g., leaving the world).
 
         // IMPORTANT: Call CapeService.getCapeLocation() to trigger animation registration
         // This must be done BEFORE setting the preview widget
