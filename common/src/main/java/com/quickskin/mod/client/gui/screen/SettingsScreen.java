@@ -71,6 +71,7 @@ public class SettingsScreen extends Screen {
     private Checkbox showOverlayCheckbox;
     private Checkbox skinLayers3DCompatCheckbox;
     private Checkbox disableSkinTransparencyCheckbox;
+    private Checkbox enablePlayerPreviewCustomizationCheckbox;
     private Button keybindButton;
 
     // State for keybind editing
@@ -158,6 +159,16 @@ public class SettingsScreen extends Screen {
                 config.showSkinPreviewOverlay
         );
         clientSettingWidgets.add(showOverlayCheckbox);
+        currentLeftY += spacing;
+
+        // Player Preview Customization Settings
+        enablePlayerPreviewCustomizationCheckbox = new Checkbox(
+                leftColumnX, currentLeftY,
+                checkboxSize, checkboxSize,
+                Component.literal("Enable Preview Customization"),
+                config.enablePlayerPreviewCustomization
+        );
+        clientSettingWidgets.add(enablePlayerPreviewCustomizationCheckbox);
         currentLeftY += spacing;
 
         // Keybind button and label
@@ -402,6 +413,7 @@ public class SettingsScreen extends Screen {
             config.showSkinPreviewOverlay = showOverlayCheckbox.selected();
             config.skinLayers3DCompat = skinLayers3DCompatCheckbox.selected();
             config.disableSkinTransparency = disableSkinTransparencyCheckbox.selected();
+            config.enablePlayerPreviewCustomization = enablePlayerPreviewCustomizationCheckbox.selected();
 
             // If transparency setting changed, clear texture cache and refresh player
             if (oldTransparencySetting != config.disableSkinTransparency) {

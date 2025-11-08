@@ -24,6 +24,23 @@ public class ClientConfig {
     public String overlayPosition = "BOTTOM_RIGHT"; // TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
     public int previewScale = 30;
     public int guiScale = 1; // GUI scaling factor (1-4)
+    public boolean enablePlayerPreviewCustomization = false; // Enable customization (resize, reposition) of player previews
+
+    // Player Preview Slider Percentages (1-100%) for different contexts
+    public int sizeModelPreviewPercentageTitleScreen = 33; // Title screen player preview size
+    public int sizeModelPreviewPercentageSkinMenu = 37; // Skin menu player preview size
+    public int sizeModelPreviewPercentageCapeMenu = 37; // Cape menu player preview size
+    public int sizeModelPreviewPercentagePauseMenu = 32; // In-game pause menu player preview size
+
+    // Player Preview Position Offsets (X, Y) for different contexts
+    public int positionOffsetXTitleScreen = 4; // Title screen X offset
+    public int positionOffsetYTitleScreen = 0; // Title screen Y offset
+    public int positionOffsetXSkinMenu = -3; // Skin menu X offset
+    public int positionOffsetYSkinMenu = 1; // Skin menu Y offset
+    public int positionOffsetXCapeMenu = 0; // Cape menu X offset
+    public int positionOffsetYCapeMenu = 0; // Cape menu Y offset
+    public int positionOffsetXPauseMenu = -1; // Pause menu X offset
+    public int positionOffsetYPauseMenu = 2; // Pause menu Y offset
 
     // Animation Settings
     public float animationSpeed = 1.0f; // Default animation speed (deprecated, use per-cape speeds)

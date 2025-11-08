@@ -278,6 +278,7 @@ public class PlayerCapeMenuScreen extends Screen {
                 this.playerWidgetX, this.playerWidgetY,
                 this.playerWidgetWidth, this.playerWidgetHeight,
                 skinLocation, null, null, modelType));
+        this.playerWidget.setContext(com.quickskin.mod.client.gui.widget.PlayerWidget.WidgetContext.CAPE_MENU);
 
         // Set custom reference point to right side center of capes grid with fixed offset
         int referenceX = this.gridX + this.gridWidth + MODEL_OFFSET_X;

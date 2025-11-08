@@ -42,6 +42,9 @@ public class QuickSkinClient {
         LocalAssetManager.getInstance().init();
         LocalAppearanceStorage.getInstance().init(PlatformHelper.getConfigDirectory());
 
+        // Phase 6: Auto-select player's own skin if no skin is currently selected
+        ClientEvents.autoSelectPlayerOwnSkin();
+
         // Phase 7: Animation service (AnimatedTextureManager is lazy-initialized)
         // Ticking is handled in ClientEvents
 

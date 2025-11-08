@@ -125,8 +125,7 @@ public class PlayerModelRenderer {
         Player playerToRender = cachedPlayer;
 
         // If no cached player exists (fresh game launch), use manual rendering
-        // OR if we have a preview cape to show (cached player path doesn't support preview capes)
-        if (playerToRender == null || playerData.getCapeLocation() != null) {
+        if (playerToRender == null) {
             renderPlayerModelManual(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);
             return;
         }
@@ -207,9 +206,7 @@ public class PlayerModelRenderer {
         poseStack.pushPose();
 
         // Match InventoryScreen.renderEntityInInventory() transformations
-        double finalX = (double)x + debugOffsetX;
-        double finalY = (double)y + debugOffsetY;
-        poseStack.translate(finalX, finalY, 50.0);
+        poseStack.translate((double)x, (double)y, 50.0);
 
         // Apply scale (negative Z flips the model to face forward)
         // Cast to int to match InventoryScreen.renderEntityInInventory() behavior
@@ -217,16 +214,20 @@ public class PlayerModelRenderer {
         Matrix4f scaleMatrix = (new Matrix4f()).scaling(scaleCasted, scaleCasted, -scaleCasted);
         poseStack.mulPoseMatrix(scaleMatrix);
 
-        // Apply rotations
+        // Apply rotations - match InventoryScreen's quaternion
         Quaternionf quaternionf = (new Quaternionf()).rotateZ((float)Math.PI);
         poseStack.mulPose(quaternionf);
 
-        // Additional rotations needed for manual rendering (not needed when using InventoryScreen)
-        poseStack.mulPose(Axis.XP.rotationDegrees(180.0f));
-        poseStack.mulPose(Axis.YP.rotationDegrees(180.0f));
+        // === NOW MATCH LivingEntityRenderer.render() EXACTLY ===
 
-        // Apply body rotation (yRotation parameter from PlayerWidget)
-        poseStack.mulPose(Axis.YP.rotationDegrees(yRotation));
+        // Body rotation (without the 180 degree offset)
+        poseStack.mulPose(Axis.YP.rotationDegrees(-yRotation));
+
+        // Flip the model (line 82 in LivingEntityRenderer)
+        poseStack.scale(-1.0F, -1.0F, 1.0F);
+
+        // CRITICAL: Position the model at feet (line 84 in LivingEntityRenderer)
+        poseStack.translate(0.0F, -1.501F, 0.0F);
 
         // Lighting.setupForEntityInInventory();
         Lighting.setupForEntityInInventory();

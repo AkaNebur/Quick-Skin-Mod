@@ -11,6 +11,7 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -31,7 +32,35 @@ public class PlayerWidget extends AbstractWidget {
 
     // Display settings
     private float scale = 87.2f; // 10% smaller than previous (96.9 * 0.9 = 87.21)
+    private static final float DEFAULT_SCALE = 87.2f; // Default scale value
+    private static final float MIN_SCALE = 20.0f; // Minimum scale for resize
+    private static final float MAX_SCALE = 200.0f; // Maximum scale for resize
+    private static final float SCALE_STEP = 3.0f; // Scale change per scroll tick (smaller for smoother resizing)
 
+    // Pivot point for scaling (at the feet position - where the red crosshair is)
+    private static final float PIVOT_OFFSET = 0.0f; // No offset - pivot at feet (crosshair position)
+
+    // Dragging state for repositioning
+    private boolean isDragging = false;
+    private int dragStartX = 0;
+    private int dragStartY = 0;
+    private int dragStartOffsetX = 0;
+    private int dragStartOffsetY = 0;
+
+    // Cached model bounds for mouse interaction (updated each frame in renderWidget)
+    private int cachedModelCenterX = 0;
+    private int cachedModelCenterY = 0;
+    private float cachedScale = DEFAULT_SCALE;
+
+    // Context type for this widget
+    public enum WidgetContext {
+        TITLE_SCREEN,
+        SKIN_MENU,
+        CAPE_MENU,
+        PAUSE_MENU,
+        OTHER
+    }
+    private WidgetContext context = WidgetContext.OTHER;
 
     // Button references for positioning (like the original mod)
     private net.minecraft.client.gui.components.Button autoButton = null;
@@ -79,11 +108,16 @@ public class PlayerWidget extends AbstractWidget {
     /**
      * Get the X position for model rendering (dynamically calculated)
      * Uses custom reference first, then model buttons if available, otherwise widget center
+     * Applies saved position offset from config
      */
     private int getModelCenterX() {
+        // Get saved offset from config
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        int offsetX = getPositionOffsetXFromConfig(config);
+
         // Priority 1: Custom reference point
         if (customCenterX != null) {
-            return customCenterX;
+            return customCenterX + offsetX;
         }
         // Priority 2: In skin menu: Center of all three model buttons (Auto, Wide, Slim)
         if (autoButton != null && slimButton != null) {
@@ -91,35 +125,60 @@ public class PlayerWidget extends AbstractWidget {
             int leftEdge = autoButton.getX();
             int rightEdge = slimButton.getX() + slimButton.getWidth();
             int middleX = (leftEdge + rightEdge) / 2;
-            return middleX;
+            return middleX + offsetX;
         }
         // Priority 3: Fallback: if only classic/slim buttons exist
         else if (classicButton != null && slimButton != null) {
             int classicCenterX = classicButton.getX() + classicButton.getWidth() / 2;
             int slimCenterX = slimButton.getX() + slimButton.getWidth() / 2;
             int middleX = (classicCenterX + slimCenterX) / 2;
-            return middleX;
+            return middleX + offsetX;
         }
         // Priority 4: Fallback to widget center if no reference
-        return getX() + getWidth() / 2;
+        return getX() + getWidth() / 2 + offsetX;
     }
 
     /**
-     * Get the Y position for model rendering (dynamically calculated)
+     * Get the base Y position for model rendering (without scale adjustments)
      * Uses custom reference first, then Classic/Slim buttons if available, otherwise widget center
+     * Applies saved position offset from config
      */
-    private int getModelCenterY() {
+    private int getBaseModelCenterY() {
+        // Get saved offset from config
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        int offsetY = getPositionOffsetYFromConfig(config);
+
         // Priority 1: Custom reference point
         if (customCenterY != null) {
-            return customCenterY;
+            return customCenterY + offsetY;
         }
         // Priority 2: In skin menu: Classic button Y coordinate (Classic and Slim are on same Y)
         if (classicButton != null) {
             int buttonCenterY = classicButton.getY() + classicButton.getHeight() / 2;
-            return (int)(buttonCenterY + DEFAULT_OFFSET_FROM_BUTTON_Y);
+            return (int)(buttonCenterY + DEFAULT_OFFSET_FROM_BUTTON_Y) + offsetY;
         }
         // Priority 3: Fallback to widget center if no reference
-        return getY() + getHeight() / 2 + 10; // Offset down slightly
+        return getY() + getHeight() / 2 + 10 + offsetY; // Offset down slightly
+    }
+
+    /**
+     * Get the Y position for model rendering (adjusted for current scale with pivot point)
+     * The pivot point is below the model's feet, so scaling keeps that point fixed
+     */
+    private int getModelCenterY() {
+        int baseY = getBaseModelCenterY();
+
+        // Calculate the pivot point Y (at default scale, it's PIVOT_OFFSET below the model center)
+        // This point remains fixed regardless of scale
+        float pivotY = baseY + PIVOT_OFFSET;
+
+        // Calculate where the model center should be based on current scale
+        // As scale increases, model moves up (away from pivot)
+        // As scale decreases, model moves down (toward pivot)
+        float scaleRatio = scale / DEFAULT_SCALE;
+        float offsetFromPivot = PIVOT_OFFSET * scaleRatio;
+
+        return (int)(pivotY - offsetFromPivot);
     }
 
     /**
@@ -143,8 +202,134 @@ public class PlayerWidget extends AbstractWidget {
         this.customCenterY = centerY;
     }
 
+    /**
+     * Set the context for this widget (determines slider positioning)
+     * @param context The context (TITLE_SCREEN, SKIN_MENU, or OTHER)
+     */
+    public void setContext(WidgetContext context) {
+        this.context = context;
+    }
+
+    /**
+     * Get the slider percentage from config based on current context
+     */
+    private int getSliderPercentageFromConfig(com.quickskin.mod.config.ClientConfig config) {
+        switch (context) {
+            case TITLE_SCREEN:
+                return config.sizeModelPreviewPercentageTitleScreen;
+            case SKIN_MENU:
+                return config.sizeModelPreviewPercentageSkinMenu;
+            case CAPE_MENU:
+                return config.sizeModelPreviewPercentageCapeMenu;
+            case PAUSE_MENU:
+                return config.sizeModelPreviewPercentagePauseMenu;
+            default:
+                return 50; // Default 50%
+        }
+    }
+
+    /**
+     * Save the slider percentage to config based on current context
+     */
+    private void saveSliderPercentageToConfig(int percentage) {
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        switch (context) {
+            case TITLE_SCREEN:
+                config.sizeModelPreviewPercentageTitleScreen = percentage;
+                break;
+            case SKIN_MENU:
+                config.sizeModelPreviewPercentageSkinMenu = percentage;
+                break;
+            case CAPE_MENU:
+                config.sizeModelPreviewPercentageCapeMenu = percentage;
+                break;
+            case PAUSE_MENU:
+                config.sizeModelPreviewPercentagePauseMenu = percentage;
+                break;
+            case OTHER:
+                // Don't save for OTHER context
+                break;
+        }
+        config.save();
+        QuickSkin.LOGGER.info("Saved {}% to config for context: {}", percentage, context);
+    }
+
+    /**
+     * Get the position X offset from config based on current context
+     */
+    private int getPositionOffsetXFromConfig(com.quickskin.mod.config.ClientConfig config) {
+        switch (context) {
+            case TITLE_SCREEN:
+                return config.positionOffsetXTitleScreen;
+            case SKIN_MENU:
+                return config.positionOffsetXSkinMenu;
+            case CAPE_MENU:
+                return config.positionOffsetXCapeMenu;
+            case PAUSE_MENU:
+                return config.positionOffsetXPauseMenu;
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * Get the position Y offset from config based on current context
+     */
+    private int getPositionOffsetYFromConfig(com.quickskin.mod.config.ClientConfig config) {
+        switch (context) {
+            case TITLE_SCREEN:
+                return config.positionOffsetYTitleScreen;
+            case SKIN_MENU:
+                return config.positionOffsetYSkinMenu;
+            case CAPE_MENU:
+                return config.positionOffsetYCapeMenu;
+            case PAUSE_MENU:
+                return config.positionOffsetYPauseMenu;
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * Save position offsets to config based on current context
+     */
+    private void savePositionOffsetsToConfig(int offsetX, int offsetY) {
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        switch (context) {
+            case TITLE_SCREEN:
+                config.positionOffsetXTitleScreen = offsetX;
+                config.positionOffsetYTitleScreen = offsetY;
+                break;
+            case SKIN_MENU:
+                config.positionOffsetXSkinMenu = offsetX;
+                config.positionOffsetYSkinMenu = offsetY;
+                break;
+            case CAPE_MENU:
+                config.positionOffsetXCapeMenu = offsetX;
+                config.positionOffsetYCapeMenu = offsetY;
+                break;
+            case PAUSE_MENU:
+                config.positionOffsetXPauseMenu = offsetX;
+                config.positionOffsetYPauseMenu = offsetY;
+                break;
+            case OTHER:
+                // Don't save for OTHER context
+                return;
+        }
+        config.save();
+        QuickSkin.LOGGER.info("Saved position offset ({}, {}) to config for context: {}", offsetX, offsetY, context);
+    }
+
     @Override
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Load and apply scale from config
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        int savedPercentage = getSliderPercentageFromConfig(config);
+
+        // Convert percentage (1-100%) to scale value
+        float percentageAsFloat = (savedPercentage - 1) / 99.0f; // Convert 1-100 to 0.0-1.0
+        scale = MIN_SCALE + percentageAsFloat * (MAX_SCALE - MIN_SCALE);
+
         // Ensure cape animation is registered before rendering
         if (previewData.getCapeId() != null && previewData.getCapeLocation() != null) {
             String capeId = previewData.getCapeId();
@@ -202,6 +387,11 @@ public class PlayerWidget extends AbstractWidget {
         int modelCenterX = getModelCenterX();
         int modelCenterY = getModelCenterY();
 
+        // Cache these values for mouse interaction
+        cachedModelCenterX = modelCenterX;
+        cachedModelCenterY = modelCenterY;
+        cachedScale = scale;
+
         // Update preview data
         previewData.setYRotation(bodyYaw);
         previewData.setHeadYaw(0.0f);
@@ -220,6 +410,48 @@ public class PlayerWidget extends AbstractWidget {
                 mouseY,
                 false
         );
+
+        // Render border around actual player model rendering area (only if customization is enabled)
+        if (config.enablePlayerPreviewCustomization) {
+            renderModelBorder(graphics, modelCenterX, modelCenterY, scale);
+        }
+    }
+
+    /**
+     * Render a border around where the player model is actually rendered (for debugging/positioning)
+     */
+    private void renderModelBorder(GuiGraphics graphics, int centerX, int centerY, float scale) {
+        // Approximate the player model bounds
+        // A Minecraft player is ~1.8 blocks tall, and with scale, this gives us the visual height
+        // The width is approximately 60% of the height for a standing player
+        int modelHeight = (int)(scale * 2.0f); // Approximate rendered height
+        int modelWidth = (int)(modelHeight * 0.6f); // Approximate rendered width
+
+        // Calculate bounding box (model is centered horizontally, feet at centerY)
+        int left = centerX - modelWidth / 2;
+        int right = centerX + modelWidth / 2;
+        int top = centerY - modelHeight;
+        int bottom = centerY;
+
+        // Draw border (2 pixels thick for visibility) in bright green
+        int borderColor = 0xFF00FF00; // Bright green
+
+        // Top edge
+        graphics.fill(left, top, right, top + 2, borderColor);
+        // Bottom edge
+        graphics.fill(left, bottom - 2, right, bottom, borderColor);
+        // Left edge
+        graphics.fill(left, top, left + 2, bottom, borderColor);
+        // Right edge
+        graphics.fill(right - 2, top, right, bottom, borderColor);
+
+        // Draw center crosshair to show exact model center
+        int crosshairSize = 5;
+        int crosshairColor = 0xFFFF0000; // Red
+        // Horizontal line
+        graphics.fill(centerX - crosshairSize, centerY - 1, centerX + crosshairSize, centerY + 1, crosshairColor);
+        // Vertical line
+        graphics.fill(centerX - 1, centerY - crosshairSize, centerX + 1, centerY + crosshairSize, crosshairColor);
     }
 
 
@@ -292,14 +524,117 @@ public class PlayerWidget extends AbstractWidget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Return false to indicate the click was not handled
-        return false;
+        // Check if customization feature is enabled and left click
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        if (!config.enablePlayerPreviewCustomization || button != 0) {
+            return false;
+        }
+
+        // Check if mouse is inside the model rendering area (green debug border area)
+        if (!isMouseOverModelArea(mouseX, mouseY, cachedModelCenterX, cachedModelCenterY, cachedScale)) {
+            return false;
+        }
+
+        // Start dragging
+        isDragging = true;
+        dragStartX = (int)mouseX;
+        dragStartY = (int)mouseY;
+        dragStartOffsetX = getPositionOffsetXFromConfig(config);
+        dragStartOffsetY = getPositionOffsetYFromConfig(config);
+
+        QuickSkin.LOGGER.info("Started dragging player preview at ({}, {})", mouseX, mouseY);
+        return true;
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        // Return false to indicate the release was not handled
-        return false;
+        if (!isDragging || button != 0) {
+            return false;
+        }
+
+        // Stop dragging
+        isDragging = false;
+        QuickSkin.LOGGER.info("Stopped dragging player preview at ({}, {})", mouseX, mouseY);
+        return true;
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (!isDragging || button != 0) {
+            return false;
+        }
+
+        // Calculate new offsets based on drag distance
+        int deltaX = (int)mouseX - dragStartX;
+        int deltaY = (int)mouseY - dragStartY;
+
+        int newOffsetX = dragStartOffsetX + deltaX;
+        int newOffsetY = dragStartOffsetY + deltaY;
+
+        // Save the new offsets to config
+        savePositionOffsetsToConfig(newOffsetX, newOffsetY);
+
+        return true;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        // Check if customization feature is enabled
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        if (!config.enablePlayerPreviewCustomization) {
+            return false;
+        }
+
+        // Check if mouse is inside the model rendering area (green debug border area)
+        if (!isMouseOverModelArea(mouseX, mouseY, cachedModelCenterX, cachedModelCenterY, cachedScale)) {
+            return false;
+        }
+
+        // Adjust scale based on scroll direction
+        float oldScale = scale;
+        scale += (float)delta * SCALE_STEP;
+
+        // Clamp to min/max
+        scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+
+        // Only save if scale actually changed
+        if (scale != oldScale) {
+            // Calculate and save percentage
+            float scaleRange = MAX_SCALE - MIN_SCALE;
+            float currentScaleOffset = scale - MIN_SCALE;
+            int percentage = Math.round((currentScaleOffset / scaleRange) * 99.0f) + 1; // 1-100%
+
+            // Save to config
+            saveSliderPercentageToConfig(percentage);
+        }
+
+        return true; // Consume the scroll event
+    }
+
+    /**
+     * Check if mouse is over this widget (full widget bounds)
+     */
+    @Override
+    public boolean isMouseOver(double mouseX, double mouseY) {
+        return mouseX >= getX() && mouseX < getX() + getWidth() &&
+               mouseY >= getY() && mouseY < getY() + getHeight();
+    }
+
+    /**
+     * Check if mouse is over the player model rendering area (the green debug border area)
+     */
+    private boolean isMouseOverModelArea(double mouseX, double mouseY, int centerX, int centerY, float scale) {
+        // Calculate the same bounds as renderModelBorder()
+        int modelHeight = (int)(scale * 2.0f);
+        int modelWidth = (int)(modelHeight * 0.6f);
+
+        int left = centerX - modelWidth / 2;
+        int right = centerX + modelWidth / 2;
+        int top = centerY - modelHeight;
+        int bottom = centerY;
+
+        return mouseX >= left && mouseX <= right &&
+               mouseY >= top && mouseY <= bottom;
     }
 
     @Override

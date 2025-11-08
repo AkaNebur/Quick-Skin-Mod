@@ -74,6 +74,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 null, // No cape ID initially
                 "classic" // Default model type
         );
+        playerWidget.setContext(com.quickskin.mod.client.gui.widget.PlayerWidget.WidgetContext.SKIN_MENU);
         screen.registerWidget(playerWidget);
     }
 

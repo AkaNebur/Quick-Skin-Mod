@@ -326,6 +326,12 @@ public class ClientEvents {
             }
 
             playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, capeLocation, capeId, modelType);
+            // Set context based on screen type
+            if ("title".equals(screenType)) {
+                playerWidget.setContext(com.quickskin.mod.client.gui.widget.PlayerWidget.WidgetContext.TITLE_SCREEN);
+            } else if ("pause".equals(screenType)) {
+                playerWidget.setContext(com.quickskin.mod.client.gui.widget.PlayerWidget.WidgetContext.PAUSE_MENU);
+            }
             screenAccess.addRenderableWidget(playerWidget);
 
             // Restore saved rotation state
@@ -495,6 +501,15 @@ public class ClientEvents {
                 QuickSkin.LOGGER.info("Player's skin already exists in list as '{}' - marking it as player's own skin",
                     existingSkin.friendlyName());
             } else {
+                // If player had a different base skin before, delete it to prevent accumulation
+                if (!config.playerOwnSkinHash.isEmpty() && !config.playerOwnSkinHash.equals(downloadedHash)) {
+                    AssetMetadata oldBaseSkin = LocalAssetManager.getInstance().getMetadata(config.playerOwnSkinHash);
+                    if (oldBaseSkin != null) {
+                        QuickSkin.LOGGER.info("Deleting old base skin '{}' before saving new one", oldBaseSkin.friendlyName());
+                        LocalAssetManager.getInstance().deleteAsset(config.playerOwnSkinHash);
+                    }
+                }
+
                 // Skin doesn't exist, save it
                 java.nio.file.Path skinPath = com.quickskin.mod.client.gui.util.SkinImporter.saveSkinImage(skinData.image, skinData.username);
                 if (skinPath != null) {
@@ -545,6 +560,8 @@ public class ClientEvents {
                     // Player not in world yet, skin will be applied when they join
                     QuickSkin.LOGGER.info("Auto-selected player's own skin (will apply on world join): {}", skinData.username);
                 }
+            } else {
+                QuickSkin.LOGGER.info("Active skin already set, not auto-selecting player's own skin");
             }
 
             config.save();
@@ -563,11 +580,11 @@ public class ClientEvents {
      */
     private static void restoreSavedAppearance(LocalPlayer player) {
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        com.quickskin.mod.client.services.LocalAssetManager assetManager =
+                com.quickskin.mod.client.services.LocalAssetManager.getInstance();
 
         // Check if there's a saved skin
         if (!config.activeSkinHash.isEmpty()) {
-            com.quickskin.mod.client.services.LocalAssetManager assetManager =
-                    com.quickskin.mod.client.services.LocalAssetManager.getInstance();
             com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
 
             if (metadata != null) {
@@ -583,6 +600,29 @@ public class ClientEvents {
             } else {
                 QuickSkin.LOGGER.warn("Saved skin hash not found in assets: {}", config.activeSkinHash);
             }
+        } else if (!config.playerOwnSkinHash.isEmpty()) {
+            // No skin selected, but player's own skin exists - auto-select it
+            com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.playerOwnSkinHash);
+
+            if (metadata != null) {
+                // Auto-select and apply the player's own skin
+                config.activeSkinHash = config.playerOwnSkinHash;
+                config.save();
+
+                String skinId = "local_skin:" + metadata.hash();
+                String modelType = assetManager.getSkinModelPreference(config.playerOwnSkinHash);
+
+                // If auto mode, use the detected model from the skin
+                if ("auto".equals(modelType)) {
+                    modelType = metadata.skinModel();
+                }
+
+                com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                        .applySkin(player.getUUID(), skinId, modelType);
+
+                QuickSkin.LOGGER.info("Auto-selected and applied player's own skin: {} with model type: {}",
+                        metadata.friendlyName(), modelType);
+            }
         }
 
         // Check if there's a saved cape
@@ -593,6 +633,32 @@ public class ClientEvents {
                     .applyCape(player.getUUID(), capeId);
 
             QuickSkin.LOGGER.info("Restored saved cape: {}", capeId);
+        }
+    }
+
+    /**
+     * Auto-select player's own skin if no skin is currently selected
+     * Called during initialization to ensure base skin is always selected
+     */
+    public static void autoSelectPlayerOwnSkin() {
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+
+        // Check if no skin is selected but player's own skin exists
+        if (config.activeSkinHash.isEmpty() && !config.playerOwnSkinHash.isEmpty()) {
+            LocalAssetManager assetManager = LocalAssetManager.getInstance();
+            AssetMetadata metadata = assetManager.getMetadata(config.playerOwnSkinHash);
+
+            if (metadata != null) {
+                // Auto-select the player's own skin
+                config.activeSkinHash = config.playerOwnSkinHash;
+                config.save();
+
+                QuickSkin.LOGGER.info("Auto-selected player's own skin on startup: {}", metadata.friendlyName());
+            } else {
+                QuickSkin.LOGGER.debug("Player's own skin hash exists in config but not in assets (will be downloaded)");
+            }
+        } else if (!config.activeSkinHash.isEmpty()) {
+            QuickSkin.LOGGER.debug("Active skin already set: {}", config.activeSkinHash);
         }
     }
 }
