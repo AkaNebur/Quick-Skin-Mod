@@ -128,43 +128,38 @@ public class ClientEvents {
 
             if (screen instanceof TitleScreen titleScreen) {
                 // Position next to accessibility button on title screen
-                // Find the actual accessibility/language button row by looking for the bottom-most row of small buttons
-                int vanillaButtonsY = -1;
-                int rightmostX = 0;
+                // The Y coordinate for the row with the vanilla language and accessibility buttons
+                final int vanillaButtonsY = titleScreen.height / 4 + 48 + 72;
 
-                // Step 1: Find all 20px height buttons and identify the bottom-most row
-                int maxY = -1;
+                net.minecraft.client.gui.components.ImageButton accessibilityButton = null;
+
+                // Find the right-most ImageButton on the right half of the screen in that specific row
+                // This specifically targets vanilla buttons and avoids other mods' buttons
                 for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
-                    if (listener instanceof Button button && button.getHeight() == buttonHeight) {
-                        if (button.getY() > maxY) {
-                            maxY = button.getY();
+                    if (listener instanceof net.minecraft.client.gui.components.ImageButton imgButton) {
+                        if (imgButton.getY() == vanillaButtonsY &&
+                            imgButton.getX() > titleScreen.width / 2 &&
+                            imgButton.getWidth() == 20 &&
+                            imgButton.getHeight() == 20) {
+                            if (accessibilityButton == null || imgButton.getX() > accessibilityButton.getX()) {
+                                accessibilityButton = imgButton;
+                            }
                         }
                     }
                 }
 
-                // Step 2: The bottom-most row is likely the language/accessibility row
-                vanillaButtonsY = maxY;
-
-                // Step 3: Find the rightmost button in that row
-                if (vanillaButtonsY >= 0) {
-                    for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
-                        if (listener instanceof AbstractWidget widget && widget.getY() == vanillaButtonsY) {
-                            rightmostX = Math.max(rightmostX, widget.getX() + widget.getWidth());
-                        }
-                    }
+                // Position next to the found accessibility button
+                if (accessibilityButton != null) {
+                    buttonX = accessibilityButton.getX() + accessibilityButton.getWidth() + spacing;
+                    buttonY = accessibilityButton.getY();
+                } else {
+                    // Fallback if we couldn't find the accessibility button
+                    buttonX = titleScreen.width / 2 + 128;
+                    buttonY = titleScreen.height / 4 + 48 + 84;
                 }
-
-                // Fallback if we couldn't find any buttons
-                if (vanillaButtonsY < 0) {
-                    vanillaButtonsY = titleScreen.height / 4 + 48 + 72;
-                    rightmostX = titleScreen.width / 2 + 124;
-                }
-
-                buttonX = rightmostX + spacing;
-                buttonY = vanillaButtonsY;
 
             } else if (screen instanceof PauseScreen pauseScreen) {
-                // Position next to "Save and Quit to Title" button (matching old mod's logic)
+                // Position next to "Save and Quit to Title" button
                 Button saveAndQuitButton = null;
                 int maxWidth = 0;
 
@@ -187,18 +182,9 @@ public class ClientEvents {
                 }
 
                 if (saveAndQuitButton != null) {
-                    int targetY = saveAndQuitButton.getY();
-                    int rightmostX = saveAndQuitButton.getX() + saveAndQuitButton.getWidth();
-
-                    // Find the true rightmost edge in that row to account for other mods
-                    for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
-                        if (listener instanceof AbstractWidget widget && widget.getY() == targetY) {
-                            rightmostX = Math.max(rightmostX, widget.getX() + widget.getWidth());
-                        }
-                    }
-
-                    buttonX = rightmostX + spacing;
-                    buttonY = targetY;
+                    // Position directly next to the vanilla quit button
+                    buttonX = saveAndQuitButton.getX() + saveAndQuitButton.getWidth() + spacing;
+                    buttonY = saveAndQuitButton.getY();
                 } else {
                     // Fallback position if we can't find the button
                     buttonX = pauseScreen.width - buttonWidth - spacing;
