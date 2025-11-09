@@ -1,5 +1,6 @@
 package com.quickskin.mod.client.gui.panel;
 
+import com.quickskin.mod.client.gui.util.ButtonFactory;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -42,29 +43,43 @@ public class ActionButtonsPanel extends AbstractWidget {
 
         // Row 1 (Bottom-most): Done Button (full width)
         bottomY -= COMPONENT_HEIGHT;
-        this.doneButton = Button.builder(Component.literal("Done"), button -> callbacks.onDone.run())
-            .bounds(fullWidthX, bottomY, fullComponentWidth, COMPONENT_HEIGHT)
-            .build();
+        this.doneButton = ButtonFactory.createPrimary(
+            fullWidthX, bottomY, fullComponentWidth, COMPONENT_HEIGHT,
+            Component.literal("Done"),
+            button -> callbacks.onDone.run()
+        );
         screen.registerWidget(this.doneButton);
 
         // Row 2: Import, HD Skin, Skin, Cape Buttons (4 equal width buttons)
         bottomY -= (COMPONENT_HEIGHT + SPACING);
         int fourButtonWidth = (fullComponentWidth - (SPACING * 3)) / 4;
 
-        Button importButton = Button.builder(Component.literal("Import Skin"), button -> callbacks.onImport.run())
-            .bounds(fullWidthX, bottomY, fourButtonWidth, COMPONENT_HEIGHT).build();
+        Button importButton = ButtonFactory.createStyled(
+            fullWidthX, bottomY, fourButtonWidth, COMPONENT_HEIGHT,
+            Component.literal("Import Skin"),
+            button -> callbacks.onImport.run()
+        );
         screen.registerWidget(importButton);
 
-        Button hdSkinWebsiteButton = Button.builder(Component.literal("HD Skin Website"), button -> callbacks.onHdSkinWebsite.run())
-            .bounds(fullWidthX + fourButtonWidth + SPACING, bottomY, fourButtonWidth, COMPONENT_HEIGHT).build();
+        Button hdSkinWebsiteButton = ButtonFactory.createStyled(
+            fullWidthX + fourButtonWidth + SPACING, bottomY, fourButtonWidth, COMPONENT_HEIGHT,
+            Component.literal("HD Skin Website"),
+            button -> callbacks.onHdSkinWebsite.run()
+        );
         screen.registerWidget(hdSkinWebsiteButton);
 
-        Button skinWebsiteButton = Button.builder(Component.literal("Skin Website"), button -> callbacks.onSkinWebsite.run())
-            .bounds(fullWidthX + (fourButtonWidth + SPACING) * 2, bottomY, fourButtonWidth, COMPONENT_HEIGHT).build();
+        Button skinWebsiteButton = ButtonFactory.createStyled(
+            fullWidthX + (fourButtonWidth + SPACING) * 2, bottomY, fourButtonWidth, COMPONENT_HEIGHT,
+            Component.literal("Skin Website"),
+            button -> callbacks.onSkinWebsite.run()
+        );
         screen.registerWidget(skinWebsiteButton);
 
-        Button capeButton = Button.builder(Component.literal("Cape"), button -> callbacks.onCape.run())
-            .bounds(fullWidthX + (fourButtonWidth + SPACING) * 3, bottomY, fourButtonWidth, COMPONENT_HEIGHT).build();
+        Button capeButton = ButtonFactory.createStyled(
+            fullWidthX + (fourButtonWidth + SPACING) * 3, bottomY, fourButtonWidth, COMPONENT_HEIGHT,
+            Component.literal("Cape"),
+            button -> callbacks.onCape.run()
+        );
         screen.registerWidget(capeButton);
     }
 

@@ -53,11 +53,12 @@ public class DeletionConfirmScreen extends Screen {
         int totalButtonWidth = (buttonWidth * 2) + buttonSpacing;
         int buttonStartX = this.panelX + (this.panelWidth - totalButtonWidth) / 2;
 
-        // Cancel button (left, safe) - uses normal Minecraft button style
-        Button cancelButton = Button.builder(
+        // Cancel button (left, safe)
+        Button cancelButton = ButtonFactory.createStyled(
+            buttonStartX, buttonY, buttonWidth, buttonHeight,
             Component.literal("Cancel"),
             (button) -> this.callback.accept(false)
-        ).bounds(buttonStartX, buttonY, buttonWidth, buttonHeight).build();
+        );
 
         // Confirm delete button (right, red/danger)
         Button confirmButton = ButtonFactory.createDanger(

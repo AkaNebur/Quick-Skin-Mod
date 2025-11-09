@@ -1,5 +1,6 @@
 package com.quickskin.mod.client.gui.panel;
 
+import com.quickskin.mod.client.gui.util.ButtonFactory;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.gui.widget.RotateButton;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -104,16 +105,25 @@ public class PlayerPreviewPanel extends AbstractWidget {
         int normalModelButtonWidth = (remainingWidth - spacing) / 2;
 
         // Create model type buttons
-        autoModelButton = Button.builder(Component.literal("✨"), button -> setModelType("auto"))
-                .bounds(modelButtonsX, modelButtonsY, componentHeight, componentHeight).build();
+        autoModelButton = ButtonFactory.createStyled(
+                modelButtonsX, modelButtonsY, componentHeight, componentHeight,
+                Component.literal("✨"),
+                button -> setModelType("auto")
+        );
         screen.registerWidget(autoModelButton);
 
-        classicModelButton = Button.builder(Component.literal("Wide"), button -> setModelType("classic"))
-                .bounds(modelButtonsX + componentHeight + spacing, modelButtonsY, normalModelButtonWidth, componentHeight).build();
+        classicModelButton = ButtonFactory.createStyled(
+                modelButtonsX + componentHeight + spacing, modelButtonsY, normalModelButtonWidth, componentHeight,
+                Component.literal("Wide"),
+                button -> setModelType("classic")
+        );
         screen.registerWidget(classicModelButton);
 
-        slimModelButton = Button.builder(Component.literal("Slim"), button -> setModelType("slim"))
-                .bounds(modelButtonsX + componentHeight + spacing + normalModelButtonWidth + spacing, modelButtonsY, normalModelButtonWidth, componentHeight).build();
+        slimModelButton = ButtonFactory.createStyled(
+                modelButtonsX + componentHeight + spacing + normalModelButtonWidth + spacing, modelButtonsY, normalModelButtonWidth, componentHeight,
+                Component.literal("Slim"),
+                button -> setModelType("slim")
+        );
         screen.registerWidget(slimModelButton);
 
         // Set button references for player widget positioning
@@ -128,7 +138,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
         int rotateButtonSize = 20;
         int rotateButtonY = modelButtonsY - rotateButtonSize - spacing;
 
-        rotateButton = new RotateButton(
+        rotateButton = ButtonFactory.createRotate(
                 modelButtonsX,
                 rotateButtonY,
                 rotateButtonSize,
@@ -154,10 +164,11 @@ public class PlayerPreviewPanel extends AbstractWidget {
             int animToggleWidth = 20;
             int animToggleX = modelButtonsX + modelButtonsTotalWidth - animToggleWidth;
 
-            animationToggleButton = Button.builder(
+            animationToggleButton = ButtonFactory.createStyled(
+                    animToggleX, rotateButtonY, animToggleWidth, rotateButtonSize,
                     Component.literal(">"),
                     button -> toggleAnimationDropdown()
-            ).bounds(animToggleX, rotateButtonY, animToggleWidth, rotateButtonSize).build();
+            );
             screen.registerWidget(animationToggleButton);
 
             // Create numbered animation buttons (dropdown)
@@ -166,7 +177,8 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 final String animName = availableAnimations.get(i);
                 final int index = i;
 
-                Button animButton = Button.builder(
+                Button animButton = ButtonFactory.createStyled(
+                        animToggleX, rotateButtonY - (i + 1) * 22, animToggleWidth, rotateButtonSize,
                         Component.literal(String.valueOf(index + 1)),
                         button -> {
                             // Set the animation on the player widget
@@ -178,7 +190,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
                             }
                             toggleAnimationDropdown();
                         }
-                ).bounds(animToggleX, rotateButtonY - (i + 1) * 22, animToggleWidth, rotateButtonSize).build();
+                );
 
                 animButton.visible = false;
                 animButton.active = false;

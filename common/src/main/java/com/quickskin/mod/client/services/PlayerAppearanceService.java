@@ -192,9 +192,8 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 BlockState state = mc.level.getBlockState(pos);
                 mc.levelRenderer.setBlockDirty(pos, state, state);
 
-                if (com.quickskin.mod.config.ClientConfig.getInstance().skinLayers3DCompat) {
-                    refreshSkinLayers3D(player);
-                }
+                // Always refresh SkinLayers3D compatibility
+                refreshSkinLayers3D(player);
 
                 QuickSkin.LOGGER.debug("Refreshed renderer for player: {}", playerId);
             }

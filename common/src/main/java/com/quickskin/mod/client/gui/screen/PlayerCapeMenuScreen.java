@@ -162,20 +162,23 @@ public class PlayerCapeMenuScreen extends Screen {
         // Create buttons
         int bottomY = this.height - scaleValue(60);
 
-        Button importButton = this.addRenderableWidget(Button.builder(
+        Button importButton = this.addRenderableWidget(com.quickskin.mod.client.gui.util.ButtonFactory.createStyled(
+                buttonStartX, bottomY, buttonWidth, scaleValue(20),
                 Component.literal("Import Cape"),
                 button -> importCape()
-        ).bounds(buttonStartX, bottomY, buttonWidth, scaleValue(20)).build());
+        ));
 
-        Button removeButton = this.addRenderableWidget(Button.builder(
+        Button removeButton = this.addRenderableWidget(com.quickskin.mod.client.gui.util.ButtonFactory.createStyled(
+                buttonStartX + buttonWidth + buttonSpacing, bottomY, buttonWidth, scaleValue(20),
                 Component.literal("Remove Cape"),
                 button -> removeCape()
-        ).bounds(buttonStartX + buttonWidth + buttonSpacing, bottomY, buttonWidth, scaleValue(20)).build());
+        ));
 
-        Button closeButton = this.addRenderableWidget(Button.builder(
+        Button closeButton = this.addRenderableWidget(com.quickskin.mod.client.gui.util.ButtonFactory.createPrimary(
+                buttonStartX + (buttonWidth + buttonSpacing) * 2, bottomY, buttonWidth, scaleValue(20),
                 Component.literal("Close"),
                 button -> this.onClose()
-        ).bounds(buttonStartX + (buttonWidth + buttonSpacing) * 2, bottomY, buttonWidth, scaleValue(20)).build());
+        ));
 
         // Create animation speed slider (centered, below buttons)
         int sliderWidth = 200;

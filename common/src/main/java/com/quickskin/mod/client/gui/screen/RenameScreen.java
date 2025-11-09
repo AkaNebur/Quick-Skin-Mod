@@ -80,10 +80,11 @@ public class RenameScreen extends Screen {
         int buttonStartX = this.panelX + (this.panelWidth - totalButtonWidth) / 2;
 
         // Cancel button (left)
-        this.addRenderableWidget(Button.builder(
+        this.addRenderableWidget(ButtonFactory.createStyled(
+            buttonStartX, buttonY, buttonWidth, buttonHeight,
             CommonComponents.GUI_CANCEL,
             (button) -> this.onClose()
-        ).bounds(buttonStartX, buttonY, buttonWidth, buttonHeight).build());
+        ));
 
         // Confirm button (right)
         this.confirmButton = this.addRenderableWidget(ButtonFactory.createStyled(

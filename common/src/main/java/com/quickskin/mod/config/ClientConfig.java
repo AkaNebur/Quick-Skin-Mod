@@ -56,11 +56,11 @@ public class ClientConfig {
     // Network Settings
     public int networkTimeout = 5000; // milliseconds
 
-    // Compatibility Settings
-    public boolean skinLayers3DCompat = true;
-
     // Transparency Settings
     public boolean disableSkinTransparency = false; // Disable transparency in player skins
+
+    // GUI Style Settings
+    public boolean enableStyledButtons = false; // Enable custom styled buttons with frosted glass aesthetic
 
     // Active Skin Settings (persisted state)
     public String activeSkinHash = "";

@@ -196,17 +196,14 @@ public class PlayerSkinMenuScreen extends Screen {
         });
         addRenderableWidget(usernameSearchField);
 
-        searchButton = Button.builder(
-                        Component.literal("Search"),
-                        button -> searchMojangSkin()
-                )
-                .bounds(
+        searchButton = com.quickskin.mod.client.gui.util.ButtonFactory.createStyled(
                         searchFieldX + searchFieldWidth - searchButtonWidth,
                         yPos,
                         searchButtonWidth,
-                        scaledComponentHeight
-                )
-                .build();
+                        scaledComponentHeight,
+                        Component.literal("Search"),
+                        button -> searchMojangSkin()
+                );
         addRenderableWidget(searchButton);
         searchButton.active = false;
 

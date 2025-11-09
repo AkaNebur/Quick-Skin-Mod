@@ -49,6 +49,7 @@ public class SettingsScreen extends Screen {
     private int dialogHeight = 280;
 
     private enum Tab {
+        GUI_EDIT("GUI Edit"),
         CLIENT("Client"),
         SERVER("Server");
 
@@ -64,15 +65,17 @@ public class SettingsScreen extends Screen {
     }
 
     private Tab activeTab = Tab.CLIENT;
+    private TabButton guiEditTabButton;
     private TabButton clientTabButton;
     private TabButton serverTabButton;
+    private final List<AbstractWidget> guiEditSettingWidgets = new ArrayList<>();
     private final List<AbstractWidget> clientSettingWidgets = new ArrayList<>();
     private final List<AbstractWidget> serverSettingWidgets = new ArrayList<>();
 
     // Client setting widgets
     private Checkbox showOverlayCheckbox;
-    private Checkbox skinLayers3DCompatCheckbox;
     private Checkbox disableSkinTransparencyCheckbox;
+    private Checkbox enableStyledButtonsCheckbox;
     private Checkbox enablePlayerPreviewCustomizationCheckbox;
     private Button keybindButton;
 
@@ -94,6 +97,7 @@ public class SettingsScreen extends Screen {
         super.init();
 
         // Clear widget lists to prevent duplication on resize
+        guiEditSettingWidgets.clear();
         clientSettingWidgets.clear();
         serverSettingWidgets.clear();
 
@@ -127,19 +131,69 @@ public class SettingsScreen extends Screen {
         );
         this.addRenderableWidget(serverTabButton);
 
-        // Create settings for both tabs
+        guiEditTabButton = (TabButton) ButtonFactory.createTab(
+                tabStartX + (TAB_WIDTH + TAB_SPACING) * 2, tabY,
+                TAB_WIDTH, TAB_HEIGHT,
+                Component.literal(Tab.GUI_EDIT.getDisplayName()),
+                activeTab == Tab.GUI_EDIT,
+                btn -> switchTab(Tab.GUI_EDIT)
+        );
+        this.addRenderableWidget(guiEditTabButton);
+
+        // Create settings for all tabs
+        createGuiEditSettings();
         createClientSettings();
         createServerSettings();
 
         // Create Done button
-        Button doneButton = Button.builder(
+        Button doneButton = ButtonFactory.createPrimary(
+                dialogX + dialogWidth / 2 - 50, dialogY + dialogHeight - 30, 100, 20,
                 Component.literal("Done"),
                 btn -> this.onClose()
-        ).bounds(dialogX + dialogWidth / 2 - 50, dialogY + dialogHeight - 30, 100, 20).build();
+        );
         this.addRenderableWidget(doneButton);
 
         // Show initial tab
         switchTab(activeTab);
+    }
+
+    private void createGuiEditSettings() {
+        ClientConfig config = ClientConfig.getInstance();
+        int checkboxSize = 20;
+        int spacing = 30;
+        // Settings content area starts below tabs
+        int startY = dialogY + TAB_HEIGHT + 20;
+        int leftColumnX = dialogX + 20;
+        int currentY = startY;
+
+        // Show HUD Overlay
+        showOverlayCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+                Component.literal("Show HUD Overlay"),
+                config.showSkinPreviewOverlay
+        );
+        guiEditSettingWidgets.add(showOverlayCheckbox);
+        currentY += spacing;
+
+        // Enable Styled Buttons
+        enableStyledButtonsCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+                Component.literal("Enable Styled Buttons"),
+                config.enableStyledButtons
+        );
+        guiEditSettingWidgets.add(enableStyledButtonsCheckbox);
+        currentY += spacing;
+
+        // Enable Preview Customization
+        enablePlayerPreviewCustomizationCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+                Component.literal("Enable Preview Customization"),
+                config.enablePlayerPreviewCustomization
+        );
+        guiEditSettingWidgets.add(enablePlayerPreviewCustomizationCheckbox);
     }
 
     private void createClientSettings() {
@@ -154,34 +208,15 @@ public class SettingsScreen extends Screen {
         int currentRightY = startY;
 
         // Left Column
-        // HUD Overlay Settings
-        showOverlayCheckbox = new Checkbox(
-                leftColumnX, currentLeftY,
-                checkboxSize, checkboxSize,
-                Component.literal("Show HUD Overlay"),
-                config.showSkinPreviewOverlay
-        );
-        clientSettingWidgets.add(showOverlayCheckbox);
-        currentLeftY += spacing;
-
-        // Player Preview Customization Settings
-        enablePlayerPreviewCustomizationCheckbox = new Checkbox(
-                leftColumnX, currentLeftY,
-                checkboxSize, checkboxSize,
-                Component.literal("Enable Preview Customization"),
-                config.enablePlayerPreviewCustomization
-        );
-        clientSettingWidgets.add(enablePlayerPreviewCustomizationCheckbox);
-        currentLeftY += spacing;
-
         // Keybind button and label
         int keybindButtonWidth = 75;
         int keybindButtonSpacing = 5;
 
-        keybindButton = Button.builder(
+        keybindButton = ButtonFactory.createStyled(
+                leftColumnX, currentLeftY, keybindButtonWidth, 20,
                 KeybindRegistry.OPEN_SKIN_MENU.getTranslatedKeyMessage(),
                 button -> this.selectedKey = KeybindRegistry.OPEN_SKIN_MENU
-        ).bounds(leftColumnX, currentLeftY, keybindButtonWidth, 20).build();
+        );
         clientSettingWidgets.add(keybindButton);
 
         clientSettingWidgets.add(new AbstractWidget(leftColumnX + keybindButtonWidth + keybindButtonSpacing, currentLeftY, 100, 20, Component.literal("Open Skin Menu")) {
@@ -210,16 +245,6 @@ public class SettingsScreen extends Screen {
 
 
         // Right Column
-        // Compatibility Settings
-        skinLayers3DCompatCheckbox = new Checkbox(
-                rightColumnX, currentRightY,
-                checkboxSize, checkboxSize,
-                Component.literal("SkinLayers3D Compatibility"),
-                config.skinLayers3DCompat
-        );
-        clientSettingWidgets.add(skinLayers3DCompatCheckbox);
-        currentRightY += spacing;
-
         // Skin Transparency Settings
         disableSkinTransparencyCheckbox = new Checkbox(
                 rightColumnX, currentRightY,
@@ -298,6 +323,9 @@ public class SettingsScreen extends Screen {
         activeTab = tab;
 
         // Remove all setting widgets
+        for (AbstractWidget widget : guiEditSettingWidgets) {
+            this.removeWidget(widget);
+        }
         for (AbstractWidget widget : clientSettingWidgets) {
             this.removeWidget(widget);
         }
@@ -306,12 +334,17 @@ public class SettingsScreen extends Screen {
         }
 
         // Add widgets for active tab
-        List<AbstractWidget> activeWidgets = tab == Tab.CLIENT ? clientSettingWidgets : serverSettingWidgets;
+        List<AbstractWidget> activeWidgets = switch (tab) {
+            case GUI_EDIT -> guiEditSettingWidgets;
+            case CLIENT -> clientSettingWidgets;
+            case SERVER -> serverSettingWidgets;
+        };
         for (AbstractWidget widget : activeWidgets) {
             this.addRenderableWidget(widget);
         }
 
         // Update tab button selected states (visual feedback)
+        guiEditTabButton.setSelected(tab == Tab.GUI_EDIT);
         clientTabButton.setSelected(tab == Tab.CLIENT);
         serverTabButton.setSelected(tab == Tab.SERVER);
     }
@@ -393,6 +426,19 @@ public class SettingsScreen extends Screen {
             com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                 .refreshPlayerRenderer(minecraft.player.getUUID());
         }
+    }
+
+    /**
+     * Recreates a screen to apply new styling settings
+     */
+    private Screen recreateScreen(Screen screen) {
+        if (screen instanceof PlayerSkinMenuScreen) {
+            return new PlayerSkinMenuScreen(null);
+        } else if (screen instanceof PlayerCapeMenuScreen) {
+            return new PlayerCapeMenuScreen(null);
+        }
+        // For other screens, return the original
+        return screen;
     }
 
     @Override
@@ -478,10 +524,11 @@ public class SettingsScreen extends Screen {
 
             // Check if transparency setting changed
             boolean oldTransparencySetting = config.disableSkinTransparency;
+            boolean oldStyledButtonsSetting = config.enableStyledButtons;
 
             config.showSkinPreviewOverlay = showOverlayCheckbox.selected();
-            config.skinLayers3DCompat = skinLayers3DCompatCheckbox.selected();
             config.disableSkinTransparency = disableSkinTransparencyCheckbox.selected();
+            config.enableStyledButtons = enableStyledButtonsCheckbox.selected();
             config.enablePlayerPreviewCustomization = enablePlayerPreviewCustomizationCheckbox.selected();
 
             // If transparency setting changed, clear texture cache and refresh player
@@ -490,6 +537,14 @@ public class SettingsScreen extends Screen {
             }
 
             config.save();
+
+            // If styled buttons setting changed, refresh parent screen
+            if (oldStyledButtonsSetting != config.enableStyledButtons && parent != null && minecraft != null) {
+                // Recreate parent screen to apply new button style
+                Screen newParent = recreateScreen(parent);
+                minecraft.setScreen(newParent);
+                return; // Don't set screen to parent again below
+            }
         }
 
         // Save server settings
