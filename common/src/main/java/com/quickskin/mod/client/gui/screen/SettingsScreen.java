@@ -1,6 +1,7 @@
 package com.quickskin.mod.client.gui.screen;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.quickskin.mod.client.gui.effect.BlurHandler;
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import com.quickskin.mod.client.gui.widget.TabButton;
 import com.quickskin.mod.client.input.KeybindRegistry;
@@ -277,6 +278,10 @@ public class SettingsScreen extends Screen {
             this.parent.render(graphics, -1, -1, partialTick);
         }
 
+        // Apply blur to background
+        graphics.flush();
+        BlurHandler.renderBlur();
+
         // Update keybind button text before rendering
         if (this.selectedKey == KeybindRegistry.OPEN_SKIN_MENU) {
             this.keybindButton.setMessage(Component.literal("> ").append(Component.literal("???").withStyle(ChatFormatting.YELLOW)).append(" <"));
@@ -289,7 +294,7 @@ public class SettingsScreen extends Screen {
         graphics.pose().translate(0, 0, 100); // Move modal forward in Z
 
         // Draw darker overlay over entire screen
-        graphics.fill(0, 0, this.width, this.height, 0xC0000000);
+        graphics.fill(0, 0, this.width, this.height, 0x60000000);
 
         // Calculate content panel area (below tabs)
         int contentPanelY = dialogY + TAB_HEIGHT;
@@ -393,6 +398,13 @@ public class SettingsScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false; // Don't pause game
+    }
+
+    @Override
+    public void removed() {
+        super.removed();
+        // Cleanup blur resources
+        BlurHandler.cleanup();
     }
 
     @Override
