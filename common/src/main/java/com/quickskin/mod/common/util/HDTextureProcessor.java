@@ -67,6 +67,13 @@ public class HDTextureProcessor {
     /**
      * Convert legacy 64x32 skin to modern 64x64 format
      * Properly copies and mirrors limbs for HD compatibility
+     *
+     * Each limb texture has 6 faces laid out in a specific pattern:
+     * - Top/Bottom (4x4 each at top)
+     * - Right side, Front, Left side, Back (4x12 each below)
+     *
+     * When converting right limbs to left limbs, we must rearrange the faces,
+     * not just flip the entire texture horizontally.
      */
     public static BufferedImage convertLegacyToModern(BufferedImage legacy) {
         int width = legacy.getWidth();
@@ -80,14 +87,146 @@ public class HDTextureProcessor {
         // Copy entire top half (64x32 scaled)
         g.drawImage(legacy, 0, 0, null);
 
-        // Copy and mirror right leg to left leg (modern format)
-        copyAreaRGBA(legacy, modern, 0, 16 * scale, 16 * scale, 16 * scale, 16 * scale, 48 * scale, true, false);
+        // Convert right leg to left leg with proper face rearrangement
+        convertLimbToMirror(legacy, modern, 0, 16 * scale, 16, 48 * scale, scale);
 
-        // Copy and mirror right arm to left arm
-        copyAreaRGBA(legacy, modern, 40 * scale, 16 * scale, 16 * scale, 16 * scale, 32 * scale, 48 * scale, true, false);
+        // Convert right arm to left arm with proper face rearrangement
+        convertLimbToMirror(legacy, modern, 40, 16 * scale, 32, 48 * scale, scale);
+
+        // Clear overlay layers if they're all black (artifact prevention)
+        clearBlackOverlays(modern, scale);
 
         g.dispose();
         return modern;
+    }
+
+    /**
+     * Detect and clear overlay layers that are entirely black
+     * Some legacy skins have black pixels in overlay areas which should be transparent
+     *
+     * @param image The converted modern format image
+     * @param scale The skin scale factor
+     */
+    private static void clearBlackOverlays(BufferedImage image, int scale) {
+        // Check head overlay (hat layer) - (32-63, 0-15)
+        if (isOverlayAllBlack(image, 32 * scale, 0, 32 * scale, 16 * scale)) {
+            QuickSkin.LOGGER.debug("Clearing all-black head overlay");
+            clearArea(image, 32 * scale, 0, 32 * scale, 16 * scale, 0x00000000);
+        }
+    }
+
+    /**
+     * Check if a rectangular area contains only black pixels (RGB 0,0,0)
+     * Ignores alpha channel - only checks if RGB values are all zero
+     *
+     * @return true if all pixels in the area are black
+     */
+    private static boolean isOverlayAllBlack(BufferedImage image, int x, int y, int width, int height) {
+        for (int dy = 0; dy < height; dy++) {
+            for (int dx = 0; dx < width; dx++) {
+                if (x + dx < image.getWidth() && y + dy < image.getHeight()) {
+                    int pixel = image.getRGB(x + dx, y + dy);
+
+                    // Extract RGB components (ignore alpha)
+                    int red = (pixel >> 16) & 0xFF;
+                    int green = (pixel >> 8) & 0xFF;
+                    int blue = pixel & 0xFF;
+
+                    // If any pixel is not black, return false
+                    if (red != 0 || green != 0 || blue != 0) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true; // All pixels are black
+    }
+
+    /**
+     * Clear a rectangular area to a specific color (usually transparent)
+     */
+    private static void clearArea(BufferedImage image, int x, int y, int width, int height, int color) {
+        for (int dy = 0; dy < height; dy++) {
+            for (int dx = 0; dx < width; dx++) {
+                if (x + dx < image.getWidth() && y + dy < image.getHeight()) {
+                    image.setRGB(x + dx, y + dy, color);
+                }
+            }
+        }
+    }
+
+    /**
+     * Convert a right limb to a left limb with proper face rearrangement
+     *
+     * Limb texture layout (each limb is 16x16 pixels at 1x scale):
+     * - Columns 0-3:   Top (rows 0-3) and Right side (rows 4-15)
+     * - Columns 4-7:   Bottom (rows 0-3) and Front (rows 4-15)
+     * - Columns 8-11:  Left side (rows 4-15)
+     * - Columns 12-15: Back (rows 4-15)
+     *
+     * When mirroring right limb to left limb:
+     * - Right side ↔ Left side (swap and mirror)
+     * - Front and Back stay in relative positions but are mirrored
+     * - Top and Bottom are mirrored
+     *
+     * @param src Source image (legacy skin)
+     * @param dst Destination image (modern skin)
+     * @param srcX Source limb X position (at 1x scale)
+     * @param srcY Source limb Y position (scaled)
+     * @param dstX Destination limb X position (at 1x scale)
+     * @param dstY Destination limb Y position (scaled)
+     * @param scale Skin scale factor (1 for 64x64, 2 for 128x128, etc.)
+     */
+    private static void convertLimbToMirror(
+            BufferedImage src,
+            BufferedImage dst,
+            int srcX, int srcY,
+            int dstX, int dstY,
+            int scale
+    ) {
+        // Scale the source and destination X coordinates
+        srcX *= scale;
+        dstX *= scale;
+
+        // Face dimensions at current scale
+        int faceWidth = 4 * scale;    // Each face is 4 pixels wide
+        int topHeight = 4 * scale;     // Top/bottom faces are 4 pixels tall
+        int sideHeight = 12 * scale;   // Side faces are 12 pixels tall
+
+        // Copy and mirror Top face (top-left 4x4)
+        // Right limb top (srcX, srcY) → Left limb top (dstX, dstY), mirrored horizontally
+        copyAreaRGBA(src, dst,
+                srcX, srcY, faceWidth, topHeight,
+                dstX, dstY, true, false);
+
+        // Copy and mirror Bottom face (top, columns 4-7)
+        // Right limb bottom (srcX+4, srcY) → Left limb bottom (dstX+4, dstY), mirrored horizontally
+        copyAreaRGBA(src, dst,
+                srcX + faceWidth, srcY, faceWidth, topHeight,
+                dstX + faceWidth, dstY, true, false);
+
+        // IMPORTANT: For the side faces, we need to swap left and right
+
+        // Right limb's RIGHT side (columns 0-3, rows 4-15) → Left limb's LEFT side (columns 8-11, rows 4-15)
+        copyAreaRGBA(src, dst,
+                srcX, srcY + topHeight, faceWidth, sideHeight,
+                dstX + (faceWidth * 2), dstY + topHeight, true, false);
+
+        // Right limb's FRONT (columns 4-7, rows 4-15) → Left limb's FRONT (columns 4-7, rows 4-15)
+        copyAreaRGBA(src, dst,
+                srcX + faceWidth, srcY + topHeight, faceWidth, sideHeight,
+                dstX + faceWidth, dstY + topHeight, true, false);
+
+        // Right limb's LEFT side (columns 8-11, rows 4-15) → Left limb's RIGHT side (columns 0-3, rows 4-15)
+        copyAreaRGBA(src, dst,
+                srcX + (faceWidth * 2), srcY + topHeight, faceWidth, sideHeight,
+                dstX, dstY + topHeight, true, false);
+
+        // Right limb's BACK (columns 12-15, rows 4-15) → Left limb's BACK (columns 12-15, rows 4-15)
+        copyAreaRGBA(src, dst,
+                srcX + (faceWidth * 3), srcY + topHeight, faceWidth, sideHeight,
+                dstX + (faceWidth * 3), dstY + topHeight, true, false);
     }
 
     /**

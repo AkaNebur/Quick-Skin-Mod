@@ -147,13 +147,13 @@ public class PlayerSkinMenuScreen extends Screen {
                 scaledComponentHeight,
                 Component.literal("Search by username")
         );
-        usernameSearchField.setSuggestion("Write a username...");
+        usernameSearchField.setSuggestion("Enter a player's username...");
         usernameSearchField.setMaxLength(16);
         usernameSearchField.setResponder(text -> {
             onUsernameFieldChanged(text);
             // Update suggestion visibility
             if (text.isEmpty()) {
-                usernameSearchField.setSuggestion("Write a username...");
+                usernameSearchField.setSuggestion("Enter a player's username...");
             } else {
                 usernameSearchField.setSuggestion("");
             }

@@ -152,6 +152,12 @@ public class SkinImporter {
                 return null;
             }
 
+            // Convert legacy 64x32 skins to modern 64x64 format
+            if (height == width / 2) {
+                QuickSkin.LOGGER.info("Converting legacy 64x32 skin to modern format for: {}", username);
+                image = HDTextureProcessor.convertLegacyToModern(image);
+            }
+
             // Apply transparency settings if needed
             boolean disableTransparency = ClientConfig.getInstance().shouldDisableSkinTransparency();
             if (disableTransparency) {
