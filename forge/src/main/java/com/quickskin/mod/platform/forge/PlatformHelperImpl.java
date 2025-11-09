@@ -10,6 +10,7 @@ import java.nio.file.Path;
  * Forge implementation of PlatformHelper
  * This class provides Forge-specific implementations for @ExpectPlatform methods
  */
+@SuppressWarnings("unused")
 public class PlatformHelperImpl {
 
     public static String getPlatformName() {

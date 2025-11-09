@@ -8,6 +8,7 @@ import java.nio.file.Path;
  * Fabric implementation of PlatformHelper
  * This class provides Fabric-specific implementations for @ExpectPlatform methods
  */
+@SuppressWarnings("unused")
 public class PlatformHelperImpl {
 
     public static String getPlatformName() {
