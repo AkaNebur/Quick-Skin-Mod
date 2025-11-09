@@ -42,6 +42,30 @@ public class ClientEvents {
     private static float titleScreenBodyYaw = 20.0f;
     private static float titleScreenTargetRotation = 20.0f;
 
+    // Shared animation state (preserved across all screens)
+    private static String sharedAnimation = "idle";
+
+    /**
+     * Get the current shared animation state
+     */
+    public static String getSharedAnimation() {
+        return sharedAnimation;
+    }
+
+    /**
+     * Set the shared animation state
+     */
+    public static void setSharedAnimation(String animation) {
+        if (animation != null && !animation.isEmpty()) {
+            sharedAnimation = animation;
+        }
+    }
+
+    // Animation buttons (for dropdown menu)
+    private static Button animationToggleButton;
+    private static final java.util.List<Button> animationButtons = new java.util.ArrayList<>();
+    private static boolean isAnimationDropdownOpen = false;
+
     /**
      * Initializes client event listeners
      * Called from QuickSkinClient.init()
@@ -305,10 +329,14 @@ public class ClientEvents {
                 capeLocation = com.quickskin.mod.client.services.CapeService.getInstance().getCapeLocation(null, capeId);
             }
 
-            // Save rotation state from existing widget before creating new one
+            // Save rotation and animation state from existing widget before creating new one
             if (playerWidget != null) {
                 titleScreenBodyYaw = playerWidget.getBodyYaw();
                 titleScreenTargetRotation = playerWidget.getTargetYRotation();
+                String currentAnimation = playerWidget.getAnimation();
+                if (currentAnimation != null && !currentAnimation.isEmpty()) {
+                    setSharedAnimation(currentAnimation);
+                }
             }
 
             playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, capeLocation, capeId, modelType);
@@ -320,12 +348,16 @@ public class ClientEvents {
             }
             screenAccess.addRenderableWidget(playerWidget);
 
-            // Restore saved rotation state
+            // Restore saved rotation and animation state
             playerWidget.setRotationState(titleScreenBodyYaw, titleScreenTargetRotation);
+            String savedAnimation = getSharedAnimation();
+            if (savedAnimation != null && !savedAnimation.isEmpty()) {
+                playerWidget.setAnimation(savedAnimation);
+            }
 
-            // Create and add rotate button (above Change Skin button, aligned to the right edge)
+            // Create and add rotate button (above Change Skin button, aligned to the left edge)
             int rotateButtonSize = 20;
-            int rotateButtonX = buttonX + buttonWidth - rotateButtonSize;
+            int rotateButtonX = buttonX;
             int rotateButtonY = buttonY - rotateButtonSize - spacing;
 
             com.quickskin.mod.client.gui.widget.RotateButton rotateButton =
@@ -336,6 +368,50 @@ public class ClientEvents {
                             button -> playerWidget.toggleRotation()
                     );
             screenAccess.addRenderableWidget(rotateButton);
+
+            // Clear animation buttons from previous screen
+            animationButtons.clear();
+            isAnimationDropdownOpen = false;
+
+            // Only add animation buttons on title screen, not in-game (pause menu)
+            if ("title".equals(screenType)) {
+                // Create animation toggle button (right of rotate button)
+                int animToggleWidth = 20;
+                int animToggleX = buttonX + buttonWidth - animToggleWidth;
+                int animToggleY = rotateButtonY;
+
+                animationToggleButton = Button.builder(
+                        Component.literal(">"),
+                        button -> toggleAnimationDropdown()
+                ).bounds(animToggleX, animToggleY, animToggleWidth, rotateButtonSize).build();
+                screenAccess.addRenderableWidget(animationToggleButton);
+
+                // Create numbered animation buttons (dropdown)
+                java.util.List<String> availableAnimations = getAvailableAnimations();
+                for (int i = 0; i < availableAnimations.size(); i++) {
+                    final String animName = availableAnimations.get(i);
+                    final int index = i;
+
+                    Button animButton = Button.builder(
+                            Component.literal(String.valueOf(index + 1)),
+                            button -> {
+                                // Set the animation on the player widget
+                                if (playerWidget != null) {
+                                    playerWidget.setAnimation(animName);
+                                    // Save animation state for persistence across all screens
+                                    setSharedAnimation(animName);
+                                    QuickSkin.LOGGER.info("Animation {} activated: {}", index + 1, animName);
+                                }
+                                toggleAnimationDropdown();
+                            }
+                    ).bounds(animToggleX, animToggleY - (i + 1) * 22, animToggleWidth, rotateButtonSize).build();
+
+                    animButton.visible = false;
+                    animButton.active = false;
+                    animationButtons.add(animButton);
+                    screenAccess.addRenderableWidget(animButton);
+                }
+            }
 
             QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) and PlayerWidget at ({}, {}) for screen type '{}'",
                     buttonX, buttonY, widgetX, widgetY, screenType);
@@ -646,5 +722,38 @@ public class ClientEvents {
         } else if (!config.activeSkinHash.isEmpty()) {
             QuickSkin.LOGGER.debug("Active skin already set: {}", config.activeSkinHash);
         }
+    }
+
+    /**
+     * Toggle the animation dropdown open/closed
+     */
+    private static void toggleAnimationDropdown() {
+        isAnimationDropdownOpen = !isAnimationDropdownOpen;
+        updateAnimationDropdownState();
+    }
+
+    /**
+     * Update animation dropdown button visibility and toggle button text
+     */
+    private static void updateAnimationDropdownState() {
+        if (animationToggleButton != null) {
+            animationToggleButton.setMessage(Component.literal(isAnimationDropdownOpen ? "×" : ">"));
+        }
+        for (Button button : animationButtons) {
+            button.visible = isAnimationDropdownOpen;
+            button.active = isAnimationDropdownOpen;
+        }
+    }
+
+    /**
+     * Get list of available animations
+     * Returns vanilla Minecraft animation states
+     */
+    private static java.util.List<String> getAvailableAnimations() {
+        java.util.List<String> animations = new java.util.ArrayList<>();
+        animations.add("idle");   // Button 1: Idle pose
+        animations.add("walk");   // Button 2: Walking pose
+        animations.add("sit");    // Button 3: Sitting pose
+        return animations;
     }
 }

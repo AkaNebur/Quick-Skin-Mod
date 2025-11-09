@@ -27,20 +27,22 @@ public class ClientConfig {
     public boolean enablePlayerPreviewCustomization = false; // Enable customization (resize, reposition) of player previews
 
     // Player Preview Slider Percentages (1-100%) for different contexts
-    public int sizeModelPreviewPercentageTitleScreen = 33; // Title screen player preview size
-    public int sizeModelPreviewPercentageSkinMenu = 37; // Skin menu player preview size
-    public int sizeModelPreviewPercentageCapeMenu = 37; // Cape menu player preview size
-    public int sizeModelPreviewPercentagePauseMenu = 32; // In-game pause menu player preview size
+    // 0 = use built-in default, non-zero = use that percentage
+    public int sizeModelPreviewPercentageTitleScreen = 0;
+    public int sizeModelPreviewPercentageSkinMenu = 0;
+    public int sizeModelPreviewPercentageCapeMenu = 0;
+    public int sizeModelPreviewPercentagePauseMenu = 0;
 
     // Player Preview Position Offsets (X, Y) for different contexts
-    public int positionOffsetXTitleScreen = 4; // Title screen X offset
-    public int positionOffsetYTitleScreen = 0; // Title screen Y offset
-    public int positionOffsetXSkinMenu = -3; // Skin menu X offset
-    public int positionOffsetYSkinMenu = 1; // Skin menu Y offset
-    public int positionOffsetXCapeMenu = 0; // Cape menu X offset
-    public int positionOffsetYCapeMenu = 0; // Cape menu Y offset
-    public int positionOffsetXPauseMenu = -1; // Pause menu X offset
-    public int positionOffsetYPauseMenu = 2; // Pause menu Y offset
+    // These are added to the base offsets (which already include the intended defaults)
+    public int positionOffsetXTitleScreen = 0;
+    public int positionOffsetYTitleScreen = 0;
+    public int positionOffsetXSkinMenu = 0;
+    public int positionOffsetYSkinMenu = 0;
+    public int positionOffsetXCapeMenu = 0;
+    public int positionOffsetYCapeMenu = 0;
+    public int positionOffsetXPauseMenu = 0;
+    public int positionOffsetYPauseMenu = 0;
 
     // Animation Settings
     public float animationSpeed = 1.0f; // Default animation speed (deprecated, use per-cape speeds)

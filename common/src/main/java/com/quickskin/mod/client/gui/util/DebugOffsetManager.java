@@ -16,15 +16,15 @@ public class DebugOffsetManager {
     private static final String CONFIG_FILE = "quickskin_debug_offsets.properties";
     private static Path configPath;
 
-    // Default offsets for all 4 screens
-    private static final int DEFAULT_TITLE_SCREEN_OFFSET_X = -26;
-    private static final int DEFAULT_TITLE_SCREEN_OFFSET_Y = -87;
+    // Default offsets for all 4 screens (base offset + config offset when config is 0)
+    private static final int DEFAULT_TITLE_SCREEN_OFFSET_X = -20; // Was -26, now -26 + 6 = -20
+    private static final int DEFAULT_TITLE_SCREEN_OFFSET_Y = -90; // Was -87, now -87 + (-3) = -90
     private static final int DEFAULT_WORLD_SELECTION_OFFSET_X = 0;
     private static final int DEFAULT_WORLD_SELECTION_OFFSET_Y = -82;
-    private static final int DEFAULT_PAUSE_SCREEN_OFFSET_X = -22;
-    private static final int DEFAULT_PAUSE_SCREEN_OFFSET_Y = -88;
-    private static final int DEFAULT_SKIN_MENU_OFFSET_X = 0;
-    private static final int DEFAULT_SKIN_MENU_OFFSET_Y = -15;
+    private static final int DEFAULT_PAUSE_SCREEN_OFFSET_X = -23; // Was -22, now -22 + (-1) = -23
+    private static final int DEFAULT_PAUSE_SCREEN_OFFSET_Y = -88; // Was -88, stays -88 + 0 = -88
+    private static final int DEFAULT_SKIN_MENU_OFFSET_X = 0; // Stays 0 + 0 = 0
+    private static final int DEFAULT_SKIN_MENU_OFFSET_Y = -18; // Was -15, now -15 + (-3) = -18
 
     // Current offsets
     private static int titleScreenOffsetX = DEFAULT_TITLE_SCREEN_OFFSET_X;

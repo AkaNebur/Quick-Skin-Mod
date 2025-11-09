@@ -212,20 +212,34 @@ public class PlayerWidget extends AbstractWidget {
 
     /**
      * Get the slider percentage from config based on current context
+     * When config is 0, returns built-in default for that context
      */
     private int getSliderPercentageFromConfig(com.quickskin.mod.config.ClientConfig config) {
+        int configValue;
+        int defaultValue;
+
         switch (context) {
             case TITLE_SCREEN:
-                return config.sizeModelPreviewPercentageTitleScreen;
+                configValue = config.sizeModelPreviewPercentageTitleScreen;
+                defaultValue = 30;
+                break;
             case SKIN_MENU:
-                return config.sizeModelPreviewPercentageSkinMenu;
+                configValue = config.sizeModelPreviewPercentageSkinMenu;
+                defaultValue = 51;
+                break;
             case CAPE_MENU:
-                return config.sizeModelPreviewPercentageCapeMenu;
+                configValue = config.sizeModelPreviewPercentageCapeMenu;
+                defaultValue = 51;
+                break;
             case PAUSE_MENU:
-                return config.sizeModelPreviewPercentagePauseMenu;
+                configValue = config.sizeModelPreviewPercentagePauseMenu;
+                defaultValue = 32;
+                break;
             default:
-                return 50; // Default 50%
+                return 50;
         }
+
+        return configValue != 0 ? configValue : defaultValue;
     }
 
     /**
@@ -256,6 +270,7 @@ public class PlayerWidget extends AbstractWidget {
 
     /**
      * Get the position X offset from config based on current context
+     * Returns the raw config value (defaults are baked into base positions)
      */
     private int getPositionOffsetXFromConfig(com.quickskin.mod.config.ClientConfig config) {
         switch (context) {
@@ -274,6 +289,7 @@ public class PlayerWidget extends AbstractWidget {
 
     /**
      * Get the position Y offset from config based on current context
+     * Returns the raw config value (defaults are baked into base positions)
      */
     private int getPositionOffsetYFromConfig(com.quickskin.mod.config.ClientConfig config) {
         switch (context) {
@@ -527,6 +543,24 @@ public class PlayerWidget extends AbstractWidget {
     public void setRotationState(float bodyYaw, float targetYRotation) {
         this.bodyYaw = bodyYaw;
         this.targetYRotation = targetYRotation;
+    }
+
+    /**
+     * Set the animation state for the player model
+     * @param animation Animation name (idle, walk, run, sneak, sit, jump)
+     */
+    public void setAnimation(String animation) {
+        if (animation != null && !animation.isEmpty()) {
+            previewData.setCurrentAnimation(animation);
+            QuickSkin.LOGGER.info("PlayerWidget animation set to: {}", animation);
+        }
+    }
+
+    /**
+     * Get the current animation
+     */
+    public String getAnimation() {
+        return previewData.getCurrentAnimation();
     }
 
     @Override

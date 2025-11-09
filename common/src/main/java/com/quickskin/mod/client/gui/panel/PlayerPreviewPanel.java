@@ -25,6 +25,9 @@ public class PlayerPreviewPanel extends AbstractWidget {
     private Button classicModelButton;
     private Button slimModelButton;
     private Button rotateButton;
+    private Button animationToggleButton;
+    private final java.util.List<Button> animationButtons = new java.util.ArrayList<>();
+    private boolean isAnimationDropdownOpen = false;
 
     private String currentModelType = "classic";
 
@@ -75,6 +78,13 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 "classic" // Default model type
         );
         playerWidget.setContext(com.quickskin.mod.client.gui.widget.PlayerWidget.WidgetContext.SKIN_MENU);
+
+        // Restore shared animation state from title screen
+        String savedAnimation = com.quickskin.mod.event.ClientEvents.getSharedAnimation();
+        if (savedAnimation != null && !savedAnimation.isEmpty()) {
+            playerWidget.setAnimation(savedAnimation);
+        }
+
         screen.registerWidget(playerWidget);
     }
 
@@ -118,9 +128,9 @@ public class PlayerPreviewPanel extends AbstractWidget {
         // Update button states to lock the currently selected model button
         updateModelButtonStates();
 
-        // Create rotate button (positioned relative to the model buttons)
+        // Create rotate button (positioned at left edge above model buttons)
         int rotateButtonSize = 20;
-        int rotateButtonX = modelButtonsX + modelButtonsTotalWidth - rotateButtonSize;
+        int rotateButtonX = modelButtonsX;
         int rotateButtonY = modelButtonsY - rotateButtonSize - spacing;
 
         rotateButton = new RotateButton(
@@ -135,6 +145,86 @@ public class PlayerPreviewPanel extends AbstractWidget {
         );
         rotateButton.setTooltip(Tooltip.create(Component.literal("Rotate Preview")));
         screen.registerWidget(rotateButton);
+
+        // Clear animation buttons from previous init
+        animationButtons.clear();
+        isAnimationDropdownOpen = false;
+
+        // Only add animation buttons when NOT in-game (title screen only)
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        boolean isInGame = mc.player != null;
+
+        if (!isInGame) {
+            // Create animation toggle button (right edge above model buttons)
+            int animToggleWidth = 20;
+            int animToggleX = modelButtonsX + modelButtonsTotalWidth - animToggleWidth;
+            int animToggleY = rotateButtonY;
+
+            animationToggleButton = Button.builder(
+                    Component.literal(">"),
+                    button -> toggleAnimationDropdown()
+            ).bounds(animToggleX, animToggleY, animToggleWidth, rotateButtonSize).build();
+            screen.registerWidget(animationToggleButton);
+
+            // Create numbered animation buttons (dropdown)
+            java.util.List<String> availableAnimations = getAvailableAnimations();
+            for (int i = 0; i < availableAnimations.size(); i++) {
+                final String animName = availableAnimations.get(i);
+                final int index = i;
+
+                Button animButton = Button.builder(
+                        Component.literal(String.valueOf(index + 1)),
+                        button -> {
+                            // Set the animation on the player widget
+                            if (playerWidget != null) {
+                                playerWidget.setAnimation(animName);
+                                // Save animation state for persistence across all screens
+                                com.quickskin.mod.event.ClientEvents.setSharedAnimation(animName);
+                                com.quickskin.mod.QuickSkin.LOGGER.info("Animation {} activated: {}", index + 1, animName);
+                            }
+                            toggleAnimationDropdown();
+                        }
+                ).bounds(animToggleX, animToggleY - (i + 1) * 22, animToggleWidth, rotateButtonSize).build();
+
+                animButton.visible = false;
+                animButton.active = false;
+                animationButtons.add(animButton);
+                screen.registerWidget(animButton);
+            }
+        }
+    }
+
+    /**
+     * Toggle the animation dropdown open/closed
+     */
+    private void toggleAnimationDropdown() {
+        isAnimationDropdownOpen = !isAnimationDropdownOpen;
+        updateAnimationDropdownState();
+    }
+
+    /**
+     * Update animation dropdown button visibility and toggle button text
+     */
+    private void updateAnimationDropdownState() {
+        if (animationToggleButton != null) {
+            animationToggleButton.setMessage(Component.literal(isAnimationDropdownOpen ? "×" : ">"));
+        }
+        for (Button button : animationButtons) {
+            button.visible = isAnimationDropdownOpen;
+            button.active = isAnimationDropdownOpen;
+        }
+    }
+
+    /**
+     * Get list of available animations
+     * Returns vanilla Minecraft animation states
+     */
+    private java.util.List<String> getAvailableAnimations() {
+        java.util.List<String> animations = new java.util.ArrayList<>();
+        animations.add("idle");   // Button 1: Idle pose
+        animations.add("walk");   // Button 2: Walking pose
+        animations.add("sit");    // Button 3: Sitting pose
+        return animations;
     }
 
     /**

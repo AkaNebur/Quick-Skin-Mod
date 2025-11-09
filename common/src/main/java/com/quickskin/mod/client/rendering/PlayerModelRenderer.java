@@ -160,6 +160,27 @@ public class PlayerModelRenderer {
 
         // Use vanilla InventoryScreen rendering method
         try {
+            // Render grass block if sitting animation is active
+            if ("sit".equalsIgnoreCase(playerData.getCurrentAnimation())) {
+                PoseStack poseStack = graphics.pose();
+                MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+
+                poseStack.pushPose();
+                // Match the transformations from InventoryScreen
+                poseStack.translate((double)x, (double)y, 50.0);
+                float scaleCasted = (float)(int)scale;
+                Matrix4f scaleMatrix = (new Matrix4f()).scaling(scaleCasted, scaleCasted, -scaleCasted);
+                poseStack.mulPoseMatrix(scaleMatrix);
+                poseStack.mulPose(quaternionXZ);
+                poseStack.mulPose(Axis.YP.rotationDegrees(-targetRotation));
+                poseStack.scale(-1.0F, -1.0F, 1.0F);
+                poseStack.translate(0.0F, -1.501F, 0.0F);
+
+                renderGrassBlock(poseStack, bufferSource);
+                bufferSource.endBatch();
+                poseStack.popPose();
+            }
+
             InventoryScreen.renderEntityInInventory(
                     graphics,
                     x,
@@ -277,11 +298,16 @@ public class PlayerModelRenderer {
         // Get Minecraft instance for tick count
         Minecraft mc = Minecraft.getInstance();
 
-        // Setup model pose with idle animation
-        setupModelPoseWithAnimation(model, playerData, mouseX, mouseY, followMouse, x, y, mc);
-
         // Get buffer source
         MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+
+        // Render grass block if sitting animation is active
+        if ("sit".equalsIgnoreCase(playerData.getCurrentAnimation())) {
+            renderGrassBlock(poseStack, bufferSource);
+        }
+
+        // Setup model pose with idle animation
+        setupModelPoseWithAnimation(model, playerData, mouseX, mouseY, followMouse, x, y, mc);
 
         // Render the model with skin texture
         RenderType renderType = RenderType.entityTranslucent(playerData.getSkinLocation());
@@ -580,8 +606,8 @@ public class PlayerModelRenderer {
     }
 
     /**
-     * Setup model pose with idle animation (arm positions, head rotation, etc.)
-     * Energetic bounce animation with smooth lerping
+     * Setup model pose with animation based on current animation state
+     * Supports idle, walk, run, sneak, sit, jump animations
      */
     private static void setupModelPoseWithAnimation(
             PlayerModel<?> model,
@@ -593,11 +619,11 @@ public class PlayerModelRenderer {
             int modelCenterY,
             Minecraft mc
     ) {
-        // Set model state flags
-        model.young = false;
-        model.crouching = false;
-        model.riding = false;
-        model.attackTime = 0.0f;
+        // Get current animation type from preview data
+        String animation = playerData.getCurrentAnimation();
+        if (animation == null || animation.isEmpty()) {
+            animation = "idle";
+        }
 
         // Get elapsed time using Minecraft's tick counter
         int tickCount = mc != null ? mc.gui.getGuiTicks() : 0;
@@ -607,8 +633,42 @@ public class PlayerModelRenderer {
         // Lerp factor for smooth transitions
         float lerpFactor = 0.15f;
 
+        // Apply animation based on type
+        switch (animation.toLowerCase()) {
+            case "walk":
+                setupWalkingPose(model, t, lerpFactor);
+                break;
+            case "sit":
+                setupSittingPose(model, t, lerpFactor);
+                break;
+            case "idle":
+            default:
+                setupIdlePose(model, t, lerpFactor);
+                break;
+        }
+
+        // Hat layer (outer layer of head) follows head rotation
+        model.hat.copyFrom(model.head);
+
+        // Setup arm rendering
+        model.leftSleeve.copyFrom(model.leftArm);
+        model.rightSleeve.copyFrom(model.rightArm);
+        model.leftPants.copyFrom(model.leftLeg);
+        model.rightPants.copyFrom(model.rightLeg);
+        model.jacket.copyFrom(model.body);
+    }
+
+    /**
+     * Setup idle pose with subtle bounce animation
+     */
+    private static void setupIdlePose(PlayerModel<?> model, float t, float lerpFactor) {
+        // Set model state flags
+        model.young = false;
+        model.crouching = false;
+        model.riding = false;
+        model.attackTime = 0.0f;
+
         // HEAD: Bouncy up/down with head tilt
-        // Note: Can't change position.y directly in Minecraft models, so we'll use body bounce instead
         float targetHeadRotZ = (float)Math.sin(t * 1.2) * 0.04f;
         prevHeadRotZ = smoothLerp(prevHeadRotZ, targetHeadRotZ, lerpFactor);
 
@@ -616,12 +676,11 @@ public class PlayerModelRenderer {
         model.head.yRot = 0.0f;
         model.head.zRot = prevHeadRotZ;
 
-        // BODY: Bounce effect (simulates head position.y bounce from original)
-        // Using abs(sin) for always positive bounce
+        // BODY: Bounce effect
         float targetBodyBounce = (float)Math.abs(Math.sin(t * 0.8)) * 0.12f;
-        prevBodyRotX = smoothLerp(prevBodyRotX, targetBodyBounce * 0.2f, lerpFactor); // Convert to rotation
+        prevBodyRotX = smoothLerp(prevBodyRotX, targetBodyBounce * 0.2f, lerpFactor);
 
-        model.body.xRot = -prevBodyRotX; // Negative to create upward lean during bounce
+        model.body.xRot = -prevBodyRotX;
         model.body.yRot = 0.0f;
         model.body.zRot = 0.0f;
 
@@ -635,7 +694,7 @@ public class PlayerModelRenderer {
         model.rightArm.yRot = 0.0f;
         model.rightArm.zRot = prevRightArmRotZ;
 
-        // LEFT ARM: Opposite swing (π phase shift)
+        // LEFT ARM: Opposite swing
         float targetLeftArmRotX = (float)Math.sin(t * 0.8 + Math.PI) * 0.12f;
         float targetLeftArmRotZ = (float)Math.sin(t + Math.PI) * -0.04f;
         prevLeftArmRotX = smoothLerp(prevLeftArmRotX, targetLeftArmRotX, lerpFactor);
@@ -653,23 +712,258 @@ public class PlayerModelRenderer {
         model.rightLeg.yRot = 0.0f;
         model.rightLeg.zRot = 0.0f;
 
-        // LEFT LEG: Opposite subtle swing (π phase shift)
+        // LEFT LEG: Opposite subtle swing
         float targetLeftLegRotX = (float)Math.sin(t * 0.5 + Math.PI) * 0.05f;
         prevLeftLegRotX = smoothLerp(prevLeftLegRotX, targetLeftLegRotX, lerpFactor);
 
         model.leftLeg.xRot = prevLeftLegRotX;
         model.leftLeg.yRot = 0.0f;
         model.leftLeg.zRot = 0.0f;
+    }
 
-        // Hat layer (outer layer of head) follows head rotation
-        model.hat.copyFrom(model.head);
+    /**
+     * Setup walking pose with natural body movements
+     */
+    private static void setupWalkingPose(PlayerModel<?> model, float t, float lerpFactor) {
+        model.young = false;
+        model.crouching = false;
+        model.riding = false;
+        model.attackTime = 0.0f;
 
-        // Setup arm rendering
-        model.leftSleeve.copyFrom(model.leftArm);
-        model.rightSleeve.copyFrom(model.rightArm);
-        model.leftPants.copyFrom(model.leftLeg);
-        model.rightPants.copyFrom(model.rightLeg);
-        model.jacket.copyFrom(model.body);
+        // ARMS and LEGS: Swinging motion (arms opposite to legs) - faster animation
+        float limbSwing = (float)Math.sin(t * 8.0) * 0.6f;
+
+        // HEAD: Natural bobbing and slight side-to-side movement while walking
+        float headBobY = (float)Math.abs(Math.sin(t * 8.0)) * 0.05f; // Up and down bob matching stride
+        float headTiltZ = (float)Math.sin(t * 8.0) * 0.03f; // Slight tilt side to side
+        model.head.xRot = -headBobY; // Nod slightly with each step
+        model.head.yRot = 0.0f;
+        model.head.zRot = headTiltZ;
+
+        // BODY: Dynamic movement - sway and lean
+        float bodySway = (float)Math.sin(t * 8.0) * 0.04f; // Side-to-side sway
+        float bodyBob = (float)Math.abs(Math.sin(t * 8.0)) * 0.02f; // Up/down movement
+        model.body.xRot = 0.05f + bodyBob; // Forward lean plus bob
+        model.body.yRot = bodySway; // Torso rotation
+        model.body.zRot = bodySway * 0.5f; // Slight roll
+
+        // ARMS: Natural swing with slight outward motion
+        float armSwingOut = (float)Math.abs(Math.sin(t * 8.0)) * 0.05f;
+        model.rightArm.xRot = -limbSwing;
+        model.rightArm.yRot = 0.0f;
+        model.rightArm.zRot = armSwingOut;
+
+        model.leftArm.xRot = limbSwing;
+        model.leftArm.yRot = 0.0f;
+        model.leftArm.zRot = -armSwingOut;
+
+        // LEGS: Standard walking motion
+        model.rightLeg.xRot = limbSwing;
+        model.rightLeg.yRot = 0.0f;
+        model.rightLeg.zRot = 0.0f;
+
+        model.leftLeg.xRot = -limbSwing;
+        model.leftLeg.yRot = 0.0f;
+        model.leftLeg.zRot = 0.0f;
+    }
+
+    /**
+     * Setup sitting pose with subtle idle movements
+     */
+    private static void setupSittingPose(PlayerModel<?> model, float t, float lerpFactor) {
+        model.young = false;
+        model.crouching = false;
+        model.riding = true; // Enable riding flag for sitting pose
+        model.attackTime = 0.0f;
+
+        // HEAD: Subtle breathing and slight look-around
+        float headBob = (float)Math.sin(t * 0.6) * 0.02f;
+        float headTilt = (float)Math.sin(t * 0.4) * 0.03f;
+        model.head.xRot = headBob;
+        model.head.yRot = 0.0f;
+        model.head.zRot = headTilt;
+
+        // BODY: Subtle breathing motion
+        float breathe = (float)Math.sin(t * 0.5) * 0.01f;
+        model.body.xRot = breathe;
+        model.body.yRot = 0.0f;
+        model.body.zRot = 0.0f;
+
+        // ARMS: Resting on legs with subtle relaxed movement
+        float armSway = (float)Math.sin(t * 0.7) * 0.02f;
+        model.rightArm.xRot = -0.62f + armSway;
+        model.rightArm.yRot = 0.0f;
+        model.rightArm.zRot = 0.0f;
+
+        model.leftArm.xRot = -0.62f - armSway;
+        model.leftArm.yRot = 0.0f;
+        model.leftArm.zRot = 0.0f;
+
+        // LEGS: Bent for sitting with very subtle fidget
+        float legFidget = (float)Math.sin(t * 0.3) * 0.01f;
+        model.rightLeg.xRot = -1.4f + legFidget;
+        model.rightLeg.yRot = 0.31f;
+        model.rightLeg.zRot = 0.05f;
+
+        model.leftLeg.xRot = -1.4f - legFidget;
+        model.leftLeg.yRot = -0.31f;
+        model.leftLeg.zRot = -0.05f;
+    }
+
+    /**
+     * Render a grass block underneath the player when sitting
+     * Positioned at the player's feet
+     */
+    private static void renderGrassBlock(PoseStack poseStack, MultiBufferSource.BufferSource bufferSource) {
+        poseStack.pushPose();
+
+        // Hardcoded position and scale values
+        double offsetX = -0.333;
+        double offsetY = 1.4;
+        double offsetZ = 0.222;
+        double scale = 0.575;
+
+        // Position the grass block
+        poseStack.translate(offsetX, offsetY, offsetZ);
+
+        // Rotate 180 degrees around X-axis to flip it right-side up
+        poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(180.0f));
+
+        // Scale the block
+        poseStack.scale((float)scale, (float)scale, (float)scale);
+
+        // Use Minecraft's BlockRenderer to render a grass block properly
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        net.minecraft.client.renderer.block.BlockRenderDispatcher blockRenderer = mc.getBlockRenderer();
+
+        // Render the grass block using Minecraft's built-in renderer
+        blockRenderer.renderSingleBlock(
+            net.minecraft.world.level.block.Blocks.GRASS_BLOCK.defaultBlockState(),
+            poseStack,
+            bufferSource,
+            15728880, // Full brightness
+            net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY
+        );
+
+        poseStack.popPose();
+    }
+
+    /**
+     * Helper method to render a single face of a cube
+     */
+    private static void renderCubeFace(Matrix4f matrix, PoseStack.Pose pose,
+                                       MultiBufferSource.BufferSource bufferSource,
+                                       ResourceLocation texture,
+                                       float x1, float y1, float z1,
+                                       float x2, float y2, float z2,
+                                       float nx, float ny, float nz) {
+        RenderType renderType = RenderType.entityCutout(texture);
+        var vertexConsumer = bufferSource.getBuffer(renderType);
+
+        // Calculate the 4 corners of the face
+        float minX = Math.min(x1, x2);
+        float maxX = Math.max(x1, x2);
+        float minY = Math.min(y1, y2);
+        float maxY = Math.max(y1, y2);
+        float minZ = Math.min(z1, z2);
+        float maxZ = Math.max(z1, z2);
+
+        // Determine which coordinates vary based on the normal
+        if (ny != 0) { // Top or bottom face (Y constant)
+            float y = y1;
+            // Bottom-left
+            vertexConsumer.vertex(matrix, minX, y, minZ)
+                .color(255, 255, 255, 255)
+                .uv(0, 0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+            // Top-left
+            vertexConsumer.vertex(matrix, minX, y, maxZ)
+                .color(255, 255, 255, 255)
+                .uv(0, 1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+            // Top-right
+            vertexConsumer.vertex(matrix, maxX, y, maxZ)
+                .color(255, 255, 255, 255)
+                .uv(1, 1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+            // Bottom-right
+            vertexConsumer.vertex(matrix, maxX, y, minZ)
+                .color(255, 255, 255, 255)
+                .uv(1, 0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+        } else if (nx != 0) { // Left or right face (X constant)
+            float x = x1;
+            vertexConsumer.vertex(matrix, x, minY, minZ)
+                .color(255, 255, 255, 255)
+                .uv(0, 0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+            vertexConsumer.vertex(matrix, x, maxY, minZ)
+                .color(255, 255, 255, 255)
+                .uv(0, 1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+            vertexConsumer.vertex(matrix, x, maxY, maxZ)
+                .color(255, 255, 255, 255)
+                .uv(1, 1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+            vertexConsumer.vertex(matrix, x, minY, maxZ)
+                .color(255, 255, 255, 255)
+                .uv(1, 0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+        } else { // Front or back face (Z constant)
+            float z = z1;
+            vertexConsumer.vertex(matrix, minX, minY, z)
+                .color(255, 255, 255, 255)
+                .uv(0, 0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+            vertexConsumer.vertex(matrix, minX, maxY, z)
+                .color(255, 255, 255, 255)
+                .uv(0, 1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+            vertexConsumer.vertex(matrix, maxX, maxY, z)
+                .color(255, 255, 255, 255)
+                .uv(1, 1)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+            vertexConsumer.vertex(matrix, maxX, minY, z)
+                .color(255, 255, 255, 255)
+                .uv(1, 0)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(15728880)
+                .normal(pose.normal(), nx, ny, nz)
+                .endVertex();
+        }
     }
 
     /**

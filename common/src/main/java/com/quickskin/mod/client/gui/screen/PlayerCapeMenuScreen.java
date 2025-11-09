@@ -75,9 +75,9 @@ public class PlayerCapeMenuScreen extends Screen {
     private Button closeButton;
     private SpeedSlider animationSpeedSlider;
 
-    // Model position offsets from grid edge
-    private static final int MODEL_OFFSET_X = 80;
-    private static final int MODEL_OFFSET_Y = 85;
+    // Model position offsets from grid edge (base offset + config offset when config is 0)
+    private static final int MODEL_OFFSET_X = 95; // Was 80, now 80 + 15 = 95
+    private static final int MODEL_OFFSET_Y = 121; // Was 85, now 85 + 36 = 121
 
     private double scrollOffset = 0;
     private double targetScrollOffset = 0;
