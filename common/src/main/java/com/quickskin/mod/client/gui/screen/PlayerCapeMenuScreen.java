@@ -108,7 +108,7 @@ public class PlayerCapeMenuScreen extends Screen {
     private int importMessageColor = 0xFFFFFF;
 
     public PlayerCapeMenuScreen(@Nullable Screen parent) {
-        super(Component.literal("Cape Selection"));
+        super(Component.empty());
         this.parent = parent;
     }
 

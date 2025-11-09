@@ -86,13 +86,13 @@ public class PlayerSkinMenuScreen extends Screen {
     private boolean isSearching = false;
 
     public PlayerSkinMenuScreen(@Nullable Screen parent) {
-        super(Component.literal("QuickSkin"));
+        super(Component.literal("Quick Skin"));
         this.parent = parent;
     }
 
     @Override
     protected void init() {
-        // Force GUI scale to 2 for consistent appearance
+        // Force GUI scale for consistent appearance
         if (!guiScaleForced && !isClosing) {
             guiScaleForced = true;
             int optimalScale = GuiScaleManager.getOptimalMenuScale();
@@ -417,7 +417,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
     /**
      * Calculate panel dimensions based on screen size
-     * Uses FIXED sizes since we're forcing GUI scale to 3
+     * Uses FIXED sizes since we're forcing GUI scale
      */
     private void calculatePanelDimensions() {
         // Calculate panel dimensions as percentages of screen for flexible sizing
@@ -594,22 +594,37 @@ public class PlayerSkinMenuScreen extends Screen {
     @Override
     public void removed() {
         super.removed();
-        // GUI scale restoration is handled in onClose()
+
+        // Only restore GUI scale if we're actually closing (not just opening a modal)
+        // The isClosing flag is set by onClose() when truly exiting the menu
+        if (isClosing) {
+            restoreGuiScaleIfNeeded();
+        }
     }
 
     @Override
     public void onClose() {
-        // Restore original GUI scale BEFORE switching to parent screen
-        if (guiScaleForced) {
-            isClosing = true;
-            guiScaleForced = false;
-            GuiScaleManager.restoreOriginalGuiScale();
-            QuickSkin.LOGGER.info("PlayerSkinMenuScreen.onClose() - GUI scale restored");
-        }
+        // Mark that we're truly closing (not just opening a modal)
+        isClosing = true;
+
+        // Restore GUI scale before closing
+        restoreGuiScaleIfNeeded();
 
         // Return to parent screen (or null to return to game)
         if (this.minecraft != null) {
             this.minecraft.setScreen(parent);
+        }
+    }
+
+    /**
+     * Restore the original GUI scale if it was forced by this screen.
+     * This method is idempotent and can be called multiple times safely.
+     */
+    private void restoreGuiScaleIfNeeded() {
+        if (guiScaleForced) {
+            guiScaleForced = false;
+            GuiScaleManager.restoreOriginalGuiScale();
+            QuickSkin.LOGGER.info("PlayerSkinMenuScreen - GUI scale restored");
         }
     }
 

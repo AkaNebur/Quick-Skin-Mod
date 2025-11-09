@@ -82,14 +82,14 @@ public class GuiScaleManager {
 
     /**
      * Get the optimal GUI scale for the QuickSkin menu.
-     * Returns 3 for consistent layout.
+     * Returns 2 for consistent layout.
      */
     public static int getOptimalMenuScale() {
         try {
-            return 3;
+            return 2;
         } catch (Exception e) {
             QuickSkin.LOGGER.error("Failed to calculate optimal menu scale", e);
-            return 3; // Safe fallback
+            return 2; // Safe fallback
         }
     }
 
