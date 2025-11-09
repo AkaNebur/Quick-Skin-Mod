@@ -9,22 +9,10 @@ import net.fabricmc.api.Environment;
  */
 @Environment(EnvType.CLIENT)
 public class ServerConfigSyncEvent {
-    private final boolean allowCustomSkins;
-    private final boolean allowCustomCapes;
     private final boolean allowTransparentSkins;
 
-    public ServerConfigSyncEvent(boolean allowCustomSkins, boolean allowCustomCapes, boolean allowTransparentSkins) {
-        this.allowCustomSkins = allowCustomSkins;
-        this.allowCustomCapes = allowCustomCapes;
+    public ServerConfigSyncEvent(boolean allowTransparentSkins) {
         this.allowTransparentSkins = allowTransparentSkins;
-    }
-
-    public boolean isAllowCustomSkins() {
-        return allowCustomSkins;
-    }
-
-    public boolean isAllowCustomCapes() {
-        return allowCustomCapes;
     }
 
     public boolean isAllowTransparentSkins() {

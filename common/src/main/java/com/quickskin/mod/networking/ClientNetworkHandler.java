@@ -185,14 +185,12 @@ public class ClientNetworkHandler {
             // Fire event for other systems to react
             InternalEventBus.getInstance().post(
                 new ServerConfigSyncEvent(
-                    serverConfig.allowCustomSkins,
-                    serverConfig.allowCustomCapes,
                     !serverConfig.disableSkinTransparency // allowTransparent
                 )
             );
 
-            QuickSkin.LOGGER.debug("Server config override applied: allowCustomSkins={}, allowHDSkins={}, maxSkinResolution={}",
-                serverConfig.allowCustomSkins, serverConfig.allowHDSkins, serverConfig.maxSkinResolution);
+            QuickSkin.LOGGER.debug("Server config override applied: disableSkinTransparency={}, skinChangeCooldownSeconds={}",
+                serverConfig.disableSkinTransparency, serverConfig.skinChangeCooldownSeconds);
 
             // CRITICAL FIX: Sync current appearance to server after receiving config
             // This ensures that when a player joins, existing players see their CURRENT appearance

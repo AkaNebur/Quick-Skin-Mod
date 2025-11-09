@@ -18,21 +18,8 @@ public class ServerConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     // Skin Settings
-    public boolean allowCustomSkins = true;
-    public boolean allowHDSkins = true;
-    public int maxSkinResolution = 2048;
     public boolean disableSkinTransparency = false; // Disable transparency in player skins
     public int skinChangeCooldownSeconds = 0; // Cooldown in seconds for changing skin (0 = disabled)
-
-    // Cape Settings
-    public boolean allowCustomCapes = true;
-    public boolean allowAnimatedCapes = true;
-
-    // Performance Settings
-    public int maxTextureSize = 2048 * 1024; // 2MB max file size
-
-    // Security Settings
-    public boolean requireAuthentication = false;
 
     private ServerConfig() {
         // Private constructor for singleton
