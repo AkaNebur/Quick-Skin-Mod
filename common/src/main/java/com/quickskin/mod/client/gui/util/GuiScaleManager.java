@@ -16,11 +16,6 @@ public class GuiScaleManager {
     public static boolean setMenuGuiScale(int targetScale) {
         try {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.options == null) {
-                QuickSkin.LOGGER.warn("Cannot change GUI scale: options is null");
-                return false;
-            }
-
             OptionInstance<Integer> guiScaleOption = mc.options.guiScale();
 
             // Store the original scale if we haven't already
@@ -56,11 +51,6 @@ public class GuiScaleManager {
             }
 
             Minecraft mc = Minecraft.getInstance();
-            if (mc.options == null) {
-                QuickSkin.LOGGER.warn("Cannot restore GUI scale: options is null");
-                return;
-            }
-
             OptionInstance<Integer> guiScaleOption = mc.options.guiScale();
             int currentScale = guiScaleOption.get();
 
@@ -85,25 +75,7 @@ public class GuiScaleManager {
      * Returns 2 for consistent layout.
      */
     public static int getOptimalMenuScale() {
-        try {
-            return 2;
-        } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to calculate optimal menu scale", e);
-            return 2; // Safe fallback
-        }
+        return 2;
     }
 
-    /**
-     * Check if we currently have a modified GUI scale
-     */
-    public static boolean hasModifiedScale() {
-        return originalGuiScale != null && scaleChanged;
-    }
-
-    /**
-     * Get the current original scale (before any changes)
-     */
-    public static Integer getOriginalScale() {
-        return originalGuiScale;
-    }
 }

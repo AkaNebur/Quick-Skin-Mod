@@ -47,8 +47,6 @@ public class PlayerSkinMenuScreen extends Screen {
     // Panels
     private SkinListPanel skinListPanel;
     private PlayerPreviewPanel playerPreviewPanel;
-    private ActionButtonsPanel actionButtonsPanel;
-    private LinkButtonsPanel linkButtonsPanel;
 
     // Panel dimensions
     private int panelX;
@@ -206,7 +204,6 @@ public class PlayerSkinMenuScreen extends Screen {
         // Model buttons row (Row 3: above Import/HD/Skin/Cape buttons)
         int modelButtonsY = actionButtonsBottomY - actionPanelHeight - scaledComponentHeight - scaledSpacing;
         int modelButtonsX = fullWidthX + (fourButtonWidth + scaledSpacing) * 3;
-        int modelButtonsTotalWidth = fourButtonWidth;
 
         // Create Player Preview Panel (right side)
         int playerWidgetX = panelX + panelWidth - rightPanelWidth - scaledPadding;
@@ -229,7 +226,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 this,
                 modelButtonsX,
                 modelButtonsY,
-                modelButtonsTotalWidth,
+                fourButtonWidth,
                 scaledComponentHeight,
                 scaledSpacing
         );
@@ -255,12 +252,14 @@ public class PlayerSkinMenuScreen extends Screen {
                 },
                 () -> {
                     // Open cape selection screen
-                    minecraft.setScreen(new PlayerCapeMenuScreen(this));
+                    if (minecraft != null) {
+                        minecraft.setScreen(new PlayerCapeMenuScreen(this));
+                    }
                 },
                 this::onClose
         );
 
-        actionButtonsPanel = new ActionButtonsPanel(
+        ActionButtonsPanel actionButtonsPanel = new ActionButtonsPanel(
                 fullWidthX,
                 bottomY,
                 fullComponentWidth,
@@ -274,7 +273,7 @@ public class PlayerSkinMenuScreen extends Screen {
         int linkPanelWidth = (scaledComponentHeight + scaledSpacing) * 4;
         int linkPanelX = panelX + panelWidth - linkPanelWidth - scaledPadding;
 
-        linkButtonsPanel = new LinkButtonsPanel(
+        LinkButtonsPanel linkButtonsPanel = new LinkButtonsPanel(
                 linkPanelX,
                 linkButtonY,
                 linkPanelWidth,
@@ -382,12 +381,10 @@ public class PlayerSkinMenuScreen extends Screen {
      * @param capeLocation Texture location (atlas)
      */
     private void registerCapeAnimationIfNeeded(String capeId, ResourceLocation capeLocation) {
-        String animationId = null;
-
         // Determine animation ID from cape ID
         if (capeId.startsWith("local_cape:")) {
             String hash = capeId.substring("local_cape:".length());
-            animationId = "cape_" + hash;
+            String animationId = "cape_" + hash;
 
             // Check if this local cape has animation metadata
             com.quickskin.mod.common.data.AnimationMetadata metadata =
@@ -405,14 +402,10 @@ public class PlayerSkinMenuScreen extends Screen {
                         .registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
                 }
             }
-        } else if (capeId.startsWith("known:")) {
-            String id = capeId.substring("known:".length());
-            animationId = "cape_known_" + id;
-
-            // Known capes might also be animated
-            // For now, we'll skip this as known capes use a different system
-            // but you could add similar logic if needed
         }
+        // Known capes might also be animated
+        // For now, we'll skip this as known capes use a different system
+        // but you could add similar logic if needed
     }
 
     /**
@@ -781,8 +774,8 @@ public class PlayerSkinMenuScreen extends Screen {
     /**
      * Public wrapper for addRenderableWidget to allow panels to add widgets
      */
-    public <T extends net.minecraft.client.gui.components.events.GuiEventListener & net.minecraft.client.gui.components.Renderable & net.minecraft.client.gui.narration.NarratableEntry> T registerWidget(T widget) {
-        return this.addRenderableWidget(widget);
+    public <T extends net.minecraft.client.gui.components.events.GuiEventListener & net.minecraft.client.gui.components.Renderable & net.minecraft.client.gui.narration.NarratableEntry> void registerWidget(T widget) {
+        this.addRenderableWidget(widget);
     }
 
     /**
@@ -845,14 +838,16 @@ public class PlayerSkinMenuScreen extends Screen {
      * Render error toasts
      */
     private void renderErrorToasts(GuiGraphics graphics) {
-        errorToasts.removeIf(toast -> !toast.render(graphics, width, height));
+        errorToasts.removeIf(toast -> !toast.render(graphics, width));
     }
 
     /**
      * Show deletion confirmation dialog
      */
     public void showDeleteConfirmation(AssetMetadata metadata) {
-        String displayName = truncateFileName(metadata.friendlyName(), 35);
+        if (minecraft == null) return;
+
+        String displayName = truncateFileName(metadata.friendlyName());
         minecraft.setScreen(new DeletionConfirmScreen(
                 this,
                 Component.literal("Delete Skin?"),
@@ -863,7 +858,9 @@ public class PlayerSkinMenuScreen extends Screen {
                         deleteSkin(metadata);
                     }
                     // Return to skin menu screen
-                    minecraft.setScreen(this);
+                    if (minecraft != null) {
+                        minecraft.setScreen(this);
+                    }
                 },
                 true
         ));
@@ -873,6 +870,8 @@ public class PlayerSkinMenuScreen extends Screen {
      * Show rename dialog for a skin
      */
     public void showRenameDialog(AssetMetadata metadata) {
+        if (minecraft == null) return;
+
         minecraft.setScreen(new RenameScreen(
                 this,
                 Component.literal("Rename Skin File"),
@@ -882,19 +881,21 @@ public class PlayerSkinMenuScreen extends Screen {
                     // Rename the skin
                     renameSkin(metadata, newName);
                     // Return to skin menu screen
-                    minecraft.setScreen(this);
+                    if (minecraft != null) {
+                        minecraft.setScreen(this);
+                    }
                 }
         ));
     }
 
     /**
-     * Truncate filename to specified length, adding ellipsis if needed
+     * Truncate filename to 35 characters, adding ellipsis if needed
      */
-    private String truncateFileName(String name, int maxLength) {
-        if (name.length() <= maxLength) {
+    private String truncateFileName(String name) {
+        if (name.length() <= 35) {
             return name;
         }
-        return name.substring(0, maxLength - 3) + "...";
+        return name.substring(0, 32) + "...";
     }
 
     /**
@@ -914,11 +915,13 @@ public class PlayerSkinMenuScreen extends Screen {
             // Delete the file
             Files.deleteIfExists(metadata.path());
 
-            minecraft.getSoundManager().play(
-                    net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                            SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
-                    )
-            );
+            if (minecraft != null) {
+                minecraft.getSoundManager().play(
+                        net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                                SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
+                        )
+                );
+            }
 
             // Refresh the asset manager and skin list
             LocalAssetManager.getInstance().discoverLocalAssets();
@@ -952,11 +955,13 @@ public class PlayerSkinMenuScreen extends Screen {
                 QuickSkin.LOGGER.info("Successfully renamed skin to: {}", newName);
 
                 // Play success sound
-                minecraft.getSoundManager().play(
-                        net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                                SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
-                        )
-                );
+                if (minecraft != null) {
+                    minecraft.getSoundManager().play(
+                            net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                                    SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
+                            )
+                    );
+                }
 
                 // Refresh the skin list to show the new name
                 refreshSkinList();
@@ -1080,11 +1085,13 @@ public class PlayerSkinMenuScreen extends Screen {
                         usernameSearchField.setValue("");
 
                         // Play success sound
-                        minecraft.getSoundManager().play(
-                                net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                                        SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
-                                )
-                        );
+                        if (minecraft != null) {
+                            minecraft.getSoundManager().play(
+                                    net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                                            SoundEvents.UI_BUTTON_CLICK.value(), 1.0f
+                                    )
+                            );
+                        }
                     } else {
                         showError(Component.literal("Failed to load skin metadata"));
                     }

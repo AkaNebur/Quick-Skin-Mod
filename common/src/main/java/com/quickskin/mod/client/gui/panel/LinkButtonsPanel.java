@@ -1,6 +1,5 @@
 package com.quickskin.mod.client.gui.panel;
 
-import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.widget.LinkButton;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;

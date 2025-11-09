@@ -16,7 +16,6 @@ public class DeletionConfirmScreen extends Screen {
     private final Screen parent;
     private final Component message;
     private final Consumer<Boolean> callback;
-    private final boolean isPermanentDelete;
 
     // Panel styling
     private static final int PANEL_BG = 0xB0000000;           // Darker semi-transparent background for frosted glass effect
@@ -26,21 +25,16 @@ public class DeletionConfirmScreen extends Screen {
     private static final int WARNING_COLOR = 0xFFCC00;        // Orange warning text
 
     // Panel dimensions
-    private int panelWidth = 340;
-    private int panelHeight = 160;
+    private final int panelWidth = 340;
+    private final int panelHeight = 160;
     private int panelX;
     private int panelY;
-
-    // Buttons
-    private Button confirmButton;
-    private Button cancelButton;
 
     public DeletionConfirmScreen(Screen parent, Component title, Component message, Consumer<Boolean> callback, boolean isPermanentDelete) {
         super(title);
         this.parent = parent;
         this.message = message;
         this.callback = callback;
-        this.isPermanentDelete = isPermanentDelete;
     }
 
     @Override
@@ -60,21 +54,21 @@ public class DeletionConfirmScreen extends Screen {
         int buttonStartX = this.panelX + (this.panelWidth - totalButtonWidth) / 2;
 
         // Cancel button (left, safe) - uses normal Minecraft button style
-        this.cancelButton = Button.builder(
+        Button cancelButton = Button.builder(
             Component.literal("Cancel"),
             (button) -> this.callback.accept(false)
         ).bounds(buttonStartX, buttonY, buttonWidth, buttonHeight).build();
 
         // Confirm delete button (right, red/danger)
-        this.confirmButton = ButtonFactory.createDanger(
+        Button confirmButton = ButtonFactory.createDanger(
             buttonStartX + buttonWidth + buttonSpacing, buttonY,
             buttonWidth, buttonHeight,
             Component.literal("Delete"),
             (button) -> this.callback.accept(true)
         );
 
-        this.addRenderableWidget(this.cancelButton);
-        this.addRenderableWidget(this.confirmButton);
+        this.addRenderableWidget(cancelButton);
+        this.addRenderableWidget(confirmButton);
     }
 
     @Override
@@ -155,21 +149,21 @@ public class DeletionConfirmScreen extends Screen {
         StringBuilder currentLine = new StringBuilder();
 
         for (String word : words) {
-            String testLine = currentLine.length() == 0 ? word : currentLine + " " + word;
+            String testLine = currentLine.isEmpty() ? word : currentLine + " " + word;
             int lineWidth = this.font.width(testLine);
 
-            if (lineWidth > maxWidth && currentLine.length() > 0) {
+            if (lineWidth > maxWidth && !currentLine.isEmpty()) {
                 lines.add(currentLine.toString());
                 currentLine = new StringBuilder(word);
             } else {
-                if (currentLine.length() > 0) {
+                if (!currentLine.isEmpty()) {
                     currentLine.append(" ");
                 }
                 currentLine.append(word);
             }
         }
 
-        if (currentLine.length() > 0) {
+        if (!currentLine.isEmpty()) {
             lines.add(currentLine.toString());
         }
 
@@ -200,10 +194,5 @@ public class DeletionConfirmScreen extends Screen {
     public void onClose() {
         // Return to parent screen without confirming
         this.callback.accept(false);
-    }
-
-    @Override
-    public boolean shouldCloseOnEsc() {
-        return true;
     }
 }

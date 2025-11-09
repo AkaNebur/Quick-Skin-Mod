@@ -1,6 +1,5 @@
 package com.quickskin.mod.client.gui.widget;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -17,8 +16,8 @@ public class ErrorToast {
     private final Minecraft mc;
     private final Component message;
     private final long creationTime;
-    private final long displayDuration = 3000; // 3 seconds
 
+    private static final long DISPLAY_DURATION = 3000; // 3 seconds
     private static final int TOAST_WIDTH = 300;
     private static final int TOAST_HEIGHT = 40;
     private static final int TOAST_PADDING = 10;
@@ -33,10 +32,10 @@ public class ErrorToast {
      * Render the toast
      * @return true if still visible, false if expired
      */
-    public boolean render(GuiGraphics guiGraphics, int screenWidth, int screenHeight) {
+    public boolean render(GuiGraphics guiGraphics, int screenWidth) {
         long elapsed = System.currentTimeMillis() - creationTime;
 
-        if (elapsed > displayDuration) {
+        if (elapsed > DISPLAY_DURATION) {
             return false; // Expired
         }
 
@@ -45,9 +44,9 @@ public class ErrorToast {
         if (elapsed < 300) {
             // Fade in
             alpha = elapsed / 300.0f;
-        } else if (elapsed > displayDuration - 500) {
+        } else if (elapsed > DISPLAY_DURATION - 500) {
             // Fade out
-            alpha = (displayDuration - elapsed) / 500.0f;
+            alpha = (DISPLAY_DURATION - elapsed) / 500.0f;
         }
 
         alpha = Math.max(0, Math.min(1, alpha));

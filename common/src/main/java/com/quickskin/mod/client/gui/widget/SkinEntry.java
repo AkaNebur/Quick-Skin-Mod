@@ -12,8 +12,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
@@ -28,10 +28,6 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     private final ResourceLocation textureLocation;
     private final SkinListWidget parentList;
 
-    // Action button state
-    private final int actionButtonSize = 11;
-    private int deleteButtonX, deleteButtonY;
-    private int editButtonX, editButtonY;
     private boolean isDeleteHovered;
     private boolean isEditHovered;
 
@@ -122,6 +118,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         int textX = left + faceSize + 12;
 
         // Calculate max width for text to avoid overlapping buttons
+        int actionButtonSize = 11;
         int buttonAreaWidth = actionButtonSize + 8;
         int textMaxWidth = (highlightRight - buttonAreaWidth) - textX;
 
@@ -146,8 +143,9 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
 
         if (isHovered && !isPlayerOwnSkin) {
             int margin = 4;
-            this.deleteButtonX = highlightRight - actionButtonSize - margin;
-            this.deleteButtonY = highlightTop + margin;
+            // Action button state
+            int deleteButtonX = highlightRight - actionButtonSize - margin;
+            int deleteButtonY = highlightTop + margin;
 
             boolean deleteHovered = mouseX >= deleteButtonX && mouseX < deleteButtonX + actionButtonSize &&
                                    mouseY >= deleteButtonY && mouseY < deleteButtonY + actionButtonSize;
@@ -160,16 +158,15 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             this.isDeleteHovered = deleteHovered;
 
             // Render edit/rename button below delete button
-            this.editButtonX = this.deleteButtonX;
-            this.editButtonY = this.deleteButtonY + this.actionButtonSize + 2;
+            int editButtonY = deleteButtonY + actionButtonSize + 2;
 
-            boolean editHovered = mouseX >= editButtonX && mouseX < editButtonX + actionButtonSize &&
+            boolean editHovered = mouseX >= deleteButtonX && mouseX < deleteButtonX + actionButtonSize &&
                                  mouseY >= editButtonY && mouseY < editButtonY + actionButtonSize;
 
-            graphics.fill(editButtonX, editButtonY,
-                editButtonX + actionButtonSize, editButtonY + actionButtonSize,
+            graphics.fill(deleteButtonX, editButtonY,
+                deleteButtonX + actionButtonSize, editButtonY + actionButtonSize,
                 editHovered ? 0xA040C0C0 : 0x80408080);
-            graphics.drawString(mc.font, "✎", editButtonX + 2, editButtonY + 1, 0xFFFFFFFF);
+            graphics.drawString(mc.font, "✎", deleteButtonX + 2, editButtonY + 1, 0xFFFFFFFF);
 
             this.isEditHovered = editHovered;
         }
@@ -202,12 +199,12 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     }
 
     @Override
-    public List<? extends GuiEventListener> children() {
+    public @NotNull List<? extends GuiEventListener> children() {
         return List.of();
     }
 
     @Override
-    public List<? extends NarratableEntry> narratables() {
+    public @NotNull List<? extends NarratableEntry> narratables() {
         return List.of();
     }
 }

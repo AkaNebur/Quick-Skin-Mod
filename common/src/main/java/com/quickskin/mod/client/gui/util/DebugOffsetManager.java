@@ -136,66 +136,11 @@ public class DebugOffsetManager {
     }
 
     /**
-     * Set offset for a specific screen type
-     */
-    public static void setOffset(String screenType, int x, int y) {
-        switch (screenType) {
-            case "title" -> {
-                titleScreenOffsetX = x;
-                titleScreenOffsetY = y;
-            }
-            case "world_selection" -> {
-                worldSelectionOffsetX = x;
-                worldSelectionOffsetY = y;
-            }
-            case "pause" -> {
-                pauseScreenOffsetX = x;
-                pauseScreenOffsetY = y;
-            }
-            case "skin_menu" -> {
-                skinMenuOffsetX = x;
-                skinMenuOffsetY = y;
-            }
-        }
-        save();
-    }
-
-    /**
-     * Check if debug mode is enabled
-     */
-    public static boolean isDebugMode() {
-        return debugMode;
-    }
-
-    /**
      * Enable debug mode (allows dragging models)
      */
     public static void setDebugMode(boolean enabled) {
         debugMode = enabled;
         save();
         QuickSkin.LOGGER.info("Debug mode {}", enabled ? "ENABLED - Hold SHIFT and drag player models to reposition" : "DISABLED");
-    }
-
-    /**
-     * Toggle debug mode
-     */
-    public static void toggleDebugMode() {
-        setDebugMode(!debugMode);
-    }
-
-    /**
-     * Reset all offsets to defaults
-     */
-    public static void resetToDefaults() {
-        titleScreenOffsetX = DEFAULT_TITLE_SCREEN_OFFSET_X;
-        titleScreenOffsetY = DEFAULT_TITLE_SCREEN_OFFSET_Y;
-        worldSelectionOffsetX = DEFAULT_WORLD_SELECTION_OFFSET_X;
-        worldSelectionOffsetY = DEFAULT_WORLD_SELECTION_OFFSET_Y;
-        pauseScreenOffsetX = DEFAULT_PAUSE_SCREEN_OFFSET_X;
-        pauseScreenOffsetY = DEFAULT_PAUSE_SCREEN_OFFSET_Y;
-        skinMenuOffsetX = DEFAULT_SKIN_MENU_OFFSET_X;
-        skinMenuOffsetY = DEFAULT_SKIN_MENU_OFFSET_Y;
-        save();
-        QuickSkin.LOGGER.info("Reset debug offsets to defaults");
     }
 }

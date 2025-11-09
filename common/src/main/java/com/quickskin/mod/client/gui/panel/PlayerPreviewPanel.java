@@ -100,24 +100,20 @@ public class PlayerPreviewPanel extends AbstractWidget {
             int spacing
     ) {
         // Auto button is smaller (square button for the emoji), Classic/Slim share the rest equally
-        int autoButtonWidth = componentHeight; // Square button
-        int remainingWidth = modelButtonsTotalWidth - autoButtonWidth - spacing;
+        int remainingWidth = modelButtonsTotalWidth - componentHeight - spacing;
         int normalModelButtonWidth = (remainingWidth - spacing) / 2;
 
         // Create model type buttons
-        autoModelButton = Button.builder(Component.literal("✨"), button -> {
-            setModelType("auto");
-        }).bounds(modelButtonsX, modelButtonsY, autoButtonWidth, componentHeight).build();
+        autoModelButton = Button.builder(Component.literal("✨"), button -> setModelType("auto"))
+                .bounds(modelButtonsX, modelButtonsY, componentHeight, componentHeight).build();
         screen.registerWidget(autoModelButton);
 
-        classicModelButton = Button.builder(Component.literal("Wide"), button -> {
-            setModelType("classic");
-        }).bounds(modelButtonsX + autoButtonWidth + spacing, modelButtonsY, normalModelButtonWidth, componentHeight).build();
+        classicModelButton = Button.builder(Component.literal("Wide"), button -> setModelType("classic"))
+                .bounds(modelButtonsX + componentHeight + spacing, modelButtonsY, normalModelButtonWidth, componentHeight).build();
         screen.registerWidget(classicModelButton);
 
-        slimModelButton = Button.builder(Component.literal("Slim"), button -> {
-            setModelType("slim");
-        }).bounds(modelButtonsX + autoButtonWidth + spacing + normalModelButtonWidth + spacing, modelButtonsY, normalModelButtonWidth, componentHeight).build();
+        slimModelButton = Button.builder(Component.literal("Slim"), button -> setModelType("slim"))
+                .bounds(modelButtonsX + componentHeight + spacing + normalModelButtonWidth + spacing, modelButtonsY, normalModelButtonWidth, componentHeight).build();
         screen.registerWidget(slimModelButton);
 
         // Set button references for player widget positioning
@@ -130,11 +126,10 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
         // Create rotate button (positioned at left edge above model buttons)
         int rotateButtonSize = 20;
-        int rotateButtonX = modelButtonsX;
         int rotateButtonY = modelButtonsY - rotateButtonSize - spacing;
 
         rotateButton = new RotateButton(
-                rotateButtonX,
+                modelButtonsX,
                 rotateButtonY,
                 rotateButtonSize,
                 b -> {
@@ -158,12 +153,11 @@ public class PlayerPreviewPanel extends AbstractWidget {
             // Create animation toggle button (right edge above model buttons)
             int animToggleWidth = 20;
             int animToggleX = modelButtonsX + modelButtonsTotalWidth - animToggleWidth;
-            int animToggleY = rotateButtonY;
 
             animationToggleButton = Button.builder(
                     Component.literal(">"),
                     button -> toggleAnimationDropdown()
-            ).bounds(animToggleX, animToggleY, animToggleWidth, rotateButtonSize).build();
+            ).bounds(animToggleX, rotateButtonY, animToggleWidth, rotateButtonSize).build();
             screen.registerWidget(animationToggleButton);
 
             // Create numbered animation buttons (dropdown)
@@ -184,7 +178,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
                             }
                             toggleAnimationDropdown();
                         }
-                ).bounds(animToggleX, animToggleY - (i + 1) * 22, animToggleWidth, rotateButtonSize).build();
+                ).bounds(animToggleX, rotateButtonY - (i + 1) * 22, animToggleWidth, rotateButtonSize).build();
 
                 animButton.visible = false;
                 animButton.active = false;

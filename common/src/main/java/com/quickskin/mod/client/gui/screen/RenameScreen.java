@@ -35,8 +35,8 @@ public class RenameScreen extends Screen {
     private static final int MESSAGE_COLOR = 0xFFFFFF;        // White message
 
     // Panel dimensions
-    private int panelWidth = 340;
-    private int panelHeight = 180;
+    private final int panelWidth = 340;
+    private final int panelHeight = 180;
     private int panelX;
     private int panelY;
 
@@ -193,6 +193,8 @@ public class RenameScreen extends Screen {
 
     @Override
     public void onClose() {
-        this.minecraft.setScreen(this.parent);
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(this.parent);
+        }
     }
 }

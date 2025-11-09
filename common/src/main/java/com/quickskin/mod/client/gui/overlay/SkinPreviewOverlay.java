@@ -1,6 +1,5 @@
 package com.quickskin.mod.client.gui.overlay;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import com.quickskin.mod.client.rendering.PreviewPlayerData;
@@ -38,6 +37,7 @@ public class SkinPreviewOverlay {
     /**
      * Render the skin preview overlay
      */
+    @SuppressWarnings("unused")
     public static void render(GuiGraphics guiGraphics, float tickDelta) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
@@ -105,9 +105,7 @@ public class SkinPreviewOverlay {
             guiGraphics,
             x + PREVIEW_SIZE / 2,
             y + (int)(PREVIEW_SIZE * 0.85f),
-            PREVIEW_SIZE / 3,
             skinLocation,
-            null, // No cape for HUD preview
             modelType,
             rotationAngle
         );
@@ -140,16 +138,15 @@ public class SkinPreviewOverlay {
         GuiGraphics graphics,
         int x,
         int y,
-        int scale,
         ResourceLocation skinTexture,
-        ResourceLocation capeTexture,
         String modelType,
         float rotation
     ) {
+        int scale = PREVIEW_SIZE / 3;
         // Create preview data
         PreviewPlayerData previewData = new PreviewPlayerData();
         previewData.setSkinLocation(skinTexture);
-        previewData.setCapeLocation(capeTexture);
+        previewData.setCapeLocation(null); // No cape for HUD preview
         previewData.setModelType(modelType);
 
         // Save graphics state

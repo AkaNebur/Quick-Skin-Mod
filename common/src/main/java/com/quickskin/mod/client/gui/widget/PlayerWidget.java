@@ -11,7 +11,6 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -27,8 +26,6 @@ public class PlayerWidget extends AbstractWidget {
     private float bodyYaw = 20.0f; // 20 degrees for sideways pose (matching original)
     private float targetYRotation = 20.0f; // Target rotation for smooth animation
 
-    // Animation state (disabled for static pose)
-    private boolean autoRotate = false; // Disabled - keep static pose
 
     // Display settings
     private float scale = 87.2f; // 10% smaller than previous (96.9 * 0.9 = 87.21)
@@ -273,18 +270,13 @@ public class PlayerWidget extends AbstractWidget {
      * Returns the raw config value (defaults are baked into base positions)
      */
     private int getPositionOffsetXFromConfig(com.quickskin.mod.config.ClientConfig config) {
-        switch (context) {
-            case TITLE_SCREEN:
-                return config.positionOffsetXTitleScreen;
-            case SKIN_MENU:
-                return config.positionOffsetXSkinMenu;
-            case CAPE_MENU:
-                return config.positionOffsetXCapeMenu;
-            case PAUSE_MENU:
-                return config.positionOffsetXPauseMenu;
-            default:
-                return 0;
-        }
+        return switch (context) {
+            case TITLE_SCREEN -> config.positionOffsetXTitleScreen;
+            case SKIN_MENU -> config.positionOffsetXSkinMenu;
+            case CAPE_MENU -> config.positionOffsetXCapeMenu;
+            case PAUSE_MENU -> config.positionOffsetXPauseMenu;
+            default -> 0;
+        };
     }
 
     /**
@@ -292,18 +284,13 @@ public class PlayerWidget extends AbstractWidget {
      * Returns the raw config value (defaults are baked into base positions)
      */
     private int getPositionOffsetYFromConfig(com.quickskin.mod.config.ClientConfig config) {
-        switch (context) {
-            case TITLE_SCREEN:
-                return config.positionOffsetYTitleScreen;
-            case SKIN_MENU:
-                return config.positionOffsetYSkinMenu;
-            case CAPE_MENU:
-                return config.positionOffsetYCapeMenu;
-            case PAUSE_MENU:
-                return config.positionOffsetYPauseMenu;
-            default:
-                return 0;
-        }
+        return switch (context) {
+            case TITLE_SCREEN -> config.positionOffsetYTitleScreen;
+            case SKIN_MENU -> config.positionOffsetYSkinMenu;
+            case CAPE_MENU -> config.positionOffsetYCapeMenu;
+            case PAUSE_MENU -> config.positionOffsetYPauseMenu;
+            default -> 0;
+        };
     }
 
     /**
@@ -447,7 +434,6 @@ public class PlayerWidget extends AbstractWidget {
         int left = centerX - modelWidth / 2;
         int right = centerX + modelWidth / 2;
         int top = centerY - modelHeight;
-        int bottom = centerY;
 
         // Draw instructional text above the border
         net.minecraft.client.gui.Font font = net.minecraft.client.Minecraft.getInstance().font;
@@ -456,7 +442,6 @@ public class PlayerWidget extends AbstractWidget {
         int textX = centerX - textWidth / 2; // Center the text horizontally
         int textY = top - 12; // Position text 12 pixels above the border
         int textColor = 0xFFFFFFFF; // White text
-        int shadowColor = 0xFF000000; // Black shadow
 
         // Draw text with shadow for better readability
         graphics.drawString(font, instructionText, textX, textY, textColor, true);
@@ -467,11 +452,11 @@ public class PlayerWidget extends AbstractWidget {
         // Top edge
         graphics.fill(left, top, right, top + 2, borderColor);
         // Bottom edge
-        graphics.fill(left, bottom - 2, right, bottom, borderColor);
+        graphics.fill(left, centerY - 2, right, centerY, borderColor);
         // Left edge
-        graphics.fill(left, top, left + 2, bottom, borderColor);
+        graphics.fill(left, top, left + 2, centerY, borderColor);
         // Right edge
-        graphics.fill(right - 2, top, right, bottom, borderColor);
+        graphics.fill(right - 2, top, right, centerY, borderColor);
 
         // Draw center crosshair to show exact model center
         int crosshairSize = 5;
@@ -505,14 +490,6 @@ public class PlayerWidget extends AbstractWidget {
      */
     public void setModelType(String modelType) {
         previewData.setModelType(modelType);
-    }
-
-    /**
-     * Reset to default rotation
-     */
-    public void resetRotation() {
-        bodyYaw = 20.0f;
-        targetYRotation = 20.0f;
     }
 
     /**
@@ -577,7 +554,7 @@ public class PlayerWidget extends AbstractWidget {
         }
 
         // Check if mouse is inside the model rendering area (green debug border area)
-        if (!isMouseOverModelArea(mouseX, mouseY, cachedModelCenterX, cachedModelCenterY, cachedScale)) {
+        if (isMouseOutsideModelArea(mouseX, mouseY, cachedModelCenterX, cachedModelCenterY, cachedScale)) {
             return false;
         }
 
@@ -632,7 +609,7 @@ public class PlayerWidget extends AbstractWidget {
         }
 
         // Check if mouse is inside the model rendering area (green debug border area)
-        if (!isMouseOverModelArea(mouseX, mouseY, cachedModelCenterX, cachedModelCenterY, cachedScale)) {
+        if (isMouseOutsideModelArea(mouseX, mouseY, cachedModelCenterX, cachedModelCenterY, cachedScale)) {
             return false;
         }
 
@@ -667,9 +644,9 @@ public class PlayerWidget extends AbstractWidget {
     }
 
     /**
-     * Check if mouse is over the player model rendering area (the green debug border area)
+     * Check if mouse is outside the player model rendering area (the green debug border area)
      */
-    private boolean isMouseOverModelArea(double mouseX, double mouseY, int centerX, int centerY, float scale) {
+    private boolean isMouseOutsideModelArea(double mouseX, double mouseY, int centerX, int centerY, float scale) {
         // Calculate the same bounds as renderModelBorder()
         int modelHeight = (int)(scale * 2.0f);
         int modelWidth = (int)(modelHeight * 0.6f);
@@ -677,10 +654,9 @@ public class PlayerWidget extends AbstractWidget {
         int left = centerX - modelWidth / 2;
         int right = centerX + modelWidth / 2;
         int top = centerY - modelHeight;
-        int bottom = centerY;
 
-        return mouseX >= left && mouseX <= right &&
-               mouseY >= top && mouseY <= bottom;
+        return mouseX < left || mouseX > right ||
+               mouseY < top || mouseY > centerY;
     }
 
     @Override

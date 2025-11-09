@@ -188,17 +188,4 @@ public class SkinImporter {
         }
     }
 
-    /**
-     * Get the skins directory path
-     */
-    public static Path getSkinsDirectory() {
-        return LocalAssetManager.getInstance().getSkinsDirectory();
-    }
-
-    /**
-     * Get the capes directory path
-     */
-    public static Path getCapesDirectory() {
-        return LocalAssetManager.getInstance().getCapesDirectory();
-    }
 }

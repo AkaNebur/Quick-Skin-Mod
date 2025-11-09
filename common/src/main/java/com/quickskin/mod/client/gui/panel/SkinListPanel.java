@@ -102,7 +102,7 @@ public class SkinListPanel extends AbstractWidget {
 
         // Find and select the entry
         for (int i = 0; i < skinListWidget.children().size(); i++) {
-            SkinEntry entry = (SkinEntry) skinListWidget.children().get(i);
+            SkinEntry entry = skinListWidget.children().get(i);
             if (entry.getMetadata().hash().equals(metadata.hash())) {
                 skinListWidget.setSelected(entry);
                 if (triggerCallback) {
@@ -117,6 +117,7 @@ public class SkinListPanel extends AbstractWidget {
     /**
      * Get the skin list widget
      */
+    @SuppressWarnings("unused")
     @Nullable
     public SkinListWidget getSkinListWidget() {
         return skinListWidget;

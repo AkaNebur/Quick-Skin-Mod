@@ -20,6 +20,8 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 @Environment(EnvType.CLIENT)
 public class FileDialogHelper {
 
+    private static final String DIALOG_CANCELLED_MSG = "File dialog cancelled";
+
     /**
      * Opens a file dialog to select a PNG image (skin)
      * @param title Dialog title
@@ -43,7 +45,7 @@ public class FileDialogHelper {
                     Path filePath = Path.of(file);
                     onFileSelected.accept(filePath);
                 } else {
-                    QuickSkin.LOGGER.debug("File dialog cancelled");
+                    QuickSkin.LOGGER.debug(DIALOG_CANCELLED_MSG);
                 }
             } catch (Exception e) {
                 QuickSkin.LOGGER.error("Error opening file dialog", e);
@@ -77,7 +79,7 @@ public class FileDialogHelper {
                     QuickSkin.LOGGER.info("File selected: {}", filePath);
                     onFileSelected.accept(filePath);
                 } else {
-                    QuickSkin.LOGGER.debug("File dialog cancelled");
+                    QuickSkin.LOGGER.debug(DIALOG_CANCELLED_MSG);
                 }
             } catch (Exception e) {
                 QuickSkin.LOGGER.error("Error opening file dialog", e);
@@ -90,6 +92,7 @@ public class FileDialogHelper {
      * @param title Dialog title
      * @param onFilesSelected Callback when files are selected
      */
+    @SuppressWarnings("unused")
     public static void openMultipleFileDialog(String title, Consumer<Path[]> onFilesSelected) {
         CompletableFuture.runAsync(() -> {
             try (MemoryStack stack = stackPush()) {
@@ -114,7 +117,7 @@ public class FileDialogHelper {
                     QuickSkin.LOGGER.info("Selected {} files", paths.length);
                     onFilesSelected.accept(paths);
                 } else {
-                    QuickSkin.LOGGER.debug("File dialog cancelled");
+                    QuickSkin.LOGGER.debug(DIALOG_CANCELLED_MSG);
                 }
             } catch (Exception e) {
                 QuickSkin.LOGGER.error("Error opening file dialog", e);

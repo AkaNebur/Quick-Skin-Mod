@@ -70,9 +70,6 @@ public class PlayerCapeMenuScreen extends Screen {
     private final Screen parent;
 
     private PlayerWidget playerWidget;
-    private Button importButton;
-    private Button removeButton;
-    private Button closeButton;
     private SpeedSlider animationSpeedSlider;
 
     // Model position offsets from grid edge (base offset + config offset when config is 0)
@@ -165,17 +162,17 @@ public class PlayerCapeMenuScreen extends Screen {
         // Create buttons
         int bottomY = this.height - scaleValue(60);
 
-        this.importButton = this.addRenderableWidget(Button.builder(
+        Button importButton = this.addRenderableWidget(Button.builder(
                 Component.literal("Import Cape"),
                 button -> importCape()
         ).bounds(buttonStartX, bottomY, buttonWidth, scaleValue(20)).build());
 
-        this.removeButton = this.addRenderableWidget(Button.builder(
+        Button removeButton = this.addRenderableWidget(Button.builder(
                 Component.literal("Remove Cape"),
                 button -> removeCape()
         ).bounds(buttonStartX + buttonWidth + buttonSpacing, bottomY, buttonWidth, scaleValue(20)).build());
 
-        this.closeButton = this.addRenderableWidget(Button.builder(
+        Button closeButton = this.addRenderableWidget(Button.builder(
                 Component.literal("Close"),
                 button -> this.onClose()
         ).bounds(buttonStartX + (buttonWidth + buttonSpacing) * 2, bottomY, buttonWidth, scaleValue(20)).build());
@@ -192,7 +189,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // Create player preview widget
         int availableWidthForWidget = this.width - (this.gridX + this.gridWidth) - scaleValue(40);
-        int availableHeightForWidget = this.closeButton.getY() - this.gridY - scaleValue(20);
+        int availableHeightForWidget = bottomY - this.gridY - scaleValue(20);
 
         int widgetSize = Mth.clamp(
                 Math.min(availableWidthForWidget, availableHeightForWidget),
@@ -578,7 +575,11 @@ public class PlayerCapeMenuScreen extends Screen {
             return;
         }
 
-        String displayName = truncateFileName(capeEntry.getFriendlyName(), 35);
+        if (minecraft == null) {
+            return;
+        }
+
+        String displayName = truncateFileName(capeEntry.getFriendlyName());
         minecraft.setScreen(new DeletionConfirmScreen(
                 this,
                 Component.literal("Delete Cape?"),
@@ -595,9 +596,10 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     /**
-     * Truncate filename to specified length, adding ellipsis if needed
+     * Truncate filename to 35 characters, adding ellipsis if needed
      */
-    private String truncateFileName(String name, int maxLength) {
+    private String truncateFileName(String name) {
+        int maxLength = 35;
         if (name.length() <= maxLength) {
             return name;
         }
@@ -609,11 +611,17 @@ public class PlayerCapeMenuScreen extends Screen {
             return;
         }
 
+        Path capePath = capeEntry.getPath();
+        if (capePath == null) {
+            QuickSkin.LOGGER.error("Cannot delete cape: path is null");
+            return;
+        }
+
         // Check if the cape being deleted is the one currently selected for preview.
         final boolean wasSelected = this.selectedCape != null && this.selectedCape.getCapeId().equals(capeEntry.getCapeId());
 
         try {
-            Files.deleteIfExists(capeEntry.getPath());
+            Files.deleteIfExists(capePath);
             LocalAssetManager.getInstance().discoverLocalAssets();
             refreshCapeList();
             updateGridDimensions();
@@ -1122,13 +1130,15 @@ public class PlayerCapeMenuScreen extends Screen {
                 }
 
                 // Play selection sound
-                minecraft.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                    net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 1.0f, 0.25f
-                ));
+                if (minecraft != null && minecraft.getSoundManager() != null) {
+                    minecraft.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                        net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 1.0f, 0.25f
+                    ));
+                }
 
                 // Select cape (includes "None" option)
                 this.selectedCape = clickedCape;
-                if (clickedCape.isKnown() && clickedCape.getKnownCape().isNoCape()) {
+                if (clickedCape.isKnown() && clickedCape.getKnownCape() != null && clickedCape.getKnownCape().isNoCape()) {
                     removeCape();
                 } else {
                     applyCape(clickedCape);
@@ -1378,7 +1388,7 @@ public class PlayerCapeMenuScreen extends Screen {
                     String name = p.toString().toLowerCase();
                     return name.endsWith(".png") || name.endsWith(".gif");
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         if (validFiles.isEmpty()) {
             showImportMessage("No PNG or GIF files found", 0xFFAA00, 100);
@@ -1395,10 +1405,8 @@ public class PlayerCapeMenuScreen extends Screen {
             try {
                 Files.createDirectories(capesDir);
             } catch (IOException e) {
-                if (Minecraft.getInstance() != null) {
-                    Minecraft.getInstance().execute(() ->
-                            showImportMessage("Error: Could not create capes directory", 0xFF5555, 100));
-                }
+                Minecraft.getInstance().execute(() ->
+                        showImportMessage("Error: Could not create capes directory", 0xFF5555, 100));
                 return;
             }
 
@@ -1413,31 +1421,27 @@ public class PlayerCapeMenuScreen extends Screen {
             int finalSuccessCount = successCount;
             int finalInvalidCount = invalidCount;
 
-            if (Minecraft.getInstance() != null) {
-                Minecraft.getInstance().execute(() -> {
-                    if (finalSuccessCount > 0) {
-                        // THIS IS THE FIX: Reload assets BEFORE refreshing the list
-                        LocalAssetManager.getInstance().reload();
+            Minecraft.getInstance().execute(() -> {
+                if (finalSuccessCount > 0) {
+                    // THIS IS THE FIX: Reload assets BEFORE refreshing the list
+                    LocalAssetManager.getInstance().reload();
 
-                        refreshCapeList();
-                        updateGridDimensions();
+                    refreshCapeList();
+                    updateGridDimensions();
 
-                        String message = String.format("✓ Imported %d cape%s", finalSuccessCount,
-                                finalSuccessCount == 1 ? "" : "s");
-                        if (finalInvalidCount > 0) {
-                            message += String.format(" (%d invalid)", finalInvalidCount);
-                        }
-                        showImportMessage(message, finalSuccessCount > finalInvalidCount ? 0x55FF55 : 0xFFAA00, 200);
-                    } else {
-                        showImportMessage("⚠ No valid capes found (must be 2:1 ratio or animation strip)", 0xFF5555, 200);
+                    String message = String.format("✓ Imported %d cape%s", finalSuccessCount,
+                            finalSuccessCount == 1 ? "" : "s");
+                    if (finalInvalidCount > 0) {
+                        message += String.format(" (%d invalid)", finalInvalidCount);
                     }
-                });
-            }
+                    showImportMessage(message, finalSuccessCount > finalInvalidCount ? 0x55FF55 : 0xFFAA00, 200);
+                } else {
+                    showImportMessage("⚠ No valid capes found (must be 2:1 ratio or animation strip)", 0xFF5555, 200);
+                }
+            });
         }).exceptionally(throwable -> {
-            if (Minecraft.getInstance() != null) {
-                Minecraft.getInstance().execute(() ->
-                        showImportMessage("Error processing files: " + throwable.getMessage(), 0xFF5555, 200));
-            }
+            Minecraft.getInstance().execute(() ->
+                    showImportMessage("Error processing files: " + throwable.getMessage(), 0xFF5555, 200));
             return null;
         });
     }
@@ -1451,43 +1455,42 @@ public class PlayerCapeMenuScreen extends Screen {
             int frameCount = 1;
             boolean isStandardFormat;
             com.quickskin.mod.common.data.AnimationMetadata animationMetadata = null;
-            byte[] finalAtlasBytes = null;
+            byte[] finalAtlasBytes;
 
             // Step 1: Load image into a source atlas and determine its format
             if (isGif) {
-                com.quickskin.mod.common.util.StbGifLoader.GifLoadResult gifResult = null;
                 try (java.io.InputStream is = Files.newInputStream(sourceFile)) {
-                    gifResult = com.quickskin.mod.common.util.StbGifLoader.loadGif(is);
+                    com.quickskin.mod.common.util.StbGifLoader.GifLoadResult gifResult = com.quickskin.mod.common.util.StbGifLoader.loadGif(is);
                     if (gifResult == null || gifResult.frames() == null) return false;
 
-                    // Convert NativeImage frames to BufferedImage atlas
-                    int width = gifResult.frameWidth();
-                    int height = gifResult.frameHeight();
-                    frameCount = gifResult.frames().length;
-                    int atlasHeight = height * frameCount;
+                    try {
+                        // Convert NativeImage frames to BufferedImage atlas
+                        int width = gifResult.frameWidth();
+                        int height = gifResult.frameHeight();
+                        frameCount = gifResult.frames().length;
+                        int atlasHeight = height * frameCount;
 
-                    sourceAtlas = new java.awt.image.BufferedImage(width, atlasHeight, java.awt.image.BufferedImage.TYPE_INT_ARGB);
-                    for (int i = 0; i < frameCount; i++) {
-                        com.mojang.blaze3d.platform.NativeImage frame = gifResult.frames()[i];
-                        for (int y = 0; y < height; y++) {
-                            for (int x = 0; x < width; x++) {
-                                int abgr = frame.getPixelRGBA(x, y);
-                                // Convert ABGR to ARGB for BufferedImage
-                                int a = (abgr >> 24) & 0xFF;
-                                int b = (abgr >> 16) & 0xFF;
-                                int g = (abgr >> 8) & 0xFF;
-                                int r = abgr & 0xFF;
-                                int argb = (a << 24) | (r << 16) | (g << 8) | b;
-                                sourceAtlas.setRGB(x, i * height + y, argb);
+                        sourceAtlas = new java.awt.image.BufferedImage(width, atlasHeight, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                        for (int i = 0; i < frameCount; i++) {
+                            com.mojang.blaze3d.platform.NativeImage frame = gifResult.frames()[i];
+                            for (int y = 0; y < height; y++) {
+                                for (int x = 0; x < width; x++) {
+                                    int abgr = frame.getPixelRGBA(x, y);
+                                    // Convert ABGR to ARGB for BufferedImage
+                                    int a = (abgr >> 24) & 0xFF;
+                                    int b = (abgr >> 16) & 0xFF;
+                                    int g = (abgr >> 8) & 0xFF;
+                                    int r = abgr & 0xFF;
+                                    int argb = (a << 24) | (r << 16) | (g << 8) | b;
+                                    sourceAtlas.setRGB(x, i * height + y, argb);
+                                }
                             }
                         }
-                    }
 
-                    animationMetadata = gifResult.metadata();
-                    isStandardFormat = true;
-                } finally {
-                    // Clean up NativeImage frames
-                    if (gifResult != null) {
+                        animationMetadata = gifResult.metadata();
+                        isStandardFormat = true;
+                    } finally {
+                        // Clean up NativeImage frames
                         gifResult.close();
                     }
                 }
@@ -1575,25 +1578,23 @@ public class PlayerCapeMenuScreen extends Screen {
                 finalAtlas = newCapeTexture;
             }
 
-            if (finalAtlas != null) {
-                try (var baos = new java.io.ByteArrayOutputStream()) {
-                    javax.imageio.ImageIO.write(finalAtlas, "png", baos);
-                    finalAtlasBytes = baos.toByteArray();
-                }
-
-                if (finalAtlasBytes != null && animationMetadata != null) {
-                    String hash = HashUtil.computeHash(finalAtlasBytes);
-                    if (hash != null) {
-                        Path metadataPath = LocalAssetManager.getInstance().getCacheDirectory().resolve(hash + ".json");
-                        Files.writeString(metadataPath, animationMetadata.toJson());
-                        QuickSkin.LOGGER.info("Saved animation metadata for imported GIF: {}", metadataPath);
-                    }
-                }
-
-                Path targetPath = resolveTargetPath(sourceFile, targetDir);
-                saveImageWithAlpha(finalAtlas, targetPath);
-                return true;
+            try (var baos = new java.io.ByteArrayOutputStream()) {
+                javax.imageio.ImageIO.write(finalAtlas, "png", baos);
+                finalAtlasBytes = baos.toByteArray();
             }
+
+            if (animationMetadata != null) {
+                String hash = HashUtil.computeHash(finalAtlasBytes);
+                if (hash != null) {
+                    Path metadataPath = LocalAssetManager.getInstance().getCacheDirectory().resolve(hash + ".json");
+                    Files.writeString(metadataPath, animationMetadata.toJson());
+                    QuickSkin.LOGGER.info("Saved animation metadata for imported GIF: {}", metadataPath);
+                }
+            }
+
+            Path targetPath = resolveTargetPath(sourceFile, targetDir);
+            saveImageWithAlpha(finalAtlas, targetPath);
+            return true;
 
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Error processing dropped file {}: {}", sourceFile.getFileName(), e.getMessage());
@@ -1629,7 +1630,12 @@ public class PlayerCapeMenuScreen extends Screen {
     private java.awt.image.BufferedImage getVanillaElytraImage() {
         try {
             ResourceLocation VANILLA_ELYTRA_TEXTURE = new ResourceLocation("minecraft", "textures/entity/elytra.png");
-            java.io.InputStream stream = Minecraft.getInstance().getResourceManager().getResource(VANILLA_ELYTRA_TEXTURE).get().open();
+            var resourceOptional = Minecraft.getInstance().getResourceManager().getResource(VANILLA_ELYTRA_TEXTURE);
+            if (resourceOptional.isEmpty()) {
+                QuickSkin.LOGGER.error("Vanilla elytra texture resource not found");
+                return null;
+            }
+            java.io.InputStream stream = resourceOptional.get().open();
             java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(stream);
             stream.close();
             return image;

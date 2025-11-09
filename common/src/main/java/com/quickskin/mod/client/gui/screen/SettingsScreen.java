@@ -307,22 +307,7 @@ public class SettingsScreen extends Screen {
                 PANEL_BG);
 
         // Draw outline around content panel
-        // Top line (connects tabs to content)
-        graphics.fill(dialogX, contentPanelY,
-                dialogX + dialogWidth, contentPanelY + 1,
-                PANEL_OUTLINE);
-        // Bottom
-        graphics.fill(dialogX, contentPanelY + contentPanelHeight - 1,
-                dialogX + dialogWidth, contentPanelY + contentPanelHeight,
-                PANEL_OUTLINE);
-        // Left
-        graphics.fill(dialogX, contentPanelY,
-                dialogX + 1, contentPanelY + contentPanelHeight,
-                PANEL_OUTLINE);
-        // Right
-        graphics.fill(dialogX + dialogWidth - 1, contentPanelY,
-                dialogX + dialogWidth, contentPanelY + contentPanelHeight,
-                PANEL_OUTLINE);
+        drawPanelOutline(graphics, dialogX, contentPanelY, dialogWidth, contentPanelHeight, PANEL_OUTLINE);
 
         // Render widgets (buttons, tabs, etc.) - this ensures they render AFTER everything above
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -336,6 +321,33 @@ public class SettingsScreen extends Screen {
         }
 
         graphics.pose().popPose();
+    }
+
+    /**
+     * Draws outline around the specified rectangular area
+     */
+    private void drawPanelOutline(GuiGraphics graphics, int x, int y, int width, int height, int color) {
+        // Top
+        graphics.fill(x, y, x + width, y + 1, color);
+        // Bottom
+        graphics.fill(x, y + height - 1, x + width, y + height, color);
+        // Left
+        graphics.fill(x, y, x + 1, y + height, color);
+        // Right
+        graphics.fill(x + width - 1, y, x + width, y + height, color);
+    }
+
+    /**
+     * Handles transparency setting changes by clearing texture cache and refreshing player renderer
+     */
+    private void handleTransparencySettingChange() {
+        com.quickskin.mod.client.services.LocalAssetManager.getInstance().clearTextureCache();
+
+        // Refresh the player's appearance to apply the new transparency setting
+        if (minecraft != null && minecraft.player != null) {
+            com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                .refreshPlayerRenderer(minecraft.player.getUUID());
+        }
     }
 
     @Override
@@ -429,13 +441,7 @@ public class SettingsScreen extends Screen {
 
             // If transparency setting changed, clear texture cache and refresh player
             if (oldTransparencySetting != config.disableSkinTransparency) {
-                com.quickskin.mod.client.services.LocalAssetManager.getInstance().clearTextureCache();
-
-                // Refresh the player's appearance to apply the new transparency setting
-                if (minecraft != null && minecraft.player != null) {
-                    com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
-                        .refreshPlayerRenderer(minecraft.player.getUUID());
-                }
+                handleTransparencySettingChange();
             }
 
             config.save();
@@ -452,13 +458,7 @@ public class SettingsScreen extends Screen {
 
             // If transparency setting changed, clear texture cache and refresh player
             if (oldServerTransparencySetting != config.disableSkinTransparency) {
-                com.quickskin.mod.client.services.LocalAssetManager.getInstance().clearTextureCache();
-
-                // Refresh the player's appearance to apply the new transparency setting
-                if (minecraft != null && minecraft.player != null) {
-                    com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
-                        .refreshPlayerRenderer(minecraft.player.getUUID());
-                }
+                handleTransparencySettingChange();
             }
 
             config.save();
