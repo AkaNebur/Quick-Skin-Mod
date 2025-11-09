@@ -553,11 +553,7 @@ public class PlayerWidget extends AbstractWidget {
             return false;
         }
 
-        // Check if mouse is inside the model rendering area (green debug border area)
-        if (isMouseOutsideModelArea(mouseX, mouseY, cachedModelCenterX, cachedModelCenterY, cachedScale)) {
-            return false;
-        }
-
+        // Note: isMouseOver() already checks if we're inside the model area when customization is enabled
         // Start dragging
         isDragging = true;
         dragStartX = (int)mouseX;
@@ -608,11 +604,7 @@ public class PlayerWidget extends AbstractWidget {
             return false;
         }
 
-        // Check if mouse is inside the model rendering area (green debug border area)
-        if (isMouseOutsideModelArea(mouseX, mouseY, cachedModelCenterX, cachedModelCenterY, cachedScale)) {
-            return false;
-        }
-
+        // Note: isMouseOver() already checks if we're inside the model area when customization is enabled
         // Adjust scale based on scroll direction
         float oldScale = scale;
         scale += (float)delta * SCALE_STEP;
@@ -635,10 +627,20 @@ public class PlayerWidget extends AbstractWidget {
     }
 
     /**
-     * Check if mouse is over this widget (full widget bounds)
+     * Check if mouse is over this widget
+     * When customization is enabled, use the model area (green border).
+     * Otherwise, use the full widget bounds.
      */
     @Override
     public boolean isMouseOver(double mouseX, double mouseY) {
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+
+        // When customization is enabled, check if mouse is inside the model area (green border)
+        if (config.enablePlayerPreviewCustomization) {
+            return !isMouseOutsideModelArea(mouseX, mouseY, cachedModelCenterX, cachedModelCenterY, cachedScale);
+        }
+
+        // Otherwise, use the full widget bounds
         return mouseX >= getX() && mouseX < getX() + getWidth() &&
                mouseY >= getY() && mouseY < getY() + getHeight();
     }
