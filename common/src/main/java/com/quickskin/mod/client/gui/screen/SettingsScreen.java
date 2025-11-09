@@ -170,7 +170,7 @@ public class SettingsScreen extends Screen {
         showOverlayCheckbox = new Checkbox(
                 leftColumnX, currentY,
                 checkboxSize, checkboxSize,
-                Component.literal("Show HUD Overlay"),
+                Component.literal("Enable mini player preview ingame"),
                 config.showSkinPreviewOverlay
         );
         guiEditSettingWidgets.add(showOverlayCheckbox);
