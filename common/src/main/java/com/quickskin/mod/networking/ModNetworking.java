@@ -45,6 +45,9 @@ public class ModNetworking {
     public static final ResourceLocation SYNC_SERVER_CONFIG =
         new ResourceLocation(QuickSkin.MOD_ID, "sync_server_config");
 
+    public static final ResourceLocation COOLDOWN_UPDATE =
+        new ResourceLocation(QuickSkin.MOD_ID, "cooldown_update");
+
     /**
      * Initializes networking (registers server-side receivers)
      * Called from QuickSkin.init() on both client and server

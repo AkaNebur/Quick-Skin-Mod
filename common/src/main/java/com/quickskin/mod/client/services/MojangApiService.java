@@ -5,7 +5,6 @@ import com.google.gson.JsonParser;
 import com.quickskin.mod.QuickSkin;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import org.jetbrains.annotations.Nullable;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;

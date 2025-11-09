@@ -41,10 +41,4 @@ public enum TextureQuality {
         };
     }
 
-    /**
-     * Check if this quality requires downsampling
-     */
-    public boolean requiresDownsampling() {
-        return this != FULL;
-    }
 }

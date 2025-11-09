@@ -16,6 +16,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -81,6 +82,7 @@ public class SettingsScreen extends Screen {
 
     // Server setting checkboxes
     private Checkbox serverDisableSkinTransparencyCheckbox;
+    private EditBox skinChangeCooldownEditBox;
 
     public SettingsScreen(@Nullable Screen parent) {
         super(Component.literal("QuickSkin Settings"));
@@ -231,22 +233,65 @@ public class SettingsScreen extends Screen {
     private void createServerSettings() {
         ServerConfig config = ServerConfig.getInstance();
         int checkboxSize = 20;
+        int spacing = 30;
         // Settings content area starts below tabs
         int startY = dialogY + TAB_HEIGHT + 20;
         int leftColumnX = dialogX + 20;
+        int currentY = startY;
 
         // Check if player is on a server or in singleplayer
         boolean isServerAdmin = minecraft != null && minecraft.hasSingleplayerServer();
 
         // Transparency Settings
         serverDisableSkinTransparencyCheckbox = new Checkbox(
-                leftColumnX, startY,
+                leftColumnX, currentY,
                 checkboxSize, checkboxSize,
                 Component.literal("Disable Skin Transparency"),
                 config.disableSkinTransparency
         );
         serverDisableSkinTransparencyCheckbox.active = isServerAdmin;
         serverSettingWidgets.add(serverDisableSkinTransparencyCheckbox);
+        currentY += spacing;
+
+        // Skin Change Cooldown Setting
+        int editBoxWidth = 60;
+        int editBoxSpacing = 5;
+
+        skinChangeCooldownEditBox = new EditBox(
+                this.font,
+                leftColumnX, currentY,
+                editBoxWidth, 20,
+                Component.literal("Skin Change Cooldown")
+        );
+        skinChangeCooldownEditBox.setValue(String.valueOf(config.skinChangeCooldownSeconds));
+        skinChangeCooldownEditBox.setMaxLength(5);
+        skinChangeCooldownEditBox.setFilter(text -> text.isEmpty() || text.matches("\\d+"));
+        skinChangeCooldownEditBox.active = isServerAdmin;
+        serverSettingWidgets.add(skinChangeCooldownEditBox);
+
+        // Label for cooldown EditBox
+        serverSettingWidgets.add(new AbstractWidget(leftColumnX + editBoxWidth + editBoxSpacing, currentY, 200, 20, Component.literal("Skin Change Cooldown (seconds)")) {
+            @Override
+            public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+                guiGraphics.drawString(
+                        Minecraft.getInstance().font,
+                        this.getMessage(),
+                        this.getX(),
+                        this.getY() + (this.height - 8) / 2,
+                        0xE0E0E0
+                );
+            }
+
+            @Override
+            public void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput narrationElementOutput) {
+                narrationElementOutput.add(net.minecraft.client.gui.narration.NarratedElementType.TITLE, this.getMessage());
+            }
+
+            @Override
+            public boolean mouseClicked(double pMouseX, double pMouseY, int pButton) {
+                return false;
+            }
+        });
     }
 
     private void switchTab(Tab tab) {
@@ -455,6 +500,18 @@ public class SettingsScreen extends Screen {
             boolean oldServerTransparencySetting = config.disableSkinTransparency;
 
             config.disableSkinTransparency = serverDisableSkinTransparencyCheckbox.selected();
+
+            // Save cooldown setting
+            if (skinChangeCooldownEditBox != null && !skinChangeCooldownEditBox.getValue().isEmpty()) {
+                try {
+                    int cooldownSeconds = Integer.parseInt(skinChangeCooldownEditBox.getValue());
+                    if (cooldownSeconds >= 0 && cooldownSeconds <= 86400) { // Max 24 hours
+                        config.skinChangeCooldownSeconds = cooldownSeconds;
+                    }
+                } catch (NumberFormatException e) {
+                    // Invalid input, keep existing value
+                }
+            }
 
             // If transparency setting changed, clear texture cache and refresh player
             if (oldServerTransparencySetting != config.disableSkinTransparency) {

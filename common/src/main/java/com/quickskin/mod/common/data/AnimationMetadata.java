@@ -78,16 +78,4 @@ public record AnimationMetadata(
         return GSON.fromJson(json, AnimationMetadata.class);
     }
 
-    /**
-     * Create simple animation with uniform frame timing
-     * @param frameCount Number of frames
-     * @param frameDelay Delay per frame in milliseconds
-     */
-    public static AnimationMetadata uniform(int frameCount, int frameDelay) {
-        List<FrameData> frames = new java.util.ArrayList<>();
-        for (int i = 0; i < frameCount; i++) {
-            frames.add(new FrameData(frameDelay, i));
-        }
-        return new AnimationMetadata(frames, frameCount);
-    }
 }

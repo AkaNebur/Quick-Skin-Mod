@@ -11,10 +11,12 @@ import com.quickskin.mod.client.gui.util.GuiScaleManager;
 import com.quickskin.mod.client.gui.util.SkinImporter;
 import com.quickskin.mod.client.gui.widget.ErrorToast;
 import com.quickskin.mod.client.gui.widget.SkinEntry;
+import com.quickskin.mod.client.services.CooldownService;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.MojangApiService;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
@@ -47,6 +49,7 @@ public class PlayerSkinMenuScreen extends Screen {
     // Panels
     private SkinListPanel skinListPanel;
     private PlayerPreviewPanel playerPreviewPanel;
+    private ActionButtonsPanel actionButtonsPanel;
 
     // Panel dimensions
     private int panelX;
@@ -86,6 +89,41 @@ public class PlayerSkinMenuScreen extends Screen {
     public PlayerSkinMenuScreen(@Nullable Screen parent) {
         super(Component.literal("Quick Skin"));
         this.parent = parent;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        updateDoneButtonState();
+    }
+
+    private void updateDoneButtonState() {
+        if (this.actionButtonsPanel == null) return;
+        Button doneButton = this.actionButtonsPanel.getDoneButton();
+        if (doneButton == null) return;
+
+        // Cooldown does not apply in singleplayer
+        if (this.minecraft != null && this.minecraft.isSingleplayer()) {
+            if (!doneButton.active) {
+                doneButton.active = true;
+                doneButton.setMessage(Component.literal("Done"));
+                doneButton.setTooltip(null);
+            }
+            return;
+        }
+
+        long remainingSeconds = CooldownService.getInstance().getRemainingCooldownSeconds();
+        if (remainingSeconds > 0) {
+            doneButton.active = false;
+            doneButton.setMessage(Component.literal("On Cooldown (" + remainingSeconds + "s)"));
+            doneButton.setTooltip(Tooltip.create(Component.literal("You must wait before changing your skin again.")));
+        } else {
+            if (!doneButton.active) {
+                doneButton.active = true;
+                doneButton.setMessage(Component.literal("Done"));
+                doneButton.setTooltip(null);
+            }
+        }
     }
 
     @Override
@@ -259,7 +297,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 this::onClose
         );
 
-        ActionButtonsPanel actionButtonsPanel = new ActionButtonsPanel(
+        actionButtonsPanel = new ActionButtonsPanel(
                 fullWidthX,
                 bottomY,
                 fullComponentWidth,

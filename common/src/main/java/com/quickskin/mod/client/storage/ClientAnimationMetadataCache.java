@@ -54,15 +54,6 @@ public class ClientAnimationMetadataCache {
     }
 
     /**
-     * Check if a texture has animation metadata
-     * @param hash The texture hash
-     * @return true if metadata exists
-     */
-    public boolean hasMetadata(String hash) {
-        return metadataCache.containsKey(hash);
-    }
-
-    /**
      * Clear all cached metadata
      */
     public void clear() {

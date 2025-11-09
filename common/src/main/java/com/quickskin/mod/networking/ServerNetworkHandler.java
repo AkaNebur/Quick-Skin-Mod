@@ -3,10 +3,12 @@ package com.quickskin.mod.networking;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.networking.packets.PacketHelper;
+import com.quickskin.mod.server.data.ServerCooldownManager;
 import com.quickskin.mod.server.data.ServerPlayerAppearanceRepository;
 import com.quickskin.mod.server.storage.ServerAnimationCache;
 import com.quickskin.mod.server.storage.ServerTextureCache;
 import dev.architectury.networking.NetworkManager;
+import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -69,11 +71,35 @@ public class ServerNetworkHandler {
                 return;
             }
 
+            // Check cooldown settings first to avoid unnecessary work
+            int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
+
+            PlayerAppearance currentAppearance = ServerPlayerAppearanceRepository.getInstance().getAppearance(playerId);
+            boolean isSkinChanging = skinId != null && !skinId.isEmpty() && (currentAppearance == null || !skinId.equals(currentAppearance.getSkinId()));
+
+            // Only check and enforce cooldown if feature is enabled
+            if (isSkinChanging && cooldownSeconds > 0) {
+                if (ServerCooldownManager.getInstance().isPlayerOnCooldown(playerId)) {
+                    QuickSkin.LOGGER.warn("Player {} tried to change skin during cooldown. Change rejected.", player.getName().getString());
+                    return;
+                }
+            }
+
             QuickSkin.LOGGER.info("Player {} updated appearance: skin={}, cape={}, model={}",
                     player.getName().getString(), skinId, capeId, model);
 
             // Update server-side repository
             ServerPlayerAppearanceRepository.getInstance().updateAppearance(playerId, skinId, capeId, model);
+
+            // Only record skin change and send updates if cooldown is enabled
+            if (isSkinChanging && cooldownSeconds > 0) {
+                ServerCooldownManager.getInstance().recordSkinChange(playerId);
+                long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(playerId);
+                FriendlyByteBuf cooldownBuf = new FriendlyByteBuf(Unpooled.buffer());
+                cooldownBuf.writeLong(cooldownEndTime);
+                NetworkManager.sendToPlayer(player, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
+                QuickSkin.LOGGER.debug("Sent cooldown update to player {}", player.getName().getString());
+            }
 
             // Phase 3: Broadcast to other players
             broadcastAppearanceToOtherPlayers(player, skinId, capeId, model);

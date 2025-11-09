@@ -1,12 +1,17 @@
 package com.quickskin.mod.event;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.ModNetworking;
 import com.quickskin.mod.networking.ServerNetworkHandler;
+import com.quickskin.mod.server.data.ServerCooldownManager;
 import com.quickskin.mod.server.storage.ServerAnimationCache;
 import com.quickskin.mod.server.storage.ServerAppearanceStorage;
 import com.quickskin.mod.server.storage.ServerTextureCache;
 import dev.architectury.event.events.common.LifecycleEvent;
 import dev.architectury.event.events.common.PlayerEvent;
+import dev.architectury.networking.NetworkManager;
+import io.netty.buffer.Unpooled;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -48,6 +53,16 @@ public class CommonEvents {
 
             // Phase 9: Sync server config to client
             ServerNetworkHandler.sendServerConfigToPlayer((ServerPlayer) player);
+
+            // Send current cooldown status to joining player
+            int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
+            if (cooldownSeconds > 0 && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())) {
+                long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID());
+                FriendlyByteBuf cooldownBuf = new FriendlyByteBuf(Unpooled.buffer());
+                cooldownBuf.writeLong(cooldownEndTime);
+                NetworkManager.sendToPlayer((ServerPlayer) player, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
+                QuickSkin.LOGGER.debug("Sent initial cooldown status to joining player {}", player.getName().getString());
+            }
         });
 
         // Player quits server
@@ -56,6 +71,12 @@ public class CommonEvents {
 
             // Phase 5: Save player's appearance to server storage
             ServerAppearanceStorage.getInstance().savePlayerAppearance(player.getUUID());
+
+            // Cleanup cooldown data (only if cooldown feature is enabled)
+            int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
+            if (cooldownSeconds > 0) {
+                ServerCooldownManager.getInstance().removePlayer(player.getUUID());
+            }
 
             // Cleanup server-side caches (textures stay cached for other players)
             // Note: We don't clear textures as they may be used by other players

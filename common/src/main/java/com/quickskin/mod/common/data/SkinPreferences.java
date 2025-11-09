@@ -2,7 +2,6 @@ package com.quickskin.mod.common.data;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.reflect.TypeToken;
 import com.quickskin.mod.QuickSkin;
 
 import java.io.IOException;
@@ -20,7 +19,7 @@ public class SkinPreferences {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     // Map of skin hash -> preference data
-    private Map<String, SkinPreference> preferences = new HashMap<>();
+    private final Map<String, SkinPreference> preferences = new HashMap<>();
 
     /**
      * Individual skin preference
@@ -32,9 +31,6 @@ public class SkinPreferences {
             // Default constructor for Gson
         }
 
-        public SkinPreference(String modelType) {
-            this.modelType = modelType;
-        }
     }
 
     /**

@@ -74,21 +74,6 @@ public class PlayerAppearance {
         this.capeLocation = capeLocation;
     }
 
-    public boolean hasCustomSkin() {
-        return skinId != null && !skinId.isEmpty();
-    }
-
-    public boolean hasCustomCape() {
-        return capeId != null && !capeId.isEmpty();
-    }
-
-    public PlayerAppearance copy() {
-        PlayerAppearance copy = new PlayerAppearance(playerId, skinId, capeId, model);
-        copy.skinLocation = this.skinLocation;
-        copy.capeLocation = this.capeLocation;
-        return copy;
-    }
-
     @Override
     public String toString() {
         return "PlayerAppearance{" +

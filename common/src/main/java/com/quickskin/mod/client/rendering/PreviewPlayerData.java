@@ -23,8 +23,7 @@ public class PreviewPlayerData {
 
     // Animation state
     private String currentAnimation; // For future animation support
-    private float animationProgress;
-    private long lastTickTime;
+    private final float animationProgress;
 
     public PreviewPlayerData() {
         this.modelType = "classic";
@@ -34,23 +33,6 @@ public class PreviewPlayerData {
         this.headPitch = 0.0f;
         this.currentAnimation = "idle";
         this.animationProgress = 0.0f;
-        this.lastTickTime = System.currentTimeMillis();
-    }
-
-    /**
-     * Update animation state
-     * Should be called each frame
-     */
-    public void tick() {
-        long currentTime = System.currentTimeMillis();
-        float deltaTime = (currentTime - lastTickTime) / 1000.0f;
-        lastTickTime = currentTime;
-
-        // Update animation progress (for future use)
-        animationProgress += deltaTime;
-        if (animationProgress > 360.0f) {
-            animationProgress -= 360.0f;
-        }
     }
 
     /**

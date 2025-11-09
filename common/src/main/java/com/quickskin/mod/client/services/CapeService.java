@@ -1,7 +1,5 @@
 package com.quickskin.mod.client.services;
 
-import com.mojang.authlib.GameProfile;
-import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -17,12 +15,9 @@ import org.jetbrains.annotations.Nullable;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Service for managing player capes
@@ -91,7 +86,7 @@ public class CapeService implements ICapeService {
         QuickSkin.LOGGER.debug("Loading local cape: {}", hash);
 
         // Check network cache first (for capes received from server)
-        ResourceLocation capeLocation = null;
+        ResourceLocation capeLocation;
         if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().hasTexture(hash)) {
             capeLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
                     .getTextureLocation(hash);
@@ -281,9 +276,4 @@ public class CapeService implements ICapeService {
         return false;
     }
 
-    @Override
-    public boolean hasLocalCape(String hash) {
-        // Phase 5: Implement check using AssetService
-        return LocalAssetManager.getInstance().getMetadata(hash) != null;
-    }
 }

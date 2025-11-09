@@ -149,7 +149,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         }
 
         com.quickskin.mod.common.event.InternalEventBus.getInstance().post(
-                new com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent(playerId, appearance, updateType)
+                new com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent(playerId, appearance)
         );
         QuickSkin.LOGGER.debug("Fired PlayerAppearanceUpdateEvent for {} (type: {})", playerId, updateType);
 
@@ -173,52 +173,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     @Override
     public void applyCape(UUID playerId, String capeId) {
         applyLook(playerId, null, capeId, null);
-    }
-
-    @Override
-    public void removeSkin(UUID playerId) {
-        PlayerAppearance appearance = repository.getAppearance(playerId);
-        if (appearance != null) {
-            appearance.setSkinId("");
-            appearance.setSkinLocation(null);
-            refreshPlayerRenderer(playerId);
-
-            // Sync to server if this is the local player
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null && playerId.equals(mc.player.getUUID())) {
-                com.quickskin.mod.networking.NetworkSyncService.getInstance().syncAppearance(
-                    playerId,
-                    "",
-                    appearance.getCapeId(),
-                    appearance.getModel()
-                );
-            }
-        }
-    }
-
-    @Override
-    public void removeCape(UUID playerId) {
-        PlayerAppearance appearance = repository.getAppearance(playerId);
-        if (appearance != null) {
-            // NOTE: We do NOT unregister animations when removing a cape.
-            // Animations are needed for thumbnail rendering in the capes menu.
-            // They will be cleaned up when appropriate (e.g., menu closes, player disconnects).
-
-            appearance.setCapeId("");
-            appearance.setCapeLocation(null);
-            refreshPlayerRenderer(playerId);
-
-            // Sync to server if this is the local player
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null && playerId.equals(mc.player.getUUID())) {
-                com.quickskin.mod.networking.NetworkSyncService.getInstance().syncAppearance(
-                    playerId,
-                    appearance.getSkinId(),
-                    "",
-                    appearance.getModel()
-                );
-            }
-        }
     }
 
     @Override

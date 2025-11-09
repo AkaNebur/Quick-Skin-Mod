@@ -150,7 +150,7 @@ public class LocalAssetManager {
                 }
                 // Process GIF files (animated capes only)
                 else if (fileName.endsWith(".gif") && "cape".equals(type)) {
-                    AssetMetadata metadata = processGifAsset(path, type);
+                    AssetMetadata metadata = processGifAsset(path);
                     if (metadata != null) {
                         metadataCache.put(metadata.hash(), metadata);
                         hashToSourcePath.put(metadata.hash(), path);
@@ -271,7 +271,7 @@ public class LocalAssetManager {
      * Process GIF asset (animated cape) and create metadata
      * Loads GIF frames directly using STB Image
      */
-    private AssetMetadata processGifAsset(Path path, String type) {
+    private AssetMetadata processGifAsset(Path path) {
         com.quickskin.mod.common.util.StbGifLoader.GifLoadResult result = null;
         try {
             QuickSkin.LOGGER.info("Processing GIF cape: {}", path);
@@ -402,13 +402,6 @@ public class LocalAssetManager {
     }
 
     /**
-     * Get all capes
-     */
-    public List<AssetMetadata> getAllCapes() {
-        return getAssetsByType("cape");
-    }
-
-    /**
      * Get metadata by hash
      */
     public AssetMetadata getMetadata(String hash) {
@@ -473,72 +466,17 @@ public class LocalAssetManager {
     }
 
     /**
-     * Save uploaded texture to assets directory
-     * @param type "skin" or "cape"
-     * @param name Friendly name for file
-     * @param data PNG bytes
-     * @return Hash of saved file, or null on error
-     */
-    public String saveTexture(String type, String name, byte[] data) {
-        try {
-            // Compute hash first
-            String hash = HashUtil.computeHash(data);
-            if (hash == null) {
-                return null;
-            }
-
-            // Check if already exists
-            if (metadataCache.containsKey(hash)) {
-                QuickSkin.LOGGER.debug("Texture already exists: {}", hash);
-                return hash;
-            }
-
-            // Determine target directory
-            Path targetDir = "skin".equals(type) ? skinsDirectory : capesDirectory;
-
-            // Create unique filename
-            String fileName = name + ".png";
-            Path targetPath = targetDir.resolve(fileName);
-
-            // If file exists, append number
-            int counter = 1;
-            while (Files.exists(targetPath)) {
-                fileName = name + "_" + counter + ".png";
-                targetPath = targetDir.resolve(fileName);
-                counter++;
-            }
-
-            // Write file
-            Files.write(targetPath, data);
-            QuickSkin.LOGGER.info("Saved texture: {}", targetPath);
-
-            // Process and add to cache
-            AssetMetadata metadata = processPngAsset(targetPath, type);
-            if (metadata != null) {
-                metadataCache.put(metadata.hash(), metadata);
-                hashToSourcePath.put(metadata.hash(), targetPath);
-            }
-
-            return hash;
-
-        } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to save texture", e);
-            return null;
-        }
-    }
-
-    /**
      * Delete local asset
      */
-    public boolean deleteAsset(String hash) {
+    public void deleteAsset(String hash) {
         AssetMetadata metadata = metadataCache.get(hash);
         if (metadata == null) {
-            return false;
+            return;
         }
 
         Path path = hashToSourcePath.get(hash);
         if (path == null || !Files.exists(path)) {
-            return false;
+            return;
         }
 
         try {
@@ -553,10 +491,8 @@ public class LocalAssetManager {
             }
 
             QuickSkin.LOGGER.info("Deleted asset: {}", path);
-            return true;
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to delete asset: {}", path, e);
-            return false;
         }
     }
 
@@ -671,14 +607,12 @@ public class LocalAssetManager {
 
         // Unregister all textures from Minecraft's texture manager
         Minecraft mc = Minecraft.getInstance();
-        if (mc != null && mc.getTextureManager() != null) {
-            for (Map<TextureQuality, ResourceLocation> qualityMap : textureRegistry.values()) {
-                for (ResourceLocation location : qualityMap.values()) {
-                    try {
-                        mc.getTextureManager().release(location);
-                    } catch (Exception e) {
-                        QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
-                    }
+        for (Map<TextureQuality, ResourceLocation> qualityMap : textureRegistry.values()) {
+            for (ResourceLocation location : qualityMap.values()) {
+                try {
+                    mc.getTextureManager().release(location);
+                } catch (Exception e) {
+                    QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
                 }
             }
         }
@@ -687,20 +621,6 @@ public class LocalAssetManager {
         textureRegistry.clear();
 
         QuickSkin.LOGGER.info("Texture cache cleared. Textures will reload on next use.");
-    }
-
-    /**
-     * Get total asset count
-     */
-    public int getAssetCount() {
-        return metadataCache.size();
-    }
-
-    /**
-     * Check if hash exists
-     */
-    public boolean hasAsset(String hash) {
-        return metadataCache.containsKey(hash);
     }
 
     /**
@@ -729,9 +649,6 @@ public class LocalAssetManager {
 
             // Convert BufferedImage to NativeImage
             NativeImage nativeImage = convertToNativeImage(bufferedImage);
-            if (nativeImage == null) {
-                return null;
-            }
 
             // Create dynamic texture
             DynamicTexture dynamicTexture = new DynamicTexture(nativeImage);
@@ -775,28 +692,6 @@ public class LocalAssetManager {
             QuickSkin.LOGGER.error("Failed to read source image for hash {}: {}", hash, e.getMessage());
             return null;
         }
-    }
-
-    /**
-     * Unregister texture from Minecraft's texture manager
-     */
-    public void unregisterTexture(String hash) {
-        Map<TextureQuality, ResourceLocation> qualityMap = textureRegistry.remove(hash);
-        if (qualityMap != null) {
-            for (ResourceLocation location : qualityMap.values()) {
-                Minecraft.getInstance().getTextureManager().release(location);
-            }
-        }
-    }
-
-    /**
-     * Clear all registered textures
-     */
-    public void unregisterAllTextures() {
-        for (String hash : textureRegistry.keySet()) {
-            unregisterTexture(hash);
-        }
-        textureRegistry.clear();
     }
 
     /**

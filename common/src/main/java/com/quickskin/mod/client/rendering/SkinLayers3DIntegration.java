@@ -28,13 +28,8 @@ import java.util.Map;
  */
 public class SkinLayers3DIntegration {
     private static final Map<ResourceLocation, PlayerMeshes> meshCache = new HashMap<>();
-    private static boolean MOD_AVAILABLE = false;
-    private static String initializationError = "Not initialized yet";
+    private static boolean MOD_AVAILABLE;
 
-    // Reflected classes and methods (cached after first successful reflection)
-    private static Class<?> skinLayersModBaseClass;
-    private static Class<?> skinLayersAPIClass;
-    private static Class<?> meshClass;
     private static Object configInstance;
     private static Object meshHelperInstance;
     private static Method create3DMeshMethod;
@@ -55,9 +50,10 @@ public class SkinLayers3DIntegration {
     static {
         try {
             // Try to load the main mod class
-            skinLayersModBaseClass = Class.forName("dev.tr7zw.skinlayers.SkinLayersModBase");
-            skinLayersAPIClass = Class.forName("dev.tr7zw.skinlayers.api.SkinLayersAPI");
-            meshClass = Class.forName("dev.tr7zw.skinlayers.api.Mesh");
+            // Reflected classes and methods (cached after first successful reflection)
+            Class<?> skinLayersModBaseClass = Class.forName("dev.tr7zw.skinlayers.SkinLayersModBase");
+            Class<?> skinLayersAPIClass = Class.forName("dev.tr7zw.skinlayers.api.SkinLayersAPI");
+            Class<?> meshClass = Class.forName("dev.tr7zw.skinlayers.api.Mesh");
 
             // Get config instance - search through class hierarchy
             Field configField = null;
@@ -122,12 +118,10 @@ public class SkinLayers3DIntegration {
             meshSetPositionMethod.setAccessible(true); // Required for accessing methods across module boundaries
 
             MOD_AVAILABLE = true;
-            initializationError = null;
             QuickSkin.LOGGER.info("[3D Skin Layers] Integration enabled");
         } catch (Exception e) {
             MOD_AVAILABLE = false;
-            initializationError = e.getMessage();
-            QuickSkin.LOGGER.debug("[3D Skin Layers] Not available: " + e.getMessage());
+            QuickSkin.LOGGER.debug("[3D Skin Layers] Not available: {}", e.getMessage());
         }
     }
 
@@ -174,7 +168,7 @@ public class SkinLayers3DIntegration {
                 renderLegLayer(poseStack, vertices, light, overlay, model.rightLeg, meshes.rightLegMesh);
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("[3D Skin Layers] Error rendering layers: " + e.getMessage());
+            QuickSkin.LOGGER.error("[3D Skin Layers] Error rendering layers: {}", e.getMessage());
         }
     }
 
@@ -225,7 +219,7 @@ public class SkinLayers3DIntegration {
                 return meshes;
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("[3D Skin Layers] Failed to create meshes: " + e.getMessage());
+            QuickSkin.LOGGER.error("[3D Skin Layers] Failed to create meshes: {}", e.getMessage());
             return null;
         }
         return null;
@@ -243,9 +237,6 @@ public class SkinLayers3DIntegration {
 
             // Try texture manager for downloaded skins
             AbstractTexture texture = mc.getTextureManager().getTexture(skinLocation);
-            if (texture == null) {
-                return null;
-            }
 
             // Handle DynamicTexture (used by QuickSkin for local skins)
             if (texture instanceof DynamicTexture) {
@@ -348,14 +339,6 @@ public class SkinLayers3DIntegration {
         }
     }
 
-    private static boolean is3DSkinLayersEnabled() {
-        try {
-            return configInstance != null;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     private static boolean getBooleanConfig(Field field) {
         try {
             return field.getBoolean(configInstance);
@@ -376,16 +359,4 @@ public class SkinLayers3DIntegration {
         meshCache.clear();
     }
 
-    private static String getInitializationStatus() {
-        StringBuilder status = new StringBuilder();
-        if (initializationError != null) {
-            status.append("ERROR: ").append(initializationError).append(" | ");
-        }
-        status.append("skinLayersModBaseClass=").append(skinLayersModBaseClass != null);
-        status.append(", skinLayersAPIClass=").append(skinLayersAPIClass != null);
-        status.append(", meshClass=").append(meshClass != null);
-        status.append(", configInstance=").append(configInstance != null);
-        status.append(", meshHelperInstance=").append(meshHelperInstance != null);
-        return status.toString();
-    }
 }

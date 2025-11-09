@@ -90,13 +90,6 @@ public record AssetMetadata(
     }
 
     /**
-     * Get display resolution string
-     */
-    public String getResolutionString() {
-        return resolution != null ? resolution.toString() : "Unknown";
-    }
-
-    /**
      * Check if this is a skin
      */
     public boolean isSkin() {
@@ -110,10 +103,4 @@ public record AssetMetadata(
         return "cape".equals(type);
     }
 
-    /**
-     * Check if this is an HD asset
-     */
-    public boolean isHD() {
-        return resolution != null && resolution.isHD();
-    }
 }

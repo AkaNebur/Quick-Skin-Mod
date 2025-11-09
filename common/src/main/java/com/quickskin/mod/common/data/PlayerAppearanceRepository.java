@@ -46,50 +46,10 @@ public class PlayerAppearanceRepository {
     }
 
     /**
-     * Updates an existing player's appearance, or creates new if doesn't exist
-     * @param playerId The player's UUID
-     * @param skinId The skin ID (can be null to keep existing)
-     * @param capeId The cape ID (can be null to keep existing)
-     * @param model The model type (can be null to keep existing)
-     */
-    public void updateAppearance(UUID playerId, @Nullable String skinId, @Nullable String capeId, @Nullable String model) {
-        PlayerAppearance appearance = appearances.computeIfAbsent(
-            playerId,
-            id -> new PlayerAppearance(id, "", "", "classic")
-        );
-
-        if (skinId != null) {
-            appearance.setSkinId(skinId);
-        }
-        if (capeId != null) {
-            appearance.setCapeId(capeId);
-        }
-        if (model != null) {
-            appearance.setModel(model);
-        }
-    }
-
-    /**
-     * Removes a player's appearance data (e.g., when they disconnect)
-     * @param playerId The player's UUID
-     */
-    public void removeAppearance(UUID playerId) {
-        appearances.remove(playerId);
-    }
-
-    /**
      * Clears all appearance data
      */
     public void clear() {
         appearances.clear();
     }
 
-    /**
-     * Checks if a player has custom appearance data
-     * @param playerId The player's UUID
-     * @return true if the player has custom data
-     */
-    public boolean hasAppearance(UUID playerId) {
-        return appearances.containsKey(playerId);
-    }
 }

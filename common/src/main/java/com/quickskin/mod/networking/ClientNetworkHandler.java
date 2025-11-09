@@ -241,4 +241,17 @@ public class ClientNetworkHandler {
                 .receiveChunk(hash, chunkIndex, totalChunks, chunkData);
         });
     }
+
+    /**
+     * Handles cooldown update from server.
+     * Packet format: long (cooldownEndTime)
+     */
+    public static void handleCooldownUpdate(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        long cooldownEndTime = buf.readLong();
+
+        context.queue(() -> {
+            QuickSkin.LOGGER.debug("Received cooldown update. Ends at: {}", cooldownEndTime);
+            com.quickskin.mod.client.services.CooldownService.getInstance().setCooldownEndTime(cooldownEndTime);
+        });
+    }
 }

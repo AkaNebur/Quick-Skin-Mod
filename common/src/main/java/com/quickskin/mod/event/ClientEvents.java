@@ -5,6 +5,7 @@ import com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen;
 import com.quickskin.mod.client.gui.util.DebugOffsetManager;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
+import com.quickskin.mod.client.services.CooldownService;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.ModelService;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -93,6 +94,7 @@ public class ClientEvents {
 
             // Clear appearance repository on world join
             PlayerAppearanceRepository.getInstance().clear();
+            CooldownService.getInstance().clearCooldown();
 
             // Restore saved skin and model type from config
             restoreSavedAppearance(player);
@@ -109,6 +111,7 @@ public class ClientEvents {
             // Clear all appearance data
             PlayerAppearanceRepository.getInstance().clear();
             ModelService.getInstance().clearAll();
+            CooldownService.getInstance().clearCooldown();
 
             // Clear incomplete texture chunks
             com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance().clear();

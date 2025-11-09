@@ -39,10 +39,6 @@ public enum SkinResolution {
         return scale > 1;
     }
 
-    public boolean isLegacy() {
-        return this == LEGACY;
-    }
-
     /**
      * Get resolution from dimensions
      * @return Resolution enum, or null if invalid
@@ -54,55 +50,6 @@ public enum SkinResolution {
             }
         }
         return null;
-    }
-
-    /**
-     * Check if dimensions are valid for a skin
-     */
-    public static boolean isValidSkinDimension(int width, int height) {
-        return fromDimensions(width, height) != null;
-    }
-
-    /**
-     * Check if dimensions are valid for a cape (64xN or HDx scale)
-     */
-    public static boolean isValidCapeDimension(int width, int height) {
-        // Standard cape: 64x32
-        if (width == 64 && height == 32) {
-            return true;
-        }
-
-        // HD capes: must maintain 2:1 aspect ratio
-        if (width > 64 && width % 64 == 0) {
-            return height == (width / 2);
-        }
-
-        return false;
-    }
-
-    /**
-     * Get the closest valid resolution for given dimensions
-     * Used for normalization
-     */
-    public static SkinResolution getClosestResolution(int width, int height) {
-        SkinResolution exact = fromDimensions(width, height);
-        if (exact != null) {
-            return exact;
-        }
-
-        // Find closest by width
-        SkinResolution closest = STANDARD;
-        int minDiff = Integer.MAX_VALUE;
-
-        for (SkinResolution res : values()) {
-            int diff = Math.abs(res.width - width);
-            if (diff < minDiff) {
-                minDiff = diff;
-                closest = res;
-            }
-        }
-
-        return closest;
     }
 
     @Override

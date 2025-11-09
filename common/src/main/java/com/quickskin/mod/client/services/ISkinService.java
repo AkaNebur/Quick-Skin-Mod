@@ -38,10 +38,4 @@ public interface ISkinService {
     @Nullable
     ResourceLocation loadLocalSkin(String hash);
 
-    /**
-     * Checks if a local skin exists
-     * @param hash The skin's hash
-     * @return true if the skin exists
-     */
-    boolean hasLocalSkin(String hash);
 }

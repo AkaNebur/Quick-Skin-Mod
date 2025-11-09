@@ -53,10 +53,4 @@ public interface ICapeService {
      */
     boolean isAnimated(String capeId);
 
-    /**
-     * Checks if a local cape exists
-     * @param hash The cape's hash
-     * @return true if the cape exists
-     */
-    boolean hasLocalCape(String hash);
 }

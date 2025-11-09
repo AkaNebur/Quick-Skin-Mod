@@ -50,6 +50,12 @@ public class ClientNetworking {
             ClientNetworkHandler::handleSyncServerConfig
         );
 
+        NetworkManager.registerReceiver(
+            NetworkManager.s2c(),
+            ModNetworking.COOLDOWN_UPDATE,
+            ClientNetworkHandler::handleCooldownUpdate
+        );
+
         QuickSkin.LOGGER.info("Client networking initialized (client-side receivers ready)");
     }
 }

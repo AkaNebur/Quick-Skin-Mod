@@ -28,8 +28,8 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
     /**
      * Add a skin entry to the list
      */
-    public int addSkinEntry(AssetMetadata metadata) {
-        return this.addEntry(new SkinEntry(this, metadata));
+    public void addSkinEntry(AssetMetadata metadata) {
+        this.addEntry(new SkinEntry(this, metadata));
     }
 
     /**
@@ -37,13 +37,6 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
      */
     public void clearSkinEntries() {
         this.clearEntries();
-    }
-
-    /**
-     * Remove all entries from the list
-     */
-    public void removeAllEntries() {
-        this.children().clear();
     }
 
     /**

@@ -42,12 +42,6 @@ public interface IModelService {
     String getModelOverride(UUID playerId);
 
     /**
-     * Clears a model override for a player
-     * @param playerId The player's UUID
-     */
-    void clearModelOverride(UUID playerId);
-
-    /**
      * Checks if a player has a model override
      * @param playerId The player's UUID
      * @return True if the player has a model override

@@ -108,8 +108,7 @@ public class TextureChunkReceiver {
          * Assemble all chunks into a single byte array
          * @return Complete texture data, or null if not all chunks received
          */
-        @Nullable
-        public byte[] assembleTexture() {
+        public byte @Nullable [] assembleTexture() {
             if (receivedCount != chunks.length) {
                 QuickSkin.LOGGER.warn("Cannot assemble texture: only {}/{} chunks received",
                     receivedCount, chunks.length);

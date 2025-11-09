@@ -41,18 +41,6 @@ public interface IPlayerAppearanceService {
     void applyCape(UUID playerId, String capeId);
 
     /**
-     * Removes a player's custom skin (reverts to Mojang skin)
-     * @param playerId The player's UUID
-     */
-    void removeSkin(UUID playerId);
-
-    /**
-     * Removes a player's custom cape
-     * @param playerId The player's UUID
-     */
-    void removeCape(UUID playerId);
-
-    /**
      * Gets a player's current appearance
      * @param playerId The player's UUID
      * @return The appearance data, or null if not set

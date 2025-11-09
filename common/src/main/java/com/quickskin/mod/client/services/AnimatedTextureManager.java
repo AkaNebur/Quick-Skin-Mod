@@ -11,9 +11,7 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.InputStream;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -93,15 +91,6 @@ public class AnimatedTextureManager {
             return nativeImage;
         }
 
-        int getCurrentFrameIndex() {
-            if (metadata.frameCount() <= 1) return 0;
-
-            long elapsed = System.currentTimeMillis() - startTime;
-            // Apply per-animation speed multiplier
-            long adjustedElapsed = (long)(elapsed * speedMultiplier);
-            return metadata.getFrameAtTime(adjustedElapsed);
-        }
-
         void tick() {
             if (metadata.frameCount() <= 1) {
                 currentFrame = 0;
@@ -126,10 +115,6 @@ public class AnimatedTextureManager {
                 return atlasTextureLocation; // Fallback to full atlas
             }
             return frameResourceLocations[currentFrame];
-        }
-
-        int getFrameCount() {
-            return metadata.frameCount();
         }
 
         void cleanup() {
@@ -218,18 +203,6 @@ public class AnimatedTextureManager {
     }
 
     /**
-     * Get current frame index for an animation
-     * @return Frame index, or 0 if animation not found
-     */
-    public int getCurrentFrame(String animationId) {
-        AnimationState state = animations.get(animationId);
-        if (state == null) {
-            return 0;
-        }
-        return state.getCurrentFrameIndex();
-    }
-
-    /**
      * Gets the ResourceLocation for the current frame of an animation.
      * @param animationId The ID of the animation.
      * @return The ResourceLocation for the current frame's texture, or null if the animation is not found.
@@ -241,18 +214,6 @@ public class AnimatedTextureManager {
             return state.getCurrentFrameTexture();
         }
         return null;
-    }
-
-    /**
-     * Get frame count for an animation
-     * @return Frame count, or 1 if animation not found
-     */
-    public int getFrameCount(String animationId) {
-        AnimationState state = animations.get(animationId);
-        if (state == null) {
-            return 1;
-        }
-        return state.getFrameCount();
     }
 
     /**
@@ -299,22 +260,6 @@ public class AnimatedTextureManager {
 
         // No running animation found for this atlas.
         return Optional.empty();
-    }
-
-    /**
-     * Clear all animations
-     */
-    public void clearAll() {
-        QuickSkin.LOGGER.info("Clearing all animations ({})", animations.size());
-        animations.values().forEach(AnimationState::cleanup);
-        animations.clear();
-    }
-
-    /**
-     * Get total number of registered animations
-     */
-    public int getAnimationCount() {
-        return animations.size();
     }
 
     /**

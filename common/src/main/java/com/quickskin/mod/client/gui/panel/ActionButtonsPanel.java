@@ -15,6 +15,8 @@ public class ActionButtonsPanel extends AbstractWidget {
     private static final int SPACING = 4;
     private static final int COMPONENT_HEIGHT = 20;
 
+    private Button doneButton;
+
     /**
      * Callbacks for button actions
      */
@@ -40,10 +42,10 @@ public class ActionButtonsPanel extends AbstractWidget {
 
         // Row 1 (Bottom-most): Done Button (full width)
         bottomY -= COMPONENT_HEIGHT;
-        Button doneButton = Button.builder(Component.literal("Done"), button -> callbacks.onDone.run())
+        this.doneButton = Button.builder(Component.literal("Done"), button -> callbacks.onDone.run())
             .bounds(fullWidthX, bottomY, fullComponentWidth, COMPONENT_HEIGHT)
             .build();
-        screen.registerWidget(doneButton);
+        screen.registerWidget(this.doneButton);
 
         // Row 2: Import, HD Skin, Skin, Cape Buttons (4 equal width buttons)
         bottomY -= (COMPONENT_HEIGHT + SPACING);
@@ -64,6 +66,10 @@ public class ActionButtonsPanel extends AbstractWidget {
         Button capeButton = Button.builder(Component.literal("Cape"), button -> callbacks.onCape.run())
             .bounds(fullWidthX + (fourButtonWidth + SPACING) * 3, bottomY, fourButtonWidth, COMPONENT_HEIGHT).build();
         screen.registerWidget(capeButton);
+    }
+
+    public Button getDoneButton() {
+        return this.doneButton;
     }
 
     @Override

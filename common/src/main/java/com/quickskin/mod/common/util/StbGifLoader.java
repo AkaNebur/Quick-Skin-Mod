@@ -52,7 +52,7 @@ public class StbGifLoader {
     public static GifLoadResult loadGif(InputStream input) throws IOException {
         ByteBuffer gifData = null;
         ByteBuffer imageData = null;
-        PointerBuffer delaysBuffer = null;
+        PointerBuffer delaysBuffer;
 
         try {
             // Read entire GIF into byte buffer

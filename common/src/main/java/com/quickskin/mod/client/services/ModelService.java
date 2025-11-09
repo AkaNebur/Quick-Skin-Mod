@@ -1,7 +1,6 @@
 package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
-import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.common.util.SkinModelDetector;
 import net.fabricmc.api.EnvType;
@@ -98,11 +97,6 @@ public class ModelService implements IModelService {
     @Nullable
     public String getModelOverride(UUID playerId) {
         return modelOverrides.get(playerId);
-    }
-
-    @Override
-    public void clearModelOverride(UUID playerId) {
-        modelOverrides.remove(playerId);
     }
 
     @Override

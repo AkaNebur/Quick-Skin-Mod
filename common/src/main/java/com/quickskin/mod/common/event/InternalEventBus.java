@@ -60,10 +60,4 @@ public class InternalEventBus {
         }
     }
 
-    /**
-     * Clears all listeners
-     */
-    public void clearAll() {
-        listeners.clear();
-    }
 }

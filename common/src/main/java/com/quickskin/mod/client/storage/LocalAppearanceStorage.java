@@ -5,7 +5,6 @@ import com.google.gson.GsonBuilder;
 import com.quickskin.mod.QuickSkin;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -47,7 +46,6 @@ public class LocalAppearanceStorage {
      */
     public static class PlayerPreferences {
         public String lastSkinId;
-        public String lastCapeId;
         public String lastModelType;
         public Map<String, String> favorites;
 
@@ -102,17 +100,6 @@ public class LocalAppearanceStorage {
         savePreferencesData(data);
 
         QuickSkin.LOGGER.debug("Saved preferences for player: {}", playerId);
-    }
-
-    /**
-     * Load player preferences
-     * @param playerId The player's UUID
-     * @return The preferences, or null if not found
-     */
-    @Nullable
-    public PlayerPreferences loadPlayerPreferences(UUID playerId) {
-        PreferencesData data = loadPreferencesData();
-        return data.players.get(playerId.toString());
     }
 
     /**

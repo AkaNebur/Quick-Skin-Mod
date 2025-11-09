@@ -11,11 +11,7 @@ import java.util.UUID;
  * Listeners can use this to refresh UI, renderers, etc.
  */
 @Environment(EnvType.CLIENT)
-public class PlayerAppearanceUpdateEvent {
-    private final UUID playerId;
-    private final PlayerAppearance appearance;
-    private final UpdateType updateType;
-
+public record PlayerAppearanceUpdateEvent(UUID playerId, PlayerAppearance appearance) {
     public enum UpdateType {
         SKIN,
         CAPE,
@@ -23,21 +19,4 @@ public class PlayerAppearanceUpdateEvent {
         FULL
     }
 
-    public PlayerAppearanceUpdateEvent(UUID playerId, PlayerAppearance appearance, UpdateType updateType) {
-        this.playerId = playerId;
-        this.appearance = appearance;
-        this.updateType = updateType;
-    }
-
-    public UUID getPlayerId() {
-        return playerId;
-    }
-
-    public PlayerAppearance getAppearance() {
-        return appearance;
-    }
-
-    public UpdateType getUpdateType() {
-        return updateType;
-    }
 }

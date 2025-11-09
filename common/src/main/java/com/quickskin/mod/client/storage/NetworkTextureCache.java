@@ -2,7 +2,6 @@ package com.quickskin.mod.client.storage;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.quickskin.mod.QuickSkin;
-import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -60,8 +59,7 @@ public class NetworkTextureCache {
      * @param hash The texture hash
      * @return The texture bytes, or null if not found
      */
-    @Nullable
-    public byte[] getTextureData(String hash) {
+    public byte @Nullable [] getTextureData(String hash) {
         return textureDataCache.get(hash);
     }
 
@@ -95,9 +93,6 @@ public class NetworkTextureCache {
 
             // Convert to NativeImage
             NativeImage nativeImage = convertToNativeImage(bufferedImage);
-            if (nativeImage == null) {
-                return null;
-            }
 
             // Create dynamic texture
             DynamicTexture dynamicTexture = new DynamicTexture(nativeImage);
@@ -129,23 +124,6 @@ public class NetworkTextureCache {
      */
     public boolean hasTexture(String hash) {
         return textureDataCache.containsKey(hash);
-    }
-
-    /**
-     * Remove a texture from the cache
-     * @param hash The texture hash
-     */
-    public void removeTexture(String hash) {
-        textureDataCache.remove(hash);
-
-        ResourceLocation location = textureRegistry.remove(hash);
-        if (location != null) {
-            try {
-                Minecraft.getInstance().getTextureManager().release(location);
-            } catch (Exception e) {
-                QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
-            }
-        }
     }
 
     /**

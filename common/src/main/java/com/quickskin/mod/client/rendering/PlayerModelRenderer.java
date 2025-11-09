@@ -16,17 +16,11 @@ import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
-import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.HumanoidArm;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
-import org.joml.Vector3f;
 
 /**
  * Utility for rendering player models in GUI using vanilla Minecraft rendering
@@ -54,15 +48,11 @@ public class PlayerModelRenderer {
         }
     }
 
-    // Debug mode flag
-    private static boolean debugMode = false;
-
     // Cached player entity for rendering (persists even after leaving world)
     private static Player cachedPlayer;
 
     // Previous rotation/position values for smooth lerping in idle animation
     private static float prevHeadRotZ = 0.0f;
-    private static float prevHeadBobY = 0.0f;
     private static float prevRightArmRotX = 0.0f;
     private static float prevRightArmRotZ = 0.0f;
     private static float prevLeftArmRotX = 0.0f;
@@ -167,7 +157,7 @@ public class PlayerModelRenderer {
 
                 poseStack.pushPose();
                 // Match the transformations from InventoryScreen
-                poseStack.translate((double)x, (double)y, 50.0);
+                poseStack.translate(x, y, 50.0);
                 float scaleCasted = (float)(int)scale;
                 Matrix4f scaleMatrix = (new Matrix4f()).scaling(scaleCasted, scaleCasted, -scaleCasted);
                 poseStack.mulPoseMatrix(scaleMatrix);

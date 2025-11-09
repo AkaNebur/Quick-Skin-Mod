@@ -1,21 +1,15 @@
 package com.quickskin.mod.client.services;
 
-import com.google.common.hash.Hashing;
-import com.mojang.authlib.GameProfile;
-import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.resources.ResourceLocation;
 
 import org.jetbrains.annotations.Nullable;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Service for managing player skins
@@ -111,9 +105,4 @@ public class SkinService implements ISkinService {
         return localLocation;
     }
 
-    @Override
-    public boolean hasLocalSkin(String hash) {
-        // Check if the metadata cache contains this hash
-        return LocalAssetManager.getInstance().getMetadata(hash) != null;
-    }
 }

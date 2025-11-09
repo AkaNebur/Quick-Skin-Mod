@@ -68,14 +68,4 @@ public class HashUtil {
         return sb.toString();
     }
 
-    /**
-     * Validate that a string is a valid SHA1 hash
-     */
-    public static boolean isValidHash(String hash) {
-        if (hash == null) {
-            return false;
-        }
-        // SHA1 is 40 hex characters
-        return hash.matches("^[a-f0-9]{40}$");
-    }
 }

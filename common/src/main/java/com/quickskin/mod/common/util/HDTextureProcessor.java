@@ -67,17 +67,14 @@ public class HDTextureProcessor {
     /**
      * Convert legacy 64x32 skin to modern 64x64 format
      * Properly copies and mirrors limbs for HD compatibility
-     *
      * Each limb texture has 6 faces laid out in a specific pattern:
      * - Top/Bottom (4x4 each at top)
      * - Right side, Front, Left side, Back (4x12 each below)
-     *
      * When converting right limbs to left limbs, we must rearrange the faces,
      * not just flip the entire texture horizontally.
      */
     public static BufferedImage convertLegacyToModern(BufferedImage legacy) {
         int width = legacy.getWidth();
-        int height = legacy.getHeight();
         int scale = width / 64;
 
         // Create new 64x64 (scaled) image
