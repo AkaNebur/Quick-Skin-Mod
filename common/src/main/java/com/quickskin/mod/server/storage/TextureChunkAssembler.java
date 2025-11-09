@@ -1,6 +1,5 @@
 package com.quickskin.mod.server.storage;
 
-import com.quickskin.mod.QuickSkin;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
@@ -33,8 +32,7 @@ public class TextureChunkAssembler {
      * @param chunkData The chunk data
      * @return Complete texture data if all chunks received, null otherwise
      */
-    @Nullable
-    public byte[] addChunk(String hash, int chunkIndex, int totalChunks, byte[] chunkData) {
+    public byte @Nullable [] addChunk(String hash, int chunkIndex, int totalChunks, byte[] chunkData) {
         // Get or create assembly
         ChunkAssembly assembly = assemblies.computeIfAbsent(hash, k -> new ChunkAssembly(totalChunks));
 

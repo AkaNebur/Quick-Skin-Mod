@@ -30,11 +30,11 @@ public class KeybindRegistry {
     public static void init() {
         QuickSkin.LOGGER.info("Registering keybinds...");
 
-        // Create keybind for opening skin menu (default: K)
+        // Create keybind for opening skin menu (default: none)
         OPEN_SKIN_MENU = new KeyMapping(
             "key." + QuickSkin.MOD_ID + ".open_menu",
             InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_K,
+            InputConstants.UNKNOWN.getValue(),
             CATEGORY
         );
 

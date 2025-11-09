@@ -110,31 +110,4 @@ public class ServerAppearanceStorage {
         }
     }
 
-    /**
-     * Save all player appearances from the repository
-     */
-    public void saveAllAppearances() {
-        // This would iterate through all players in the repository
-        // For now, it's called when individual players quit
-        QuickSkin.LOGGER.debug("saveAllAppearances called (individual saves happen on player quit)");
-    }
-
-    /**
-     * Delete a player's saved appearance
-     * @param playerId The player's UUID
-     */
-    public void deletePlayerAppearance(UUID playerId) {
-        if (storageDirectory == null) {
-            return;
-        }
-
-        Path file = storageDirectory.resolve(playerId.toString() + ".json");
-
-        try {
-            Files.deleteIfExists(file);
-            QuickSkin.LOGGER.info("Deleted appearance for player: {}", playerId);
-        } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to delete appearance for player: {}", playerId, e);
-        }
-    }
 }

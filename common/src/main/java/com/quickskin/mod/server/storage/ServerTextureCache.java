@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -65,23 +64,11 @@ public class ServerTextureCache {
     }
 
     /**
-     * Store a player's texture with UUID and type
-     * @param playerId The player's UUID
-     * @param textureType "skin" or "cape"
-     * @param textureData The texture image data
-     */
-    public void storeTexture(UUID playerId, String textureType, byte[] textureData) {
-        String hash = generateHash(playerId, textureType);
-        storeTexture(hash, textureData);
-    }
-
-    /**
      * Retrieve a texture from cache
      * @param hash The texture hash
      * @return The texture data, or null if not found
      */
-    @Nullable
-    public byte[] getTexture(String hash) {
+    public byte @Nullable [] getTexture(String hash) {
         return textureCache.get(hash);
     }
 
@@ -107,13 +94,6 @@ public class ServerTextureCache {
     public void clear() {
         textureCache.clear();
         QuickSkin.LOGGER.info("Cleared texture cache");
-    }
-
-    /**
-     * Generate a hash for a player's texture
-     */
-    private String generateHash(UUID playerId, String textureType) {
-        return playerId.toString() + "_" + textureType;
     }
 
     /**

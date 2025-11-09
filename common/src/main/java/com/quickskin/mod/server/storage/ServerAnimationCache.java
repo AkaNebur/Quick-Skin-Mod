@@ -70,13 +70,6 @@ public class ServerAnimationCache {
     }
 
     /**
-     * Check if animation metadata exists
-     */
-    public boolean hasMetadata(String hash) {
-        return metadataCache.containsKey(hash);
-    }
-
-    /**
      * Clear all cached metadata from memory
      */
     public void clear() {
