@@ -553,7 +553,11 @@ public class PlayerWidget extends AbstractWidget {
             return false;
         }
 
-        // Note: isMouseOver() already checks if we're inside the model area when customization is enabled
+        // Only handle clicks within the model's interactive area (the green box)
+        if (!isMouseOver(mouseX, mouseY)) {
+            return false;
+        }
+
         // Start dragging
         isDragging = true;
         dragStartX = (int)mouseX;
@@ -604,7 +608,11 @@ public class PlayerWidget extends AbstractWidget {
             return false;
         }
 
-        // Note: isMouseOver() already checks if we're inside the model area when customization is enabled
+        // Only handle scroll events within the model's interactive area (the green box)
+        if (!isMouseOver(mouseX, mouseY)) {
+            return false;
+        }
+
         // Adjust scale based on scroll direction
         float oldScale = scale;
         scale += (float)delta * SCALE_STEP;
