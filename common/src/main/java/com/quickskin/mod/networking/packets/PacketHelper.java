@@ -105,11 +105,10 @@ public class PacketHelper {
     }
 
     /**
-     * Reads a string from buffer (null-safe)
+     * Reads a string from buffer.
      */
     public static String readString(FriendlyByteBuf buf) {
-        String str = buf.readUtf();
-        return str.isEmpty() ? null : str;
+        return buf.readUtf();
     }
 
     /**
