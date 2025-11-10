@@ -2,11 +2,10 @@ plugins {
     id 'dev.architectury.loom' version '1.11-SNAPSHOT' apply false
     id 'architectury-plugin' version '3.4-SNAPSHOT'
     id 'com.gradleup.shadow' version '8.3.6' apply false
-    id 'io.github.pacifistmc.forgix' version '2.0.0-SNAPSHOT.5.1'
 }
 
 architectury {
-    minecraft = project.minecraft_version
+    minecraft = project.minecraft_version_1_21
 }
 
 allprojects {
@@ -33,12 +32,8 @@ subprojects {
     }
 
     dependencies {
-        // Use different Minecraft versions based on module
-        if (project.name.contains('1.21') || project.name == 'neoforge') {
-            minecraft "net.minecraft:minecraft:$rootProject.minecraft_version_1_21"
-        } else {
-            minecraft "net.minecraft:minecraft:$rootProject.minecraft_version"
-        }
+        // All modules use Minecraft 1.21.1
+        minecraft "net.minecraft:minecraft:$rootProject.minecraft_version_1_21"
         mappings loom.officialMojangMappings()
     }
 
@@ -48,23 +43,14 @@ subprojects {
         // If you remove this line, sources will not be generated.
         withSourcesJar()
 
-        // Use Java 21 for 1.21.1 modules, Java 17 for 1.20.1 modules
-        if (project.name.contains('1.21') || project.name == 'neoforge') {
-            sourceCompatibility = JavaVersion.VERSION_21
-            targetCompatibility = JavaVersion.VERSION_21
-        } else {
-            sourceCompatibility = JavaVersion.VERSION_17
-            targetCompatibility = JavaVersion.VERSION_17
-        }
+        // All modules use Java 21
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     tasks.withType(JavaCompile).configureEach {
-        // Use Java 21 for 1.21.1 modules, Java 17 for 1.20.1 modules
-        if (project.name.contains('1.21') || project.name == 'neoforge') {
-            it.options.release = 21
-        } else {
-            it.options.release = 17
-        }
+        // All modules use Java 21
+        it.options.release = 21
     }
 
     // Configure Maven publishing.
@@ -83,67 +69,5 @@ subprojects {
             // The repositories here will be used for publishing your artifact, not for
             // retrieving dependencies.
         }
-    }
-}
-
-// Choose which version to merge via gradle property
-// For 1.20.1: ./gradlew clean build mergeJars
-// For 1.21.1: ./gradlew clean build mergeJars -Pmerge121=true
-def shouldMerge121 = project.hasProperty('merge121') && project.property('merge121') == 'true'
-
-forgix {
-    group = rootProject.maven_group
-    destinationDirectory = layout.projectDirectory.dir("build/libs")
-
-    if (shouldMerge121) {
-        // Merge 1.21.1 (Fabric + NeoForge)
-        archiveClassifier = "1.21.1-merged"
-        archiveVersion = rootProject.mod_version
-
-        fabric {
-            inputJar = project(":fabric-1.21").tasks.remapJar.archiveFile
-        }
-
-        neoforge {
-            inputJar = project(":neoforge").tasks.remapJar.archiveFile
-        }
-    } else {
-        // Merge 1.20.1 (Fabric + Forge) - DEFAULT
-        archiveClassifier = "1.20.1-merged"
-        archiveVersion = rootProject.mod_version
-
-        fabric {
-            inputJar = project(":fabric").tasks.remapJar.archiveFile
-        }
-
-        forge {
-            inputJar = project(":forge").tasks.remapJar.archiveFile
-        }
-    }
-}
-
-// Convenience task for building 1.21.1 versions
-task build121 {
-    group = "build"
-    description = "Builds 1.21.1 Fabric and NeoForge modules"
-    dependsOn ":fabric-1.21:build", ":neoforge:build"
-
-    doLast {
-        println "\n✓ Built 1.21.1 versions:"
-        println "  Fabric: fabric-1.21/build/libs/"
-        println "  NeoForge: neoforge/build/libs/"
-        println "\n⚠ WARNING: Merged JARs don't work properly for 1.21.1 due to Architectury's @ExpectPlatform."
-        println "  Please distribute separate JARs for each loader.\n"
-    }
-}
-
-// Convenience task for building and merging 1.20.1
-task mergeJars120 {
-    group = "build"
-    description = "Builds and merges 1.20.1 Fabric + Forge into a single JAR"
-    dependsOn ":fabric:build", ":forge:build", "mergeJars"
-
-    doLast {
-        println "\n✓ Merged 1.20.1 JAR created in build/libs/\n"
     }
 }

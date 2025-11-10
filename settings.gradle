@@ -11,11 +11,6 @@ pluginManagement {
 
 rootProject.name = 'quick-skin'
 
-// 1.20.1 modules
-include 'common'
-include 'fabric'
-include 'forge'
-
 // 1.21.1 modules
 include 'common-1.21'
 include 'fabric-1.21'
