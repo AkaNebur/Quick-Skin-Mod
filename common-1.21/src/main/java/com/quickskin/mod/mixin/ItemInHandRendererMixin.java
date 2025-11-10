@@ -1,6 +1,5 @@
 package com.quickskin.mod.mixin;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
@@ -11,43 +10,40 @@ import net.minecraft.client.renderer.ItemInHandRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.HumanoidArm;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
  * Mixin to enable transparent arm rendering in first-person view.
- * Wraps the MultiBufferSource to return translucent buffers for skins with transparency.
+ * Redirects getBuffer calls to return translucent buffers for skins with transparency.
+ *
+ * Uses @Redirect which is more reliable cross-platform than @ModifyVariable or @ModifyArg.
  */
 @Mixin(ItemInHandRenderer.class)
 public class ItemInHandRendererMixin {
 
     /**
-     * Wraps the MultiBufferSource in renderPlayerArm to return translucent buffers for transparent skins.
+     * Redirects all getBuffer calls within renderPlayerArm to potentially return
+     * translucent render types for transparent skins.
      */
-    @ModifyVariable(
+    @Redirect(
         method = "renderPlayerArm",
-        at = @At("HEAD"),
-        argsOnly = true,
-        ordinal = 0
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/renderer/MultiBufferSource;getBuffer(Lnet/minecraft/client/renderer/RenderType;)Lcom/mojang/blaze3d/vertex/VertexConsumer;"
+        )
     )
-    private MultiBufferSource quickskin$wrapBufferSourceForTransparency(MultiBufferSource original,
-                                                                         PoseStack poseStack,
-                                                                         MultiBufferSource multiBufferSource,
-                                                                         int light,
-                                                                         float equipProgress,
-                                                                         float swingProgress,
-                                                                         HumanoidArm arm) {
+    private VertexConsumer quickskin$redirectGetBuffer(MultiBufferSource multiBufferSource, RenderType renderType) {
         // Check if transparency is enabled
         if (ClientConfig.getInstance().shouldDisableSkinTransparency()) {
-            return original;
+            return multiBufferSource.getBuffer(renderType);
         }
 
         // Get the current player
         AbstractClientPlayer player = Minecraft.getInstance().player;
         if (player == null) {
-            return original;
+            return multiBufferSource.getBuffer(renderType);
         }
 
         ResourceLocation skinTexture = player.getSkin().texture();
@@ -61,20 +57,15 @@ public class ItemInHandRendererMixin {
         }
 
         if (!needsTranslucent) {
-            return original; // No transparency needed
+            return multiBufferSource.getBuffer(renderType);
         }
 
-        // Wrap the buffer source to return translucent buffers
-        return new MultiBufferSource() {
-            @Override
-            public VertexConsumer getBuffer(RenderType renderType) {
-                // Replace entity render types with translucent version
-                String renderTypeName = renderType.toString();
-                if (renderTypeName.contains("entity")) {
-                    return original.getBuffer(RenderType.entityTranslucentCull(skinTexture));
-                }
-                return original.getBuffer(renderType);
-            }
-        };
+        // Replace entity render types with translucent version
+        String renderTypeName = renderType.toString();
+        if (renderTypeName.contains("entity")) {
+            return multiBufferSource.getBuffer(RenderType.entityTranslucentCull(skinTexture));
+        }
+
+        return multiBufferSource.getBuffer(renderType);
     }
 }

@@ -216,7 +216,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
     public boolean hasActiveSkin(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
-        return appearance != null && appearance.getSkinLocation() != null;
+        return appearance != null && appearance.getSkinId() != null && !appearance.getSkinId().isEmpty();
     }
 
     public boolean hasActiveCape(UUID playerId) {
@@ -231,7 +231,26 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     @Nullable
     public ResourceLocation getSkinLocation(UUID playerId) {
         PlayerAppearance appearance = repository.getAppearance(playerId);
-        return appearance != null ? appearance.getSkinLocation() : null;
+        if (appearance == null) {
+            return null;
+        }
+
+        // If the location is already cached, return it.
+        if (appearance.getSkinLocation() != null) {
+            return appearance.getSkinLocation();
+        }
+
+        // If not cached, try to resolve it now.
+        // This handles the race condition where SYNC_APPEARANCE arrives before SEND_TEXTURE
+        if (appearance.getSkinId() != null && !appearance.getSkinId().isEmpty()) {
+            ResourceLocation location = skinService.getSkinLocation(playerId, appearance.getSkinId());
+            if (location != null) {
+                appearance.setSkinLocation(location); // Cache it for next time
+                return location;
+            }
+        }
+
+        return null;
     }
 
     @Nullable

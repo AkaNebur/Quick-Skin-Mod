@@ -86,31 +86,64 @@ subprojects {
     }
 }
 
+// Choose which version to merge via gradle property
+// For 1.20.1: ./gradlew clean build mergeJars
+// For 1.21.1: ./gradlew clean build mergeJars -Pmerge121=true
+def shouldMerge121 = project.hasProperty('merge121') && project.property('merge121') == 'true'
+
 forgix {
     group = rootProject.maven_group
+    destinationDirectory = layout.projectDirectory.dir("build/libs")
 
-    // Merged JAR for 1.20.1 (Fabric + Forge)
-    fabric {
-        inputJar = project(":fabric").tasks.remapJar.archiveFile
-    }
+    if (shouldMerge121) {
+        // Merge 1.21.1 (Fabric + NeoForge)
+        archiveClassifier = "1.21.1-merged"
+        archiveVersion = rootProject.mod_version
 
-    forge {
-        inputJar = project(":forge").tasks.remapJar.archiveFile
+        fabric {
+            inputJar = project(":fabric-1.21").tasks.remapJar.archiveFile
+        }
+
+        neoforge {
+            inputJar = project(":neoforge").tasks.remapJar.archiveFile
+        }
+    } else {
+        // Merge 1.20.1 (Fabric + Forge) - DEFAULT
+        archiveClassifier = "1.20.1-merged"
+        archiveVersion = rootProject.mod_version
+
+        fabric {
+            inputJar = project(":fabric").tasks.remapJar.archiveFile
+        }
+
+        forge {
+            inputJar = project(":forge").tasks.remapJar.archiveFile
+        }
     }
 }
 
-// For 1.21.1, create separate build tasks
-// Since Forgix is configured for 1.20.1, we'll provide separate JARs for 1.21.1
+// Convenience task for building 1.21.1 versions
 task build121 {
     group = "build"
-    description = "Builds 1.21.1 versions (Fabric and NeoForge separately)"
+    description = "Builds 1.21.1 Fabric and NeoForge modules"
     dependsOn ":fabric-1.21:build", ":neoforge:build"
 
     doLast {
         println "\n✓ Built 1.21.1 versions:"
         println "  Fabric: fabric-1.21/build/libs/"
         println "  NeoForge: neoforge/build/libs/"
-        println "\nNote: 1.21.1 versions are separate JARs (Fabric or NeoForge)"
-        println "      1.20.1 merged JAR available via 'gradlew mergeJars' task\n"
+        println "\n⚠ WARNING: Merged JARs don't work properly for 1.21.1 due to Architectury's @ExpectPlatform."
+        println "  Please distribute separate JARs for each loader.\n"
+    }
+}
+
+// Convenience task for building and merging 1.20.1
+task mergeJars120 {
+    group = "build"
+    description = "Builds and merges 1.20.1 Fabric + Forge into a single JAR"
+    dependsOn ":fabric:build", ":forge:build", "mergeJars"
+
+    doLast {
+        println "\n✓ Merged 1.20.1 JAR created in build/libs/\n"
     }
 }

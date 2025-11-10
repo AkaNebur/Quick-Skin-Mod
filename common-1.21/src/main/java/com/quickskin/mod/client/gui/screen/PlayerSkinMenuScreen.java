@@ -10,6 +10,7 @@ import com.quickskin.mod.client.gui.util.FileDialogHelper;
 import com.quickskin.mod.client.gui.util.GuiScaleManager;
 import com.quickskin.mod.client.gui.util.SkinImporter;
 import com.quickskin.mod.client.gui.widget.ErrorToast;
+import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.gui.widget.SkinEntry;
 import com.quickskin.mod.client.services.CooldownService;
 import com.quickskin.mod.client.services.LocalAssetManager;
@@ -197,13 +198,13 @@ public class PlayerSkinMenuScreen extends Screen {
         addRenderableWidget(usernameSearchField);
 
         searchButton = com.quickskin.mod.client.gui.util.ButtonFactory.createStyled(
-                        searchFieldX + searchFieldWidth - searchButtonWidth,
-                        yPos,
-                        searchButtonWidth,
-                        scaledComponentHeight,
-                        Component.literal("Search"),
-                        button -> searchMojangSkin()
-                );
+                searchFieldX + searchFieldWidth - searchButtonWidth,
+                yPos,
+                searchButtonWidth,
+                scaledComponentHeight,
+                Component.literal("Search"),
+                button -> searchMojangSkin()
+        );
         addRenderableWidget(searchButton);
         searchButton.active = false;
 
@@ -423,18 +424,18 @@ public class PlayerSkinMenuScreen extends Screen {
 
             // Check if this local cape has animation metadata
             com.quickskin.mod.common.data.AnimationMetadata metadata =
-                LocalAssetManager.getInstance().getAnimationMetadata(hash);
+                    LocalAssetManager.getInstance().getAnimationMetadata(hash);
 
             if (metadata != null && metadata.frameCount() > 1) {
                 // Load atlas image from cache
                 java.awt.image.BufferedImage atlasImage =
-                    LocalAssetManager.getInstance().getSourceImage(hash);
+                        LocalAssetManager.getInstance().getSourceImage(hash);
 
                 if (atlasImage != null) {
                     // Register animation
                     QuickSkin.LOGGER.info("Registering animation for cape in skin menu: {}", animationId);
                     com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
-                        .registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
+                            .registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
                 }
             }
         }
@@ -679,6 +680,18 @@ public class PlayerSkinMenuScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Give PlayerWidget input priority for its customization feature
+        if (playerPreviewPanel != null) {
+            PlayerWidget widget = playerPreviewPanel.getPlayerWidget();
+            if (widget != null && widget.mouseClicked(mouseX, mouseY, button)) {
+                this.setFocused(widget);
+                if (button == 0) {
+                    this.setDragging(true);
+                }
+                return true;
+            }
+        }
+
         // Handle debug positioning mode
         if (com.quickskin.mod.client.rendering.PlayerModelRenderer.handleDebugMousePressed((int)mouseX, (int)mouseY, button)) {
             return true;
@@ -702,6 +715,18 @@ public class PlayerSkinMenuScreen extends Screen {
             return true;
         }
         return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
+        // Give PlayerWidget input priority for its customization feature
+        if (playerPreviewPanel != null) {
+            PlayerWidget widget = playerPreviewPanel.getPlayerWidget();
+            if (widget != null && widget.mouseScrolled(mouseX, mouseY, deltaX, deltaY)) {
+                return true;
+            }
+        }
+        return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
     }
 
     @Override
