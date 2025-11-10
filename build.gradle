@@ -33,7 +33,12 @@ subprojects {
     }
 
     dependencies {
-        minecraft "net.minecraft:minecraft:$rootProject.minecraft_version"
+        // Use different Minecraft versions based on module
+        if (project.name.contains('1.21') || project.name == 'neoforge') {
+            minecraft "net.minecraft:minecraft:$rootProject.minecraft_version_1_21"
+        } else {
+            minecraft "net.minecraft:minecraft:$rootProject.minecraft_version"
+        }
         mappings loom.officialMojangMappings()
     }
 
@@ -43,12 +48,23 @@ subprojects {
         // If you remove this line, sources will not be generated.
         withSourcesJar()
 
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        // Use Java 21 for 1.21.1 modules, Java 17 for 1.20.1 modules
+        if (project.name.contains('1.21') || project.name == 'neoforge') {
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+        } else {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
+        }
     }
 
     tasks.withType(JavaCompile).configureEach {
-        it.options.release = 17
+        // Use Java 21 for 1.21.1 modules, Java 17 for 1.20.1 modules
+        if (project.name.contains('1.21') || project.name == 'neoforge') {
+            it.options.release = 21
+        } else {
+            it.options.release = 17
+        }
     }
 
     // Configure Maven publishing.
@@ -73,11 +89,28 @@ subprojects {
 forgix {
     group = rootProject.maven_group
 
+    // Merged JAR for 1.20.1 (Fabric + Forge)
     fabric {
         inputJar = project(":fabric").tasks.remapJar.archiveFile
     }
 
     forge {
         inputJar = project(":forge").tasks.remapJar.archiveFile
+    }
+}
+
+// For 1.21.1, create separate build tasks
+// Since Forgix is configured for 1.20.1, we'll provide separate JARs for 1.21.1
+task build121 {
+    group = "build"
+    description = "Builds 1.21.1 versions (Fabric and NeoForge separately)"
+    dependsOn ":fabric-1.21:build", ":neoforge:build"
+
+    doLast {
+        println "\n✓ Built 1.21.1 versions:"
+        println "  Fabric: fabric-1.21/build/libs/"
+        println "  NeoForge: neoforge/build/libs/"
+        println "\nNote: 1.21.1 versions are separate JARs (Fabric or NeoForge)"
+        println "      1.20.1 merged JAR available via 'gradlew mergeJars' task\n"
     }
 }

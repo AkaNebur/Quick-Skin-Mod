@@ -1,0 +1,833 @@
+
+> Configure project :
+Architect Plugin: 3.4.162
+Architectury Loom: 1.11.458
+
+> Task :common-1.21:compileJava FAILED
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\mixin\PlayerInfoMixin.java:28: warning: Unable to determine descriptor for @Inject target method
+    @Inject(method = "getSkinLocation", at = @At("HEAD"), cancellable = true)
+    ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\mixin\PlayerInfoMixin.java:45: warning: Unable to determine descriptor for @Inject target method
+    @Inject(method = "getModelName", at = @At("HEAD"), cancellable = true)
+    ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\mixin\PlayerInfoMixin.java:62: warning: Unable to determine descriptor for @Inject target method
+    @Inject(method = "getCapeLocation", at = @At("HEAD"), cancellable = true)
+    ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\overlay\SkinPreviewOverlay.java:75: error: cannot find symbol
+            modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                     ^
+  symbol:   method getPath()
+  location: class String
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\widget\LinkButton.java:39: error: cannot find symbol
+        graphics.blitNineSliced(WIDGETS_LOCATION, this.getX(), this.getY(), this.getWidth(), this.getHeight(), 20, 4, 200, 20, 0, 46 + 20);
+                ^
+  symbol:   method blitNineSliced(ResourceLocation,int,int,int,int,int,int,int,int,int,int)
+  location: variable graphics of type GuiGraphics
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\PlayerCapeMenuScreen.java:48: error: cannot find symbol
+    private static final ResourceLocation VIGNETTE_LOCATION = new ResourceLocation.withDefaultNamespace("textures/misc/vignette.png");
+                                                                                  ^
+  symbol:   class withDefaultNamespace
+  location: class ResourceLocation
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\PlayerCapeMenuScreen.java:255: error: cannot find symbol
+                    modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                             ^
+  symbol:   method getPath()
+  location: class String
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\PlayerCapeMenuScreen.java:263: error: cannot find symbol
+                modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                         ^
+  symbol:   method getPath()
+  location: class String
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:170: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+        showOverlayCheckbox = new Checkbox(
+                              ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:182: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+        enableStyledButtonsCheckbox = new Checkbox(
+                                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:194: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+        enablePlayerPreviewCustomizationCheckbox = new Checkbox(
+                                                   ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:255: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+        disableSkinTransparencyCheckbox = new Checkbox(
+                                          ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:279: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+        serverDisableSkinTransparencyCheckbox = new Checkbox(
+                                                ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:455: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:463: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:471: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:479: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:512: error: cannot find symbol
+                .color(255, 0, 255, 255) // Bright magenta
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:517: error: cannot find symbol
+                .color(255, 0, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:522: error: cannot find symbol
+                .color(255, 0, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:527: error: cannot find symbol
+                .color(255, 0, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:562: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:571: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:580: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:589: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:867: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:875: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:883: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:891: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:900: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:907: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:914: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:921: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:930: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:937: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:944: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:951: error: cannot find symbol
+                .color(255, 255, 255, 255)
+                ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:1012: error: cannot find symbol
+        consumer.addVertex(matrix, x1, y1, z1).color(r, g, b, 255).normal(1, 0, 0).endVertex();
+                                              ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:1013: error: cannot find symbol
+        consumer.addVertex(matrix, x2, y2, z2).color(r, g, b, 255).normal(1, 0, 0).endVertex();
+                                              ^
+  symbol:   method color(int,int,int,int)
+  location: interface VertexConsumer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:1069: error: cannot find symbol
+        defaultData.setSkinLocation(new ResourceLocation.withDefaultNamespace("textures/entity/steve.png"));
+                                                        ^
+  symbol:   class withDefaultNamespace
+  location: class ResourceLocation
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\ClientEvents.java:304: error: cannot find symbol
+                        modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                                 ^
+  symbol:   method getPath()
+  location: class String
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\ClientEvents.java:312: error: cannot find symbol
+                    modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                             ^
+  symbol:   method getPath()
+  location: class String
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\ClientEvents.java:442: error: incompatible types: DeltaTracker cannot be converted to float
+                com.quickskin.mod.client.gui.overlay.SkinPreviewOverlay.render(guiGraphics, tickDelta);
+                                                                                            ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\CommonEvents.java:63: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                NetworkManager.sendToPlayer((ServerPlayer) player, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
+                              ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\CommonEvents.java:86: error: incompatible types: incompatible parameter types in lambda expression
+        PlayerEvent.PLAYER_RESPAWN.register((player, conqueredEnd) -> {
+                                            ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\mixin\CapeLayerMixin.java:40: error: cannot find symbol
+        ResourceLocation capeTexture = player.getCloakTextureLocation();
+                                             ^
+  symbol:   method getCloakTextureLocation()
+  location: variable player of type AbstractClientPlayer
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:23: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:29: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:35: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:41: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:47: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:53: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:59: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:65: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:71: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:77: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:83: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:89: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+        NetworkManager.registerReceiver(
+                      ^
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:77: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+        NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
+                      ^
+    method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToServer(T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToServer(T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:122: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+            NetworkManager.sendToServer(ModNetworking.TEXTURE_CHUNK, buf);
+                          ^
+    method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToServer(T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToServer(T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:147: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+        NetworkManager.sendToServer(ModNetworking.UPLOAD_ANIMATION_METADATA, buf);
+                      ^
+    method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToServer(T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToServer(T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:172: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+        NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
+                      ^
+    method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToServer(T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToServer(T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:191: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+        NetworkManager.sendToServer(ModNetworking.REQUEST_TEXTURE, buf);
+                      ^
+    method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToServer(T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToServer(T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:100: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                NetworkManager.sendToPlayer(player, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
+                              ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:237: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SEND_TEXTURE, packet);
+                              ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:261: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SYNC_APPEARANCE, packet);
+                              ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:288: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+            NetworkManager.sendToPlayer(recipient, ModNetworking.SYNC_APPEARANCE, packet);
+                          ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:300: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                    NetworkManager.sendToPlayer(recipient, ModNetworking.SEND_TEXTURE, skinPacket);
+                                  ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:311: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                    NetworkManager.sendToPlayer(recipient, ModNetworking.SEND_TEXTURE, capePacket);
+                                  ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:318: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                        NetworkManager.sendToPlayer(recipient, ModNetworking.SEND_ANIMATION_METADATA, animPacket);
+                                      ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:375: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+        NetworkManager.sendToPlayer(player, ModNetworking.SEND_TEXTURE, packet);
+                      ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:391: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SEND_ANIMATION_METADATA, packet);
+                              ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:409: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+        NetworkManager.sendToPlayer(player, ModNetworking.SYNC_SERVER_CONFIG, packet);
+                      ^
+    method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+      (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+    method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+      (cannot infer type-variable(s) T
+        (actual and formal argument lists differ in length))
+  where T is a type-variable:
+    T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+Note: C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\services\MojangApiService.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+58 errors
+15 warnings
+
+[Incubating] Problems report is available at: file:///C:/Users/nebur/Desktop/quick-skin-1.20.1-fabric-forge/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':common-1.21:compileJava'.
+> Compilation failed; see the compiler output below.
+  Note: C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\services\MojangApiService.java uses or overrides a deprecated API.
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\CommonEvents.java:63: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                  NetworkManager.sendToPlayer((ServerPlayer) player, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
+                                ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:77: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+          NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
+                        ^
+      method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToServer(T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToServer(T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:122: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+              NetworkManager.sendToServer(ModNetworking.TEXTURE_CHUNK, buf);
+                            ^
+      method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToServer(T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToServer(T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:147: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+          NetworkManager.sendToServer(ModNetworking.UPLOAD_ANIMATION_METADATA, buf);
+                        ^
+      method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToServer(T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToServer(T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:172: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+          NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
+                        ^
+      method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToServer(T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToServer(T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\NetworkSyncService.java:191: error: no suitable method found for sendToServer(ResourceLocation,FriendlyByteBuf)
+          NetworkManager.sendToServer(ModNetworking.REQUEST_TEXTURE, buf);
+                        ^
+      method NetworkManager.sendToServer(ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToServer(T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToServer(T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:100: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                  NetworkManager.sendToPlayer(player, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
+                                ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:237: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                  NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SEND_TEXTURE, packet);
+                                ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:261: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                  NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SYNC_APPEARANCE, packet);
+                                ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:288: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+              NetworkManager.sendToPlayer(recipient, ModNetworking.SYNC_APPEARANCE, packet);
+                            ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:300: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                      NetworkManager.sendToPlayer(recipient, ModNetworking.SEND_TEXTURE, skinPacket);
+                                    ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:311: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                      NetworkManager.sendToPlayer(recipient, ModNetworking.SEND_TEXTURE, capePacket);
+                                    ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:318: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                          NetworkManager.sendToPlayer(recipient, ModNetworking.SEND_ANIMATION_METADATA, animPacket);
+                                        ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:375: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+          NetworkManager.sendToPlayer(player, ModNetworking.SEND_TEXTURE, packet);
+                        ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:391: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+                  NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SEND_ANIMATION_METADATA, packet);
+                                ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ServerNetworkHandler.java:409: error: no suitable method found for sendToPlayer(ServerPlayer,ResourceLocation,FriendlyByteBuf)
+          NetworkManager.sendToPlayer(player, ModNetworking.SYNC_SERVER_CONFIG, packet);
+                        ^
+      method NetworkManager.sendToPlayer(ServerPlayer,ResourceLocation,RegistryFriendlyByteBuf) is not applicable
+        (argument mismatch; FriendlyByteBuf cannot be converted to RegistryFriendlyByteBuf)
+      method NetworkManager.<T>sendToPlayer(ServerPlayer,T) is not applicable
+        (cannot infer type-variable(s) T
+          (actual and formal argument lists differ in length))
+    where T is a type-variable:
+      T extends CustomPacketPayload declared in method <T>sendToPlayer(ServerPlayer,T)
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\mixin\PlayerInfoMixin.java:28: warning: Unable to determine descriptor for @Inject target method
+      @Inject(method = "getSkinLocation", at = @At("HEAD"), cancellable = true)
+      ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\mixin\PlayerInfoMixin.java:45: warning: Unable to determine descriptor for @Inject target method
+      @Inject(method = "getModelName", at = @At("HEAD"), cancellable = true)
+      ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\mixin\PlayerInfoMixin.java:62: warning: Unable to determine descriptor for @Inject target method
+      @Inject(method = "getCapeLocation", at = @At("HEAD"), cancellable = true)
+      ^
+  Note: Recompile with -Xlint:deprecation for details.
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\ClientEvents.java:442: error: incompatible types: DeltaTracker cannot be converted to float
+                  com.quickskin.mod.client.gui.overlay.SkinPreviewOverlay.render(guiGraphics, tickDelta);
+                                                                                              ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\CommonEvents.java:86: error: incompatible types: incompatible parameter types in lambda expression
+          PlayerEvent.PLAYER_RESPAWN.register((player, conqueredEnd) -> {
+                                              ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\PlayerCapeMenuScreen.java:48: error: cannot find symbol
+      private static final ResourceLocation VIGNETTE_LOCATION = new ResourceLocation.withDefaultNamespace("textures/misc/vignette.png");
+                                                                                    ^
+    symbol:   class withDefaultNamespace
+    location: class ResourceLocation
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:1069: error: cannot find symbol
+          defaultData.setSkinLocation(new ResourceLocation.withDefaultNamespace("textures/entity/steve.png"));
+                                                          ^
+    symbol:   class withDefaultNamespace
+    location: class ResourceLocation
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:170: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+          showOverlayCheckbox = new Checkbox(
+                                ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:182: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+          enableStyledButtonsCheckbox = new Checkbox(
+                                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:194: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+          enablePlayerPreviewCustomizationCheckbox = new Checkbox(
+                                                     ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:255: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+          disableSkinTransparencyCheckbox = new Checkbox(
+                                            ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\SettingsScreen.java:279: error: Checkbox(int,int,int,Component,Font,boolean,OnValueChange) is not public in Checkbox; cannot be accessed from outside package
+          serverDisableSkinTransparencyCheckbox = new Checkbox(
+                                                  ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:23: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:29: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:35: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:41: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:47: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ClientNetworking.java:53: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:59: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:65: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:71: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:77: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:83: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\networking\ModNetworking.java:89: warning: [removal] registerReceiver(Side,ResourceLocation,NetworkReceiver<RegistryFriendlyByteBuf>) in NetworkManager has been deprecated and marked for removal
+          NetworkManager.registerReceiver(
+                        ^
+  Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\overlay\SkinPreviewOverlay.java:75: error: cannot find symbol
+              modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                       ^
+    symbol:   method getPath()
+    location: class String
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\widget\LinkButton.java:39: error: cannot find symbol
+          graphics.blitNineSliced(WIDGETS_LOCATION, this.getX(), this.getY(), this.getWidth(), this.getHeight(), 20, 4, 200, 20, 0, 46 + 20);
+                  ^
+    symbol:   method blitNineSliced(ResourceLocation,int,int,int,int,int,int,int,int,int,int)
+    location: variable graphics of type GuiGraphics
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\PlayerCapeMenuScreen.java:255: error: cannot find symbol
+                      modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                               ^
+    symbol:   method getPath()
+    location: class String
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\gui\screen\PlayerCapeMenuScreen.java:263: error: cannot find symbol
+                  modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                           ^
+    symbol:   method getPath()
+    location: class String
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:455: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:463: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:471: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:479: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:512: error: cannot find symbol
+                  .color(255, 0, 255, 255) // Bright magenta
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:517: error: cannot find symbol
+                  .color(255, 0, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:522: error: cannot find symbol
+                  .color(255, 0, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:527: error: cannot find symbol
+                  .color(255, 0, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:562: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:571: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:580: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:589: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:867: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:875: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:883: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:891: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:900: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:907: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:914: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:921: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:930: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:937: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:944: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:951: error: cannot find symbol
+                  .color(255, 255, 255, 255)
+                  ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:1012: error: cannot find symbol
+          consumer.addVertex(matrix, x1, y1, z1).color(r, g, b, 255).normal(1, 0, 0).endVertex();
+                                                ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\client\rendering\PlayerModelRenderer.java:1013: error: cannot find symbol
+          consumer.addVertex(matrix, x2, y2, z2).color(r, g, b, 255).normal(1, 0, 0).endVertex();
+                                                ^
+    symbol:   method color(int,int,int,int)
+    location: interface VertexConsumer
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\ClientEvents.java:304: error: cannot find symbol
+                          modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                                   ^
+    symbol:   method getPath()
+    location: class String
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\event\ClientEvents.java:312: error: cannot find symbol
+                      modelType = player.getSkin().model().id().getPath(); // "default" or "slim"
+                                                               ^
+    symbol:   method getPath()
+    location: class String
+  C:\Users\nebur\Desktop\quick-skin-1.20.1-fabric-forge\common-1.21\src\main\java\com\quickskin\mod\mixin\CapeLayerMixin.java:40: error: cannot find symbol
+          ResourceLocation capeTexture = player.getCloakTextureLocation();
+                                               ^
+    symbol:   method getCloakTextureLocation()
+    location: variable player of type AbstractClientPlayer
+  58 errors
+  15 warnings
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to get full insights.
+
+BUILD FAILED in 3s
+1 actionable task: 1 executed
