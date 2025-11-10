@@ -23,6 +23,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -174,6 +175,42 @@ public class LocalAssetManager {
             String hash = HashUtil.computeFileHash(path);
             if (hash == null) {
                 return null;
+            }
+
+            // For capes, check if it's an old animation strip missing metadata and generate it.
+            if ("cape".equals(type)) {
+                Path metadataPathForCheck = cacheDirectory.resolve(hash + ".json");
+                if (!Files.exists(metadataPathForCheck)) {
+                    // No metadata found. Let's see if this PNG is a multi-frame strip.
+                    try (InputStream is = Files.newInputStream(path)) {
+                        BufferedImage imageForCheck = ImageIO.read(is);
+                        if (imageForCheck != null) {
+                            int width = imageForCheck.getWidth();
+                            int height = imageForCheck.getHeight();
+                            // Cape frames have a 2:1 aspect ratio.
+                            int frameHeight = width / 2;
+
+                            if (width > 0 && frameHeight > 0 && height > frameHeight && height % frameHeight == 0) {
+                                int frameCount = height / frameHeight;
+                                if (frameCount > 1) {
+                                    QuickSkin.LOGGER.info("Detected old animated cape strip without metadata: {}. Generating default timing.", path.getFileName());
+
+                                    List<AnimationMetadata.FrameData> frames = new ArrayList<>();
+                                    for (int i = 0; i < frameCount; i++) {
+                                        // Use 50ms per frame (20 FPS) as a sensible default.
+                                        frames.add(new AnimationMetadata.FrameData(50, i));
+                                    }
+                                    AnimationMetadata generatedMeta = new AnimationMetadata(frames, frameCount);
+
+                                    Files.writeString(metadataPathForCheck, generatedMeta.toJson());
+                                    QuickSkin.LOGGER.info("Saved default metadata for old cape: {}", hash);
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        QuickSkin.LOGGER.warn("Could not check/generate missing metadata for cape '{}': {}", path.getFileName(), e.getMessage());
+                    }
+                }
             }
 
             // Check for animation metadata first
@@ -387,10 +424,10 @@ public class LocalAssetManager {
         return metadataCache.values().stream()
                 .filter(meta -> type.equals(meta.type()))
                 .sorted(Comparator
-                    // First, sort by whether it's the player's own skin (player's skin first)
-                    .comparing((AssetMetadata meta) -> !meta.hash().equals(playerOwnSkinHash))
-                    // Then, sort alphabetically by friendly name
-                    .thenComparing(AssetMetadata::friendlyName))
+                        // First, sort by whether it's the player's own skin (player's skin first)
+                        .comparing((AssetMetadata meta) -> !meta.hash().equals(playerOwnSkinHash))
+                        // Then, sort alphabetically by friendly name
+                        .thenComparing(AssetMetadata::friendlyName))
                 .toList();
     }
 
@@ -436,7 +473,7 @@ public class LocalAssetManager {
             AssetMetadata metadata = getMetadata(hash);
             boolean isSkin = metadata != null && "skin".equals(metadata.type());
             boolean shouldRemoveTransparency = isSkin &&
-                com.quickskin.mod.config.ClientConfig.getInstance().shouldDisableSkinTransparency();
+                    com.quickskin.mod.config.ClientConfig.getInstance().shouldDisableSkinTransparency();
 
             // Apply transparency removal if needed
             if (shouldRemoveTransparency) {
@@ -552,29 +589,29 @@ public class LocalAssetManager {
             AssetMetadata updatedMetadata;
             if ("skin".equals(metadata.type())) {
                 updatedMetadata = AssetMetadata.forSkin(
-                    metadata.hash(),
-                    sanitizedName,
-                    newPath,
-                    metadata.resolution(),
-                    metadata.fileSize(),
-                    metadata.skinModel()
+                        metadata.hash(),
+                        sanitizedName,
+                        newPath,
+                        metadata.resolution(),
+                        metadata.fileSize(),
+                        metadata.skinModel()
                 );
             } else if (metadata.isAnimated()) {
                 updatedMetadata = AssetMetadata.forAnimatedCape(
-                    metadata.hash(),
-                    sanitizedName,
-                    newPath,
-                    metadata.resolution(),
-                    metadata.fileSize(),
-                    metadata.frameCount()
+                        metadata.hash(),
+                        sanitizedName,
+                        newPath,
+                        metadata.resolution(),
+                        metadata.fileSize(),
+                        metadata.frameCount()
                 );
             } else {
                 updatedMetadata = AssetMetadata.forCape(
-                    metadata.hash(),
-                    sanitizedName,
-                    newPath,
-                    metadata.resolution(),
-                    metadata.fileSize()
+                        metadata.hash(),
+                        sanitizedName,
+                        newPath,
+                        metadata.resolution(),
+                        metadata.fileSize()
                 );
             }
 
