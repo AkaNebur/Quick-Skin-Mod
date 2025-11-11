@@ -592,8 +592,14 @@ public class PlayerSkinMenuScreen extends Screen {
                 0xFFFFFF
         );
 
+        // Push pose
+        graphics.pose().pushPose();
+
         // Render widgets (buttons, etc.)
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        // Pop pose
+        graphics.pose().popPose();
 
         // Render error toasts (on top of everything)
         renderErrorToasts(graphics);
@@ -667,6 +673,11 @@ public class PlayerSkinMenuScreen extends Screen {
     @Override
     public void renderBlurredBackground(float partialTick) {
         // Disable the default blur effect - we have our own custom background
+    }
+
+    @Override
+    public void renderBackground(net.minecraft.client.gui.GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Disable the default dark background overlay - we render our own custom background
     }
 
     @Override
