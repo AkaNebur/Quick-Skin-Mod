@@ -196,4 +196,9 @@ public class DeletionConfirmScreen extends Screen {
         // Return to parent screen without confirming
         this.callback.accept(false);
     }
+
+    @Override
+    public void renderBlurredBackground(float partialTick) {
+        // Disable the default Minecraft blur effect - we handle blur with BlurHandler
+    }
 }

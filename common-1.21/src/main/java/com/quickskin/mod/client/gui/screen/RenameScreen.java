@@ -198,4 +198,9 @@ public class RenameScreen extends Screen {
             this.minecraft.setScreen(this.parent);
         }
     }
+
+    @Override
+    public void renderBlurredBackground(float partialTick) {
+        // Disable the default Minecraft blur effect - we handle blur with BlurHandler
+    }
 }
