@@ -10,6 +10,7 @@ import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
+import com.quickskin.mod.platform.PlatformHelper;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.KnownCapes;
 import com.quickskin.mod.common.data.TextureQuality;
@@ -673,7 +674,7 @@ public class PlayerCapeMenuScreen extends Screen {
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(0.0F, 0.0F, 0.0F, 0.75F);
         // Stretch Minecraft's vignette texture to cover the entire screen.
-        graphics.blit(VIGNETTE_LOCATION, 0, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
+        PlatformHelper.blit(graphics, VIGNETTE_LOCATION, 0, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
 
         // 4. Reset render state to avoid affecting other GUI elements.
         RenderSystem.disableBlend();
@@ -717,7 +718,7 @@ public class PlayerCapeMenuScreen extends Screen {
                 pose.pushPose();
                 pose.translate(drawX, drawY, 0);
                 pose.scale(tileSize / (float)textureSize, tileSize / (float)textureSize, 1.0f);
-                graphics.blit(STAR_PATTERN_TEXTURE, 0, 0, 0, 0.0f, 0.0f, textureSize, textureSize, textureSize, textureSize);
+                PlatformHelper.blit(graphics, STAR_PATTERN_TEXTURE, 0, 0, 0, 0.0f, 0.0f, textureSize, textureSize, textureSize, textureSize);
                 pose.popPose();
             }
         }
@@ -1006,7 +1007,7 @@ public class PlayerCapeMenuScreen extends Screen {
         graphics.pose().scale(scaleFactor * 3.5f, scaleFactor * 3.5f, 1.0f);
         graphics.pose().translate(-5, -8, 0);
 
-        graphics.blit(texture, 0, 0, 10, 16, u, v, uWidth, vHeight, textureWidth, textureHeight);
+        PlatformHelper.blit(graphics, texture, 0, 0, 10, 16, u, v, uWidth, vHeight, textureWidth, textureHeight);
 
         graphics.pose().popPose();
     }
@@ -1478,7 +1479,7 @@ public class PlayerCapeMenuScreen extends Screen {
                             com.mojang.blaze3d.platform.NativeImage frame = gifResult.frames()[i];
                             for (int y = 0; y < height; y++) {
                                 for (int x = 0; x < width; x++) {
-                                    int abgr = frame.getPixelRGBA(x, y);
+                                    int abgr = PlatformHelper.getPixel(frame, x, y);
                                     // Convert ABGR to ARGB for BufferedImage
                                     int a = (abgr >> 24) & 0xFF;
                                     int b = (abgr >> 16) & 0xFF;

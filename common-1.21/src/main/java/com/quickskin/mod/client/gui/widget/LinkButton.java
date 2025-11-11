@@ -2,6 +2,7 @@ package com.quickskin.mod.client.gui.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.platform.PlatformHelper;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -46,7 +47,7 @@ public class LinkButton extends Button {
 
         // Draw the logo texture on top, inset slightly to fit within the rounded border.
         int padding = 2;
-        graphics.blit(this.texture,
+        PlatformHelper.blit(graphics, this.texture,
                 this.getX() + padding, this.getY() + padding,           // Screen position (x, y) with padding
                 this.width - (padding * 2), this.height - (padding * 2), // Size on screen (width, height) reduced by padding
                 0.0F, 0.0F,                                              // Texture UV start

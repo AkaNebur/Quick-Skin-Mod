@@ -3,6 +3,7 @@ package com.quickskin.mod.common.util;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.AnimationMetadata;
+import com.quickskin.mod.platform.PlatformHelper;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.stb.STBImage;
 import org.lwjgl.system.MemoryStack;
@@ -147,7 +148,7 @@ public class StbGifLoader {
 
                                 // NativeImage uses ABGR format
                                 int abgr = (a << 24) | (b << 16) | (g << 8) | r;
-                                frame.setPixelRGBA(x, y, abgr);
+                                PlatformHelper.setPixel(frame, x, y, abgr);
                             }
                         }
 

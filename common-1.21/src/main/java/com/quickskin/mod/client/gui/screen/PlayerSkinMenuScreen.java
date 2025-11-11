@@ -15,6 +15,7 @@ import com.quickskin.mod.client.gui.widget.SkinEntry;
 import com.quickskin.mod.client.services.CooldownService;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.MojangApiService;
+import com.quickskin.mod.platform.PlatformHelper;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -519,7 +520,7 @@ public class PlayerSkinMenuScreen extends Screen {
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(0.0F, 0.0F, 0.0F, 0.75F);
         // Stretch Minecraft's vignette texture to cover the entire screen.
-        graphics.blit(VIGNETTE_LOCATION, 0, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
+        PlatformHelper.blit(graphics, VIGNETTE_LOCATION, 0, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
 
         // 4. Reset render state to avoid affecting other GUI elements.
         RenderSystem.disableBlend();
@@ -563,7 +564,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 pose.pushPose();
                 pose.translate(drawX, drawY, 0);
                 pose.scale(tileSize / (float)textureSize, tileSize / (float)textureSize, 1.0f);
-                graphics.blit(STAR_PATTERN_TEXTURE, 0, 0, 0, 0.0f, 0.0f, textureSize, textureSize, textureSize, textureSize);
+                PlatformHelper.blit(graphics, STAR_PATTERN_TEXTURE, 0, 0, 0, 0.0f, 0.0f, textureSize, textureSize, textureSize, textureSize);
                 pose.popPose();
             }
         }

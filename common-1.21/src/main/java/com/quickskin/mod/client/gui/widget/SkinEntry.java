@@ -5,6 +5,7 @@ import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.config.ClientConfig;
+import com.quickskin.mod.platform.PlatformHelper;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -99,10 +100,10 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             float scaleY = textureHeight / 64.0f;
 
             // Render face (front + overlay)
-            graphics.blit(textureLocation, faceX, faceY, faceSize, faceSize,
+            PlatformHelper.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
                 8.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
                 textureWidth, textureHeight);
-            graphics.blit(textureLocation, faceX, faceY, faceSize, faceSize,
+            PlatformHelper.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
                 40.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
                 textureWidth, textureHeight);
 

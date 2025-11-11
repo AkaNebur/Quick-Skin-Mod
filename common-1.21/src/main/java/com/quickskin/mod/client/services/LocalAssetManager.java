@@ -337,7 +337,7 @@ public class LocalAssetManager {
                 NativeImage frame = result.frames()[i];
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
-                        atlas.setPixelRGBA(x, i * height + y, frame.getPixelRGBA(x, y));
+                        PlatformHelper.setPixel(atlas, x, i * height + y, PlatformHelper.getPixel(frame, x, y));
                     }
                 }
             }
@@ -770,7 +770,7 @@ public class LocalAssetManager {
                 int g = (argb >> 8) & 0xFF;
                 int b = argb & 0xFF;
                 int abgr = (a << 24) | (b << 16) | (g << 8) | r;
-                nativeImage.setPixelRGBA(x, y, abgr);
+                PlatformHelper.setPixel(nativeImage, x, y, abgr);
             }
         }
 

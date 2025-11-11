@@ -6,6 +6,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
+import com.quickskin.mod.platform.PlatformHelper;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -325,7 +326,7 @@ public class PlayerModelRenderer {
             poseStack.mulPose(Axis.XP.rotationDegrees(6.0F));
             poseStack.mulPose(Axis.YP.rotationDegrees(180.0F)); // The cloak model part is drawn facing backwards
 
-            model.renderCloak(poseStack, capeVertexConsumer, 15728880, OverlayTexture.NO_OVERLAY);
+            PlatformHelper.renderCloak(model, poseStack, capeVertexConsumer, 15728880, OverlayTexture.NO_OVERLAY);
 
             poseStack.popPose();
         }
@@ -619,10 +620,10 @@ public class PlayerModelRenderer {
      */
     private static void setupIdlePose(PlayerModel<?> model, float t, float lerpFactor) {
         // Set model state flags
-        model.young = false;
-        model.crouching = false;
-        model.riding = false;
-        model.attackTime = 0.0f;
+        PlatformHelper.setYoung(model, false);
+        PlatformHelper.setCrouching(model, false);
+        PlatformHelper.setRiding(model, false);
+        PlatformHelper.setAttackTime(model, 0.0f);
 
         // HEAD: Bouncy up/down with head tilt
         float targetHeadRotZ = (float)Math.sin(t * 1.2) * 0.04f;
@@ -681,10 +682,10 @@ public class PlayerModelRenderer {
      * Setup walking pose with natural body movements
      */
     private static void setupWalkingPose(PlayerModel<?> model, float t, float lerpFactor) {
-        model.young = false;
-        model.crouching = false;
-        model.riding = false;
-        model.attackTime = 0.0f;
+        PlatformHelper.setYoung(model, false);
+        PlatformHelper.setCrouching(model, false);
+        PlatformHelper.setRiding(model, false);
+        PlatformHelper.setAttackTime(model, 0.0f);
 
         // ARMS and LEGS: Swinging motion (arms opposite to legs) - faster animation
         float limbSwing = (float)Math.sin(t * 8.0) * 0.6f;
@@ -727,10 +728,10 @@ public class PlayerModelRenderer {
      * Setup sitting pose with subtle idle movements
      */
     private static void setupSittingPose(PlayerModel<?> model, float t, float lerpFactor) {
-        model.young = false;
-        model.crouching = false;
-        model.riding = true; // Enable riding flag for sitting pose
-        model.attackTime = 0.0f;
+        PlatformHelper.setYoung(model, false);
+        PlatformHelper.setCrouching(model, false);
+        PlatformHelper.setRiding(model, true); // Enable riding flag for sitting pose
+        PlatformHelper.setAttackTime(model, 0.0f);
 
         // HEAD: Subtle breathing and slight look-around
         float headBob = (float)Math.sin(t * 0.6) * 0.02f;
