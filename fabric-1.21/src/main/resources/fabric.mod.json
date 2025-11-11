@@ -13,7 +13,7 @@
     "issues": "https://github.com/yourusername/quickskin/issues"
   },
   "license": "MIT",
-  "icon": "quickskin_logo.png",
+  "icon": "icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [

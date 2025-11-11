@@ -14,7 +14,7 @@ QuickSkin - Customize your Minecraft player skin and cape in-game!
 Supports Fabric and NeoForge through Architectury.
 '''
 displayURL = "https://github.com/yourusername/quickskin"
-logoFile = "quickskin_logo.png"
+logoFile = "icon.png"
 
 [[mixins]]
 config = "quickskin.mixins.json"
