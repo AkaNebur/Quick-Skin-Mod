@@ -676,8 +676,7 @@ public class PlayerCapeMenuScreen extends Screen {
         // Stretch Minecraft's vignette texture to cover the entire screen.
         PlatformHelper.blit(graphics, VIGNETTE_LOCATION, 0, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
 
-        // 4. Reset render state to avoid affecting other GUI elements.
-        RenderSystem.disableBlend();
+        // 4. Reset shader color but keep blend enabled for GUI elements
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
@@ -725,7 +724,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         pose.popPose();
 
-        RenderSystem.disableBlend();
+        // Reset shader color but keep blend enabled
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
@@ -737,13 +736,20 @@ public class PlayerCapeMenuScreen extends Screen {
         // Render the animated star background
         this.renderBackgroundEffects(graphics, partialTick);
 
+        // Flush and ensure clean render state
+        graphics.flush();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+
         // Title
         graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFF);
 
-        // Grid background (darker semi-transparent for better visibility)
-        graphics.fill(this.gridX - 5, this.gridY - 5,
-                this.gridX + this.gridWidth + 5, this.gridY + this.gridHeight + 5,
-                0xB0000000);
+        super.render(graphics, mouseX, mouseY, partialTick);
+
+        // Push pose and translate forward in Z to render on top
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 100);
 
         // Enable scissor for grid content
         graphics.enableScissor(this.gridX, this.gridY,
@@ -753,7 +759,9 @@ public class PlayerCapeMenuScreen extends Screen {
         graphics.disableScissor();
 
         this.renderScrollbar(graphics);
-        super.render(graphics, mouseX, mouseY, partialTick);
+
+        // Pop pose
+        graphics.pose().popPose();
 
         // Render import message
         if (importMessageTimer > 0 && !importMessage.isEmpty()) {
@@ -1687,6 +1695,11 @@ public class PlayerCapeMenuScreen extends Screen {
     @Override
     public void renderBlurredBackground(float partialTick) {
         // Disable the default blur effect - we have our own custom background
+    }
+
+    @Override
+    public void renderBackground(net.minecraft.client.gui.GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Disable the default dark background overlay - we render our own custom background
     }
 
     @Override
