@@ -38,7 +38,7 @@ public class BlurHandler {
         RenderSystem.disableBlend();
         RenderSystem.disableDepthTest();
         blurShader.process(0.0f);
-        mc.getMainRenderTarget().bindWrite(false);
+        mc.getMainRenderTarget().bindWrite(true);  // Changed to true so we can draw on top
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
     }

@@ -367,10 +367,6 @@ public class SettingsScreen extends Screen {
             this.keybindButton.setMessage(KeybindRegistry.OPEN_SKIN_MENU.getTranslatedKeyMessage());
         }
 
-        // Push pose to ensure modal renders on a higher layer
-        graphics.pose().pushPose();
-        graphics.pose().translate(0, 0, 100); // Move modal forward in Z
-
         // Draw darker overlay over entire screen
         graphics.fill(0, 0, this.width, this.height, 0x60000000);
 
@@ -397,8 +393,6 @@ public class SettingsScreen extends Screen {
             int noticeWidth = this.font.width(notice);
             graphics.drawString(this.font, notice, dialogX + (dialogWidth - noticeWidth) / 2, noticeY, 0xAAAAAA, false);
         }
-
-        graphics.pose().popPose();
     }
 
     /**
@@ -501,6 +495,11 @@ public class SettingsScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false; // Don't pause game
+    }
+
+    @Override
+    public void renderBlurredBackground(float partialTick) {
+        // Disable the default Minecraft blur effect - we handle blur manually
     }
 
     @Override
