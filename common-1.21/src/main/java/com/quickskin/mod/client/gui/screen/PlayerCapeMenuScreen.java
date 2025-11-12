@@ -1535,15 +1535,10 @@ public class PlayerCapeMenuScreen extends Screen {
             if (isStandardFormat) {
                 QuickSkin.LOGGER.info("Processing as a standard cape format ({} frames): {}", frameCount, sourceFile.getFileName());
 
-                // ### START FIX: Use resizeAnimationStrip for multi-frame images ###
-                java.awt.image.BufferedImage normalizedAtlas;
-                if (frameCount > 1) {
-                    // This is an animation strip, resize it while preserving the vertical frames.
-                    normalizedAtlas = com.quickskin.mod.common.util.HDTextureProcessor.resizeAnimationStrip(sourceAtlas, 64);
-                } else {
-                    // This is a single static image, use the standard downsampler.
-                    normalizedAtlas = com.quickskin.mod.common.util.HDTextureProcessor.downsample(sourceAtlas, 64);
-                }
+                // ### START FIX: Unify cape resizing ###
+                // The resizeAnimationStrip method works for both single-frame (static) and multi-frame (animated) capes.
+                // It correctly preserves the 2:1 aspect ratio for each frame.
+                java.awt.image.BufferedImage normalizedAtlas = com.quickskin.mod.common.util.HDTextureProcessor.resizeAnimationStrip(sourceAtlas, 64);
                 // ### END FIX ###
 
                 // Check if the elytra area is transparent

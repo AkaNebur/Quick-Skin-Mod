@@ -361,29 +361,30 @@ public class HDTextureProcessor {
     // ### START NEW METHOD ###
     /**
      * Resizes an animation strip (vertical frames) to a new width, preserving the strip's aspect ratio.
+     * This version correctly handles frame-by-frame resizing to prevent content shrinking.
      * @param source The original animation strip.
      * @param targetWidth The desired width for each frame.
      * @return A new, resized animation strip.
      */
     public static BufferedImage resizeAnimationStrip(BufferedImage source, int targetWidth) {
         int originalWidth = source.getWidth();
+        if (originalWidth <= 0) {
+            QuickSkin.LOGGER.warn("Source image for resize has zero or negative width.");
+            return source; // Return original if invalid
+        }
         if (originalWidth == targetWidth) {
             return source; // No resize needed
         }
 
-        // Calculate the aspect ratio of a single frame (e.g., 2:1 for capes)
-        double singleFrameAspectRatio = (double)originalWidth / (double)(originalWidth / 2);
+        // A single cape frame has a 2:1 aspect ratio.
+        int originalFrameHeight = originalWidth / 2;
+        if (originalFrameHeight <= 0 || source.getHeight() % originalFrameHeight != 0) {
+            QuickSkin.LOGGER.warn("Invalid cape dimensions for resizing: {}x{}", originalWidth, source.getHeight());
+            return source; // Return original if dimensions are not a valid strip
+        }
 
-        // Calculate the height of a single frame in the original image
-        int originalFrameHeight = (int)(originalWidth / singleFrameAspectRatio);
-        if (originalFrameHeight <= 0) return source; // Avoid division by zero
-
-        // Calculate the number of frames
         int frameCount = source.getHeight() / originalFrameHeight;
-        if (frameCount <= 0) return source; // Invalid strip
-
-        // Calculate new dimensions
-        int targetFrameHeight = (int)(targetWidth / singleFrameAspectRatio);
+        int targetFrameHeight = targetWidth / 2;
         int targetHeight = targetFrameHeight * frameCount;
 
         BufferedImage resizedStrip = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB);
@@ -394,10 +395,25 @@ public class HDTextureProcessor {
         g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        // Draw the entire original strip into the new, resized strip
-        g.drawImage(source, 0, 0, targetWidth, targetHeight, null);
-        g.dispose();
+        // Iterate through each frame and draw it scaled
+        for (int i = 0; i < frameCount; i++) {
+            // Source coordinates for the current frame
+            int sx1 = 0;
+            int sy1 = i * originalFrameHeight;
+            int sx2 = originalWidth;
+            int sy2 = sy1 + originalFrameHeight;
 
+            // Destination coordinates for the current frame
+            int dx1 = 0;
+            int dy1 = i * targetFrameHeight;
+            int dx2 = targetWidth;
+            int dy2 = dy1 + targetFrameHeight;
+
+            // Draw the source frame into the destination frame, scaling it in the process
+            g.drawImage(source, dx1, dy1, dx2, dy2, sx1, sy1, sx2, sy2, null);
+        }
+
+        g.dispose();
         return resizedStrip;
     }
     // ### END NEW METHOD ###

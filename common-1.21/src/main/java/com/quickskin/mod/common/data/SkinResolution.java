@@ -11,7 +11,14 @@ public enum SkinResolution {
     HD_256(256, 256, 4),    // 4x HD
     HD_512(512, 512, 8),    // 8x HD
     HD_1024(1024, 1024, 16), // 16x HD
-    HD_2048(2048, 2048, 32); // 32x HD (max)
+    HD_2048(2048, 2048, 32), // 32x HD (max)
+
+    // Cape dimensions (2:1 aspect ratio)
+    CAPE_128(128, 64, 2),      // 2x HD cape
+    CAPE_256(256, 128, 4),     // 4x HD cape
+    CAPE_512(512, 256, 8),     // 8x HD cape
+    CAPE_1024(1024, 512, 16),  // 16x HD cape
+    CAPE_2048(2048, 1024, 32); // 32x HD cape (max)
 
     private final int width;
     private final int height;
