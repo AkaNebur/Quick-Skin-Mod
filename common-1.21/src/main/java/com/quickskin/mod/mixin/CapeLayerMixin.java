@@ -56,10 +56,12 @@ public class CapeLayerMixin {
 
         RenderType renderType;
 
-        // Use the final texture (either frame or atlas) for the checks.
-        if (finalTexture.getNamespace().equals(QuickSkin.MOD_ID) && (finalTexture.getPath().startsWith("local/") || finalTexture.getPath().startsWith("animated/"))) {
+        // If the texture is from our mod (local, network, animated, or known),
+        // always use the translucent render type to correctly handle transparency.
+        if (finalTexture.getNamespace().equals(QuickSkin.MOD_ID)) {
             renderType = RenderType.entityTranslucentCull(finalTexture);
         } else {
+            // For vanilla capes or capes from other mods, use the alpha detector.
             boolean hasTransparency = TextureAlphaDetector.hasTransparency(finalTexture);
             if (hasTransparency) {
                 renderType = RenderType.entityTranslucentCull(finalTexture);
