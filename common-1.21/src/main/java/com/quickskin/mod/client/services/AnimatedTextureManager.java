@@ -173,6 +173,17 @@ public class AnimatedTextureManager {
     }
 
     /**
+     * Clear all animations (for texture cache reload)
+     */
+    public void clearAnimations() {
+        QuickSkin.LOGGER.info("Clearing all animated texture registrations");
+        for (AnimationState state : animations.values()) {
+            state.cleanup();
+        }
+        animations.clear();
+    }
+
+    /**
      * Unregister an animated texture
      */
     public void unregisterAnimation(String animationId) {

@@ -661,6 +661,42 @@ public class LocalAssetManager {
     }
 
     /**
+     * Clear only skin textures from cache (not capes)
+     * Call this when skin transparency settings change
+     */
+    public void clearSkinTextureCache() {
+        QuickSkin.LOGGER.info("Clearing skin texture cache (will re-register with current settings)...");
+
+        Minecraft mc = Minecraft.getInstance();
+        List<String> hashesToClear = new ArrayList<>();
+
+        // Find all skin hashes
+        for (String hash : textureRegistry.keySet()) {
+            AssetMetadata metadata = getMetadata(hash);
+            if (metadata != null && "skin".equals(metadata.type())) {
+                hashesToClear.add(hash);
+            }
+        }
+
+        // Unregister and remove skin textures only
+        for (String hash : hashesToClear) {
+            Map<TextureQuality, ResourceLocation> qualityMap = textureRegistry.get(hash);
+            if (qualityMap != null) {
+                for (ResourceLocation location : qualityMap.values()) {
+                    try {
+                        mc.getTextureManager().release(location);
+                    } catch (Exception e) {
+                        QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
+                    }
+                }
+                textureRegistry.remove(hash);
+            }
+        }
+
+        QuickSkin.LOGGER.info("Cleared {} skin textures. Capes remain cached.", hashesToClear.size());
+    }
+
+    /**
      * Get ResourceLocation for a texture
      * Registers texture with Minecraft if not already registered
      */

@@ -294,4 +294,43 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         PlayerAppearance appearance = repository.getAppearance(playerId);
         return appearance != null ? appearance.getModel() : null;
     }
+
+    /**
+     * Reloads all player skin textures to apply transparency setting changes.
+     * This method is granular and only affects skins, leaving capes untouched.
+     */
+    public void reloadSkinsForTransparencyChange() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null) return;
+
+        QuickSkin.LOGGER.info("Reloading player skins for transparency change...");
+
+        // Clear ONLY skin textures from local cache (not capes!)
+        LocalAssetManager.getInstance().clearSkinTextureCache();
+
+        // Reprocess network skin textures with new transparency setting (reprocesses from original data)
+        com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().reprocessSkins();
+
+        // Refresh the skin list UI if we're in the skin menu
+        if (mc.screen instanceof com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen skinMenu) {
+            skinMenu.refreshSkinList();
+        }
+
+        // Re-apply ALL players' appearances to force them to fetch new ResourceLocations
+        if (mc.level != null && mc.level.players() != null) {
+            java.util.List<net.minecraft.world.entity.player.Player> players = new java.util.ArrayList<>(mc.level.players());
+
+            for (net.minecraft.world.entity.player.Player player : players) {
+                if (player != null) {
+                    com.quickskin.mod.common.data.PlayerAppearance appearance = getAppearance(player.getUUID());
+                    if (appearance != null) {
+                        // Invalidate cached locations to force re-fetch
+                        appearance.setSkinLocation(null);
+                        // Re-apply the look to trigger re-resolution and refresh the renderer
+                        applyLook(player.getUUID(), appearance.getSkinId(), appearance.getCapeId(), appearance.getModel());
+                    }
+                }
+            }
+        }
+    }
 }

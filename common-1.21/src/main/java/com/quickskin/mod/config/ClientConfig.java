@@ -146,6 +146,14 @@ public class ClientConfig {
     }
 
     /**
+     * Get current server config override
+     * @return Server config override, or null if not set
+     */
+    public ServerConfig getServerOverride() {
+        return serverOverride;
+    }
+
+    /**
      * Check if skin transparency should be disabled
      * Uses OR logic: if either client OR server disables transparency, it's disabled
      */

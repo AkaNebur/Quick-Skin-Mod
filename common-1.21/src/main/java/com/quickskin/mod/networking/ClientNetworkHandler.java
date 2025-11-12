@@ -23,6 +23,9 @@ import java.util.UUID;
 @Environment(EnvType.CLIENT)
 public class ClientNetworkHandler {
 
+    // Flag to track if a texture reload is pending when GUI closes
+    private static boolean pendingTransparencyReload = false;
+
     /**
      * Handles appearance sync from server
      * Packet format: UUID (player) + String (skinId) + String (capeId) + String (model)
@@ -175,12 +178,19 @@ public class ClientNetworkHandler {
         context.queue(() -> {
             QuickSkin.LOGGER.info("Received server config sync");
 
+            // Get current server override to detect changes
+            com.quickskin.mod.config.ClientConfig clientConfig = com.quickskin.mod.config.ClientConfig.getInstance();
+            com.quickskin.mod.config.ServerConfig oldServerConfig = clientConfig.getServerOverride();
+            boolean oldTransparencySetting = oldServerConfig != null && oldServerConfig.disableSkinTransparency;
+
             // Parse server config from JSON
             com.quickskin.mod.config.ServerConfig serverConfig =
                 com.quickskin.mod.config.ServerConfig.fromJson(configJson);
 
+            boolean newTransparencySetting = serverConfig.disableSkinTransparency;
+
             // Phase 9: Apply server config override to client
-            com.quickskin.mod.config.ClientConfig.getInstance().applyServerOverride(serverConfig);
+            clientConfig.applyServerOverride(serverConfig);
 
             // Fire event for other systems to react
             InternalEventBus.getInstance().post(
@@ -191,6 +201,24 @@ public class ClientNetworkHandler {
 
             QuickSkin.LOGGER.debug("Server config override applied: disableSkinTransparency={}, skinChangeCooldownSeconds={}",
                 serverConfig.disableSkinTransparency, serverConfig.skinChangeCooldownSeconds);
+
+            // If transparency setting changed, reload textures
+            if (oldTransparencySetting != newTransparencySetting) {
+                Minecraft mc = Minecraft.getInstance();
+
+                // If no GUI is open OR if we're not in the settings screen, reload immediately
+                // Otherwise, mark pending and reload when the settings GUI closes
+                boolean isInSettingsScreen = mc.screen instanceof com.quickskin.mod.client.gui.screen.SettingsScreen;
+
+                if (mc.screen == null || !isInSettingsScreen) {
+                    QuickSkin.LOGGER.info("Server transparency setting changed, reloading textures immediately (screen: {})",
+                        mc.screen != null ? mc.screen.getClass().getSimpleName() : "null");
+                    PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
+                } else {
+                    QuickSkin.LOGGER.info("Server transparency setting changed, marking reload as pending");
+                    pendingTransparencyReload = true;
+                }
+            }
 
             // CRITICAL FIX: Sync current appearance to server after receiving config
             // This ensures that when a player joins, existing players see their CURRENT appearance
@@ -212,6 +240,18 @@ public class ClientNetworkHandler {
                 }
             }
         });
+    }
+
+    /**
+     * Checks if there's a pending transparency reload and executes it
+     * Should be called when the settings GUI closes
+     */
+    public static void executePendingTransparencyReload() {
+        if (pendingTransparencyReload) {
+            QuickSkin.LOGGER.info("Executing pending transparency reload");
+            PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
+            pendingTransparencyReload = false;
+        }
     }
 
     /**

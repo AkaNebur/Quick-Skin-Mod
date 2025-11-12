@@ -25,11 +25,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class NetworkTextureCache {
     private static NetworkTextureCache instance;
 
-    // Store raw texture bytes in memory
+    // Store raw texture bytes in memory (ORIGINAL unprocessed data)
+    private final Map<String, byte[]> originalTextureData = new ConcurrentHashMap<>();
+
+    // Store processed texture bytes (with transparency removed if needed)
     private final Map<String, byte[]> textureDataCache = new ConcurrentHashMap<>();
 
     // Store registered ResourceLocations
     private final Map<String, ResourceLocation> textureRegistry = new ConcurrentHashMap<>();
+
+    // Track texture types (skin/cape) for selective clearing
+    private final Map<String, String> textureTypeMap = new ConcurrentHashMap<>();
 
     private NetworkTextureCache() {}
 
@@ -41,18 +47,64 @@ public class NetworkTextureCache {
     }
 
     /**
-     * Store texture data received from the network
+     * Store texture data received from the network (without type info)
      * @param hash The texture hash
      * @param textureData The raw PNG/image bytes
      */
     public void storeTexture(String hash, byte[] textureData) {
+        storeTexture(hash, null, textureData);
+    }
+
+    /**
+     * Store texture data received from the network
+     * @param hash The texture hash
+     * @param textureType The type of texture ("skin" or "cape")
+     * @param textureData The raw PNG/image bytes
+     */
+    public void storeTexture(String hash, @Nullable String textureType, byte[] textureData) {
         if (hash == null || textureData == null) {
             QuickSkin.LOGGER.warn("Cannot store null texture data");
             return;
         }
 
-        textureDataCache.put(hash, textureData);
-        QuickSkin.LOGGER.debug("Cached network texture: {} ({} bytes)", hash, textureData.length);
+        // Store original unprocessed data ONLY if it doesn't already exist.
+        // This ensures we never overwrite the pristine original with reprocessed data.
+        originalTextureData.putIfAbsent(hash, textureData);
+
+        // Track texture type if provided
+        if (textureType != null) {
+            textureTypeMap.put(hash, textureType);
+        }
+
+        // Check if transparency should be removed for skins (only if we know it's a skin)
+        boolean isSkin = "skin".equals(textureType);
+        boolean shouldRemoveTransparency = isSkin &&
+                com.quickskin.mod.config.ClientConfig.getInstance().shouldDisableSkinTransparency();
+
+        byte[] processedData = textureData;
+        if (shouldRemoveTransparency) {
+            try {
+                // Load the image
+                ByteArrayInputStream bais = new ByteArrayInputStream(textureData);
+                BufferedImage image = ImageIO.read(bais);
+
+                if (image != null) {
+                    // Remove transparency
+                    image = com.quickskin.mod.common.util.HDTextureProcessor.removeTransparency(image);
+
+                    // Convert back to PNG bytes
+                    processedData = com.quickskin.mod.common.util.HDTextureProcessor.imageToPng(image);
+
+                    QuickSkin.LOGGER.debug("Removed transparency from network skin texture: {}", hash);
+                }
+            } catch (IOException e) {
+                QuickSkin.LOGGER.error("Failed to process transparency for network texture: {}", hash, e);
+                // Fall through to store original texture data
+            }
+        }
+
+        textureDataCache.put(hash, processedData);
+        QuickSkin.LOGGER.debug("Cached network texture: {} ({} bytes, type: {})", hash, processedData.length, textureType);
     }
 
     /**
@@ -140,9 +192,81 @@ public class NetworkTextureCache {
             }
         }
 
+        originalTextureData.clear();
         textureDataCache.clear();
         textureRegistry.clear();
+        textureTypeMap.clear();
         QuickSkin.LOGGER.info("Cleared network texture cache");
+    }
+
+    /**
+     * Clear only skin texture registrations (not the raw data or capes)
+     * Used when skin transparency setting changes - this forces skins to re-register
+     * with the new transparency setting applied
+     */
+    public void clearSkins() {
+        java.util.List<String> hashesToClear = new java.util.ArrayList<>();
+
+        // Find all skin hashes
+        for (java.util.Map.Entry<String, String> entry : textureTypeMap.entrySet()) {
+            if ("skin".equals(entry.getValue())) {
+                hashesToClear.add(entry.getKey());
+            }
+        }
+
+        // Release and remove ONLY the registered ResourceLocations for skins
+        // Keep the raw texture data so we can re-process it with new settings
+        for (String hash : hashesToClear) {
+            ResourceLocation location = textureRegistry.remove(hash);
+            if (location != null) {
+                try {
+                    Minecraft.getInstance().getTextureManager().release(location);
+                } catch (Exception e) {
+                    QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
+                }
+            }
+        }
+
+        QuickSkin.LOGGER.info("Cleared {} network skin texture registrations (keeping raw data). Capes remain cached.", hashesToClear.size());
+    }
+
+    /**
+     * Reprocess and re-register all skin textures with current transparency settings
+     * Called when server transparency setting changes
+     */
+    public void reprocessSkins() {
+        java.util.List<String> skinHashes = new java.util.ArrayList<>();
+
+        // Find all skin hashes
+        for (java.util.Map.Entry<String, String> entry : textureTypeMap.entrySet()) {
+            if ("skin".equals(entry.getValue())) {
+                skinHashes.add(entry.getKey());
+            }
+        }
+
+        QuickSkin.LOGGER.info("Reprocessing {} network skins with current transparency settings", skinHashes.size());
+
+        // Re-store each skin with current settings (this will reprocess transparency from original data)
+        for (String hash : skinHashes) {
+            byte[] originalData = originalTextureData.get(hash);
+            if (originalData != null) {
+                // Remove old processed data and registration
+                textureDataCache.remove(hash);
+                ResourceLocation oldLocation = textureRegistry.remove(hash);
+                if (oldLocation != null) {
+                    try {
+                        Minecraft.getInstance().getTextureManager().release(oldLocation);
+                    } catch (Exception e) {
+                        QuickSkin.LOGGER.debug("Failed to release texture {}: {}", oldLocation, e.getMessage());
+                    }
+                }
+
+                // Re-store with current transparency settings using ORIGINAL data
+                storeTexture(hash, "skin", originalData);
+            }
+        }
+
+        QuickSkin.LOGGER.info("Finished reprocessing network skins");
     }
 
     /**

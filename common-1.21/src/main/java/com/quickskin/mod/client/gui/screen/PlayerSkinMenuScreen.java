@@ -898,7 +898,11 @@ public class PlayerSkinMenuScreen extends Screen {
     /**
      * Refresh the skin list after importing
      */
-    private void refreshSkinList() {
+    /**
+     * Refresh the skin list UI
+     * Public so it can be called when textures are reloaded
+     */
+    public void refreshSkinList() {
         if (skinListPanel != null) {
             skinListPanel.refresh();
         }

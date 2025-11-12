@@ -332,7 +332,11 @@ public class PlayerCapeMenuScreen extends Screen {
         return GuiScalingUtils.scaleValue(baseValue, this.width, this.height);
     }
 
-    private void refreshCapeList() {
+    /**
+     * Refresh the cape list UI
+     * Public so it can be called when textures are reloaded
+     */
+    public void refreshCapeList() {
         this.localCapes.clear();
         this.knownCapes.clear();
 

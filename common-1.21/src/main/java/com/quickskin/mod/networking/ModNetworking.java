@@ -29,6 +29,9 @@ public class ModNetworking {
     public static final ResourceLocation UPLOAD_ANIMATION_METADATA =
         ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID,"upload_animation_metadata");
 
+    public static final ResourceLocation UPDATE_SERVER_CONFIG =
+        new ResourceLocation(QuickSkin.MOD_ID, "update_server_config");
+
     // Server to Client packets (S2C)
     public static final ResourceLocation SYNC_APPEARANCE =
         ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID,"sync_appearance");
@@ -90,6 +93,12 @@ public class ModNetworking {
             NetworkManager.c2s(),
             TEXTURE_CHUNK,
             ServerNetworkHandler::handleTextureChunk
+        );
+
+        NetworkManager.registerReceiver(
+            NetworkManager.c2s(),
+            UPDATE_SERVER_CONFIG,
+            ServerNetworkHandler::handleUpdateServerConfig
         );
 
         QuickSkin.LOGGER.info("Networking initialized (server-side receivers ready)");

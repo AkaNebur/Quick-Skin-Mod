@@ -224,6 +224,52 @@ public class ServerNetworkHandler {
     }
 
     /**
+     * Handles server config update from admin client
+     * Packet format: String (key) + boolean (value)
+     */
+    public static void handleUpdateServerConfig(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String key = PacketHelper.readString(buf);
+        boolean value = buf.readBoolean();
+
+        context.queue(() -> {
+            ServerPlayer player = (ServerPlayer) context.getPlayer();
+
+            if (player == null) {
+                return;
+            }
+
+            // Check if player has admin permissions (operator level 2+)
+            if (!player.hasPermissions(2)) {
+                QuickSkin.LOGGER.warn("Player {} tried to change server config without permission",
+                    player.getName().getString());
+                return;
+            }
+
+            QuickSkin.LOGGER.info("Admin {} updated server config: {} = {}",
+                player.getName().getString(), key, value);
+
+            // Update server config based on key
+            com.quickskin.mod.config.ServerConfig serverConfig =
+                com.quickskin.mod.config.ServerConfig.getInstance();
+
+            switch (key) {
+                case "disableSkinTransparency":
+                    serverConfig.disableSkinTransparency = value;
+                    break;
+                default:
+                    QuickSkin.LOGGER.warn("Unknown server config key: {}", key);
+                    return;
+            }
+
+            // Save config to disk
+            serverConfig.save();
+
+            // Broadcast config change to ALL clients (including the admin who made the change)
+            broadcastServerConfigToAllPlayers(player.server);
+        });
+    }
+
+    /**
      * Broadcasts a player's texture to all other players on the server
      * @param player The player whose texture changed
      * @param textureType The type of texture ("skin" or "cape")
@@ -410,5 +456,25 @@ public class ServerNetworkHandler {
 
         NetworkManager.sendToPlayer(player, ModNetworking.SYNC_SERVER_CONFIG, packet);
         QuickSkin.LOGGER.debug("Sent server config to {}", player.getName().getString());
+    }
+
+    /**
+     * Broadcasts server config to ALL players on the server
+     * Called when an admin changes a server setting
+     * @param server The server instance
+     */
+    private static void broadcastServerConfigToAllPlayers(net.minecraft.server.MinecraftServer server) {
+        com.quickskin.mod.config.ServerConfig serverConfig = com.quickskin.mod.config.ServerConfig.getInstance();
+        String configJson = serverConfig.toJson();
+
+        // Send to ALL players (including the admin who made the change)
+        // IMPORTANT: Create a fresh packet buffer for each player to avoid buffer exhaustion
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            FriendlyByteBuf packet = PacketHelper.createSyncServerConfigPacket(configJson);
+            NetworkManager.sendToPlayer(player, ModNetworking.SYNC_SERVER_CONFIG, packet);
+        }
+
+        QuickSkin.LOGGER.info("Broadcasted server config to all {} players",
+            server.getPlayerList().getPlayerCount());
     }
 }

@@ -7,8 +7,13 @@ import com.quickskin.mod.client.gui.widget.TabButton;
 import com.quickskin.mod.client.input.KeybindRegistry;
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.config.ServerConfig;
+import com.quickskin.mod.networking.ModNetworking;
+import com.quickskin.mod.networking.packets.PacketHelper;
+import dev.architectury.networking.NetworkManager;
+import io.netty.buffer.Unpooled;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -86,6 +91,9 @@ public class SettingsScreen extends Screen {
     // Server setting checkboxes
     private Checkbox serverDisableSkinTransparencyCheckbox;
     private EditBox skinChangeCooldownEditBox;
+
+    // Track if texture reload is needed
+    private boolean needsTextureReload = false;
 
     public SettingsScreen(@Nullable Screen parent) {
         super(Component.literal("QuickSkin Settings"));
@@ -264,17 +272,23 @@ public class SettingsScreen extends Screen {
         int leftColumnX = dialogX + 20;
         int currentY = startY;
 
-        // Check if player is on a server or in singleplayer
-        boolean isServerAdmin = minecraft != null && minecraft.hasSingleplayerServer();
+        // Check if player has admin permissions
+        boolean isAdmin = minecraft != null && minecraft.player != null && minecraft.player.hasPermissions(2);
+
+        // Get current server transparency setting from server override
+        // This is synced from the server on join (both singleplayer and multiplayer)
+        ServerConfig serverOverride = ClientConfig.getInstance().getServerOverride();
+        boolean currentTransparencySetting = serverOverride != null ? serverOverride.disableSkinTransparency : false;
 
         // Transparency Settings
         serverDisableSkinTransparencyCheckbox = Checkbox.builder(
-                Component.literal("Disable Skin Transparency"),
+                Component.literal("Disable Skin Transparency (Server)"),
                 this.font)
                 .pos(leftColumnX, currentY)
-                .selected(config.disableSkinTransparency)
+                .selected(currentTransparencySetting)
                 .build();
-        serverDisableSkinTransparencyCheckbox.active = isServerAdmin;
+        // Only allow admins to change this setting
+        serverDisableSkinTransparencyCheckbox.active = isAdmin;
         serverSettingWidgets.add(serverDisableSkinTransparencyCheckbox);
         currentY += spacing;
 
@@ -291,7 +305,7 @@ public class SettingsScreen extends Screen {
         skinChangeCooldownEditBox.setValue(String.valueOf(config.skinChangeCooldownSeconds));
         skinChangeCooldownEditBox.setMaxLength(5);
         skinChangeCooldownEditBox.setFilter(text -> text.isEmpty() || text.matches("\\d+"));
-        skinChangeCooldownEditBox.active = isServerAdmin;
+        skinChangeCooldownEditBox.active = isAdmin;
         serverSettingWidgets.add(skinChangeCooldownEditBox);
 
         // Label for cooldown EditBox
@@ -386,12 +400,16 @@ public class SettingsScreen extends Screen {
         // Render widgets (buttons, tabs, etc.) - this ensures they render AFTER everything above
         super.render(graphics, mouseX, mouseY, partialTick);
 
-        // Render "Read-Only" notice for Server tab if not admin (render last to ensure it's on top)
-        if (activeTab == Tab.SERVER && minecraft != null && !minecraft.hasSingleplayerServer()) {
-            int noticeY = dialogY + dialogHeight - 55;
-            String notice = "Server settings are read-only (not server admin)";
-            int noticeWidth = this.font.width(notice);
-            graphics.drawString(this.font, notice, dialogX + (dialogWidth - noticeWidth) / 2, noticeY, 0xAAAAAA, false);
+        // Render "Admin-Only" notice for Server tab if not admin (render last to ensure it's on top)
+        if (activeTab == Tab.SERVER && minecraft != null) {
+            boolean isAdmin = minecraft.player != null && minecraft.player.hasPermissions(2);
+
+            if (!isAdmin) {
+                int noticeY = dialogY + dialogHeight - 55;
+                String notice = "Only server admins can change these settings";
+                int noticeWidth = this.font.width(notice);
+                graphics.drawString(this.font, notice, dialogX + (dialogWidth - noticeWidth) / 2, noticeY, 0xFFCC00, false);
+            }
         }
     }
 
@@ -407,19 +425,6 @@ public class SettingsScreen extends Screen {
         graphics.fill(x, y, x + 1, y + height, color);
         // Right
         graphics.fill(x + width - 1, y, x + width, y + height, color);
-    }
-
-    /**
-     * Handles transparency setting changes by clearing texture cache and refreshing player renderer
-     */
-    private void handleTransparencySettingChange() {
-        com.quickskin.mod.client.services.LocalAssetManager.getInstance().clearTextureCache();
-
-        // Refresh the player's appearance to apply the new transparency setting
-        if (minecraft != null && minecraft.player != null) {
-            com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
-                .refreshPlayerRenderer(minecraft.player.getUUID());
-        }
     }
 
     /**
@@ -507,6 +512,11 @@ public class SettingsScreen extends Screen {
         super.removed();
         // Cleanup blur resources
         BlurHandler.cleanup();
+
+        // If a reload was flagged, execute it now that the screen is closed.
+        if (this.needsTextureReload) {
+            com.quickskin.mod.client.services.PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
+        }
     }
 
     @Override
@@ -516,6 +526,9 @@ public class SettingsScreen extends Screen {
             KeyMapping.resetMapping();
             this.selectedKey = null;
         }
+
+        // Execute any pending transparency reload from server config changes
+        com.quickskin.mod.networking.ClientNetworkHandler.executePendingTransparencyReload();
 
         // Save client settings
         if (showOverlayCheckbox != null) {
@@ -530,9 +543,9 @@ public class SettingsScreen extends Screen {
             config.enableStyledButtons = enableStyledButtonsCheckbox.selected();
             config.enablePlayerPreviewCustomization = enablePlayerPreviewCustomizationCheckbox.selected();
 
-            // If transparency setting changed, clear texture cache and refresh player
+            // If transparency setting changed, flag for a reload
             if (oldTransparencySetting != config.disableSkinTransparency) {
-                handleTransparencySettingChange();
+                this.needsTextureReload = true;
             }
 
             config.save();
@@ -546,33 +559,42 @@ public class SettingsScreen extends Screen {
             }
         }
 
-        // Save server settings
+        // Save server settings (only if player is admin)
         if (serverDisableSkinTransparencyCheckbox != null) {
-            ServerConfig config = ServerConfig.getInstance();
+            boolean isAdmin = minecraft != null && minecraft.player != null && minecraft.player.hasPermissions(2);
 
-            // Check if transparency setting changed
-            boolean oldServerTransparencySetting = config.disableSkinTransparency;
+            if (isAdmin) {
+                boolean newValue = serverDisableSkinTransparencyCheckbox.selected();
 
-            config.disableSkinTransparency = serverDisableSkinTransparencyCheckbox.selected();
+                // Get old value from server override (synced from server)
+                ServerConfig serverOverride = ClientConfig.getInstance().getServerOverride();
+                boolean oldValue = serverOverride != null ? serverOverride.disableSkinTransparency : false;
 
-            // Save cooldown setting
-            if (skinChangeCooldownEditBox != null && !skinChangeCooldownEditBox.getValue().isEmpty()) {
+                if (newValue != oldValue) {
+                    // Send packet to server to update the server-side config
+                    FriendlyByteBuf packet = new FriendlyByteBuf(Unpooled.buffer());
+                    packet.writeUtf("disableSkinTransparency");
+                    packet.writeBoolean(newValue);
+                    NetworkManager.sendToServer(ModNetworking.UPDATE_SERVER_CONFIG, packet);
+
+                    // The server will broadcast the change to all clients, including this one
+                    // No need to save locally or reload textures here - it will happen when we receive the broadcast
+                }
+            }
+
+            // Save cooldown setting (if admin)
+            if (isAdmin && skinChangeCooldownEditBox != null && !skinChangeCooldownEditBox.getValue().isEmpty()) {
                 try {
                     int cooldownSeconds = Integer.parseInt(skinChangeCooldownEditBox.getValue());
                     if (cooldownSeconds >= 0 && cooldownSeconds <= 86400) { // Max 24 hours
+                        ServerConfig config = ServerConfig.getInstance();
                         config.skinChangeCooldownSeconds = cooldownSeconds;
+                        config.save();
                     }
                 } catch (NumberFormatException e) {
                     // Invalid input, keep existing value
                 }
             }
-
-            // If transparency setting changed, clear texture cache and refresh player
-            if (oldServerTransparencySetting != config.disableSkinTransparency) {
-                handleTransparencySettingChange();
-            }
-
-            config.save();
         }
 
         if (minecraft != null) {
