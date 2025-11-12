@@ -30,7 +30,7 @@ public class ModNetworking {
         ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID,"upload_animation_metadata");
 
     public static final ResourceLocation UPDATE_SERVER_CONFIG =
-        new ResourceLocation(QuickSkin.MOD_ID, "update_server_config");
+        ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "update_server_config");
 
     // Server to Client packets (S2C)
     public static final ResourceLocation SYNC_APPEARANCE =

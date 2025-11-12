@@ -14,6 +14,8 @@ import io.netty.buffer.Unpooled;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -572,7 +574,7 @@ public class SettingsScreen extends Screen {
 
                 if (newValue != oldValue) {
                     // Send packet to server to update the server-side config
-                    FriendlyByteBuf packet = new FriendlyByteBuf(Unpooled.buffer());
+                    RegistryFriendlyByteBuf packet = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
                     packet.writeUtf("disableSkinTransparency");
                     packet.writeBoolean(newValue);
                     NetworkManager.sendToServer(ModNetworking.UPDATE_SERVER_CONFIG, packet);

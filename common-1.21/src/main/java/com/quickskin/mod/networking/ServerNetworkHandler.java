@@ -470,7 +470,7 @@ public class ServerNetworkHandler {
         // Send to ALL players (including the admin who made the change)
         // IMPORTANT: Create a fresh packet buffer for each player to avoid buffer exhaustion
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            FriendlyByteBuf packet = PacketHelper.createSyncServerConfigPacket(configJson);
+            RegistryFriendlyByteBuf packet = PacketHelper.createSyncServerConfigPacket(configJson);
             NetworkManager.sendToPlayer(player, ModNetworking.SYNC_SERVER_CONFIG, packet);
         }
 
