@@ -151,8 +151,9 @@ public class PlayerModelRenderer {
 
         // Use vanilla InventoryScreen rendering method
         try {
-            // Render grass block if sitting animation is active
-            if ("sit".equalsIgnoreCase(playerData.getCurrentAnimation())) {
+            // Render grass block if sitting animation is active AND we're not in a world
+            // When in-game, animations are controlled by the game, so don't render the custom grass block
+            if ("sit".equalsIgnoreCase(playerData.getCurrentAnimation()) && mc.level == null) {
                 PoseStack poseStack = graphics.pose();
                 MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
 
@@ -254,8 +255,9 @@ public class PlayerModelRenderer {
         // Get buffer source
         MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
 
-        // Render grass block if sitting animation is active
-        if ("sit".equalsIgnoreCase(playerData.getCurrentAnimation())) {
+        // Render grass block if sitting animation is active AND we're not in a world
+        // When in-game, animations are controlled by the game, so don't render the custom grass block
+        if ("sit".equalsIgnoreCase(playerData.getCurrentAnimation()) && mc.level == null) {
             renderGrassBlock(poseStack, bufferSource);
         }
 

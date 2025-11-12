@@ -89,6 +89,9 @@ public class ClientEvents {
         ClientPlayerEvent.CLIENT_PLAYER_JOIN.register(player -> {
             QuickSkin.LOGGER.info("Local player joined world: {}", player.getName().getString());
 
+            // Reset animation to idle when entering world
+            setSharedAnimation("idle");
+
             // Phase 5: Rescan assets in case files changed while not in-game
             // LocalAssetManager.getInstance().reload();
 
