@@ -110,11 +110,18 @@ public class SkinPreviewOverlay {
         guiGraphics.fill(x, y, x + 1, y + PREVIEW_SIZE, borderColor); // Left
         guiGraphics.fill(x + PREVIEW_SIZE - 1, y, x + PREVIEW_SIZE, y + PREVIEW_SIZE, borderColor); // Right
 
-        // Update rotation
-        rotationAngle += ROTATION_SPEED;
-        if (rotationAngle >= 360f) {
-            rotationAngle -= 360f;
+        // --- OPTIMIZATION START ---
+        // Update rotation only if enabled in config
+        if (config.enableRotatingPreviewInOverlay) {
+            rotationAngle += ROTATION_SPEED;
+            if (rotationAngle >= 360f) {
+                rotationAngle -= 360f;
+            }
+        } else {
+            // Set a fixed, nice-looking angle when rotation is disabled
+            rotationAngle = 20f;
         }
+        // --- OPTIMIZATION END ---
 
         // Render player preview using cached data
         renderPlayerPreview(

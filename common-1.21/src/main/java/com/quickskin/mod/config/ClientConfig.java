@@ -21,6 +21,7 @@ public class ClientConfig {
 
     // GUI Settings
     public boolean showSkinPreviewOverlay = false;
+    public boolean enableRotatingPreviewInOverlay = true; // Enable/disable rotation in HUD overlay for performance
     public String overlayPosition = "BOTTOM_RIGHT"; // TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
     public int previewScale = 30;
     public int guiScale = 1; // GUI scaling factor (1-4)
