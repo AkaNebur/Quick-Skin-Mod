@@ -41,21 +41,22 @@ public class ModelService implements IModelService {
             return requestedModel;
         }
 
-        // If auto mode, detect from skin texture (ignore overrides)
+        // If auto mode, get the pre-detected model from metadata
         if ("auto".equalsIgnoreCase(requestedModel)) {
-            // Auto-detect from skin texture
             if (skinId != null && skinId.startsWith("local_skin:")) {
                 String hash = skinId.substring("local_skin:".length());
 
-                // Detect from texture
-                byte[] skinData = LocalAssetManager.getInstance().loadTexture(hash, TextureQuality.PREVIEW);
-                if (skinData != null) {
-                    String detected = detectModelType(skinData);
-                    return detected;
+                // Get metadata from the asset manager which has the pre-detected model type
+                com.quickskin.mod.common.data.AssetMetadata metadata =
+                    LocalAssetManager.getInstance().getMetadata(hash);
+
+                if (metadata != null && metadata.skinModel() != null) {
+                    // Return the cached model type! This avoids all file I/O.
+                    return metadata.skinModel();
                 }
             }
 
-            // Default to classic if detection fails
+            // Default to classic if detection fails or skinId is not local
             return "classic";
         }
 

@@ -243,9 +243,8 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
             // Update model type based on current mode
             if ("auto".equals(currentModelType)) {
-                // Auto-detect from actual texture
-                String detectedModel = detectModelFromTexture(metadata);
-                playerWidget.setModelType(detectedModel);
+                // Use the pre-detected model from metadata
+                playerWidget.setModelType(metadata.skinModel());
             } else {
                 // Use explicitly selected model
                 playerWidget.setModelType(currentModelType);
@@ -304,10 +303,9 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
         // Update preview widget
         if (playerWidget != null) {
-            // If auto mode, detect from actual texture
+            // If auto mode, use the pre-detected model from metadata
             if ("auto".equals(modelType) && currentMetadata != null) {
-                String detectedModel = detectModelFromTexture(currentMetadata);
-                playerWidget.setModelType(detectedModel);
+                playerWidget.setModelType(currentMetadata.skinModel());
             } else {
                 playerWidget.setModelType(modelType);
             }

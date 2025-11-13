@@ -27,6 +27,11 @@ public class SkinPreviewOverlay {
     private static float rotationAngle = 0f;
     private static final float ROTATION_SPEED = 0.5f; // degrees per frame
 
+    // Cached fields for performance
+    private static ResourceLocation cachedSkinLocation = null;
+    private static String cachedModelType = "classic";
+    private static String lastCheckedSkinHash = null; // Use null to force initial update
+
     public enum OverlayPosition {
         TOP_LEFT,
         TOP_RIGHT,
@@ -46,37 +51,48 @@ public class SkinPreviewOverlay {
             return;
         }
 
-        // Get current skin and model type
-        ResourceLocation skinLocation = player.getSkin().texture();
-        String modelType = "classic";
-
-        // Check if there's an active custom skin
+        // Update-on-change logic for huge performance gain
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
-        if (!config.activeSkinHash.isEmpty()) {
-            // Use custom skin
-            com.quickskin.mod.client.services.LocalAssetManager assetManager =
-                com.quickskin.mod.client.services.LocalAssetManager.getInstance();
-            com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+        String activeSkinHash = config.activeSkinHash;
 
-            if (metadata != null) {
-                skinLocation = assetManager.getTextureLocation(config.activeSkinHash,
-                    com.quickskin.mod.common.data.TextureQuality.FULL);
+        // Use .equals() for string comparison. lastCheckedSkinHash can be null initially.
+        boolean needsUpdate = (lastCheckedSkinHash == null) || !lastCheckedSkinHash.equals(activeSkinHash);
 
-                // Get model type preference for this skin (respecting auto mode)
-                String skinModelType = assetManager.getSkinModelPreference(config.activeSkinHash);
-                if ("auto".equals(skinModelType)) {
-                    modelType = metadata.skinModel();
-                } else {
-                    modelType = skinModelType;
+        if (needsUpdate) {
+            lastCheckedSkinHash = activeSkinHash; // Update the hash we're tracking
+
+            if (!activeSkinHash.isEmpty()) {
+                // Use custom skin
+                com.quickskin.mod.client.services.LocalAssetManager assetManager =
+                    com.quickskin.mod.client.services.LocalAssetManager.getInstance();
+                com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(activeSkinHash);
+
+                if (metadata != null) {
+                    cachedSkinLocation = assetManager.getTextureLocation(activeSkinHash,
+                        com.quickskin.mod.common.data.TextureQuality.FULL);
+
+                    // Get model type preference for this skin, using cached data from metadata
+                    String skinModelPref = assetManager.getSkinModelPreference(activeSkinHash);
+                    if ("auto".equals(skinModelPref)) {
+                        cachedModelType = metadata.skinModel(); // Use cached model
+                    } else {
+                        cachedModelType = skinModelPref;
+                    }
+                }
+            } else {
+                // Use vanilla skin
+                cachedSkinLocation = player.getSkinTextureLocation();
+                cachedModelType = player.getModelName(); // "default" or "slim"
+                if ("default".equals(cachedModelType)) {
+                    cachedModelType = "classic";
                 }
             }
-        } else {
-            // Use vanilla skin
-            modelType = player.getSkin().model().id(); // "default" or "slim"
-            // Convert to our model type format
-            if ("default".equals(modelType)) {
-                modelType = "classic";
-            }
+        }
+
+        // Fallback if cached skin is somehow still null
+        if (cachedSkinLocation == null) {
+            cachedSkinLocation = player.getSkinTextureLocation();
+            cachedModelType = "classic";
         }
 
         // Calculate position based on overlay position setting
@@ -100,13 +116,13 @@ public class SkinPreviewOverlay {
             rotationAngle -= 360f;
         }
 
-        // Render player preview
+        // Render player preview using cached data
         renderPlayerPreview(
             guiGraphics,
             x + PREVIEW_SIZE / 2,
             y + (int)(PREVIEW_SIZE * 0.85f),
-            skinLocation,
-            modelType,
+            cachedSkinLocation,  // Use cached value
+            cachedModelType,     // Use cached value
             rotationAngle
         );
     }
