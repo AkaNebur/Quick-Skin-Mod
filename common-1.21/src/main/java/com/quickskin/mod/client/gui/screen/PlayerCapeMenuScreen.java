@@ -737,9 +737,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Tick animations for animated cape thumbnails
-        com.quickskin.mod.client.services.AnimatedTextureManager.getInstance().tick();
-
         // Render the animated star background
         this.renderBackgroundEffects(graphics, partialTick);
 
@@ -940,24 +937,12 @@ public class PlayerCapeMenuScreen extends Screen {
         // Regular cape rendering
         ResourceLocation texture = cape.getTextureLocation();
 
-        // If animated, get the current frame texture instead of the atlas
+        // If animated, get the current frame texture
+        // This leverages the work already done in AnimatedTextureManager.tick()
         if (texture != null && cape.isAnimated()) {
-            String capeId = cape.getCapeId();
-            String animationId = null;
-
-            if (capeId.startsWith("local_cape:")) {
-                animationId = "cape_" + capeId.substring("local_cape:".length());
-            } else if (capeId.startsWith("known:")) {
-                animationId = "cape_known_" + capeId.substring("known:".length());
-            }
-
-            if (animationId != null) {
-                ResourceLocation frameTexture = com.quickskin.mod.client.services.AnimatedTextureManager
-                    .getInstance().getCurrentFrameTexture(animationId);
-                if (frameTexture != null) {
-                    texture = frameTexture;
-                }
-            }
+            texture = com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
+                .getAnimationFrame(texture)
+                .orElse(texture);
         }
 
         // Render cape texture

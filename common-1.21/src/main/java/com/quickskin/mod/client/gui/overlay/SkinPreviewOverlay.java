@@ -99,18 +99,6 @@ public class SkinPreviewOverlay {
         int x = calculateX(mc.getWindow().getGuiScaledWidth());
         int y = calculateY(mc.getWindow().getGuiScaledHeight());
 
-        // Draw background
-        int bgColor = 0x80000000; // Semi-transparent black
-        guiGraphics.fill(x, y, x + PREVIEW_SIZE, y + PREVIEW_SIZE, bgColor);
-
-        // Draw border
-        int borderColor = 0xFF5A5A5A;
-        guiGraphics.fill(x, y, x + PREVIEW_SIZE, y + 1, borderColor); // Top
-        guiGraphics.fill(x, y + PREVIEW_SIZE - 1, x + PREVIEW_SIZE, y + PREVIEW_SIZE, borderColor); // Bottom
-        guiGraphics.fill(x, y, x + 1, y + PREVIEW_SIZE, borderColor); // Left
-        guiGraphics.fill(x + PREVIEW_SIZE - 1, y, x + PREVIEW_SIZE, y + PREVIEW_SIZE, borderColor); // Right
-
-        // --- OPTIMIZATION START ---
         // Update rotation only if enabled in config
         if (config.enableRotatingPreviewInOverlay) {
             rotationAngle += ROTATION_SPEED;
@@ -121,7 +109,6 @@ public class SkinPreviewOverlay {
             // Set a fixed, nice-looking angle when rotation is disabled
             rotationAngle = 20f;
         }
-        // --- OPTIMIZATION END ---
 
         // Render player preview using cached data
         renderPlayerPreview(
