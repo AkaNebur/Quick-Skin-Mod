@@ -720,14 +720,13 @@ public class PlayerCapeMenuScreen extends Screen {
         RenderSystem.setShader(net.minecraft.client.renderer.GameRenderer::getPositionTexShader);
 
         com.mojang.blaze3d.vertex.Tesselator tesselator = com.mojang.blaze3d.vertex.Tesselator.getInstance();
-        com.mojang.blaze3d.vertex.BufferBuilder bufferBuilder = tesselator.getBuilder();
+        com.mojang.blaze3d.vertex.BufferBuilder bufferBuilder = tesselator.begin(com.mojang.blaze3d.vertex.VertexFormat.Mode.QUADS, com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_TEX);
 
-        bufferBuilder.begin(com.mojang.blaze3d.vertex.VertexFormat.Mode.QUADS, com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_TEX);
-        bufferBuilder.vertex(pose.last().pose(), 0, this.height, 0).uv(u0, v1).endVertex();
-        bufferBuilder.vertex(pose.last().pose(), this.width, this.height, 0).uv(u1, v1).endVertex();
-        bufferBuilder.vertex(pose.last().pose(), this.width, 0, 0).uv(u1, v0).endVertex();
-        bufferBuilder.vertex(pose.last().pose(), 0, 0, 0).uv(u0, v0).endVertex();
-        tesselator.end();
+        bufferBuilder.addVertex(pose.last().pose(), 0, this.height, 0).setUv(u0, v1);
+        bufferBuilder.addVertex(pose.last().pose(), this.width, this.height, 0).setUv(u1, v1);
+        bufferBuilder.addVertex(pose.last().pose(), this.width, 0, 0).setUv(u1, v0);
+        bufferBuilder.addVertex(pose.last().pose(), 0, 0, 0).setUv(u0, v0);
+        com.mojang.blaze3d.vertex.BufferUploader.drawWithShader(bufferBuilder.buildOrThrow());
 
         pose.popPose();
 

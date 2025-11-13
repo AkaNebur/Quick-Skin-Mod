@@ -81,8 +81,8 @@ public class SkinPreviewOverlay {
                 }
             } else {
                 // Use vanilla skin
-                cachedSkinLocation = player.getSkinTextureLocation();
-                cachedModelType = player.getModelName(); // "default" or "slim"
+                cachedSkinLocation = player.getSkin().texture();
+                cachedModelType = player.getSkin().model().id(); // "default" or "slim"
                 if ("default".equals(cachedModelType)) {
                     cachedModelType = "classic";
                 }
@@ -91,7 +91,7 @@ public class SkinPreviewOverlay {
 
         // Fallback if cached skin is somehow still null
         if (cachedSkinLocation == null) {
-            cachedSkinLocation = player.getSkinTextureLocation();
+            cachedSkinLocation = player.getSkin().texture();
             cachedModelType = "classic";
         }
 
