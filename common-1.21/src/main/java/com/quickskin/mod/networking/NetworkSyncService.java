@@ -3,21 +3,17 @@ package com.quickskin.mod.networking;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AnimationMetadata;
-import com.quickskin.mod.networking.packets.PacketHelper;
+import com.quickskin.mod.networking.payloads.*;
 import dev.architectury.networking.NetworkManager;
-import io.netty.buffer.Unpooled;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.core.RegistryAccess;
 
 import java.util.UUID;
 
 /**
  * Client-side service for syncing appearance changes to the server
- * Similar to the old SkinSwapper class
+ * Uses Architectury 13.x CustomPacketPayload system for MC 1.21.1
  */
 @Environment(EnvType.CLIENT)
 public class NetworkSyncService {
@@ -69,14 +65,14 @@ public class NetworkSyncService {
         }
 
         // Send appearance update packet
-        RegistryFriendlyByteBuf buf = PacketHelper.createUpdateAppearancePacket(
+        UpdateAppearancePayload payload = new UpdateAppearancePayload(
             playerId,
             skinId != null ? skinId : "",
             capeId != null ? capeId : "",
             model != null ? model : "classic"
         );
 
-        NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
+        NetworkManager.sendToServer(payload);
         QuickSkin.LOGGER.debug("Sent UPDATE_APPEARANCE packet to server");
     }
 
@@ -113,15 +109,16 @@ public class NetworkSyncService {
             byte[] chunk = new byte[length];
             System.arraycopy(textureData, offset, chunk, 0, length);
 
-            // Create chunk packet
-            RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
-            buf.writeUtf(hash);
-            buf.writeUtf(textureType);
-            buf.writeInt(i); // chunk index
-            buf.writeInt(totalChunks); // total chunks
-            buf.writeByteArray(chunk);
+            // Create chunk payload
+            TextureChunkPayload payload = new TextureChunkPayload(
+                hash,
+                textureType,
+                i, // chunk index
+                totalChunks, // total chunks
+                chunk
+            );
 
-            NetworkManager.sendToServer(ModNetworking.TEXTURE_CHUNK, buf);
+            NetworkManager.sendToServer(payload);
             QuickSkin.LOGGER.debug("Sent texture chunk {}/{} for {}", i + 1, totalChunks, hash);
         }
     }
@@ -142,11 +139,9 @@ public class NetworkSyncService {
         // Serialize metadata to JSON
         String metadataJson = serializeMetadata(metadata);
 
-        RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
-        buf.writeUtf(hash);
-        buf.writeUtf(metadataJson);
+        UploadAnimationMetadataPayload payload = new UploadAnimationMetadataPayload(hash, metadataJson);
+        NetworkManager.sendToServer(payload);
 
-        NetworkManager.sendToServer(ModNetworking.UPLOAD_ANIMATION_METADATA, buf);
         QuickSkin.LOGGER.debug("Sent animation metadata for {}", hash);
     }
 
@@ -170,8 +165,8 @@ public class NetworkSyncService {
 
         QuickSkin.LOGGER.info("Clearing appearance on server");
 
-        RegistryFriendlyByteBuf buf = PacketHelper.createUpdateAppearancePacket(playerId, "", "", "classic");
-        NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
+        UpdateAppearancePayload payload = new UpdateAppearancePayload(playerId, "", "", "classic");
+        NetworkManager.sendToServer(payload);
     }
 
     /**
@@ -189,7 +184,7 @@ public class NetworkSyncService {
 
         QuickSkin.LOGGER.info("Requesting {} texture from server: {}", textureType, hash);
 
-        RegistryFriendlyByteBuf buf = PacketHelper.createRequestTexturePacket(playerId, textureType, hash);
-        NetworkManager.sendToServer(ModNetworking.REQUEST_TEXTURE, buf);
+        RequestTexturePayload payload = new RequestTexturePayload(playerId, textureType, hash);
+        NetworkManager.sendToServer(payload);
     }
 }

@@ -7,15 +7,10 @@ import com.quickskin.mod.client.gui.widget.TabButton;
 import com.quickskin.mod.client.input.KeybindRegistry;
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.config.ServerConfig;
-import com.quickskin.mod.networking.ModNetworking;
-import com.quickskin.mod.networking.packets.PacketHelper;
+import com.quickskin.mod.networking.payloads.UpdateServerConfigPayload;
 import dev.architectury.networking.NetworkManager;
-import io.netty.buffer.Unpooled;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -574,10 +569,8 @@ public class SettingsScreen extends Screen {
 
                 if (newValue != oldValue) {
                     // Send packet to server to update the server-side config
-                    RegistryFriendlyByteBuf packet = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
-                    packet.writeUtf("disableSkinTransparency");
-                    packet.writeBoolean(newValue);
-                    NetworkManager.sendToServer(ModNetworking.UPDATE_SERVER_CONFIG, packet);
+                    UpdateServerConfigPayload payload = new UpdateServerConfigPayload("disableSkinTransparency", newValue);
+                    NetworkManager.sendToServer(payload);
 
                     // The server will broadcast the change to all clients, including this one
                     // No need to save locally or reload textures here - it will happen when we receive the broadcast

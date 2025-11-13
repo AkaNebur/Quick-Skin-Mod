@@ -651,17 +651,18 @@ public class ClientEvents {
         com.quickskin.mod.client.services.LocalAssetManager assetManager =
                 com.quickskin.mod.client.services.LocalAssetManager.getInstance();
 
+        String skinId = null;
+        String modelType = null;
+        String capeId = null;
+
         // Check if there's a saved skin
         if (!config.activeSkinHash.isEmpty()) {
             com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
 
             if (metadata != null) {
-                // Apply the saved skin with the saved model type preference for this skin
-                String skinId = "local_skin:" + metadata.hash();
-                String modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
-
-                com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
-                        .applySkin(player.getUUID(), skinId, modelType);
+                // Prepare the saved skin with the saved model type preference for this skin
+                skinId = "local_skin:" + metadata.hash();
+                modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
 
                 QuickSkin.LOGGER.info("Restored saved skin: {} with model type: {}",
                         metadata.friendlyName(), modelType);
@@ -677,16 +678,13 @@ public class ClientEvents {
                 config.activeSkinHash = config.playerOwnSkinHash;
                 config.save();
 
-                String skinId = "local_skin:" + metadata.hash();
-                String modelType = assetManager.getSkinModelPreference(config.playerOwnSkinHash);
+                skinId = "local_skin:" + metadata.hash();
+                modelType = assetManager.getSkinModelPreference(config.playerOwnSkinHash);
 
                 // If auto mode, use the detected model from the skin
                 if ("auto".equals(modelType)) {
                     modelType = metadata.skinModel();
                 }
-
-                com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
-                        .applySkin(player.getUUID(), skinId, modelType);
 
                 QuickSkin.LOGGER.info("Auto-selected and applied player's own skin: {} with model type: {}",
                         metadata.friendlyName(), modelType);
@@ -695,12 +693,14 @@ public class ClientEvents {
 
         // Check if there's a saved cape
         if (!config.activeCapeHash.isEmpty()) {
-            String capeId = config.activeCapeHash;
-
-            com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
-                    .applyCape(player.getUUID(), capeId);
-
+            capeId = config.activeCapeHash;
             QuickSkin.LOGGER.info("Restored saved cape: {}", capeId);
+        }
+
+        // Apply both skin and cape together in a single call to avoid multiple syncs
+        if (skinId != null || capeId != null) {
+            com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                    .applyLook(player.getUUID(), skinId, capeId, modelType);
         }
     }
 

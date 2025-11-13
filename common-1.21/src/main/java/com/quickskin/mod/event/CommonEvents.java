@@ -1,8 +1,8 @@
 package com.quickskin.mod.event;
 
 import com.quickskin.mod.QuickSkin;
-import com.quickskin.mod.networking.ModNetworking;
 import com.quickskin.mod.networking.ServerNetworkHandler;
+import com.quickskin.mod.networking.payloads.CooldownUpdatePayload;
 import com.quickskin.mod.server.data.ServerCooldownManager;
 import com.quickskin.mod.server.storage.ServerAnimationCache;
 import com.quickskin.mod.server.storage.ServerAppearanceStorage;
@@ -10,10 +10,6 @@ import com.quickskin.mod.server.storage.ServerTextureCache;
 import dev.architectury.event.events.common.LifecycleEvent;
 import dev.architectury.event.events.common.PlayerEvent;
 import dev.architectury.networking.NetworkManager;
-import io.netty.buffer.Unpooled;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -60,9 +56,8 @@ public class CommonEvents {
             int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
             if (cooldownSeconds > 0 && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())) {
                 long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID());
-                RegistryFriendlyByteBuf cooldownBuf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
-                cooldownBuf.writeLong(cooldownEndTime);
-                NetworkManager.sendToPlayer((ServerPlayer) player, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
+                CooldownUpdatePayload payload = new CooldownUpdatePayload(cooldownEndTime);
+                NetworkManager.sendToPlayer((ServerPlayer) player, payload);
                 QuickSkin.LOGGER.debug("Sent initial cooldown status to joining player {}", player.getName().getString());
             }
         });
