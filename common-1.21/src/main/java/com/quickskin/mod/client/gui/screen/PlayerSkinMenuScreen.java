@@ -989,7 +989,7 @@ public class PlayerSkinMenuScreen extends Screen {
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
 
         // Prevent deletion of the player's own skin
-        if (metadata.hash().equals(config.playerOwnSkinHash)) {
+        if (config.enablePlayerOwnSkinSystem && metadata.hash().equals(config.playerOwnSkinHash)) {
             QuickSkin.LOGGER.warn("Cannot delete player's own skin: {}", metadata.friendlyName());
             showError(Component.literal("Cannot delete your own skin!"));
             return;

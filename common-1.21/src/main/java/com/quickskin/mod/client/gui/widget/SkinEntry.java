@@ -64,7 +64,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
 
         // Check if this is the player's own skin
         ClientConfig config = ClientConfig.getInstance();
-        boolean isPlayerOwnSkin = metadata.hash().equals(config.playerOwnSkinHash);
+        boolean isPlayerOwnSkin = config.enablePlayerOwnSkinSystem && metadata.hash().equals(config.playerOwnSkinHash);
 
         if (parentList.getSelected() == this) {
             if (isPlayerOwnSkin) {

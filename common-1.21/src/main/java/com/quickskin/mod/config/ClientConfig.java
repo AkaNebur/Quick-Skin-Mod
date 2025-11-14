@@ -62,6 +62,9 @@ public class ClientConfig {
     // GUI Style Settings
     public boolean enableStyledButtons = false; // Enable custom styled buttons with frosted glass aesthetic
 
+    // --- NEW --- Modpack Settings
+    public boolean enablePlayerOwnSkinSystem = true; // When enabled, automatically downloads and protects the player's own skin.
+
     // Active Skin Settings (persisted state)
     public String activeSkinHash = "";
     @Deprecated // Now using per-skin model preferences stored in skin-preferences.json

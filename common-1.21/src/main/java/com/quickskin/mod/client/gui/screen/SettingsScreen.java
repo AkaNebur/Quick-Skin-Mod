@@ -19,6 +19,7 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -53,7 +54,8 @@ public class SettingsScreen extends Screen {
     private enum Tab {
         GUI_EDIT("GUI Edit"),
         CLIENT("Client"),
-        SERVER("Server");
+        SERVER("Server"),
+        MODPACK("Modpack");
 
         private final String displayName;
 
@@ -70,9 +72,12 @@ public class SettingsScreen extends Screen {
     private TabButton guiEditTabButton;
     private TabButton clientTabButton;
     private TabButton serverTabButton;
+    private TabButton modpackTabButton;
     private final List<AbstractWidget> guiEditSettingWidgets = new ArrayList<>();
     private final List<AbstractWidget> clientSettingWidgets = new ArrayList<>();
     private final List<AbstractWidget> serverSettingWidgets = new ArrayList<>();
+    private final List<AbstractWidget> modpackSettingWidgets = new ArrayList<>();
+
 
     // Client setting widgets
     private Checkbox showOverlayCheckbox;
@@ -88,6 +93,9 @@ public class SettingsScreen extends Screen {
     // Server setting checkboxes
     private Checkbox serverDisableSkinTransparencyCheckbox;
     private EditBox skinChangeCooldownEditBox;
+
+    // --- NEW --- Modpack setting widgets
+    private Checkbox enablePlayerOwnSkinSystemCheckbox;
 
     // Track if texture reload is needed
     private boolean needsTextureReload = false;
@@ -105,6 +113,7 @@ public class SettingsScreen extends Screen {
         guiEditSettingWidgets.clear();
         clientSettingWidgets.clear();
         serverSettingWidgets.clear();
+        modpackSettingWidgets.clear();
 
         // Make dialog responsive to screen size
         dialogWidth = Math.min(480, this.width - 40);
@@ -145,10 +154,20 @@ public class SettingsScreen extends Screen {
         );
         this.addRenderableWidget(guiEditTabButton);
 
+        modpackTabButton = (TabButton) ButtonFactory.createTab(
+                tabStartX + (TAB_WIDTH + TAB_SPACING) * 3, tabY,
+                TAB_WIDTH, TAB_HEIGHT,
+                Component.literal(Tab.MODPACK.getDisplayName()),
+                activeTab == Tab.MODPACK,
+                btn -> switchTab(Tab.MODPACK)
+        );
+        this.addRenderableWidget(modpackTabButton);
+
         // Create settings for all tabs
         createGuiEditSettings();
         createClientSettings();
         createServerSettings();
+        createModpackSettings();
 
         // Create Done button
         Button doneButton = ButtonFactory.createPrimary(
@@ -330,6 +349,24 @@ public class SettingsScreen extends Screen {
         });
     }
 
+    private void createModpackSettings() {
+        ClientConfig config = ClientConfig.getInstance();
+        // Settings content area starts below tabs
+        int startY = dialogY + TAB_HEIGHT + 20;
+        int leftColumnX = dialogX + 20;
+
+        enablePlayerOwnSkinSystemCheckbox = Checkbox.builder(
+                Component.literal("Enable Player's Own Skin System"),
+                this.font)
+                .pos(leftColumnX, startY)
+                .selected(config.enablePlayerOwnSkinSystem)
+                .tooltip(Tooltip.create(
+                        Component.literal("When enabled, automatically downloads your Mojang skin and protects it from being deleted. Disable for modpacks where all players should use provided skins.")
+                ))
+                .build();
+        modpackSettingWidgets.add(enablePlayerOwnSkinSystemCheckbox);
+    }
+
     private void switchTab(Tab tab) {
         activeTab = tab;
 
@@ -343,12 +380,16 @@ public class SettingsScreen extends Screen {
         for (AbstractWidget widget : serverSettingWidgets) {
             this.removeWidget(widget);
         }
+        for (AbstractWidget widget : modpackSettingWidgets) {
+            this.removeWidget(widget);
+        }
 
         // Add widgets for active tab
         List<AbstractWidget> activeWidgets = switch (tab) {
             case GUI_EDIT -> guiEditSettingWidgets;
             case CLIENT -> clientSettingWidgets;
             case SERVER -> serverSettingWidgets;
+            case MODPACK -> modpackSettingWidgets;
         };
         for (AbstractWidget widget : activeWidgets) {
             this.addRenderableWidget(widget);
@@ -358,6 +399,7 @@ public class SettingsScreen extends Screen {
         guiEditTabButton.setSelected(tab == Tab.GUI_EDIT);
         clientTabButton.setSelected(tab == Tab.CLIENT);
         serverTabButton.setSelected(tab == Tab.SERVER);
+        modpackTabButton.setSelected(tab == Tab.MODPACK);
     }
 
     @Override
@@ -539,6 +581,7 @@ public class SettingsScreen extends Screen {
             config.disableSkinTransparency = disableSkinTransparencyCheckbox.selected();
             config.enableStyledButtons = enableStyledButtonsCheckbox.selected();
             config.enablePlayerPreviewCustomization = enablePlayerPreviewCustomizationCheckbox.selected();
+            config.enablePlayerOwnSkinSystem = enablePlayerOwnSkinSystemCheckbox.selected();
 
             // If transparency setting changed, flag for a reload
             if (oldTransparencySetting != config.disableSkinTransparency) {
