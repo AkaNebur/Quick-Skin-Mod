@@ -801,21 +801,31 @@ public class PlayerSkinMenuScreen extends Screen {
                     LocalAssetManager.getInstance().getTextureLocation(metadata.hash(), TextureQuality.FULL)
             );
 
-            // Apply skin to the actual player in-game
-            if (this.minecraft != null && this.minecraft.player != null) {
-                String skinId = "local_skin:" + metadata.hash();
-
-                // Pass the model type directly - ModelService will handle "auto" detection
-                com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
-                        .applySkin(this.minecraft.player.getUUID(), skinId, modelType);
-                QuickSkin.LOGGER.info("Applied skin to player: {} with model type: {}",
-                        metadata.friendlyName(), modelType);
-            }
-
-            // Save the active skin hash to config
+            // Check if this is a new skin selection
             com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
-            config.activeSkinHash = metadata.hash();
-            config.save();
+            boolean isSkinAlreadyActive = metadata.hash().equals(config.activeSkinHash);
+
+            // Apply the change if it's a new skin selection.
+            if (!isSkinAlreadyActive) {
+                // Always save the active skin hash to config, regardless of being in-game.
+                // This makes the selection persist on the title screen.
+                config.activeSkinHash = metadata.hash();
+                config.save();
+                QuickSkin.LOGGER.info("Set active skin in config: {}", metadata.friendlyName());
+
+                // If in-game, apply the skin to the actual player entity.
+                if (this.minecraft != null && this.minecraft.player != null) {
+                    String skinId = "local_skin:" + metadata.hash();
+
+                    // The user's preference for "auto" is passed to the service to be saved correctly.
+                    String modelForService = modelType;
+
+                    com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                            .applySkin(this.minecraft.player.getUUID(), skinId, modelForService);
+                    QuickSkin.LOGGER.info("Applied skin to player: {} with model type: {}",
+                            metadata.friendlyName(), modelForService);
+                }
+            }
         }
     }
 
