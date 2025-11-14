@@ -21,11 +21,11 @@ public class ClientConfig {
 
     // GUI Settings
     public boolean showSkinPreviewOverlay = false;
-    public boolean enableRotatingPreviewInOverlay = true; // Enable/disable rotation in HUD overlay for performance
     public String overlayPosition = "BOTTOM_RIGHT"; // TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
     public int previewScale = 30;
     public int guiScale = 1; // GUI scaling factor (1-4)
     public boolean enablePlayerPreviewCustomization = false; // Enable customization (resize, reposition) of player previews
+    public float hudOverlayRotation = 20.0f;
 
     // Player Preview Slider Percentages (1-100%) for different contexts
     // 0 = use built-in default, non-zero = use that percentage
@@ -33,6 +33,7 @@ public class ClientConfig {
     public int sizeModelPreviewPercentageSkinMenu = 0;
     public int sizeModelPreviewPercentageCapeMenu = 0;
     public int sizeModelPreviewPercentagePauseMenu = 0;
+    public int sizeModelPreviewPercentageHudOverlay = 30;
 
     // Player Preview Position Offsets (X, Y) for different contexts
     // These are added to the base offsets (which already include the intended defaults)
@@ -44,6 +45,8 @@ public class ClientConfig {
     public int positionOffsetYCapeMenu = 0;
     public int positionOffsetXPauseMenu = 0;
     public int positionOffsetYPauseMenu = 0;
+    public int positionOffsetXHudOverlay = 0;
+    public int positionOffsetYHudOverlay = 0;
 
     // Animation Settings
     public float animationSpeed = 1.0f; // Default animation speed (deprecated, use per-cape speeds)

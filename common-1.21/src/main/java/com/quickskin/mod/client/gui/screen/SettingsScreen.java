@@ -136,17 +136,8 @@ public class SettingsScreen extends Screen {
         );
         this.addRenderableWidget(clientTabButton);
 
-        serverTabButton = (TabButton) ButtonFactory.createTab(
-                tabStartX + TAB_WIDTH + TAB_SPACING, tabY,
-                TAB_WIDTH, TAB_HEIGHT,
-                Component.literal(Tab.SERVER.getDisplayName()),
-                activeTab == Tab.SERVER,
-                btn -> switchTab(Tab.SERVER)
-        );
-        this.addRenderableWidget(serverTabButton);
-
         guiEditTabButton = (TabButton) ButtonFactory.createTab(
-                tabStartX + (TAB_WIDTH + TAB_SPACING) * 2, tabY,
+                tabStartX + TAB_WIDTH + TAB_SPACING, tabY,
                 TAB_WIDTH, TAB_HEIGHT,
                 Component.literal(Tab.GUI_EDIT.getDisplayName()),
                 activeTab == Tab.GUI_EDIT,
@@ -155,13 +146,22 @@ public class SettingsScreen extends Screen {
         this.addRenderableWidget(guiEditTabButton);
 
         modpackTabButton = (TabButton) ButtonFactory.createTab(
-                tabStartX + (TAB_WIDTH + TAB_SPACING) * 3, tabY,
+                tabStartX + (TAB_WIDTH + TAB_SPACING) * 2, tabY,
                 TAB_WIDTH, TAB_HEIGHT,
                 Component.literal(Tab.MODPACK.getDisplayName()),
                 activeTab == Tab.MODPACK,
                 btn -> switchTab(Tab.MODPACK)
         );
         this.addRenderableWidget(modpackTabButton);
+
+        serverTabButton = (TabButton) ButtonFactory.createTab(
+                tabStartX + (TAB_WIDTH + TAB_SPACING) * 3, tabY,
+                TAB_WIDTH, TAB_HEIGHT,
+                Component.literal(Tab.SERVER.getDisplayName()),
+                activeTab == Tab.SERVER,
+                btn -> switchTab(Tab.SERVER)
+        );
+        this.addRenderableWidget(serverTabButton);
 
         // Create settings for all tabs
         createGuiEditSettings();

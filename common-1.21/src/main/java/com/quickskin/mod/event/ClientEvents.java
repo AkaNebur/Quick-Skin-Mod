@@ -1,6 +1,7 @@
 package com.quickskin.mod.event;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.gui.overlay.SkinPreviewOverlay;
 import com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen;
 import com.quickskin.mod.client.gui.util.DebugOffsetManager;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
@@ -28,6 +29,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import org.lwjgl.glfw.GLFW;
 
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
@@ -69,6 +71,8 @@ public class ClientEvents {
     private static Button animationToggleButton;
     private static final java.util.List<Button> animationButtons = new java.util.ArrayList<>();
     private static boolean isAnimationDropdownOpen = false;
+    private static boolean isLeftDraggingOverlay = false;
+    private static boolean isRightDraggingOverlay = false;
 
     /**
      * Initializes client event listeners
@@ -83,6 +87,46 @@ public class ClientEvents {
         ClientTickEvent.CLIENT_POST.register(client -> {
             // This also ensures the singleton instance is created.
             AnimatedTextureManager.getInstance().tick();
+
+            // Handle HUD overlay dragging only when a GUI is open (cursor is visible)
+            if (!client.mouseHandler.isMouseGrabbed()) {
+                boolean leftMouseDown = GLFW.glfwGetMouseButton(client.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+                boolean rightMouseDown = GLFW.glfwGetMouseButton(client.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
+                double mouseX = client.mouseHandler.xpos() * (double)client.getWindow().getGuiScaledWidth() / (double)client.getWindow().getScreenWidth();
+                double mouseY = client.mouseHandler.ypos() * (double)client.getWindow().getGuiScaledHeight() / (double)client.getWindow().getScreenHeight();
+
+                // Handle Left Click for moving
+                if (leftMouseDown) {
+                    if (!isLeftDraggingOverlay) {
+                        if (SkinPreviewOverlay.onMouseClicked(mouseX, mouseY, 0).interruptsFurtherEvaluation()) {
+                            isLeftDraggingOverlay = true;
+                        }
+                    } else {
+                        SkinPreviewOverlay.onMouseDragged(mouseX, mouseY, 0, 0, 0);
+                    }
+                } else if (isLeftDraggingOverlay) {
+                    SkinPreviewOverlay.onMouseReleased(mouseX, mouseY, 0);
+                    isLeftDraggingOverlay = false;
+                }
+
+                // Handle Right Click for rotating
+                if (rightMouseDown) {
+                    if (!isRightDraggingOverlay) {
+                        if (SkinPreviewOverlay.onRightMouseClicked(mouseX, mouseY, 1).interruptsFurtherEvaluation()) {
+                            isRightDraggingOverlay = true;
+                        }
+                    } else {
+                        SkinPreviewOverlay.onMouseDragged(mouseX, mouseY, 1, 0, 0);
+                    }
+                } else if (isRightDraggingOverlay) {
+                    SkinPreviewOverlay.onMouseReleased(mouseX, mouseY, 1);
+                    isRightDraggingOverlay = false;
+                }
+            } else {
+                // If no screen is open or mouse is grabbed, ensure dragging is stopped
+                if (isLeftDraggingOverlay) isLeftDraggingOverlay = false;
+                if (isRightDraggingOverlay) isRightDraggingOverlay = false;
+            }
         });
 
         // Download player's own skin on startup (async, won't block)
@@ -424,6 +468,15 @@ public class ClientEvents {
 
             QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) and PlayerWidget at ({}, {}) for screen type '{}'",
                     buttonX, buttonY, widgetX, widgetY, screenType);
+        });
+
+        // Use PRE event for scrolling so we can interrupt it
+        ClientScreenInputEvent.MOUSE_SCROLLED_PRE.register((client, screen, mouseX, mouseY, amountX, amountY) -> {
+            // Forward scroll events to the HUD overlay if the cursor is visible
+            if (!client.mouseHandler.isMouseGrabbed()) {
+                return SkinPreviewOverlay.onMouseScrolled(mouseX, mouseY, amountY);
+            }
+            return EventResult.pass();
         });
 
         // Debug screen toggle (F3)
