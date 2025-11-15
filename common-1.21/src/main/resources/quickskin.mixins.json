@@ -3,10 +3,13 @@
   "package": "com.quickskin.mod.mixin",
   "compatibilityLevel": "JAVA_17",
   "minVersion": "0.8",
+  "priority": 2000,
+  "mixinPriority": 2000,
   "client": [
     "PlayerInfoMixin",
     "CapeLayerMixin",
-    "ItemInHandRendererMixin"
+    "ItemInHandRendererMixin",
+    "MixinAbstractClientPlayer"
   ],
   "mixins": [
   ],

@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.At;
  * PERFORMANCE CRITICAL: This method is called thousands of times per frame.
  * We cache the result to avoid expensive service lookups on every call.
  */
-@Mixin(value = PlayerInfo.class, priority = 900) // Lower priority to let other mods run first
+@Mixin(value = PlayerInfo.class, priority = 1100) // Higher priority to override TLSkinCape and other mods
 public abstract class PlayerInfoMixin {
 
     @Shadow

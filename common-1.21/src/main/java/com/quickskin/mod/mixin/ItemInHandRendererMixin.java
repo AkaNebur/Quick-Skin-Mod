@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * This mixin targets PlayerRenderer, which is responsible for rendering the arm model.
  * It redirects getBuffer calls to return translucent buffers for skins with transparency.
  */
-@Mixin(PlayerRenderer.class)
+@Mixin(value = PlayerRenderer.class, priority = 1100) // Higher priority to override TLSkinCape and other mods
 public class ItemInHandRendererMixin {
 
     /**
