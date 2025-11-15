@@ -17,9 +17,6 @@ public record AnimationMetadata(
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    // Cache for total duration to avoid recalculating every tick
-    private static int totalDuration = -1;
-
     /**
      * Frame data for a single animation frame
      */
@@ -32,17 +29,12 @@ public record AnimationMetadata(
      * Get total animation duration in milliseconds
      */
     public int getTotalDuration() {
-        // If the duration hasn't been calculated yet, do it once and cache it.
-        if (totalDuration == -1) {
-            if (frames == null || frames.isEmpty()) {
-                totalDuration = 0;
-            } else {
-                totalDuration = frames.stream()
-                        .mapToInt(FrameData::delay)
-                        .sum();
-            }
+        if (frames == null || frames.isEmpty()) {
+            return 0;
         }
-        return totalDuration;
+        return frames.stream()
+                .mapToInt(FrameData::delay)
+                .sum();
     }
 
     /**
