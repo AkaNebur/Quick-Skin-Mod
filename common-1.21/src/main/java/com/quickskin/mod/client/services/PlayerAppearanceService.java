@@ -83,6 +83,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             ResourceLocation skinLocation = skinService.getSkinLocation(playerId, skinId);
             if (skinLocation != null) {
                 appearance.setSkinLocation(skinLocation);
+
+                // Trigger async transparency analysis for the skin texture
+                com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(skinLocation);
             }
         }
 
@@ -101,6 +104,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             ResourceLocation capeLocation = capeService.getCapeLocation(playerId, capeId);
             if (capeLocation != null) {
                 appearance.setCapeLocation(capeLocation);
+
+                // Trigger async transparency analysis for the cape texture
+                com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(capeLocation);
 
                 // If animated, ensure the animation is registered
                 if (capeService.isAnimated(capeId)) {
@@ -246,6 +252,10 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             ResourceLocation location = skinService.getSkinLocation(playerId, appearance.getSkinId());
             if (location != null) {
                 appearance.setSkinLocation(location); // Cache it for next time
+
+                // Trigger async transparency analysis for the skin texture
+                com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(location);
+
                 return location;
             }
         }
@@ -270,6 +280,10 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             ResourceLocation location = capeService.getCapeLocation(playerId, appearance.getCapeId());
             if (location != null) {
                 appearance.setCapeLocation(location); // Cache it for next time
+
+                // Trigger async transparency analysis for the cape texture
+                com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(location);
+
                 return location;
             }
         }
@@ -304,6 +318,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         if (mc == null) return;
 
         QuickSkin.LOGGER.info("Reloading player skins for transparency change...");
+
+        // Clear texture alpha detection cache since transparency settings changed
+        com.quickskin.mod.common.util.TextureAlphaDetector.clearCache();
 
         // Clear ONLY skin textures from local cache (not capes!)
         LocalAssetManager.getInstance().clearSkinTextureCache();

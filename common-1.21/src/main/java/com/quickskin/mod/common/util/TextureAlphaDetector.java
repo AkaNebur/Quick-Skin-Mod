@@ -12,6 +12,8 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -23,10 +25,15 @@ public class TextureAlphaDetector {
     // Cache to avoid repeatedly checking the same textures
     private static final Map<ResourceLocation, Boolean> transparencyCache = new ConcurrentHashMap<>();
 
+    // Track textures currently being analyzed to avoid duplicate work
+    private static final Set<ResourceLocation> pendingAnalysis = ConcurrentHashMap.newKeySet();
+
     /**
      * Check if a texture contains any transparent pixels
+     * This method returns immediately and does NOT perform I/O on the calling thread.
+     *
      * @param textureLocation The resource location of the texture
-     * @return true if the texture has any pixels with alpha < 255, false otherwise
+     * @return true if the texture has any pixels with alpha < 255, OR if the analysis is not yet complete (defaults to TRANSLUCENT for safety)
      */
     public static boolean hasTransparency(ResourceLocation textureLocation) {
         if (textureLocation == null) {
@@ -39,10 +46,56 @@ public class TextureAlphaDetector {
             return cached;
         }
 
-        boolean hasAlpha = detectTransparency(textureLocation);
-        QuickSkin.LOGGER.info("Detected transparency for {}: {}", textureLocation, hasAlpha);
-        transparencyCache.put(textureLocation, hasAlpha);
-        return hasAlpha;
+        // Default to TRANSLUCENT (true) if not yet analyzed
+        // This is safer - it may be slightly less performant but won't cause visual glitches
+        return true;
+    }
+
+    /**
+     * Asynchronously analyze a texture for transparency.
+     * This should be called when a texture is first loaded/applied.
+     * The analysis happens on a background thread, and the result is cached for future use.
+     *
+     * @param textureLocation The resource location of the texture to analyze
+     */
+    public static void analyzeTextureAsync(ResourceLocation textureLocation) {
+        if (textureLocation == null) {
+            return;
+        }
+
+        // Skip if already cached
+        if (transparencyCache.containsKey(textureLocation)) {
+            return;
+        }
+
+        // Skip if already being analyzed
+        if (!pendingAnalysis.add(textureLocation)) {
+            return;
+        }
+
+        QuickSkin.LOGGER.debug("Starting async transparency analysis for: {}", textureLocation);
+
+        // Perform the analysis on a background thread
+        CompletableFuture.runAsync(() -> {
+            try {
+                boolean hasAlpha = detectTransparency(textureLocation);
+
+                // Update cache on the main thread to ensure thread safety with rendering
+                Minecraft mc = Minecraft.getInstance();
+                mc.execute(() -> {
+                    transparencyCache.put(textureLocation, hasAlpha);
+                    QuickSkin.LOGGER.info("Completed transparency analysis for {}: {}", textureLocation, hasAlpha);
+                });
+            } catch (Exception e) {
+                QuickSkin.LOGGER.error("Error during async transparency analysis for {}", textureLocation, e);
+                // On error, cache as transparent (safe default)
+                Minecraft mc = Minecraft.getInstance();
+                mc.execute(() -> transparencyCache.put(textureLocation, true));
+            } finally {
+                // Remove from pending set
+                pendingAnalysis.remove(textureLocation);
+            }
+        });
     }
 
     /**
@@ -115,5 +168,7 @@ public class TextureAlphaDetector {
      */
     public static void clearCache() {
         transparencyCache.clear();
+        pendingAnalysis.clear();
+        QuickSkin.LOGGER.debug("Cleared texture transparency cache");
     }
 }

@@ -158,10 +158,16 @@ public class ClientEvents {
                 QuickSkin.LOGGER.info("Local player quit world (player was null)");
             }
 
+            // *** THE FIX: Clear all active animations to stop background ticking and render lookups ***
+            AnimatedTextureManager.getInstance().clearAnimations();
+
             // Clear all appearance data
             PlayerAppearanceRepository.getInstance().clear();
             ModelService.getInstance().clearAll();
             CooldownService.getInstance().clearCooldown();
+
+            // Clear texture alpha detection cache since we're leaving the world
+            com.quickskin.mod.common.util.TextureAlphaDetector.clearCache();
 
             // Clear incomplete texture chunks
             com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance().clear();
