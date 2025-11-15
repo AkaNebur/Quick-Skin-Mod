@@ -246,6 +246,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             return appearance.getSkinLocation();
         }
 
+        // SLOW PATH - LOG THIS!
+        QuickSkin.LOGGER.warn("CACHE MISS for player {} skin! This should not happen frequently!", playerId);
+
         // If not cached, try to resolve it now.
         // This handles the race condition where SYNC_APPEARANCE arrives before SEND_TEXTURE
         if (appearance.getSkinId() != null && !appearance.getSkinId().isEmpty()) {

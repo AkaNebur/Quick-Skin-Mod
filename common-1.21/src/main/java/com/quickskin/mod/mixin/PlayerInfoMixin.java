@@ -17,6 +17,9 @@ import org.spongepowered.asm.mixin.injection.At;
  *
  * In MC 1.21.1, getSkinLocation/getModelName/getCapeLocation were replaced with getSkin()
  * which returns a PlayerSkin record containing all skin data
+ *
+ * PERFORMANCE CRITICAL: This method is called thousands of times per frame.
+ * We cache the result to avoid expensive service lookups on every call.
  */
 @Mixin(value = PlayerInfo.class, priority = 900) // Lower priority to let other mods run first
 public abstract class PlayerInfoMixin {
@@ -25,15 +28,23 @@ public abstract class PlayerInfoMixin {
     @Final
     private GameProfile profile;
 
+    // Cache for the custom PlayerSkin to avoid rebuilding it every frame
+    private PlayerSkin quickskin$cachedSkin = null;
+
+    // Cache the original skin we based our custom skin on
+    private PlayerSkin quickskin$cachedOriginalSkin = null;
+
+    // Cache key components to detect when we need to rebuild
+    private ResourceLocation quickskin$cachedSkinLocation = null;
+    private ResourceLocation quickskin$cachedCapeLocation = null;
+    private String quickskin$cachedModelName = null;
+
     /**
      * Modify the return value of getSkin() to override with QuickSkin data
      * This replaces the old getSkinLocation/getModelName/getCapeLocation injections
      */
     @ModifyReturnValue(method = "getSkin", at = @At("RETURN"))
     private PlayerSkin quickskin$onGetSkin(PlayerSkin originalSkin) {
-        // ALWAYS log this to confirm mixin is being called
-        com.quickskin.mod.QuickSkin.LOGGER.info("PlayerInfoMixin.getSkin() called for player: {}", this.profile.getName());
-
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
 
         boolean hasCustomSkin = service.hasActiveSkin(this.profile.getId());
@@ -42,50 +53,61 @@ public abstract class PlayerInfoMixin {
 
         // Only modify if we have custom data
         if (!hasCustomSkin && !hasCustomCape && !hasModelOverride) {
+            // Clear cache if we no longer have custom data
+            quickskin$cachedSkin = null;
+            quickskin$cachedOriginalSkin = null;
             return originalSkin;
         }
 
-        // Debug logging
-        com.quickskin.mod.QuickSkin.LOGGER.info("PlayerInfoMixin: Overriding skin for player {} (hasCustomSkin={}, hasCustomCape={}, hasModelOverride={})",
+        // FAST PATH: Check if we can use cached result
+        // Get the current appearance data
+        ResourceLocation currentSkinLocation = hasCustomSkin ? service.getSkinLocation(this.profile.getId()) : null;
+        ResourceLocation currentCapeLocation = hasCustomCape ? service.getCapeLocation(this.profile.getId()) : null;
+        String currentModelName = (hasCustomSkin || hasModelOverride) ? service.getModelName(this.profile.getId()) : null;
+
+        // Check if cache is valid (original skin unchanged and component data unchanged)
+        if (quickskin$cachedSkin != null &&
+            quickskin$cachedOriginalSkin == originalSkin &&
+            java.util.Objects.equals(quickskin$cachedSkinLocation, currentSkinLocation) &&
+            java.util.Objects.equals(quickskin$cachedCapeLocation, currentCapeLocation) &&
+            java.util.Objects.equals(quickskin$cachedModelName, currentModelName)) {
+            // Cache hit! Return cached result without rebuilding
+            return quickskin$cachedSkin;
+        }
+
+        // SLOW PATH: Cache miss, need to rebuild
+        com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Rebuilding skin for player {} (hasCustomSkin={}, hasCustomCape={}, hasModelOverride={})",
             this.profile.getName(), hasCustomSkin, hasCustomCape, hasModelOverride);
 
-        // Get custom values or fall back to original
+        // Get custom values or fall back to original (reuse the values we already fetched)
         ResourceLocation skinTexture = originalSkin.texture();
         PlayerSkin.Model skinModel = originalSkin.model();
         ResourceLocation capeTexture = originalSkin.capeTexture();
 
-        // Override skin texture
-        if (hasCustomSkin) {
-            ResourceLocation customSkin = service.getSkinLocation(this.profile.getId());
-            if (customSkin != null) {
-                skinTexture = customSkin;
-                com.quickskin.mod.QuickSkin.LOGGER.info("PlayerInfoMixin: Set custom skin texture to {}", customSkin);
-            }
+        // Override skin texture (use cached value we already retrieved)
+        if (hasCustomSkin && currentSkinLocation != null) {
+            skinTexture = currentSkinLocation;
+            com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Set custom skin texture to {}", currentSkinLocation);
         }
 
-        // Override model type
-        if (hasCustomSkin || hasModelOverride) {
-            String customModelName = service.getModelName(this.profile.getId());
-            if (customModelName != null) {
-                // Convert string model name to PlayerSkin.Model enum
-                skinModel = "slim".equals(customModelName) ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE;
-                com.quickskin.mod.QuickSkin.LOGGER.info("PlayerInfoMixin: Set custom model to {} ({})", customModelName, skinModel);
-            }
+        // Override model type (use cached value we already retrieved)
+        if ((hasCustomSkin || hasModelOverride) && currentModelName != null) {
+            // Convert string model name to PlayerSkin.Model enum
+            skinModel = "slim".equals(currentModelName) ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE;
+            com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Set custom model to {} ({})", currentModelName, skinModel);
         }
 
-        // Override cape texture
+        // Override cape texture (use cached value we already retrieved)
         if (hasCustomCape) {
-            com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(this.profile.getId());
-
-            // Check for the explicit "hide cape" identifier
-            if (appearance != null && ("__NONE__".equals(appearance.getCapeId()) || appearance.getCapeId().isEmpty())) {
-                capeTexture = null; // Hide cape
-                com.quickskin.mod.QuickSkin.LOGGER.info("PlayerInfoMixin: Hiding cape");
+            if (currentCapeLocation != null) {
+                capeTexture = currentCapeLocation;
+                com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Set custom cape texture to {}", currentCapeLocation);
             } else {
-                ResourceLocation customCape = service.getCapeLocation(this.profile.getId());
-                if (customCape != null) {
-                    capeTexture = customCape;
-                    com.quickskin.mod.QuickSkin.LOGGER.info("PlayerInfoMixin: Set custom cape texture to {}", customCape);
+                // Check if we're explicitly hiding the cape
+                com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(this.profile.getId());
+                if (appearance != null && ("__NONE__".equals(appearance.getCapeId()) || appearance.getCapeId().isEmpty())) {
+                    capeTexture = null; // Hide cape
+                    com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Hiding cape");
                 }
             }
         }
@@ -99,6 +121,13 @@ public abstract class PlayerInfoMixin {
             skinModel,
             originalSkin.secure()
         );
+
+        // Cache the result for subsequent calls
+        quickskin$cachedSkin = customSkin;
+        quickskin$cachedOriginalSkin = originalSkin;
+        quickskin$cachedSkinLocation = currentSkinLocation;
+        quickskin$cachedCapeLocation = currentCapeLocation;
+        quickskin$cachedModelName = currentModelName;
 
         return customSkin;
     }
