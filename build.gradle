@@ -21,9 +21,9 @@ subprojects {
     base {
         // Set up a suffixed format for the mod jar names, e.g. `example-fabric`.
         if (project.name == 'neoforge') {
-            archivesName = "Quick Skin - Neoforge - ${rootProject.minecraft_version_1_21} - ${rootProject.mod_version}"
+            archivesName = "Quick Skin - Neoforge - ${rootProject.minecraft_version_1_21}"
         } else if (project.name == 'fabric-1.21') {
-            archivesName = "Quick Skin - Fabric - ${rootProject.minecraft_version_1_21} - ${rootProject.mod_version}"
+            archivesName = "Quick Skin - Fabric - ${rootProject.minecraft_version_1_21}"
         } else {
             archivesName = "$rootProject.archives_name-$project.name"
         }
