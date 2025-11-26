@@ -3,8 +3,6 @@ package com.quickskin.mod.networking;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.networking.payloads.*;
 import dev.architectury.networking.NetworkManager;
-import dev.architectury.platform.Platform;
-import net.fabricmc.api.EnvType;
 
 /**
  * Central networking registry for QuickSkin
@@ -61,21 +59,6 @@ public class ModNetworking {
             UpdateServerConfigPayload.CODEC,
             ServerNetworkHandler::handleUpdateServerConfig
         );
-
-        // Register S2C payloads ONLY on dedicated server (not on client)
-        // On client, ClientNetworking.init() handles S2C registration with real handlers
-        // On server, we need dummy registrations so the server can SEND S2C packets
-        // Use Architectury's Platform API for cross-platform environment detection
-        if (Platform.getEnv() == EnvType.SERVER) {
-            // We're on a dedicated server - register S2C with dummy handlers
-            NetworkManager.registerReceiver(NetworkManager.s2c(), SyncAppearancePayload.TYPE, SyncAppearancePayload.CODEC, (payload, context) -> {});
-            NetworkManager.registerReceiver(NetworkManager.s2c(), SendTexturePayload.TYPE, SendTexturePayload.CODEC, (payload, context) -> {});
-            NetworkManager.registerReceiver(NetworkManager.s2c(), SendTextureChunkPayload.TYPE, SendTextureChunkPayload.CODEC, (payload, context) -> {});
-            NetworkManager.registerReceiver(NetworkManager.s2c(), SendAnimationMetadataPayload.TYPE, SendAnimationMetadataPayload.CODEC, (payload, context) -> {});
-            NetworkManager.registerReceiver(NetworkManager.s2c(), SyncServerConfigPayload.TYPE, SyncServerConfigPayload.CODEC, (payload, context) -> {});
-            NetworkManager.registerReceiver(NetworkManager.s2c(), CooldownUpdatePayload.TYPE, CooldownUpdatePayload.CODEC, (payload, context) -> {});
-            QuickSkin.LOGGER.info("Registered S2C payloads for dedicated server");
-        }
 
         QuickSkin.LOGGER.info("Networking initialized (server-side receivers ready)");
     }
