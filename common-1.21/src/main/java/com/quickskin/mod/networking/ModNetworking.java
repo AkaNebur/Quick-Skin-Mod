@@ -19,45 +19,45 @@ public class ModNetworking {
 
         // Register C2S (Client to Server) payload receivers
         NetworkManager.registerReceiver(
-            NetworkManager.c2s(),
-            UploadTexturePayload.TYPE,
-            UploadTexturePayload.CODEC,
-            ServerNetworkHandler::handleUploadTexture
+                NetworkManager.c2s(),
+                UploadTexturePayload.TYPE,
+                UploadTexturePayload.CODEC,
+                ServerNetworkHandler::handleUploadTexture
         );
 
         NetworkManager.registerReceiver(
-            NetworkManager.c2s(),
-            UpdateAppearancePayload.TYPE,
-            UpdateAppearancePayload.CODEC,
-            ServerNetworkHandler::handleUpdateAppearance
+                NetworkManager.c2s(),
+                UpdateAppearancePayload.TYPE,
+                UpdateAppearancePayload.CODEC,
+                ServerNetworkHandler::handleUpdateAppearance
         );
 
         NetworkManager.registerReceiver(
-            NetworkManager.c2s(),
-            RequestTexturePayload.TYPE,
-            RequestTexturePayload.CODEC,
-            ServerNetworkHandler::handleRequestTexture
+                NetworkManager.c2s(),
+                RequestTexturePayload.TYPE,
+                RequestTexturePayload.CODEC,
+                ServerNetworkHandler::handleRequestTexture
         );
 
         NetworkManager.registerReceiver(
-            NetworkManager.c2s(),
-            TextureChunkPayload.TYPE,
-            TextureChunkPayload.CODEC,
-            ServerNetworkHandler::handleTextureChunk
+                NetworkManager.c2s(),
+                TextureChunkPayload.TYPE,
+                TextureChunkPayload.CODEC,
+                ServerNetworkHandler::handleTextureChunk
         );
 
         NetworkManager.registerReceiver(
-            NetworkManager.c2s(),
-            UploadAnimationMetadataPayload.TYPE,
-            UploadAnimationMetadataPayload.CODEC,
-            ServerNetworkHandler::handleUploadAnimationMetadata
+                NetworkManager.c2s(),
+                UploadAnimationMetadataPayload.TYPE,
+                UploadAnimationMetadataPayload.CODEC,
+                ServerNetworkHandler::handleUploadAnimationMetadata
         );
 
         NetworkManager.registerReceiver(
-            NetworkManager.c2s(),
-            UpdateServerConfigPayload.TYPE,
-            UpdateServerConfigPayload.CODEC,
-            ServerNetworkHandler::handleUpdateServerConfig
+                NetworkManager.c2s(),
+                UpdateServerConfigPayload.TYPE,
+                UpdateServerConfigPayload.CODEC,
+                ServerNetworkHandler::handleUpdateServerConfig
         );
 
         QuickSkin.LOGGER.info("Networking initialized (server-side receivers ready)");
