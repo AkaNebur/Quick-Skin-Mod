@@ -4,6 +4,7 @@ import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.networking.payloads.*;
 import dev.architectury.networking.NetworkManager;
 import dev.architectury.platform.Platform;
+import net.fabricmc.api.EnvType;
 
 /**
  * Central networking registry for QuickSkin
@@ -65,13 +66,8 @@ public class ModNetworking {
         // On clients, ClientNetworking.registerReceiver() handles both type and handler registration
         // This prevents duplicate registration errors on clients
         // Use Architectury's cross-platform environment detection
-        try {
-            // Check if we're on a dedicated server (no client classes loaded)
-            Class.forName("net.minecraft.client.Minecraft");
-            // If we reach here, client classes are present - skip S2C type registration
-            QuickSkin.LOGGER.debug("Client environment detected, skipping S2C payload type registration");
-        } catch (ClassNotFoundException e) {
-            // Client classes not found - we're on a dedicated server
+        if (Platform.getEnv() == EnvType.SERVER) {
+            // We're on a dedicated server
             NetworkManager.registerS2CPayloadType(SyncAppearancePayload.TYPE, SyncAppearancePayload.CODEC);
             NetworkManager.registerS2CPayloadType(SendTexturePayload.TYPE, SendTexturePayload.CODEC);
             NetworkManager.registerS2CPayloadType(SendTextureChunkPayload.TYPE, SendTextureChunkPayload.CODEC);
@@ -80,6 +76,9 @@ public class ModNetworking {
             NetworkManager.registerS2CPayloadType(CooldownUpdatePayload.TYPE, CooldownUpdatePayload.CODEC);
 
             QuickSkin.LOGGER.info("Registered S2C payload types for dedicated server");
+        } else {
+            // Client environment
+            QuickSkin.LOGGER.debug("Client environment detected, skipping S2C payload type registration (handled by ClientNetworking)");
         }
 
         QuickSkin.LOGGER.info("Networking initialized (C2S receivers registered)");
