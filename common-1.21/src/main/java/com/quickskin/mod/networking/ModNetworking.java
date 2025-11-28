@@ -3,6 +3,7 @@ package com.quickskin.mod.networking;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.networking.payloads.*;
 import dev.architectury.networking.NetworkManager;
+import dev.architectury.platform.Platform;
 
 /**
  * Central networking registry for QuickSkin
@@ -60,6 +61,27 @@ public class ModNetworking {
                 ServerNetworkHandler::handleUpdateServerConfig
         );
 
-        QuickSkin.LOGGER.info("Networking initialized (server-side receivers ready)");
+        // Register S2C (Server to Client) payload types ONLY on servers (not clients)
+        // On clients, ClientNetworking.registerReceiver() handles both type and handler registration
+        // This prevents duplicate registration errors on clients
+        // Use Architectury's cross-platform environment detection
+        try {
+            // Check if we're on a dedicated server (no client classes loaded)
+            Class.forName("net.minecraft.client.Minecraft");
+            // If we reach here, client classes are present - skip S2C type registration
+            QuickSkin.LOGGER.debug("Client environment detected, skipping S2C payload type registration");
+        } catch (ClassNotFoundException e) {
+            // Client classes not found - we're on a dedicated server
+            NetworkManager.registerS2CPayloadType(SyncAppearancePayload.TYPE, SyncAppearancePayload.CODEC);
+            NetworkManager.registerS2CPayloadType(SendTexturePayload.TYPE, SendTexturePayload.CODEC);
+            NetworkManager.registerS2CPayloadType(SendTextureChunkPayload.TYPE, SendTextureChunkPayload.CODEC);
+            NetworkManager.registerS2CPayloadType(SendAnimationMetadataPayload.TYPE, SendAnimationMetadataPayload.CODEC);
+            NetworkManager.registerS2CPayloadType(SyncServerConfigPayload.TYPE, SyncServerConfigPayload.CODEC);
+            NetworkManager.registerS2CPayloadType(CooldownUpdatePayload.TYPE, CooldownUpdatePayload.CODEC);
+
+            QuickSkin.LOGGER.info("Registered S2C payload types for dedicated server");
+        }
+
+        QuickSkin.LOGGER.info("Networking initialized (C2S receivers registered)");
     }
 }
