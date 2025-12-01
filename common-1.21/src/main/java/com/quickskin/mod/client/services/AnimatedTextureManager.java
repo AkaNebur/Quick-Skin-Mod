@@ -263,10 +263,25 @@ public class AnimatedTextureManager {
         }
 
         // Find which, if any, running animation is using this atlas texture.
-        for (AnimationState state : animations.values()) {
+        for (Map.Entry<String, AnimationState> entry : animations.entrySet()) {
+            AnimationState state = entry.getValue();
             if (atlasLocation.equals(state.atlasTextureLocation)) {
                 // We found a match! Return the texture of the current frame.
                 return Optional.ofNullable(state.getCurrentFrameTexture());
+            }
+        }
+
+        // DEBUG: Log when lookup fails (this could help diagnose the issue)
+        if (!animations.isEmpty()) {
+            QuickSkin.LOGGER.debug("[AnimatedTextureManager] getAnimationFrame MISS for: {} (registered animations: {})",
+                atlasLocation, animations.keySet());
+            // Log the atlas locations of all registered animations for comparison
+            for (Map.Entry<String, AnimationState> entry : animations.entrySet()) {
+                QuickSkin.LOGGER.debug("[AnimatedTextureManager]   - {} has atlas: {} (equals={}, sameInstance={})",
+                    entry.getKey(),
+                    entry.getValue().atlasTextureLocation,
+                    atlasLocation.equals(entry.getValue().atlasTextureLocation),
+                    atlasLocation == entry.getValue().atlasTextureLocation);
             }
         }
 

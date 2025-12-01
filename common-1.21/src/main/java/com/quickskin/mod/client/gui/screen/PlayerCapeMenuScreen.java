@@ -936,12 +936,24 @@ public class PlayerCapeMenuScreen extends Screen {
         // Regular cape rendering
         ResourceLocation texture = cape.getTextureLocation();
 
-        // If animated, get the current frame texture
-        // This leverages the work already done in AnimatedTextureManager.tick()
+        // If animated, get the current frame texture using animation ID lookup
+        // This is more reliable than atlas location lookup
         if (texture != null && cape.isAnimated()) {
-            texture = com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
-                .getAnimationFrame(texture)
-                .orElse(texture);
+            String capeId = cape.getCapeId();
+            String animationId = null;
+            if (capeId.startsWith("local_cape:")) {
+                animationId = "cape_" + capeId.substring("local_cape:".length());
+            } else if (capeId.startsWith("known:")) {
+                animationId = "cape_known_" + capeId.substring("known:".length());
+            }
+
+            if (animationId != null) {
+                ResourceLocation currentFrame = com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
+                    .getCurrentFrameTexture(animationId);
+                if (currentFrame != null) {
+                    texture = currentFrame;
+                }
+            }
         }
 
         // Render cape texture

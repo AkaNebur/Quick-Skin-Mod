@@ -17,7 +17,7 @@ displayURL = "https://github.com/yourusername/quickskin"
 logoFile = "icon.png"
 
 [[mixins]]
-config = "quickskin.mixins.json"
+config = "quickskin-neoforge.mixins.json"
 
 [[dependencies.quickskin]]
 modId = "neoforge"

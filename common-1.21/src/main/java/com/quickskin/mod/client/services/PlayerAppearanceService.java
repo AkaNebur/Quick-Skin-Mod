@@ -234,6 +234,21 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         return appearance != null && appearance.getCapeId() != null && !appearance.getCapeId().isEmpty();
     }
 
+    /**
+     * Get the cape ID for a player (e.g., "local_cape:hash" or "known:rickroll")
+     * @param playerId The player's UUID
+     * @return The cape ID string, or null if no cape is set
+     */
+    @Nullable
+    public String getCapeId(UUID playerId) {
+        PlayerAppearance appearance = repository.getAppearance(playerId);
+        if (appearance == null) {
+            return null;
+        }
+        String capeId = appearance.getCapeId();
+        return (capeId != null && !capeId.isEmpty()) ? capeId : null;
+    }
+
     public boolean hasModelOverride(UUID playerId) {
         return modelService.hasModelOverride(playerId);
     }

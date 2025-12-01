@@ -1,4 +1,4 @@
-package com.quickskin.mod.mixin;
+package com.quickskin.mod.neoforge.mixin;
 
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
@@ -21,12 +21,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(value = CapeLayer.class, priority = 1100) // Higher priority to override TLSkinCape and other mods
+@Mixin(value = CapeLayer.class, priority = 1100)
 public class CapeLayerMixin {
 
-    // Throttle logging to avoid spam
     private static final java.util.Map<java.util.UUID, Long> lastLogTime = new java.util.concurrent.ConcurrentHashMap<>();
-    private static final long LOG_INTERVAL_MS = 2000; // Log every 2 seconds per player
+    private static final long LOG_INTERVAL_MS = 2000;
 
     @Inject(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;FFFFFF)V",
             at = @At("HEAD"),
@@ -38,7 +37,6 @@ public class CapeLayerMixin {
 
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
 
-        // Throttled debug logging
         long now = System.currentTimeMillis();
         Long lastLog = lastLogTime.get(player.getUUID());
         boolean shouldLog = (lastLog == null || now - lastLog > LOG_INTERVAL_MS);
@@ -50,13 +48,13 @@ public class CapeLayerMixin {
             if (shouldLog) {
                 QuickSkin.LOGGER.info("[CapeLayerMixin] No active cape for player {}, letting vanilla run", player.getName().getString());
             }
-            return; // No custom cape, let vanilla logic run
+            return;
         }
 
         ResourceLocation capeTexture = player.getSkin().capeTexture();
 
         if (capeTexture == null) {
-            ci.cancel(); // Don't render anything if QuickSkin wants to hide the cape
+            ci.cancel();
             return;
         }
 
@@ -65,8 +63,6 @@ public class CapeLayerMixin {
             return;
         }
 
-        // Check if this cape is animated. If so, get the current frame texture.
-        // Use animation ID lookup (more reliable) instead of atlas location lookup
         ResourceLocation finalTexture = capeTexture;
         String capeId = service.getCapeId(player.getUUID());
 
@@ -99,7 +95,6 @@ public class CapeLayerMixin {
             if (shouldLog) {
                 QuickSkin.LOGGER.warn("[CapeLayerMixin] capeId is null/empty, falling back to atlas lookup for texture={}", capeTexture);
             }
-            // Fallback to atlas location lookup (for non-QuickSkin capes that might be animated)
             java.util.Optional<ResourceLocation> animFrame = AnimatedTextureManager.getInstance()
                     .getAnimationFrame(capeTexture);
             finalTexture = animFrame.orElse(capeTexture);
@@ -107,12 +102,9 @@ public class CapeLayerMixin {
 
         RenderType renderType;
 
-        // If the texture is from our mod (local, network, animated, or known),
-        // always use the translucent render type to correctly handle transparency.
         if (finalTexture.getNamespace().equals(QuickSkin.MOD_ID)) {
             renderType = RenderType.entityTranslucentCull(finalTexture);
         } else {
-            // For vanilla capes or capes from other mods, use the alpha detector.
             boolean hasTransparency = TextureAlphaDetector.hasTransparency(finalTexture);
             if (hasTransparency) {
                 renderType = RenderType.entityTranslucentCull(finalTexture);
@@ -123,7 +115,6 @@ public class CapeLayerMixin {
 
         VertexConsumer vertexconsumer = buffer.getBuffer(renderType);
 
-        // Replicate the vanilla cape rendering logic with our custom render type
         poseStack.pushPose();
         poseStack.translate(0.0D, 0.0D, 0.125D);
         double d0 = Mth.lerp(partialTicks, player.xCloakO, player.xCloak) - Mth.lerp(partialTicks, player.xo, player.getX());
@@ -152,12 +143,10 @@ public class CapeLayerMixin {
         poseStack.mulPose(Axis.ZP.rotationDegrees(f3 / 2.0F));
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - f3 / 2.0F));
 
-        // Render the cloak part of the model
         ((CapeLayer)(Object)this).getParentModel().renderCloak(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY);
 
         poseStack.popPose();
 
-        // Cancel the original vanilla method to prevent it from rendering a second time
         ci.cancel();
     }
 }
