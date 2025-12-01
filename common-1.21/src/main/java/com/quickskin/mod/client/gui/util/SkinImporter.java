@@ -35,10 +35,12 @@ public class SkinImporter {
             return null;
         }
 
-        // Validate it's a PNG file
+        // Validate it's a supported image file (PNG, WebP, or JPG)
         String fileName = sourcePath.getFileName().toString();
-        if (!fileName.toLowerCase().endsWith(".png")) {
-            QuickSkin.LOGGER.error("File is not a PNG: {}", fileName);
+        String lowerName = fileName.toLowerCase();
+        if (!lowerName.endsWith(".png") && !lowerName.endsWith(".webp")
+                && !lowerName.endsWith(".jpg")) {
+            QuickSkin.LOGGER.error("Unsupported file format (must be PNG, WebP, or JPG): {}", fileName);
             return null;
         }
 
@@ -55,13 +57,13 @@ public class SkinImporter {
 
             QuickSkin.LOGGER.info("Importing skin: {}", fileName);
 
-            // Copy file to skins directory
+            // Copy file to skins directory (always save as PNG since content is converted to PNG)
             LocalAssetManager assetManager = LocalAssetManager.getInstance();
-            Path targetPath = assetManager.getSkinsDirectory().resolve(fileName);
+            String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+            Path targetPath = assetManager.getSkinsDirectory().resolve(nameWithoutExt + ".png");
 
             // If file already exists, add a number
             int counter = 1;
-            String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
             while (Files.exists(targetPath)) {
                 targetPath = assetManager.getSkinsDirectory().resolve(nameWithoutExt + "_" + counter + ".png");
                 counter++;

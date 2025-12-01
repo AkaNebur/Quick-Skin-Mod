@@ -748,22 +748,27 @@ public class PlayerSkinMenuScreen extends Screen {
     public void onFilesDrop(List<Path> files) {
         QuickSkin.LOGGER.info("Files dropped: {}", files.size());
 
-        // Filter for PNG files
-        List<Path> pngFiles = files.stream()
-                .filter(path -> path.toString().toLowerCase().endsWith(".png"))
+        // Filter for supported image files (PNG, WebP, JPG)
+        List<Path> imageFiles = files.stream()
+                .filter(path -> {
+                    String lower = path.toString().toLowerCase();
+                    return lower.endsWith(".png") || lower.endsWith(".webp")
+                            || lower.endsWith(".jpg");
+                })
                 .toList();
 
-        if (pngFiles.isEmpty()) {
-            QuickSkin.LOGGER.warn("No PNG files in drop");
+        if (imageFiles.isEmpty()) {
+            QuickSkin.LOGGER.warn("No supported image files in drop (PNG, WebP, or JPG)");
+            showError(Component.literal("Unsupported file format. Use PNG, WebP, or JPG."));
             return;
         }
 
-        QuickSkin.LOGGER.info("Processing {} PNG files", pngFiles.size());
+        QuickSkin.LOGGER.info("Processing {} image files", imageFiles.size());
 
-        // Import all PNG files
+        // Import all image files
         if (this.minecraft != null) {
             this.minecraft.execute(() -> {
-                List<AssetMetadata> imported = SkinImporter.importSkins(pngFiles.toArray(new Path[0]));
+                List<AssetMetadata> imported = SkinImporter.importSkins(imageFiles.toArray(new Path[0]));
 
                 if (!imported.isEmpty()) {
                     QuickSkin.LOGGER.info("Successfully imported {} skins", imported.size());
