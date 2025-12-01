@@ -35,6 +35,9 @@ dependencies {
 
     common(project(path: ':common-1.21', configuration: 'namedElements')) { transitive = false }
     shadowBundle project(path: ':common-1.21', configuration: 'transformProductionFabric')
+
+    // Sejda WebP ImageIO - WebP support with bundled native libs (bundled into mod jar)
+    shadowBundle 'org.sejda.imageio:webp-imageio:0.1.6'
 }
 
 processResources {

@@ -27,15 +27,41 @@ public class HDTextureProcessor {
      */
     public static byte[] processHDSkin(InputStream input, boolean allowTransparency) {
         try {
-            BufferedImage image = ImageIO.read(input);
-            if (image == null) {
-                QuickSkin.LOGGER.error("Failed to read image");
+            // Read all bytes first to allow multiple read attempts
+            byte[] imageBytes = input.readAllBytes();
+            QuickSkin.LOGGER.debug("Read {} bytes from input stream", imageBytes.length);
+
+            if (imageBytes.length == 0) {
+                QuickSkin.LOGGER.error("Failed to read image: input stream was empty");
                 return null;
+            }
+
+            // Detect and log the image format
+            String detectedFormat = detectImageFormat(imageBytes);
+            QuickSkin.LOGGER.debug("Detected image format: {}", detectedFormat);
+
+            // Read image using ImageIO (TwelveMonkeys adds WebP, JPEG, and other format support)
+            BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
+            if (image == null) {
+                QuickSkin.LOGGER.error("Failed to read image: unsupported format ({}). The file may be corrupted or renamed with wrong extension.", detectedFormat);
+                return null;
+            }
+
+            // Ensure image has alpha channel (TYPE_INT_ARGB = 2)
+            if (image.getType() != BufferedImage.TYPE_INT_ARGB) {
+                QuickSkin.LOGGER.debug("Converting image to ARGB format (was type {})", image.getType());
+                BufferedImage argbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
+                // Copy pixels manually to preserve alpha
+                for (int y = 0; y < image.getHeight(); y++) {
+                    for (int x = 0; x < image.getWidth(); x++) {
+                        argbImage.setRGB(x, y, image.getRGB(x, y));
+                    }
+                }
+                image = argbImage;
             }
 
             int width = image.getWidth();
             int height = image.getHeight();
-
 
             // Check if valid resolution
             SkinResolution resolution = SkinResolution.fromDimensions(width, height);
@@ -485,5 +511,53 @@ public class HDTextureProcessor {
         g.dispose();
 
         return normalized;
+    }
+
+    /**
+     * Detect image format from file header bytes
+     */
+    private static String detectImageFormat(byte[] bytes) {
+        if (bytes == null || bytes.length < 12) {
+            return "unknown (insufficient data)";
+        }
+
+        // PNG: 89 50 4E 47 0D 0A 1A 0A
+        if (bytes.length >= 8 &&
+            (bytes[0] & 0xFF) == 0x89 &&
+            (bytes[1] & 0xFF) == 0x50 &&
+            (bytes[2] & 0xFF) == 0x4E &&
+            (bytes[3] & 0xFF) == 0x47) {
+            return "PNG";
+        }
+
+        // JPEG: FF D8 FF
+        if ((bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF) {
+            return "JPEG";
+        }
+
+        // GIF: "GIF87a" or "GIF89a"
+        if (bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == '8') {
+            return "GIF";
+        }
+
+        // BMP: "BM"
+        if (bytes[0] == 'B' && bytes[1] == 'M') {
+            return "BMP";
+        }
+
+        // WebP: "RIFF" ... "WEBP"
+        if (bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F' &&
+            bytes.length >= 12 && bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P') {
+            return "WebP";
+        }
+
+        // TIFF: "II" (little-endian) or "MM" (big-endian)
+        if ((bytes[0] == 'I' && bytes[1] == 'I') || (bytes[0] == 'M' && bytes[1] == 'M')) {
+            return "TIFF";
+        }
+
+        // Return hex of first 4 bytes for unknown formats
+        return String.format("unknown (header: %02X %02X %02X %02X)",
+            bytes[0] & 0xFF, bytes[1] & 0xFF, bytes[2] & 0xFF, bytes[3] & 0xFF);
     }
 }

@@ -1,6 +1,5 @@
 package com.quickskin.mod.mixin;
 
-import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.mojang.authlib.GameProfile;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -9,19 +8,15 @@ import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Mixin to intercept PlayerInfo skin lookups
- * Allows QuickSkin to override player skins, capes, and models
- *
- * In MC 1.21.1, getSkinLocation/getModelName/getCapeLocation were replaced with getSkin()
- * which returns a PlayerSkin record containing all skin data
- *
- * PERFORMANCE CRITICAL: This method is called thousands of times per frame.
- * We cache the result to avoid expensive service lookups on every call.
+ * Mixin to intercept PlayerInfo skin lookups and apply custom skins/capes.
  */
-@Mixin(value = PlayerInfo.class, priority = 1100) // Higher priority to override TLSkinCape and other mods
+@Mixin(value = PlayerInfo.class, priority = 500)
 public abstract class PlayerInfoMixin {
 
     @Shadow
@@ -29,23 +24,30 @@ public abstract class PlayerInfoMixin {
     private GameProfile profile;
 
     // Cache for the custom PlayerSkin to avoid rebuilding it every frame
+    @Unique
     private PlayerSkin quickskin$cachedSkin = null;
 
-    // Cache the original skin we based our custom skin on
-    private PlayerSkin quickskin$cachedOriginalSkin = null;
+    // Cache the original skin's texture to detect when underlying skin changed
+    @Unique
+    private ResourceLocation quickskin$cachedOriginalTexture = null;
 
     // Cache key components to detect when we need to rebuild
+    @Unique
     private ResourceLocation quickskin$cachedSkinLocation = null;
+    @Unique
     private ResourceLocation quickskin$cachedCapeLocation = null;
+    @Unique
     private String quickskin$cachedModelName = null;
 
     /**
-     * Modify the return value of getSkin() to override with QuickSkin data
-     * This replaces the old getSkinLocation/getModelName/getCapeLocation injections
+     * Inject at TAIL to override skin data when we have custom skin/cape/model.
      */
-    @ModifyReturnValue(method = "getSkin", at = @At("RETURN"))
-    private PlayerSkin quickskin$onGetSkin(PlayerSkin originalSkin) {
+    @Inject(method = "getSkin", at = @At("TAIL"), cancellable = true)
+    private void quickskin$overrideSkinTail(CallbackInfoReturnable<PlayerSkin> cir) {
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
+        if (service == null) {
+            return;
+        }
 
         boolean hasCustomSkin = service.hasActiveSkin(this.profile.getId());
         boolean hasCustomCape = service.hasActiveCape(this.profile.getId());
@@ -53,61 +55,54 @@ public abstract class PlayerInfoMixin {
 
         // Only modify if we have custom data
         if (!hasCustomSkin && !hasCustomCape && !hasModelOverride) {
-            // Clear cache if we no longer have custom data
             quickskin$cachedSkin = null;
-            quickskin$cachedOriginalSkin = null;
-            return originalSkin;
+            quickskin$cachedOriginalTexture = null;
+            return;
         }
 
-        // FAST PATH: Check if we can use cached result
-        // Get the current appearance data
+        PlayerSkin original = cir.getReturnValue();
+        if (original == null) {
+            return;
+        }
+
+        // Get current Quick-Skin data
         ResourceLocation currentSkinLocation = hasCustomSkin ? service.getSkinLocation(this.profile.getId()) : null;
         ResourceLocation currentCapeLocation = hasCustomCape ? service.getCapeLocation(this.profile.getId()) : null;
         String currentModelName = (hasCustomSkin || hasModelOverride) ? service.getModelName(this.profile.getId()) : null;
 
-        // Check if cache is valid (original skin unchanged and component data unchanged)
+        // FAST PATH: Check if we can use cached result
         if (quickskin$cachedSkin != null &&
-            quickskin$cachedOriginalSkin == originalSkin &&
+            java.util.Objects.equals(quickskin$cachedOriginalTexture, original.texture()) &&
             java.util.Objects.equals(quickskin$cachedSkinLocation, currentSkinLocation) &&
             java.util.Objects.equals(quickskin$cachedCapeLocation, currentCapeLocation) &&
             java.util.Objects.equals(quickskin$cachedModelName, currentModelName)) {
-            // Cache hit! Return cached result without rebuilding
-            return quickskin$cachedSkin;
+            cir.setReturnValue(quickskin$cachedSkin);
+            return;
         }
 
         // SLOW PATH: Cache miss, need to rebuild
-        com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Rebuilding skin for player {} (hasCustomSkin={}, hasCustomCape={}, hasModelOverride={})",
-            this.profile.getName(), hasCustomSkin, hasCustomCape, hasModelOverride);
+        ResourceLocation skinTexture = original.texture();
+        PlayerSkin.Model skinModel = original.model();
+        ResourceLocation capeTexture = original.capeTexture();
 
-        // Get custom values or fall back to original (reuse the values we already fetched)
-        ResourceLocation skinTexture = originalSkin.texture();
-        PlayerSkin.Model skinModel = originalSkin.model();
-        ResourceLocation capeTexture = originalSkin.capeTexture();
-
-        // Override skin texture (use cached value we already retrieved)
+        // Override skin texture
         if (hasCustomSkin && currentSkinLocation != null) {
             skinTexture = currentSkinLocation;
-            com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Set custom skin texture to {}", currentSkinLocation);
         }
 
-        // Override model type (use cached value we already retrieved)
+        // Override model
         if ((hasCustomSkin || hasModelOverride) && currentModelName != null) {
-            // Convert string model name to PlayerSkin.Model enum
             skinModel = "slim".equals(currentModelName) ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE;
-            com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Set custom model to {} ({})", currentModelName, skinModel);
         }
 
-        // Override cape texture (use cached value we already retrieved)
+        // Override cape
         if (hasCustomCape) {
             if (currentCapeLocation != null) {
                 capeTexture = currentCapeLocation;
-                com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Set custom cape texture to {}", currentCapeLocation);
             } else {
-                // Check if we're explicitly hiding the cape
                 com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(this.profile.getId());
                 if (appearance != null && ("__NONE__".equals(appearance.getCapeId()) || appearance.getCapeId().isEmpty())) {
-                    capeTexture = null; // Hide cape
-                    com.quickskin.mod.QuickSkin.LOGGER.debug("PlayerInfoMixin: Hiding cape");
+                    capeTexture = null;
                 }
             }
         }
@@ -115,20 +110,20 @@ public abstract class PlayerInfoMixin {
         // Create new PlayerSkin with our custom values
         PlayerSkin customSkin = new PlayerSkin(
             skinTexture,
-            originalSkin.textureUrl(),
+            original.textureUrl(),
             capeTexture,
-            originalSkin.elytraTexture(),
+            original.elytraTexture(),
             skinModel,
-            originalSkin.secure()
+            original.secure()
         );
 
-        // Cache the result for subsequent calls
+        // Cache the result
         quickskin$cachedSkin = customSkin;
-        quickskin$cachedOriginalSkin = originalSkin;
+        quickskin$cachedOriginalTexture = original.texture();
         quickskin$cachedSkinLocation = currentSkinLocation;
         quickskin$cachedCapeLocation = currentCapeLocation;
         quickskin$cachedModelName = currentModelName;
 
-        return customSkin;
+        cir.setReturnValue(customSkin);
     }
 }

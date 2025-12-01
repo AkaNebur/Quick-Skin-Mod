@@ -49,7 +49,7 @@ public class SkinImporter {
             byte[] processedImageBytes = HDTextureProcessor.processHDSkin(inputStream, allowTransparency);
 
             if (processedImageBytes == null) {
-                QuickSkin.LOGGER.error("Failed to process skin file: {}", fileName);
+                QuickSkin.LOGGER.error("Failed to process skin file: {} (path: {})", fileName, sourcePath.toAbsolutePath());
                 return null;
             }
 

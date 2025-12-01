@@ -1,6 +1,7 @@
 package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.compat.CustomNPCsIntegration;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
@@ -86,6 +87,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
                 // Trigger async transparency analysis for the skin texture
                 com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(skinLocation);
+
+                // Notify CustomNPCs integration (if available) to handle any skin cache invalidation
+                CustomNPCsIntegration.onSkinApplied(playerId, skinLocation);
             }
         }
 

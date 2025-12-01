@@ -1,87 +1,176 @@
 package com.quickskin.mod.mixin;
 
+import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.lang.reflect.Field;
+
 /**
- * Mixin to intercept AbstractClientPlayer skin lookups at the deepest level
- * This operates at the same depth as TLSkinCape, with higher priority (2000) to win
+ * Mixin to intercept AbstractClientPlayer skin lookups.
+ *
+ * Uses @Inject at HEAD with lowest priority (100) to run BEFORE other mods like
+ * CustomNPCs-Unofficial (which uses priority 1001 at RETURN).
+ *
+ * By injecting at HEAD with cancellable=true, we can bypass other mods' modifications
+ * entirely when we have custom skin data.
+ *
+ * In MC 1.21.1, getSkinTextureLocation/getModelName/getCloakTextureLocation were replaced
+ * with getSkin() which returns a PlayerSkin record containing all skin data.
  */
-@Mixin(AbstractClientPlayer.class)
-public class MixinAbstractClientPlayer {
+@Mixin(value = AbstractClientPlayer.class, priority = 100)
+public abstract class MixinAbstractClientPlayer {
+
+    // Cache the playerInfo field for reflection access (works on both Fabric and NeoForge)
+    @Unique
+    private static Field quickskin$playerInfoField = null;
+
+    @Unique
+    private static boolean quickskin$fieldSearched = false;
+
+    // Throttle logging to avoid spam
+    @Unique
+    private static final java.util.Map<java.util.UUID, Long> quickskin$lastLogTime = new java.util.concurrent.ConcurrentHashMap<>();
+    @Unique
+    private static final long LOG_INTERVAL_MS = 5000;
 
     /**
-     * Intercept skin texture lookups and return QuickSkin's texture if active.
-     * We inject at HEAD with cancellable=true to short-circuit TLSkinCape and vanilla.
-     *
-     * With global mixin priority 2000 (higher than TLSkinCape's default 1000),
-     * this ensures QuickSkin gets the final say on player skins.
+     * Inject at HEAD with lowest priority to intercept before other mods.
+     * When we have custom skin data, we bypass the normal method entirely.
      */
-    @Inject(method = "getSkinTextureLocation", at = @At("HEAD"), cancellable = true)
-    private void quickskin$getSkinTextureLocation(CallbackInfoReturnable<ResourceLocation> cir) {
+    @Inject(method = "getSkin()Lnet/minecraft/client/resources/PlayerSkin;", at = @At("HEAD"), cancellable = true, remap = false)
+    private void quickskin$overrideSkinAtHead(CallbackInfoReturnable<PlayerSkin> cir) {
+        // UNCONDITIONAL LOG - confirm injection is running
+        System.out.println("[QuickSkin DEBUG] HEAD injection in AbstractClientPlayer.getSkin() entered!");
+
+        PlayerAppearanceService service = PlayerAppearanceService.getInstance();
+        if (service == null) {
+            return;
+        }
+
         AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
 
-        // Get QuickSkin's texture for this player
-        PlayerAppearanceService service = PlayerAppearanceService.getInstance();
+        boolean hasCustomSkin = service.hasActiveSkin(self.getUUID());
+        boolean hasCustomCape = service.hasActiveCape(self.getUUID());
+        boolean hasModelOverride = service.hasModelOverride(self.getUUID());
 
-        // Only override if QuickSkin has an active custom skin for this player
-        if (service.hasActiveSkin(self.getUUID())) {
+        // Throttled debug logging to confirm mixin is running
+        long now = System.currentTimeMillis();
+        Long lastLog = quickskin$lastLogTime.get(self.getUUID());
+        if (lastLog == null || now - lastLog > LOG_INTERVAL_MS) {
+            quickskin$lastLogTime.put(self.getUUID(), now);
+            QuickSkin.LOGGER.info("[MixinAbstractClientPlayer HEAD] getSkin() called for {} (UUID={}) - hasCustomSkin={}, hasCustomCape={}, hasModelOverride={}",
+                self.getName().getString(), self.getUUID(), hasCustomSkin, hasCustomCape, hasModelOverride);
+        }
+
+        // Only intercept if we have custom data
+        if (!hasCustomSkin && !hasCustomCape && !hasModelOverride) {
+            // No custom data - let the normal method (and other mods) run
+            return;
+        }
+
+        // Get the base skin from PlayerInfo using reflection (works on both Fabric and NeoForge)
+        PlayerInfo playerInfo = quickskin$getPlayerInfo(self);
+        if (playerInfo == null) {
+            QuickSkin.LOGGER.warn("[MixinAbstractClientPlayer] PlayerInfo is null for {}", self.getName().getString());
+            return;
+        }
+
+        PlayerSkin originalSkin = playerInfo.getSkin();
+        if (originalSkin == null) {
+            return;
+        }
+
+        // Build our custom skin
+        ResourceLocation skinTexture = originalSkin.texture();
+        PlayerSkin.Model skinModel = originalSkin.model();
+        ResourceLocation capeTexture = originalSkin.capeTexture();
+
+        // Override skin texture
+        if (hasCustomSkin) {
             ResourceLocation customSkin = service.getSkinLocation(self.getUUID());
             if (customSkin != null) {
-                cir.setReturnValue(customSkin); // QuickSkin wins here
+                skinTexture = customSkin;
+                QuickSkin.LOGGER.info("[MixinAbstractClientPlayer] OVERRIDING skin for {} - originalTexture={}, newTexture={}",
+                    self.getName().getString(), originalSkin.texture(), skinTexture);
             }
         }
-        // If no active QuickSkin, let vanilla or other mods handle it
-    }
 
-    /**
-     * Intercept model name lookups to return QuickSkin's model type.
-     * Works in tandem with skin texture override to ensure correct model rendering.
-     */
-    @Inject(method = "getModelName", at = @At("HEAD"), cancellable = true)
-    private void quickskin$getModelName(CallbackInfoReturnable<String> cir) {
-        AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
-
-        PlayerAppearanceService service = PlayerAppearanceService.getInstance();
-
-        // Override if QuickSkin has an active custom model OR a model override for this player
-        if (service.hasActiveSkin(self.getUUID()) || service.hasModelOverride(self.getUUID())) {
+        // Override model
+        if (hasCustomSkin || hasModelOverride) {
             String customModel = service.getModelName(self.getUUID());
             if (customModel != null) {
-                cir.setReturnValue(customModel);
+                skinModel = "slim".equals(customModel) ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE;
             }
         }
+
+        // Override cape
+        if (hasCustomCape) {
+            ResourceLocation customCape = service.getCapeLocation(self.getUUID());
+            if (customCape != null) {
+                capeTexture = customCape;
+            } else {
+                // Check if we're explicitly hiding the cape
+                com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(self.getUUID());
+                if (appearance != null && ("__NONE__".equals(appearance.getCapeId()) || appearance.getCapeId().isEmpty())) {
+                    capeTexture = null;
+                }
+            }
+        }
+
+        // Create and set the final skin - cancels the method and returns our custom skin
+        PlayerSkin customSkin = new PlayerSkin(
+            skinTexture,
+            originalSkin.textureUrl(),
+            capeTexture,
+            originalSkin.elytraTexture(),
+            skinModel,
+            originalSkin.secure()
+        );
+
+        QuickSkin.LOGGER.info("[MixinAbstractClientPlayer] Returning custom skin for {} - texture={}, cape={}, model={}",
+            self.getName().getString(), skinTexture, capeTexture, skinModel);
+
+        cir.setReturnValue(customSkin);
     }
 
     /**
-     * Intercept cape texture lookups to return QuickSkin's cape if active.
+     * Gets the PlayerInfo from AbstractClientPlayer using reflection.
+     * This works on both Fabric (Intermediary) and NeoForge (SRG) mappings.
      */
-    @Inject(method = "getCloakTextureLocation", at = @At("HEAD"), cancellable = true)
-    private void quickskin$getCloakTextureLocation(CallbackInfoReturnable<ResourceLocation> cir) {
-        AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
-
-        PlayerAppearanceService service = PlayerAppearanceService.getInstance();
-
-        // Only override if QuickSkin has an active custom cape for this player
-        if (service.hasActiveCape(self.getUUID())) {
-            com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(self.getUUID());
-
-            // Check for the explicit "hide cape" identifier
-            if (appearance != null && ("__NONE__".equals(appearance.getCapeId()) || appearance.getCapeId().isEmpty())) {
-                cir.setReturnValue(null); // Return null to hide the cape completely
-                return;
+    @Unique
+    private static PlayerInfo quickskin$getPlayerInfo(AbstractClientPlayer player) {
+        if (!quickskin$fieldSearched) {
+            quickskin$fieldSearched = true;
+            // Try to find the playerInfo field - it might have different names in different mappings
+            for (Field field : AbstractClientPlayer.class.getDeclaredFields()) {
+                if (PlayerInfo.class.isAssignableFrom(field.getType())) {
+                    field.setAccessible(true);
+                    quickskin$playerInfoField = field;
+                    QuickSkin.LOGGER.info("[MixinAbstractClientPlayer] Found playerInfo field: {}", field.getName());
+                    break;
+                }
             }
-
-            ResourceLocation customCape = service.getCapeLocation(self.getUUID());
-
-            // If a custom cape is found (or still loading but intended), set it.
-            cir.setReturnValue(customCape);
+            if (quickskin$playerInfoField == null) {
+                QuickSkin.LOGGER.error("[MixinAbstractClientPlayer] Could not find playerInfo field in AbstractClientPlayer!");
+            }
         }
-        // If no active QuickSkin cape, let vanilla or other mods handle it
+
+        if (quickskin$playerInfoField != null) {
+            try {
+                return (PlayerInfo) quickskin$playerInfoField.get(player);
+            } catch (IllegalAccessException e) {
+                QuickSkin.LOGGER.error("[MixinAbstractClientPlayer] Failed to access playerInfo field", e);
+            }
+        }
+        return null;
     }
 }

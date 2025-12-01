@@ -1,0 +1,34 @@
+{
+  "mappings": {
+    "com/quickskin/mod/mixin/CapeLayerMixin": {
+      "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;FFFFFF)V": "Lnet/minecraft/class_972;method_4177(Lnet/minecraft/class_4587;Lnet/minecraft/class_4597;ILnet/minecraft/class_742;FFFFFF)V"
+    },
+    "com/quickskin/mod/mixin/ItemInHandRendererMixin": {
+      "Lnet/minecraft/client/renderer/MultiBufferSource;getBuffer(Lnet/minecraft/client/renderer/RenderType;)Lcom/mojang/blaze3d/vertex/VertexConsumer;": "Lnet/minecraft/class_4597;getBuffer(Lnet/minecraft/class_1921;)Lnet/minecraft/class_4588;",
+      "renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;Lnet/minecraft/client/model/geom/ModelPart;Lnet/minecraft/client/model/geom/ModelPart;)V": "Lnet/minecraft/class_1007;method_23205(Lnet/minecraft/class_4587;Lnet/minecraft/class_4597;ILnet/minecraft/class_742;Lnet/minecraft/class_630;Lnet/minecraft/class_630;)V"
+    },
+    "com/quickskin/mod/mixin/MixinAbstractClientPlayer": {
+      "getSkin": "Lnet/minecraft/class_742;method_52814()Lnet/minecraft/class_8685;"
+    },
+    "com/quickskin/mod/mixin/PlayerInfoMixin": {
+      "getSkin": "Lnet/minecraft/class_640;method_52810()Lnet/minecraft/class_8685;"
+    }
+  },
+  "data": {
+    "named:intermediary": {
+      "com/quickskin/mod/mixin/CapeLayerMixin": {
+        "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;FFFFFF)V": "Lnet/minecraft/class_972;method_4177(Lnet/minecraft/class_4587;Lnet/minecraft/class_4597;ILnet/minecraft/class_742;FFFFFF)V"
+      },
+      "com/quickskin/mod/mixin/ItemInHandRendererMixin": {
+        "Lnet/minecraft/client/renderer/MultiBufferSource;getBuffer(Lnet/minecraft/client/renderer/RenderType;)Lcom/mojang/blaze3d/vertex/VertexConsumer;": "Lnet/minecraft/class_4597;getBuffer(Lnet/minecraft/class_1921;)Lnet/minecraft/class_4588;",
+        "renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;Lnet/minecraft/client/model/geom/ModelPart;Lnet/minecraft/client/model/geom/ModelPart;)V": "Lnet/minecraft/class_1007;method_23205(Lnet/minecraft/class_4587;Lnet/minecraft/class_4597;ILnet/minecraft/class_742;Lnet/minecraft/class_630;Lnet/minecraft/class_630;)V"
+      },
+      "com/quickskin/mod/mixin/MixinAbstractClientPlayer": {
+        "getSkin": "Lnet/minecraft/class_742;method_52814()Lnet/minecraft/class_8685;"
+      },
+      "com/quickskin/mod/mixin/PlayerInfoMixin": {
+        "getSkin": "Lnet/minecraft/class_640;method_52810()Lnet/minecraft/class_8685;"
+      }
+    }
+  }
+}

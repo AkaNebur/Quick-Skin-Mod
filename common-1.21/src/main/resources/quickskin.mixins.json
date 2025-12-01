@@ -1,22 +1,16 @@
 {
   "required": true,
   "package": "com.quickskin.mod.mixin",
-  "compatibilityLevel": "JAVA_17",
+  "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8",
   "priority": 2000,
-  "mixinPriority": 2000,
+  "refmap": "quick-skin-common-1.21-common-1.21-refmap.json",
   "client": [
-    "PlayerInfoMixin",
-    "CapeLayerMixin",
-    "ItemInHandRendererMixin",
-    "MixinAbstractClientPlayer"
+    "PlayerInfoMixin"
   ],
   "mixins": [
   ],
   "injectors": {
     "defaultRequire": 0
-  },
-  "overwrite": {
-    "conformVisibility": true
   }
 }
