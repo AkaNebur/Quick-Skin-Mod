@@ -47,9 +47,10 @@ public abstract class MixinAbstractClientPlayer {
 
         long now = System.currentTimeMillis();
         Long lastLog = quickskin$lastLogTime.get(self.getUUID());
-        if (lastLog == null || now - lastLog > LOG_INTERVAL_MS) {
+        boolean shouldLog = lastLog == null || now - lastLog > LOG_INTERVAL_MS;
+        if (shouldLog) {
             quickskin$lastLogTime.put(self.getUUID(), now);
-            QuickSkin.LOGGER.info("[MixinAbstractClientPlayer HEAD] getSkin() called for {} (UUID={}) - hasCustomSkin={}, hasCustomCape={}, hasModelOverride={}",
+            QuickSkin.LOGGER.debug("[MixinAbstractClientPlayer HEAD] getSkin() called for {} (UUID={}) - hasCustomSkin={}, hasCustomCape={}, hasModelOverride={}",
                 self.getName().getString(), self.getUUID(), hasCustomSkin, hasCustomCape, hasModelOverride);
         }
 
@@ -76,8 +77,6 @@ public abstract class MixinAbstractClientPlayer {
             ResourceLocation customSkin = service.getSkinLocation(self.getUUID());
             if (customSkin != null) {
                 skinTexture = customSkin;
-                QuickSkin.LOGGER.info("[MixinAbstractClientPlayer] OVERRIDING skin for {} - originalTexture={}, newTexture={}",
-                    self.getName().getString(), originalSkin.texture(), skinTexture);
             }
         }
 
@@ -109,9 +108,6 @@ public abstract class MixinAbstractClientPlayer {
             originalSkin.secure()
         );
 
-        QuickSkin.LOGGER.info("[MixinAbstractClientPlayer] Returning custom skin for {} - texture={}, cape={}, model={}",
-            self.getName().getString(), skinTexture, capeTexture, skinModel);
-
         cir.setReturnValue(customSkin);
     }
 
@@ -123,7 +119,7 @@ public abstract class MixinAbstractClientPlayer {
                 if (PlayerInfo.class.isAssignableFrom(field.getType())) {
                     field.setAccessible(true);
                     quickskin$playerInfoField = field;
-                    QuickSkin.LOGGER.info("[MixinAbstractClientPlayer] Found playerInfo field: {}", field.getName());
+                    QuickSkin.LOGGER.debug("[MixinAbstractClientPlayer] Found playerInfo field: {}", field.getName());
                     break;
                 }
             }
