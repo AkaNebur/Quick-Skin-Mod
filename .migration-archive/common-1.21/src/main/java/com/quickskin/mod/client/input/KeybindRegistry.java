@@ -1,0 +1,67 @@
+package com.quickskin.mod.client.input;
+
+import com.mojang.blaze3d.platform.InputConstants;
+import com.quickskin.mod.QuickSkin;
+import dev.architectury.event.events.client.ClientTickEvent;
+import dev.architectury.registry.client.keymappings.KeyMappingRegistry;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import org.lwjgl.glfw.GLFW;
+
+/**
+ * Keybind registration and handling for QuickSkin
+ * Uses Architectury's KeyMappingRegistry for cross-platform compatibility
+ */
+@Environment(EnvType.CLIENT)
+public class KeybindRegistry {
+
+    // Keybind category
+    private static final String CATEGORY = "key.categories." + QuickSkin.MOD_ID;
+
+    // Keybind definitions
+    public static KeyMapping OPEN_SKIN_MENU;
+
+    /**
+     * Registers all keybinds
+     * Called from QuickSkinClient.init()
+     */
+    public static void init() {
+        QuickSkin.LOGGER.info("Registering keybinds...");
+
+        // Create keybind for opening skin menu (default: none)
+        OPEN_SKIN_MENU = new KeyMapping(
+            "key." + QuickSkin.MOD_ID + ".open_menu",
+            InputConstants.Type.KEYSYM,
+            InputConstants.UNKNOWN.getValue(),
+            CATEGORY
+        );
+
+        // Register with Architectury
+        KeyMappingRegistry.register(OPEN_SKIN_MENU);
+
+        // Register tick handler to check for key presses
+        ClientTickEvent.CLIENT_POST.register(client -> {
+            handleKeyPresses(client);
+        });
+
+        QuickSkin.LOGGER.info("Keybinds registered");
+    }
+
+    /**
+     * Handles key presses
+     * Called every client tick
+     */
+    private static void handleKeyPresses(Minecraft client) {
+        // Check if open menu key was pressed
+        while (OPEN_SKIN_MENU.consumeClick()) {
+            QuickSkin.LOGGER.info("Open skin menu key pressed - opening PlayerSkinMenuScreen");
+
+            // Phase 8: Open skin selection screen
+            if (client.player != null) {
+                client.setScreen(new com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen(client.screen));
+            }
+        }
+    }
+}
