@@ -54,7 +54,7 @@ public class SkinListPanel extends AbstractWidget {
     /**
      * Load skins from LocalAssetManager
      */
-    private void loadSkins() {
+    public void loadSkins() {
         if (skinListWidget == null) {
             return;
         }

@@ -18,6 +18,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.SkinSortMode;
 import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -85,6 +86,7 @@ public class PlayerSkinMenuScreen extends Screen {
     // Mojang search widgets
     private EditBox usernameSearchField;
     private Button searchButton;
+    private Button sortButton;
     private boolean isSearching = false;
 
     // Selection mode for external integrations (e.g., Player Armor Stands mod)
@@ -206,16 +208,21 @@ public class PlayerSkinMenuScreen extends Screen {
         // Create Mojang username search field (below title)
         // Match the width of the skin list panel
         int searchButtonWidth = 60;
+        int sortButtonSize = 20;
         // Align with skin entry highlight containers
         // Entry highlights: left = getRowLeft() (list x + ~4px), highlightLeft = left - 4px
         int searchFieldX = componentX + 4;
         int searchFieldWidth = leftPanelWidth - 4;
 
+        // Available width for search field (reserve space for both buttons)
+        int reservedWidth = sortButtonSize + searchButtonWidth + (scaledSpacing * 2);
+        int searchFieldAvailableWidth = searchFieldWidth - reservedWidth;
+
         usernameSearchField = new EditBox(
                 this.font,
                 searchFieldX,
                 yPos,
-                searchFieldWidth - searchButtonWidth - scaledSpacing,
+                searchFieldAvailableWidth,
                 scaledComponentHeight,
                 Component.literal("Search by username")
         );
@@ -232,8 +239,25 @@ public class PlayerSkinMenuScreen extends Screen {
         });
         addRenderableWidget(usernameSearchField);
 
+        // Sort button (between search field and search button)
+        int sortButtonX = searchFieldX + searchFieldAvailableWidth + scaledSpacing;
+        sortButton = com.quickskin.mod.client.gui.util.ButtonFactory.createStyled(
+                sortButtonX,
+                yPos,
+                sortButtonSize,
+                scaledComponentHeight,
+                Component.literal(getCurrentSortMode().getIcon()),
+                button -> cycleSortMode()
+        );
+        sortButton.setTooltip(Tooltip.create(
+                Component.literal("Sorting: " + getCurrentSortMode().getDisplayName())
+        ));
+        addRenderableWidget(sortButton);
+
+        // Search button (at the right edge)
+        int searchButtonX = sortButtonX + sortButtonSize + scaledSpacing;
         searchButton = com.quickskin.mod.client.gui.util.ButtonFactory.createStyled(
-                searchFieldX + searchFieldWidth - searchButtonWidth,
+                searchButtonX,
                 yPos,
                 searchButtonWidth,
                 scaledComponentHeight,
@@ -1232,5 +1256,40 @@ public class PlayerSkinMenuScreen extends Screen {
             searchButton.setMessage(Component.literal("Search"));
             searchButton.active = usernameSearchField != null && !usernameSearchField.getValue().trim().isEmpty();
         }
+    }
+
+    /**
+     * Get current skin sort mode
+     */
+    private SkinSortMode getCurrentSortMode() {
+        return com.quickskin.mod.config.ClientConfig.getInstance().getSkinSortMode();
+    }
+
+    /**
+     * Cycle to next sort mode
+     */
+    private void cycleSortMode() {
+        SkinSortMode currentMode = getCurrentSortMode();
+        SkinSortMode nextMode = currentMode.next();
+
+        // Save preference
+        com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+        config.setSkinSortMode(nextMode);
+
+        // Update button appearance
+        sortButton.setMessage(Component.literal(nextMode.getIcon()));
+        sortButton.setTooltip(Tooltip.create(
+                Component.literal("Sorting: " + nextMode.getDisplayName())
+        ));
+
+        // Refresh the skin list with new sorting
+        if (skinListPanel != null) {
+            skinListPanel.refresh();
+        }
+
+        // Play click sound
+        minecraft.getSoundManager().play(
+                net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), 1.0f)
+        );
     }
 }

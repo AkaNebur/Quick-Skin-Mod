@@ -4,6 +4,7 @@ package com.quickskin.mod.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.SkinSortMode;
 import com.quickskin.mod.platform.PlatformHelper;
 
 import java.io.IOException;
@@ -65,6 +66,9 @@ public class ClientConfig {
 
     // GUI Style Settings
     public boolean enableStyledButtons = false; // Enable custom styled buttons with frosted glass aesthetic
+
+    // Sorting Settings
+    public String skinSortMode = "LATEST_LAST"; // Skin list sorting mode
 
     // --- NEW --- Modpack Settings
     public boolean enablePlayerOwnSkinSystem = true; // When enabled, automatically downloads and protects the player's own skin.
@@ -238,5 +242,26 @@ public class ClientConfig {
         capeAnimationSpeeds.put(capeId, clampedSpeed);
 
         QuickSkin.LOGGER.debug("Set animation speed for cape {}: {}", capeId, clampedSpeed);
+    }
+
+    /**
+     * Get skin sort mode with fallback to default
+     * @return Skin sort mode
+     */
+    public SkinSortMode getSkinSortMode() {
+        try {
+            return SkinSortMode.valueOf(skinSortMode);
+        } catch (IllegalArgumentException e) {
+            return SkinSortMode.LATEST_LAST;
+        }
+    }
+
+    /**
+     * Set skin sort mode and save configuration
+     * @param mode The sort mode to set
+     */
+    public void setSkinSortMode(SkinSortMode mode) {
+        this.skinSortMode = mode.name();
+        save();
     }
 }

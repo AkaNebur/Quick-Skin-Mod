@@ -37,8 +37,15 @@ public class StarPatternCache {
         try {
             Minecraft mc = Minecraft.getInstance();
 
-            // Load the pre-generated star pattern cache texture
-            Resource resource = mc.getResourceManager().getResource(STAR_PATTERN_CACHE).orElseThrow();
+            // Try to load the pre-generated star pattern cache texture
+            var resourceOptional = mc.getResourceManager().getResource(STAR_PATTERN_CACHE);
+            if (resourceOptional.isEmpty()) {
+                QuickSkin.LOGGER.warn("Star pattern cache texture not found, creating fallback");
+                createFallbackTexture();
+                return;
+            }
+
+            Resource resource = resourceOptional.get();
             NativeImage cachedImage;
             try (InputStream stream = resource.open()) {
                 cachedImage = NativeImage.read(stream);
@@ -57,6 +64,7 @@ public class StarPatternCache {
 
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to load star pattern cache", e);
+            createFallbackTexture();
         }
     }
 
@@ -95,6 +103,35 @@ public class StarPatternCache {
      */
     public static int getTileSize() {
         return TILE_SIZE;
+    }
+
+    /**
+     * Create a simple fallback texture when the cached version is not available
+     */
+    private static void createFallbackTexture() {
+        try {
+            Minecraft mc = Minecraft.getInstance();
+
+            // Create a simple 64x64 transparent texture as fallback
+            int size = 64;
+            NativeImage fallbackImage = new NativeImage(size, size, false);
+
+            // Fill with transparent pixels
+            for (int y = 0; y < size; y++) {
+                for (int x = 0; x < size; x++) {
+                    fallbackImage.setPixelRGBA(x, y, 0x00000000); // Fully transparent
+                }
+            }
+
+            cachedTextureWidth = size;
+            cachedTextureHeight = size;
+            cachedTexture = new DynamicTexture(fallbackImage);
+            cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache_fallback", cachedTexture);
+
+            QuickSkin.LOGGER.info("Created fallback star pattern texture: {}x{}", size, size);
+        } catch (Exception e) {
+            QuickSkin.LOGGER.error("Failed to create fallback texture", e);
+        }
     }
 
     /**

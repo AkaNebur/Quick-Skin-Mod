@@ -5,6 +5,7 @@ import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.SkinPreferences;
 import com.quickskin.mod.common.data.SkinResolution;
+import com.quickskin.mod.common.data.SkinSortMode;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.common.util.HDTextureProcessor;
@@ -284,17 +285,18 @@ public class LocalAssetManager {
                 friendlyName = friendlyName.substring(0, dotIndex);
             }
 
-            // Get file size
+            // Get file size and modification time
             long fileSize = Files.size(path);
+            long lastModifiedTime = Files.getLastModifiedTime(path).toMillis();
 
             // Create metadata
             if ("skin".equals(type)) {
-                return AssetMetadata.forSkin(hash, friendlyName, path, resolution, fileSize, skinModel);
+                return AssetMetadata.forSkin(hash, friendlyName, path, resolution, fileSize, skinModel, lastModifiedTime);
             } else {
                 if (isAnimated) {
-                    return AssetMetadata.forAnimatedCape(hash, friendlyName, path, resolution, fileSize, frameCount);
+                    return AssetMetadata.forAnimatedCape(hash, friendlyName, path, resolution, fileSize, frameCount, lastModifiedTime);
                 } else {
-                    return AssetMetadata.forCape(hash, friendlyName, path, resolution, fileSize);
+                    return AssetMetadata.forCape(hash, friendlyName, path, resolution, fileSize, lastModifiedTime);
                 }
             }
 
@@ -360,8 +362,9 @@ public class LocalAssetManager {
                 friendlyName = friendlyName.substring(0, dotIndex);
             }
 
-            // Get file size
+            // Get file size and modification time
             long fileSize = Files.size(path);
+            long lastModifiedTime = Files.getLastModifiedTime(path).toMillis();
 
             // Get resolution from first frame
             SkinResolution resolution = SkinResolution.fromDimensions(width, height);
@@ -378,7 +381,8 @@ public class LocalAssetManager {
                     path,
                     resolution,
                     fileSize,
-                    frameCount
+                    frameCount,
+                    lastModifiedTime
             );
 
         } catch (Exception e) {
@@ -420,15 +424,31 @@ public class LocalAssetManager {
      */
     public List<AssetMetadata> getAssetsByType(String type) {
         String playerOwnSkinHash = ClientConfig.getInstance().playerOwnSkinHash;
+        SkinSortMode sortMode = ClientConfig.getInstance().getSkinSortMode();
 
         return metadataCache.values().stream()
                 .filter(meta -> type.equals(meta.type()))
-                .sorted(Comparator
-                        // First, sort by whether it's the player's own skin (player's skin first)
-                        .comparing((AssetMetadata meta) -> !meta.hash().equals(playerOwnSkinHash))
-                        // Then, sort alphabetically by friendly name
-                        .thenComparing(AssetMetadata::friendlyName))
+                .sorted(getSortComparator(sortMode, playerOwnSkinHash))
                 .toList();
+    }
+
+    /**
+     * Get comparator for sorting assets based on sort mode
+     */
+    private Comparator<AssetMetadata> getSortComparator(SkinSortMode mode, String playerSkinHash) {
+        return switch (mode) {
+            case LATEST_LAST -> Comparator
+                    .comparing((AssetMetadata meta) -> !meta.hash().equals(playerSkinHash))
+                    .thenComparing(AssetMetadata::friendlyName);
+
+            case LATEST_FIRST -> Comparator
+                    .comparing((AssetMetadata meta) -> !meta.hash().equals(playerSkinHash))
+                    .thenComparing(Comparator.comparing(AssetMetadata::lastModifiedTime).reversed());
+
+            case ALPHABETICAL -> Comparator
+                    .comparing((AssetMetadata meta) -> !meta.hash().equals(playerSkinHash))
+                    .thenComparing(AssetMetadata::friendlyName);
+        };
     }
 
     /**
@@ -594,7 +614,8 @@ public class LocalAssetManager {
                         newPath,
                         metadata.resolution(),
                         metadata.fileSize(),
-                        metadata.skinModel()
+                        metadata.skinModel(),
+                        metadata.lastModifiedTime()
                 );
             } else if (metadata.isAnimated()) {
                 updatedMetadata = AssetMetadata.forAnimatedCape(
@@ -603,7 +624,8 @@ public class LocalAssetManager {
                         newPath,
                         metadata.resolution(),
                         metadata.fileSize(),
-                        metadata.frameCount()
+                        metadata.frameCount(),
+                        metadata.lastModifiedTime()
                 );
             } else {
                 updatedMetadata = AssetMetadata.forCape(
@@ -611,7 +633,8 @@ public class LocalAssetManager {
                         sanitizedName,
                         newPath,
                         metadata.resolution(),
-                        metadata.fileSize()
+                        metadata.fileSize(),
+                        metadata.lastModifiedTime()
                 );
             }
 

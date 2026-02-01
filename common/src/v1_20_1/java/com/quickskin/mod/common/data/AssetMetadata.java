@@ -15,7 +15,8 @@ public record AssetMetadata(
     boolean isAnimated,       // True if GIF cape
     int frameCount,           // Number of animation frames (1 if not animated)
     long fileSize,            // File size in bytes
-    String skinModel          // "classic" or "slim" (null for capes)
+    String skinModel,         // "classic" or "slim" (null for capes)
+    long lastModifiedTime     // File modification timestamp in milliseconds
 ) {
 
     /**
@@ -27,7 +28,8 @@ public record AssetMetadata(
             Path path,
             SkinResolution resolution,
             long fileSize,
-            String skinModel
+            String skinModel,
+            long lastModifiedTime
     ) {
         return new AssetMetadata(
                 hash,
@@ -38,7 +40,8 @@ public record AssetMetadata(
                 false,
                 1,
                 fileSize,
-                skinModel
+                skinModel,
+                lastModifiedTime
         );
     }
 
@@ -50,7 +53,8 @@ public record AssetMetadata(
             String friendlyName,
             Path path,
             SkinResolution resolution,
-            long fileSize
+            long fileSize,
+            long lastModifiedTime
     ) {
         return new AssetMetadata(
                 hash,
@@ -61,7 +65,8 @@ public record AssetMetadata(
                 false,
                 1,
                 fileSize,
-                null
+                null,
+                lastModifiedTime
         );
     }
 
@@ -74,7 +79,8 @@ public record AssetMetadata(
             Path path,
             SkinResolution resolution,
             long fileSize,
-            int frameCount
+            int frameCount,
+            long lastModifiedTime
     ) {
         return new AssetMetadata(
                 hash,
@@ -85,7 +91,8 @@ public record AssetMetadata(
                 true,
                 frameCount,
                 fileSize,
-                null
+                null,
+                lastModifiedTime
         );
     }
 
