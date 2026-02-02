@@ -353,9 +353,13 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // --- Section 2: Default Capes ---
         // Add all known capes except NONE (that's in My Capes section)
-        for (KnownCapes knownCape : KnownCapes.values()) {
-            if (!knownCape.isNoCape()) {
-                this.knownCapes.add(CapeEntry.fromKnown(knownCape));
+        // Only populate if user hasn't hidden built-in capes
+        ClientConfig config = ClientConfig.getInstance();
+        if (!config.hideBuiltInCapes) {
+            for (KnownCapes knownCape : KnownCapes.values()) {
+                if (!knownCape.isNoCape()) {
+                    this.knownCapes.add(CapeEntry.fromKnown(knownCape));
+                }
             }
         }
 

@@ -4,6 +4,7 @@ import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
+import com.quickskin.mod.config.ClientConfig;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -47,7 +48,7 @@ public class CapeLayerMixin {
         }
 
         if (!service.hasActiveCape(player.getUUID())) {
-            if (shouldLog) {
+            if (shouldLog && ClientConfig.getInstance().enableVerboseLogging) {
                 QuickSkin.LOGGER.debug("[CapeLayerMixin] No active cape for player {}, letting vanilla run", player.getName().getString());
             }
             return; // No custom cape, let vanilla logic run
@@ -82,21 +83,21 @@ public class CapeLayerMixin {
                 ResourceLocation currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);
                 if (currentFrame != null) {
                     finalTexture = currentFrame;
-                    if (shouldLog) {
+                    if (shouldLog && ClientConfig.getInstance().enableVerboseLogging) {
                         QuickSkin.LOGGER.debug("[CapeLayerMixin] Animation frame: capeId={}, animationId={}, frame={}", capeId, animationId, currentFrame);
                     }
                 } else {
-                    if (shouldLog) {
+                    if (shouldLog && ClientConfig.getInstance().enableVerboseLogging) {
                         QuickSkin.LOGGER.warn("[CapeLayerMixin] getCurrentFrameTexture returned null for animationId={}", animationId);
                     }
                 }
             } else {
-                if (shouldLog) {
+                if (shouldLog && ClientConfig.getInstance().enableVerboseLogging) {
                     QuickSkin.LOGGER.warn("[CapeLayerMixin] Could not derive animationId from capeId={}", capeId);
                 }
             }
         } else {
-            if (shouldLog) {
+            if (shouldLog && ClientConfig.getInstance().enableVerboseLogging) {
                 QuickSkin.LOGGER.warn("[CapeLayerMixin] capeId is null/empty, falling back to atlas lookup for texture={}", capeTexture);
             }
             // Fallback to atlas location lookup (for non-QuickSkin capes that might be animated)

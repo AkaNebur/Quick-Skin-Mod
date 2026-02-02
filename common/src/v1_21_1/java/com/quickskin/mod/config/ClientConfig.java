@@ -66,11 +66,17 @@ public class ClientConfig {
     // GUI Style Settings
     public boolean enableStyledButtons = false; // Enable custom styled buttons with frosted glass aesthetic
 
+    // Cape Settings
+    public boolean hideBuiltInCapes = false; // Hide built-in Minecraft capes from cape menu
+
     // Sorting Settings
     public String skinSortMode = "LATEST_LAST"; // Skin list sorting mode
 
     // --- NEW --- Modpack Settings
     public boolean enablePlayerOwnSkinSystem = true; // When enabled, automatically downloads and protects the player's own skin.
+
+    // Logging Settings
+    public boolean enableVerboseLogging = false; // Enable verbose logging for cape animations and texture loading (default: false for silent operation)
 
     // Active Skin Settings (persisted state)
     public String activeSkinHash = "";

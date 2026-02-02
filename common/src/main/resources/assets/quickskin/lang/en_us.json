@@ -128,6 +128,8 @@
   "quickskin.settings.enable_preview_custom": "Enable Preview Customization",
   "quickskin.settings.keybind_label": "Open Skin Menu",
   "quickskin.settings.disable_transparency": "Disable Skin Transparency",
+  "quickskin.settings.hide_builtin_capes": "Hide Built-in Capes",
+  "quickskin.settings.hide_builtin_capes.tooltip": "Hide official Minecraft capes from the cape menu. Only custom/local capes will be shown.",
   "quickskin.settings.disable_transparency_server": "Disable Skin Transparency (Server)",
   "quickskin.settings.cooldown_label": "Skin Change Cooldown",
   "quickskin.settings.cooldown_seconds": "Skin Change Cooldown (seconds)",

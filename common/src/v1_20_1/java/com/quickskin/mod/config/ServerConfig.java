@@ -21,6 +21,9 @@ public class ServerConfig {
     public boolean disableSkinTransparency = false; // Disable transparency in player skins
     public int skinChangeCooldownSeconds = 0; // Cooldown in seconds for changing skin (0 = disabled)
 
+    // Logging Settings
+    public boolean enableVerboseLogging = false; // Enable verbose logging for skin/cape changes (default: false for silent operation)
+
     private ServerConfig() {
         // Private constructor for singleton
     }

@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.PlayerAppearance;
+import com.quickskin.mod.config.ServerConfig;
 import com.quickskin.mod.server.data.ServerPlayerAppearanceRepository;
 import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
@@ -73,8 +74,10 @@ public class ServerAppearanceStorage {
             // Update the repository with loaded data
             ServerPlayerAppearanceRepository.getInstance().setAppearance(appearance);
 
-            QuickSkin.LOGGER.info("Loaded appearance for player: {} (skin={}, cape={}, model={})",
-                    playerId, appearance.getSkinId(), appearance.getCapeId(), appearance.getModel());
+            if (ServerConfig.getInstance().enableVerboseLogging) {
+                QuickSkin.LOGGER.info("Loaded appearance for player: {} (skin={}, cape={}, model={})",
+                        playerId, appearance.getSkinId(), appearance.getCapeId(), appearance.getModel());
+            }
 
             return appearance;
         } catch (IOException e) {

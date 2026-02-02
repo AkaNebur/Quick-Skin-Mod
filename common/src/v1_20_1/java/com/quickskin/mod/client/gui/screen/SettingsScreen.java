@@ -87,6 +87,7 @@ public class SettingsScreen extends Screen {
     private Checkbox disableSkinTransparencyCheckbox;
     private Checkbox enableStyledButtonsCheckbox;
     private Checkbox enablePlayerPreviewCustomizationCheckbox;
+    private Checkbox hideBuiltInCapesCheckbox;
     private Button keybindButton;
 
     // State for keybind editing
@@ -221,6 +222,19 @@ public class SettingsScreen extends Screen {
                 config.enablePlayerPreviewCustomization
         );
         guiEditSettingWidgets.add(enablePlayerPreviewCustomizationCheckbox);
+        currentY += spacing;
+
+        // Hide Built-in Capes
+        hideBuiltInCapesCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+                Component.translatable("quickskin.settings.hide_builtin_capes"),
+                config.hideBuiltInCapes
+        );
+        hideBuiltInCapesCheckbox.setTooltip(Tooltip.create(
+                Component.translatable("quickskin.settings.hide_builtin_capes.tooltip")
+        ));
+        guiEditSettingWidgets.add(hideBuiltInCapesCheckbox);
     }
 
     private void createClientSettings() {
@@ -587,6 +601,7 @@ public class SettingsScreen extends Screen {
             config.enableStyledButtons = enableStyledButtonsCheckbox.selected();
             config.enablePlayerPreviewCustomization = enablePlayerPreviewCustomizationCheckbox.selected();
             config.enablePlayerOwnSkinSystem = enablePlayerOwnSkinSystemCheckbox.selected();
+            config.hideBuiltInCapes = hideBuiltInCapesCheckbox.selected();
 
             // If transparency setting changed, flag for a reload
             if (oldTransparencySetting != config.disableSkinTransparency) {

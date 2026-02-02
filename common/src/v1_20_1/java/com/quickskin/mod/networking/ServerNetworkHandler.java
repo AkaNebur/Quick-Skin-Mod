@@ -2,6 +2,7 @@ package com.quickskin.mod.networking;
 
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.PlayerAppearance;
+import com.quickskin.mod.config.ServerConfig;
 import com.quickskin.mod.networking.packets.PacketHelper;
 import com.quickskin.mod.server.data.ServerCooldownManager;
 import com.quickskin.mod.server.data.ServerPlayerAppearanceRepository;
@@ -39,8 +40,10 @@ public class ServerNetworkHandler {
                 return;
             }
 
-            QuickSkin.LOGGER.info("Received {} upload from player: {} (size: {} bytes)",
-                    textureType, player.getName().getString(), imageData.length);
+            if (ServerConfig.getInstance().enableVerboseLogging) {
+                QuickSkin.LOGGER.info("Received {} upload from player: {} (size: {} bytes)",
+                        textureType, player.getName().getString(), imageData.length);
+            }
 
             // Generate hash for this texture
             String hash = playerId.toString() + "_" + textureType;
@@ -85,8 +88,10 @@ public class ServerNetworkHandler {
                 }
             }
 
-            QuickSkin.LOGGER.info("Player {} updated appearance: skin={}, cape={}, model={}",
-                    player.getName().getString(), skinId, capeId, model);
+            if (ServerConfig.getInstance().enableVerboseLogging) {
+                QuickSkin.LOGGER.info("Player {} updated appearance: skin={}, cape={}, model={}",
+                        player.getName().getString(), skinId, capeId, model);
+            }
 
             // Update server-side repository
             ServerPlayerAppearanceRepository.getInstance().updateAppearance(playerId, skinId, capeId, model);
@@ -122,8 +127,10 @@ public class ServerNetworkHandler {
                 return;
             }
 
-            QuickSkin.LOGGER.info("Player {} requested {} texture: {}",
-                    player.getName().getString(), textureType, hash);
+            if (ServerConfig.getInstance().enableVerboseLogging) {
+                QuickSkin.LOGGER.info("Player {} requested {} texture: {}",
+                        player.getName().getString(), textureType, hash);
+            }
 
             // Phase 5: Load texture from server storage and send to client
             byte[] textureData = ServerTextureCache.getInstance().getTexture(hash);
@@ -183,8 +190,10 @@ public class ServerNetworkHandler {
 
             // If all chunks received, store and broadcast
             if (completeTexture != null) {
-                QuickSkin.LOGGER.info("Received complete {} texture from player: {} (size: {} bytes)",
-                    textureType, player.getName().getString(), completeTexture.length);
+                if (ServerConfig.getInstance().enableVerboseLogging) {
+                    QuickSkin.LOGGER.info("Received complete {} texture from player: {} (size: {} bytes)",
+                        textureType, player.getName().getString(), completeTexture.length);
+                }
 
                 // Store texture in server cache
                 ServerTextureCache.getInstance().storeTexture(hash, completeTexture);
@@ -210,8 +219,10 @@ public class ServerNetworkHandler {
                 return;
             }
 
-            QuickSkin.LOGGER.info("Player {} uploaded animation metadata for: {}",
-                    player.getName().getString(), hash);
+            if (ServerConfig.getInstance().enableVerboseLogging) {
+                QuickSkin.LOGGER.info("Player {} uploaded animation metadata for: {}",
+                        player.getName().getString(), hash);
+            }
 
             // Phase 7: Store animation metadata
             ServerAnimationCache.getInstance().storeMetadata(hash, metadataJson);
