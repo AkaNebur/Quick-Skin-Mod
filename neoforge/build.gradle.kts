@@ -53,8 +53,9 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
     archiveClassifier.set("dev-shadow")
 }
 
-tasks.named("remapJar") {
+tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
     dependsOn("shadowJar")
     val shadowJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar")
     mustRunAfter(shadowJar)
+    inputFile.set(shadowJar.get().archiveFile)
 }
