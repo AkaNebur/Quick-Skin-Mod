@@ -14,6 +14,7 @@ import net.minecraft.client.gui.screens.Screen;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * Compatibility service for Player Armor Stands (PAS) mod integration.
@@ -153,13 +154,13 @@ public class PasCompatService {
             String fullHash = metadata.hash();
             String modelPreference = LocalAssetManager.getInstance().getSkinModelPreference(fullHash);
             boolean isSlim;
-            if ("slim".equalsIgnoreCase(modelPreference)) {
+            if ("slim".equals(modelPreference != null ? modelPreference.toLowerCase(Locale.ROOT) : null)) {
                 isSlim = true;
-            } else if ("classic".equalsIgnoreCase(modelPreference)) {
+            } else if ("classic".equals(modelPreference != null ? modelPreference.toLowerCase(Locale.ROOT) : null)) {
                 isSlim = false;
             } else {
                 // Auto - use the skin's detected model
-                isSlim = "slim".equalsIgnoreCase(metadata.skinModel());
+                isSlim = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null);
             }
             accessor.quickskin$setIsSlim(isSlim);
             QuickSkin.LOGGER.info("[PAS Compat] Set isSlim to: {}", isSlim);

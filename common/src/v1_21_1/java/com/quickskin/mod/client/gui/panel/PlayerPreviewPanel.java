@@ -12,6 +12,7 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -114,14 +115,14 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
         classicModelButton = ButtonFactory.createStyled(
                 modelButtonsX + componentHeight + spacing, modelButtonsY, normalModelButtonWidth, componentHeight,
-                Component.literal("Wide"),
+                Component.translatable("quickskin.preview.model.wide"),
                 button -> setModelType("classic")
         );
         screen.registerWidget(classicModelButton);
 
         slimModelButton = ButtonFactory.createStyled(
                 modelButtonsX + componentHeight + spacing + normalModelButtonWidth + spacing, modelButtonsY, normalModelButtonWidth, componentHeight,
-                Component.literal("Slim"),
+                Component.translatable("quickskin.preview.model.slim"),
                 button -> setModelType("slim")
         );
         screen.registerWidget(slimModelButton);
@@ -148,7 +149,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
                     }
                 }
         );
-        rotateButton.setTooltip(Tooltip.create(Component.literal("Rotate Preview")));
+        rotateButton.setTooltip(Tooltip.create(Component.translatable("quickskin.preview.rotate")));
         screen.registerWidget(rotateButton);
 
         // Clear animation buttons from previous init
@@ -334,9 +335,9 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     private void updateModelButtonStates() {
         if (autoModelButton != null && classicModelButton != null && slimModelButton != null) {
-            boolean isAuto = "auto".equalsIgnoreCase(currentModelType);
-            boolean isSlim = "slim".equalsIgnoreCase(currentModelType);
-            boolean isClassic = "classic".equalsIgnoreCase(currentModelType);
+            boolean isAuto = "auto".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
+            boolean isSlim = "slim".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
+            boolean isClassic = "classic".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
 
             // Button is active (clickable) when it's NOT the current model
             autoModelButton.active = !isAuto;

@@ -55,19 +55,19 @@ public class SettingsScreen extends Screen {
     private int dialogHeight = 280;
 
     private enum Tab {
-        GUI_EDIT("GUI Edit"),
-        CLIENT("Client"),
-        SERVER("Server"),
-        MODPACK("Modpack");
+        GUI_EDIT("quickskin.settings.tab.gui_edit"),
+        CLIENT("quickskin.settings.tab.client"),
+        SERVER("quickskin.settings.tab.server"),
+        MODPACK("quickskin.settings.tab.modpack");
 
-        private final String displayName;
+        private final String translationKey;
 
-        Tab(String displayName) {
-            this.displayName = displayName;
+        Tab(String translationKey) {
+            this.translationKey = translationKey;
         }
 
-        public String getDisplayName() {
-            return displayName;
+        public String getTranslationKey() {
+            return translationKey;
         }
     }
 
@@ -104,7 +104,7 @@ public class SettingsScreen extends Screen {
     private boolean needsTextureReload = false;
 
     public SettingsScreen(@Nullable Screen parent) {
-        super(Component.literal("QuickSkin Settings"));
+        super(Component.translatable("quickskin.screen.settings.title"));
         this.parent = parent;
     }
 
@@ -133,7 +133,7 @@ public class SettingsScreen extends Screen {
         clientTabButton = (TabButton) ButtonFactory.createTab(
                 tabStartX, tabY,
                 TAB_WIDTH, TAB_HEIGHT,
-                Component.literal(Tab.CLIENT.getDisplayName()),
+                Component.translatable(Tab.CLIENT.getTranslationKey()),
                 activeTab == Tab.CLIENT,
                 btn -> switchTab(Tab.CLIENT)
         );
@@ -142,7 +142,7 @@ public class SettingsScreen extends Screen {
         guiEditTabButton = (TabButton) ButtonFactory.createTab(
                 tabStartX + TAB_WIDTH + TAB_SPACING, tabY,
                 TAB_WIDTH, TAB_HEIGHT,
-                Component.literal(Tab.GUI_EDIT.getDisplayName()),
+                Component.translatable(Tab.GUI_EDIT.getTranslationKey()),
                 activeTab == Tab.GUI_EDIT,
                 btn -> switchTab(Tab.GUI_EDIT)
         );
@@ -151,7 +151,7 @@ public class SettingsScreen extends Screen {
         modpackTabButton = (TabButton) ButtonFactory.createTab(
                 tabStartX + (TAB_WIDTH + TAB_SPACING) * 2, tabY,
                 TAB_WIDTH, TAB_HEIGHT,
-                Component.literal(Tab.MODPACK.getDisplayName()),
+                Component.translatable(Tab.MODPACK.getTranslationKey()),
                 activeTab == Tab.MODPACK,
                 btn -> switchTab(Tab.MODPACK)
         );
@@ -160,7 +160,7 @@ public class SettingsScreen extends Screen {
         serverTabButton = (TabButton) ButtonFactory.createTab(
                 tabStartX + (TAB_WIDTH + TAB_SPACING) * 3, tabY,
                 TAB_WIDTH, TAB_HEIGHT,
-                Component.literal(Tab.SERVER.getDisplayName()),
+                Component.translatable(Tab.SERVER.getTranslationKey()),
                 activeTab == Tab.SERVER,
                 btn -> switchTab(Tab.SERVER)
         );
@@ -175,7 +175,7 @@ public class SettingsScreen extends Screen {
         // Create Done button
         Button doneButton = ButtonFactory.createPrimary(
                 dialogX + dialogWidth / 2 - 50, dialogY + dialogHeight - 30, 100, 20,
-                Component.literal("Done"),
+                Component.translatable("quickskin.button.done"),
                 btn -> this.onClose()
         );
         this.addRenderableWidget(doneButton);
@@ -197,7 +197,7 @@ public class SettingsScreen extends Screen {
         showOverlayCheckbox = new Checkbox(
                 leftColumnX, currentY,
                 checkboxSize, checkboxSize,
-                Component.literal("Enable mini player preview ingame"),
+                Component.translatable("quickskin.settings.enable_preview"),
                 config.showSkinPreviewOverlay
         );
         guiEditSettingWidgets.add(showOverlayCheckbox);
@@ -207,7 +207,7 @@ public class SettingsScreen extends Screen {
         enableStyledButtonsCheckbox = new Checkbox(
                 leftColumnX, currentY,
                 checkboxSize, checkboxSize,
-                Component.literal("Enable Styled Buttons"),
+                Component.translatable("quickskin.settings.enable_styled_buttons"),
                 config.enableStyledButtons
         );
         guiEditSettingWidgets.add(enableStyledButtonsCheckbox);
@@ -217,7 +217,7 @@ public class SettingsScreen extends Screen {
         enablePlayerPreviewCustomizationCheckbox = new Checkbox(
                 leftColumnX, currentY,
                 checkboxSize, checkboxSize,
-                Component.literal("Enable Preview Customization"),
+                Component.translatable("quickskin.settings.enable_preview_custom"),
                 config.enablePlayerPreviewCustomization
         );
         guiEditSettingWidgets.add(enablePlayerPreviewCustomizationCheckbox);
@@ -246,7 +246,7 @@ public class SettingsScreen extends Screen {
         );
         clientSettingWidgets.add(keybindButton);
 
-        clientSettingWidgets.add(new AbstractWidget(leftColumnX + keybindButtonWidth + keybindButtonSpacing, currentLeftY, 100, 20, Component.literal("Open Skin Menu")) {
+        clientSettingWidgets.add(new AbstractWidget(leftColumnX + keybindButtonWidth + keybindButtonSpacing, currentLeftY, 100, 20, Component.translatable("quickskin.settings.keybind_label")) {
             @Override
             public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
                 // Draw the string vertically centered with the standard UI text color.
@@ -276,7 +276,7 @@ public class SettingsScreen extends Screen {
         disableSkinTransparencyCheckbox = new Checkbox(
                 rightColumnX, currentRightY,
                 checkboxSize, checkboxSize,
-                Component.literal("Disable Skin Transparency"),
+                Component.translatable("quickskin.settings.disable_transparency"),
                 config.disableSkinTransparency
         );
         clientSettingWidgets.add(disableSkinTransparencyCheckbox);
@@ -303,7 +303,7 @@ public class SettingsScreen extends Screen {
         serverDisableSkinTransparencyCheckbox = new Checkbox(
                 leftColumnX, currentY,
                 checkboxSize, checkboxSize,
-                Component.literal("Disable Skin Transparency (Server)"),
+                Component.translatable("quickskin.settings.disable_transparency_server"),
                 currentTransparencySetting
         );
         // Only allow admins to change this setting
@@ -319,7 +319,7 @@ public class SettingsScreen extends Screen {
                 this.font,
                 leftColumnX, currentY,
                 editBoxWidth, 20,
-                Component.literal("Skin Change Cooldown")
+                Component.translatable("quickskin.settings.cooldown_label")
         );
         skinChangeCooldownEditBox.setValue(String.valueOf(config.skinChangeCooldownSeconds));
         skinChangeCooldownEditBox.setMaxLength(5);
@@ -328,7 +328,7 @@ public class SettingsScreen extends Screen {
         serverSettingWidgets.add(skinChangeCooldownEditBox);
 
         // Label for cooldown EditBox
-        serverSettingWidgets.add(new AbstractWidget(leftColumnX + editBoxWidth + editBoxSpacing, currentY, 200, 20, Component.literal("Skin Change Cooldown (seconds)")) {
+        serverSettingWidgets.add(new AbstractWidget(leftColumnX + editBoxWidth + editBoxSpacing, currentY, 200, 20, Component.translatable("quickskin.settings.cooldown_seconds")) {
             @Override
             public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
                 guiGraphics.drawString(
@@ -362,11 +362,11 @@ public class SettingsScreen extends Screen {
         enablePlayerOwnSkinSystemCheckbox = new Checkbox(
                 leftColumnX, startY,
                 checkboxSize, checkboxSize,
-                Component.literal("Enable Player's Own Skin System"),
+                Component.translatable("quickskin.settings.enable_own_skin"),
                 config.enablePlayerOwnSkinSystem
         );
         enablePlayerOwnSkinSystemCheckbox.setTooltip(Tooltip.create(
-                Component.literal("When enabled, automatically downloads your Mojang skin and protects it from being deleted. Disable for modpacks where all players should use provided skins.")
+                Component.translatable("quickskin.settings.own_skin_tooltip")
         ));
         modpackSettingWidgets.add(enablePlayerOwnSkinSystemCheckbox);
     }
@@ -453,7 +453,7 @@ public class SettingsScreen extends Screen {
 
             if (!isAdmin) {
                 int noticeY = dialogY + dialogHeight - 55;
-                String notice = "Only server admins can change these settings";
+                Component notice = Component.translatable("quickskin.settings.server_notice");
                 int noticeWidth = this.font.width(notice);
                 graphics.drawString(this.font, notice, dialogX + (dialogWidth - noticeWidth) / 2, noticeY, 0xFFCC00, false);
             }

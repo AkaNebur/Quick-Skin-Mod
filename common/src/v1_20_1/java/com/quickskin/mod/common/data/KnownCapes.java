@@ -3,6 +3,8 @@ package com.quickskin.mod.common.data;
 import com.quickskin.mod.QuickSkin;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.Locale;
+
 /**
  * Enum containing all known official Minecraft capes, sorted from most common to rarest.
  * Each cape has a corresponding texture file in assets/quickskin/textures/capes/
@@ -140,7 +142,7 @@ public enum KnownCapes {
      */
     public static KnownCapes getById(String id) {
         for (KnownCapes cape : values()) {
-            if (cape.getId().equalsIgnoreCase(id)) {
+            if (cape.getId().equals(id != null ? id.toLowerCase(Locale.ROOT) : null)) {
                 return cape;
             }
         }

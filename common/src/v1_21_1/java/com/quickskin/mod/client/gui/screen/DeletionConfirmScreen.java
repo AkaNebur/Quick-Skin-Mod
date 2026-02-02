@@ -56,7 +56,7 @@ public class DeletionConfirmScreen extends Screen {
         // Cancel button (left, safe)
         Button cancelButton = ButtonFactory.createStyled(
             buttonStartX, buttonY, buttonWidth, buttonHeight,
-            Component.literal("Cancel"),
+            Component.translatable("quickskin.button.cancel"),
             (button) -> this.callback.accept(false)
         );
 
@@ -64,7 +64,7 @@ public class DeletionConfirmScreen extends Screen {
         Button confirmButton = ButtonFactory.createDanger(
             buttonStartX + buttonWidth + buttonSpacing, buttonY,
             buttonWidth, buttonHeight,
-            Component.literal("Delete"),
+            Component.translatable("quickskin.button.delete"),
             (button) -> this.callback.accept(true)
         );
 

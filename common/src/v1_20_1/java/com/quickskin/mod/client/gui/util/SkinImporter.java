@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Utility for importing skin files into the QuickSkin directory
@@ -37,7 +38,7 @@ public class SkinImporter {
 
         // Validate it's a PNG file
         String fileName = sourcePath.getFileName().toString();
-        if (!fileName.toLowerCase().endsWith(".png")) {
+        if (!fileName.toLowerCase(Locale.ROOT).endsWith(".png")) {
             QuickSkin.LOGGER.error("File is not a PNG: {}", fileName);
             return null;
         }

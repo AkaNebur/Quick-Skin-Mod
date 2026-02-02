@@ -23,6 +23,8 @@ import net.minecraft.world.entity.player.Player;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 
+import java.util.Locale;
+
 /**
  * Utility for rendering player models in GUI using vanilla Minecraft rendering
  * Replaces GeckoLib-based rendering with vanilla PlayerModel
@@ -161,7 +163,7 @@ public class PlayerModelRenderer {
         try {
             // Render grass block if sitting animation is active AND we're not in a world
             // When in-game, animations are controlled by the game, so don't render the custom grass block
-            if ("sit".equalsIgnoreCase(playerData.getCurrentAnimation()) && mc.level == null) {
+            if ("sit".equals(playerData.getCurrentAnimation() != null ? playerData.getCurrentAnimation().toLowerCase(Locale.ROOT) : null) && mc.level == null) {
                 PoseStack poseStack = graphics.pose();
                 MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
 
@@ -228,7 +230,7 @@ public class PlayerModelRenderer {
         ensureModelsLoaded();
 
         // Select model based on type
-        PlayerModel<?> model = playerData.getModelType().equalsIgnoreCase("slim") ? slimModel : classicModel;
+        PlayerModel<?> model = "slim".equals(playerData.getModelType() != null ? playerData.getModelType().toLowerCase(Locale.ROOT) : null) ? slimModel : classicModel;
 
         PoseStack poseStack = graphics.pose();
         poseStack.pushPose();
@@ -268,7 +270,7 @@ public class PlayerModelRenderer {
 
         // Render grass block if sitting animation is active AND we're not in a world
         // When in-game, animations are controlled by the game, so don't render the custom grass block
-        if ("sit".equalsIgnoreCase(playerData.getCurrentAnimation()) && mc.level == null) {
+        if ("sit".equals(playerData.getCurrentAnimation() != null ? playerData.getCurrentAnimation().toLowerCase(Locale.ROOT) : null) && mc.level == null) {
             renderGrassBlock(poseStack, bufferSource);
         }
 
@@ -280,7 +282,7 @@ public class PlayerModelRenderer {
         var vertexConsumer = bufferSource.getBuffer(renderType);
 
         // Determine if using slim model
-        boolean isSlimModel = playerData.getModelType().equalsIgnoreCase("slim");
+        boolean isSlimModel = "slim".equals(playerData.getModelType() != null ? playerData.getModelType().toLowerCase(Locale.ROOT) : null);
 
         // Render model
         model.renderToBuffer(
@@ -621,7 +623,7 @@ public class PlayerModelRenderer {
         float lerpFactor = 0.15f;
 
         // Apply animation based on type
-        switch (animation.toLowerCase()) {
+        switch (animation.toLowerCase(Locale.ROOT)) {
             case "walk":
                 setupWalkingPose(model, t, lerpFactor);
                 break;

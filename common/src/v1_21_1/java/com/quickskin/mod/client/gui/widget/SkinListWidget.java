@@ -115,8 +115,8 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
                 drawDashedBorder(graphics, zoneX, zoneY, zoneWidth, zoneHeight, isHovering);
 
                 // Draw text centered in the zone
-                Component mainMessage = Component.literal("Drop skin files here");
-                Component subMessage = Component.literal("or click 'Import Skin'");
+                Component mainMessage = Component.translatable("quickskin.dropzone.skins.main");
+                Component subMessage = Component.translatable("quickskin.dropzone.skins.sub");
 
                 int mainColor = isHovering ? 0xFFFFFF : 0xE0E0E0;
                 int subColor = isHovering ? 0xB0B0B0 : 0x909090;
@@ -175,5 +175,12 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
      */
     public void requestRename(SkinEntry entry) {
         parentScreen.showRenameDialog(entry.getMetadata());
+    }
+
+    /**
+     * Request upload to Mojang for a skin
+     */
+    public void requestUploadToMojang(SkinEntry entry) {
+        parentScreen.showUploadToMojangDialog(entry.getMetadata());
     }
 }

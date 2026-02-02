@@ -2,6 +2,7 @@ package com.quickskin.mod.client.gui.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.client.services.LocalAssetManager;
+import com.quickskin.mod.client.util.PremiumDetector;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.config.ClientConfig;
@@ -17,6 +18,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Individual skin entry in the skin list
@@ -28,14 +30,17 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     private final AssetMetadata metadata;
     private final ResourceLocation textureLocation;
     private final SkinListWidget parentList;
+    private final boolean isPremiumAccount;
 
     private boolean isDeleteHovered;
     private boolean isEditHovered;
+    private boolean isUploadHovered;
 
     public SkinEntry(SkinListWidget parentList, AssetMetadata metadata) {
         this.parentList = parentList;
         this.metadata = metadata;
         this.mc = Minecraft.getInstance();
+        this.isPremiumAccount = PremiumDetector.isPremiumAccount();
 
         // Get texture location from LocalAssetManager
         this.textureLocation = LocalAssetManager.getInstance()
@@ -131,7 +136,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFF);
 
         // Model type and resolution
-        String modelText = "slim".equalsIgnoreCase(metadata.skinModel()) ? "Slim" : "Classic";
+        String modelText = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null) ? "Slim" : "Classic";
         if (metadata.resolution().isHD()) {
             modelText += " • " + metadata.resolution().name();
         }
@@ -141,6 +146,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         // Render action buttons on hover (but not for player's own skin)
         this.isDeleteHovered = false;
         this.isEditHovered = false;
+        this.isUploadHovered = false;
 
         if (isHovered && !isPlayerOwnSkin) {
             int margin = 4;
@@ -170,6 +176,20 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             graphics.drawString(mc.font, "✎", deleteButtonX + 2, editButtonY + 1, 0xFFFFFFFF);
 
             this.isEditHovered = editHovered;
+
+            // Upload button (only for premium users)
+            if (isPremiumAccount) {
+                int uploadButtonY = editButtonY + actionButtonSize + 2;
+                boolean uploadHovered = mouseX >= deleteButtonX && mouseX < deleteButtonX + actionButtonSize &&
+                                       mouseY >= uploadButtonY && mouseY < uploadButtonY + actionButtonSize;
+
+                graphics.fill(deleteButtonX, uploadButtonY,
+                    deleteButtonX + actionButtonSize, uploadButtonY + actionButtonSize,
+                    uploadHovered ? 0xA040A040 : 0x80408040);
+                graphics.drawString(mc.font, "↑", deleteButtonX + 2, uploadButtonY + 1, 0xFFFFFFFF);
+
+                this.isUploadHovered = uploadHovered;
+            }
         }
     }
 
@@ -185,6 +205,12 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             if (this.isEditHovered) {
                 // Request rename from parent
                 parentList.requestRename(this);
+                return true;
+            }
+
+            if (this.isUploadHovered) {
+                // Request upload to Mojang
+                parentList.requestUploadToMojang(this);
                 return true;
             }
 

@@ -36,6 +36,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -94,7 +95,7 @@ public class PlayerSkinMenuScreen extends Screen {
     private Consumer<AssetMetadata> selectionCallback;
 
     public PlayerSkinMenuScreen(@Nullable Screen parent) {
-        super(Component.literal("Quick Skin"));
+        super(Component.translatable("quickskin.screen.skin_menu.title"));
         this.parent = parent;
     }
 
@@ -144,7 +145,7 @@ public class PlayerSkinMenuScreen extends Screen {
         if (this.minecraft != null && this.minecraft.isSingleplayer()) {
             if (!doneButton.active) {
                 doneButton.active = true;
-                doneButton.setMessage(Component.literal("Done"));
+                doneButton.setMessage(Component.translatable("quickskin.button.done"));
                 doneButton.setTooltip(null);
             }
             return;
@@ -153,12 +154,12 @@ public class PlayerSkinMenuScreen extends Screen {
         long remainingSeconds = CooldownService.getInstance().getRemainingCooldownSeconds();
         if (remainingSeconds > 0) {
             doneButton.active = false;
-            doneButton.setMessage(Component.literal("On Cooldown (" + remainingSeconds + "s)"));
-            doneButton.setTooltip(Tooltip.create(Component.literal("You must wait before changing your skin again.")));
+            doneButton.setMessage(Component.translatable("quickskin.cooldown.button", remainingSeconds));
+            doneButton.setTooltip(Tooltip.create(Component.translatable("quickskin.cooldown.tooltip")));
         } else {
             if (!doneButton.active) {
                 doneButton.active = true;
-                doneButton.setMessage(Component.literal("Done"));
+                doneButton.setMessage(Component.translatable("quickskin.button.done"));
                 doneButton.setTooltip(null);
             }
         }
@@ -224,15 +225,15 @@ public class PlayerSkinMenuScreen extends Screen {
                 yPos,
                 searchFieldAvailableWidth,
                 scaledComponentHeight,
-                Component.literal("Search by username")
+                Component.translatable("quickskin.search.placeholder")
         );
-        usernameSearchField.setSuggestion("Enter a player's username...");
+        usernameSearchField.setSuggestion(Component.translatable("quickskin.search.suggestion").getString());
         usernameSearchField.setMaxLength(16);
         usernameSearchField.setResponder(text -> {
             onUsernameFieldChanged(text);
             // Update suggestion visibility
             if (text.isEmpty()) {
-                usernameSearchField.setSuggestion("Enter a player's username...");
+                usernameSearchField.setSuggestion(Component.translatable("quickskin.search.suggestion").getString());
             } else {
                 usernameSearchField.setSuggestion("");
             }
@@ -250,7 +251,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 button -> cycleSortMode()
         );
         sortButton.setTooltip(Tooltip.create(
-                Component.literal("Sorting: " + getCurrentSortMode().getDisplayName())
+                Component.translatable("quickskin.tooltip.sorting", getCurrentSortMode().getDisplayName())
         ));
         addRenderableWidget(sortButton);
 
@@ -261,7 +262,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 yPos,
                 searchButtonWidth,
                 scaledComponentHeight,
-                Component.literal("Search"),
+                Component.translatable("quickskin.button.search"),
                 button -> searchMojangSkin()
         );
         addRenderableWidget(searchButton);
@@ -778,7 +779,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Filter for PNG files
         List<Path> pngFiles = files.stream()
-                .filter(path -> path.toString().toLowerCase().endsWith(".png"))
+                .filter(path -> path.toString().toLowerCase(Locale.ROOT).endsWith(".png"))
                 .toList();
 
         if (pngFiles.isEmpty()) {
@@ -946,7 +947,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 } else {
                     QuickSkin.LOGGER.error("Failed to import skin: {}", filePath);
                     // Show error message to user
-                    showError(Component.literal("Failed to import skin"));
+                    showError(Component.translatable("quickskin.error.import_failed"));
                 }
             });
         }
@@ -988,8 +989,8 @@ public class PlayerSkinMenuScreen extends Screen {
         String displayName = truncateFileName(metadata.friendlyName());
         minecraft.setScreen(new DeletionConfirmScreen(
                 this,
-                Component.literal("Delete Skin?"),
-                Component.literal("Are you sure you want to delete \"" + displayName + "\"?"),
+                Component.translatable("quickskin.screen.delete.title"),
+                Component.translatable("quickskin.dialog.confirm_delete", displayName),
                 (confirmed) -> {
                     if (confirmed) {
                         // Confirm deletion
@@ -1012,13 +1013,30 @@ public class PlayerSkinMenuScreen extends Screen {
 
         minecraft.setScreen(new RenameScreen(
                 this,
-                Component.literal("Rename Skin File"),
+                Component.translatable("quickskin.screen.rename.title"),
                 Component.empty(),
                 metadata.friendlyName(),
                 (newName) -> {
                     // Rename the skin
                     renameSkin(metadata, newName);
                     // Return to skin menu screen
+                    if (minecraft != null) {
+                        minecraft.setScreen(this);
+                    }
+                }
+        ));
+    }
+
+    /**
+     * Show upload to Mojang dialog for a skin
+     */
+    public void showUploadToMojangDialog(AssetMetadata metadata) {
+        if (minecraft == null) return;
+
+        minecraft.setScreen(new UploadToMojangScreen(
+                this,
+                metadata,
+                (confirmed) -> {
                     if (minecraft != null) {
                         minecraft.setScreen(this);
                     }
@@ -1045,7 +1063,7 @@ public class PlayerSkinMenuScreen extends Screen {
         // Prevent deletion of the player's own skin
         if (config.enablePlayerOwnSkinSystem && metadata.hash().equals(config.playerOwnSkinHash)) {
             QuickSkin.LOGGER.warn("Cannot delete player's own skin: {}", metadata.friendlyName());
-            showError(Component.literal("Cannot delete your own skin!"));
+            showError(Component.translatable("quickskin.error.delete_own_skin"));
             return;
         }
 
@@ -1077,7 +1095,7 @@ public class PlayerSkinMenuScreen extends Screen {
             QuickSkin.LOGGER.info("Deleted skin: {}", metadata.friendlyName());
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to delete skin: {}", metadata.friendlyName(), e);
-            showError(Component.literal("Failed to delete skin: " + e.getMessage()));
+            showError(Component.translatable("quickskin.error.delete_failed", e.getMessage()));
         }
     }
 
@@ -1115,22 +1133,22 @@ public class PlayerSkinMenuScreen extends Screen {
 
             case NAME_TAKEN:
                 QuickSkin.LOGGER.warn("Rename failed: Name already exists");
-                showError(Component.literal("Error: A skin file with that name already exists."));
+                showError(Component.translatable("quickskin.error.rename_exists"));
                 break;
 
             case INVALID_NAME:
                 QuickSkin.LOGGER.warn("Rename failed: Invalid name");
-                showError(Component.literal("Error: The name contains invalid characters or is empty."));
+                showError(Component.translatable("quickskin.error.rename_invalid"));
                 break;
 
             case IO_ERROR:
                 QuickSkin.LOGGER.error("Rename failed: IO error");
-                showError(Component.literal("Error: Could not rename the file. See logs."));
+                showError(Component.translatable("quickskin.error.rename_failed"));
                 break;
 
             case NOT_FOUND:
                 QuickSkin.LOGGER.error("Rename failed: File not found");
-                showError(Component.literal("Error: Could not find the original file."));
+                showError(Component.translatable("quickskin.error.rename_not_found"));
                 break;
         }
     }
@@ -1160,7 +1178,7 @@ public class PlayerSkinMenuScreen extends Screen {
         // Disable search while fetching
         isSearching = true;
         searchButton.active = false;
-        searchButton.setMessage(Component.literal("Searching..."));
+        searchButton.setMessage(Component.translatable("quickskin.button.searching"));
 
         QuickSkin.LOGGER.info("Searching for Mojang skin: {}", username);
 
@@ -1173,7 +1191,7 @@ public class PlayerSkinMenuScreen extends Screen {
                             if (skinData != null) {
                                 handleMojangSkinFetched(skinData);
                             } else {
-                                showError(Component.literal("Player not found: " + username));
+                                showError(Component.translatable("quickskin.error.player_not_found", username));
                                 resetSearchButton();
                             }
                         });
@@ -1183,7 +1201,7 @@ public class PlayerSkinMenuScreen extends Screen {
                     QuickSkin.LOGGER.error("Error fetching Mojang skin", throwable);
                     if (this.minecraft != null) {
                         this.minecraft.execute(() -> {
-                            showError(Component.literal("Failed to fetch skin: " + throwable.getMessage()));
+                            showError(Component.translatable("quickskin.error.fetch_skin_failed", throwable.getMessage()));
                             resetSearchButton();
                         });
                     }
@@ -1231,17 +1249,17 @@ public class PlayerSkinMenuScreen extends Screen {
                             );
                         }
                     } else {
-                        showError(Component.literal("Failed to load skin metadata"));
+                        showError(Component.translatable("quickskin.error.load_metadata_failed"));
                     }
                 } else {
-                    showError(Component.literal("Failed to compute file hash"));
+                    showError(Component.translatable("quickskin.error.compute_hash_failed"));
                 }
             } else {
-                showError(Component.literal("Failed to save skin image"));
+                showError(Component.translatable("quickskin.error.save_image_failed"));
             }
         } catch (Exception e) {
             QuickSkin.LOGGER.error("Error handling Mojang skin", e);
-            showError(Component.literal("Error: " + e.getMessage()));
+            showError(Component.translatable("quickskin.error.generic", e.getMessage()));
         } finally {
             resetSearchButton();
         }
@@ -1253,7 +1271,7 @@ public class PlayerSkinMenuScreen extends Screen {
     private void resetSearchButton() {
         isSearching = false;
         if (searchButton != null) {
-            searchButton.setMessage(Component.literal("Search"));
+            searchButton.setMessage(Component.translatable("quickskin.button.search"));
             searchButton.active = usernameSearchField != null && !usernameSearchField.getValue().trim().isEmpty();
         }
     }
@@ -1279,7 +1297,7 @@ public class PlayerSkinMenuScreen extends Screen {
         // Update button appearance
         sortButton.setMessage(Component.literal(nextMode.getIcon()));
         sortButton.setTooltip(Tooltip.create(
-                Component.literal("Sorting: " + nextMode.getDisplayName())
+                Component.translatable("quickskin.tooltip.sorting", nextMode.getDisplayName())
         ));
 
         // Refresh the skin list with new sorting

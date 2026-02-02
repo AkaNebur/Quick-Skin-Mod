@@ -45,7 +45,7 @@ public class ActionButtonsPanel extends AbstractWidget {
         bottomY -= COMPONENT_HEIGHT;
         this.doneButton = ButtonFactory.createPrimary(
             fullWidthX, bottomY, fullComponentWidth, COMPONENT_HEIGHT,
-            Component.literal("Done"),
+            Component.translatable("quickskin.button.done"),
             button -> callbacks.onDone.run()
         );
         screen.registerWidget(this.doneButton);
@@ -56,28 +56,28 @@ public class ActionButtonsPanel extends AbstractWidget {
 
         Button importButton = ButtonFactory.createStyled(
             fullWidthX, bottomY, fourButtonWidth, COMPONENT_HEIGHT,
-            Component.literal("Import Skin"),
+            Component.translatable("quickskin.button.import_skin"),
             button -> callbacks.onImport.run()
         );
         screen.registerWidget(importButton);
 
         Button hdSkinWebsiteButton = ButtonFactory.createStyled(
             fullWidthX + fourButtonWidth + SPACING, bottomY, fourButtonWidth, COMPONENT_HEIGHT,
-            Component.literal("HD Skin Website"),
+            Component.translatable("quickskin.button.hd_skin_website"),
             button -> callbacks.onHdSkinWebsite.run()
         );
         screen.registerWidget(hdSkinWebsiteButton);
 
         Button skinWebsiteButton = ButtonFactory.createStyled(
             fullWidthX + (fourButtonWidth + SPACING) * 2, bottomY, fourButtonWidth, COMPONENT_HEIGHT,
-            Component.literal("Skin Website"),
+            Component.translatable("quickskin.button.skin_website"),
             button -> callbacks.onSkinWebsite.run()
         );
         screen.registerWidget(skinWebsiteButton);
 
         Button capeButton = ButtonFactory.createStyled(
             fullWidthX + (fourButtonWidth + SPACING) * 3, bottomY, fourButtonWidth, COMPONENT_HEIGHT,
-            Component.literal("Cape"),
+            Component.translatable("quickskin.button.cape"),
             button -> callbacks.onCape.run()
         );
         screen.registerWidget(capeButton);

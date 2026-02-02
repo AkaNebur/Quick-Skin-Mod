@@ -47,7 +47,7 @@ public class LinkButtonsPanel extends AbstractWidget {
             BUTTON_SIZE,
             SETTINGS_ICON,
             null, // No URL, will be handled differently
-            Component.literal("Settings")
+            Component.translatable("quickskin.button.settings")
         ) {
             @Override
             public void onPress() {
@@ -67,7 +67,7 @@ public class LinkButtonsPanel extends AbstractWidget {
             BUTTON_SIZE,
             DISCORD_ICON,
             DISCORD_URL,
-            Component.literal("Join our Discord!")
+            Component.translatable("quickskin.button.discord")
         ));
 
         // CurseForge button (left of Discord)
@@ -79,7 +79,7 @@ public class LinkButtonsPanel extends AbstractWidget {
             BUTTON_SIZE,
             CURSEFORGE_ICON,
             CURSEFORGE_URL,
-            Component.literal("Visit our CurseForge page")
+            Component.translatable("quickskin.button.curseforge")
         ));
 
         // Modrinth button (left of CurseForge)
@@ -91,7 +91,7 @@ public class LinkButtonsPanel extends AbstractWidget {
             BUTTON_SIZE,
             MODRINTH_ICON,
             MODRINTH_URL,
-            Component.literal("Visit our Modrinth page")
+            Component.translatable("quickskin.button.modrinth")
         ));
     }
 

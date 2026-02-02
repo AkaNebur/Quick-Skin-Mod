@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.image.BufferedImage;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -317,7 +318,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     public String getModelName(UUID playerId) {
         String override = modelService.getModelOverride(playerId);
         if (override != null) {
-            if ("auto".equalsIgnoreCase(override)) {
+            if ("auto".equals(override != null ? override.toLowerCase(Locale.ROOT) : null)) {
                 PlayerAppearance appearance = repository.getAppearance(playerId);
                 if (appearance != null) {
                     String skinId = appearance.getSkinId();

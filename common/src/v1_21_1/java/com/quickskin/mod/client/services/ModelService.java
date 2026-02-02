@@ -7,6 +7,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
 import org.jetbrains.annotations.Nullable;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,12 +38,12 @@ public class ModelService implements IModelService {
     @Override
     public String getModelType(UUID playerId, String skinId, String requestedModel) {
         // If a specific model is explicitly requested (not "auto"), honor that request
-        if (requestedModel != null && !"auto".equalsIgnoreCase(requestedModel)) {
+        if (requestedModel != null && !"auto".equals(requestedModel.toLowerCase(Locale.ROOT))) {
             return requestedModel;
         }
 
         // If auto mode, get the pre-detected model from metadata
-        if ("auto".equalsIgnoreCase(requestedModel)) {
+        if ("auto".equals(requestedModel != null ? requestedModel.toLowerCase(Locale.ROOT) : null)) {
             if (skinId != null && skinId.startsWith("local_skin:")) {
                 String hash = skinId.substring("local_skin:".length());
 
@@ -63,7 +64,7 @@ public class ModelService implements IModelService {
         // Fallback: check for override
         if (modelOverrides.containsKey(playerId)) {
             String override = modelOverrides.get(playerId);
-            if (!"auto".equalsIgnoreCase(override)) {
+            if (!"auto".equals(override != null ? override.toLowerCase(Locale.ROOT) : null)) {
                 return override;
             }
         }

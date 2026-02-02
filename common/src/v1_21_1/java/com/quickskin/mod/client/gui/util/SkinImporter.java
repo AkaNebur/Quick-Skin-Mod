@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Utility for importing skin files into the QuickSkin directory
@@ -37,7 +38,7 @@ public class SkinImporter {
 
         // Validate it's a supported image file (PNG, WebP, or JPG)
         String fileName = sourcePath.getFileName().toString();
-        String lowerName = fileName.toLowerCase();
+        String lowerName = fileName.toLowerCase(Locale.ROOT);
         if (!lowerName.endsWith(".png") && !lowerName.endsWith(".webp")
                 && !lowerName.endsWith(".jpg")) {
             QuickSkin.LOGGER.error("Unsupported file format (must be PNG, WebP, or JPG): {}", fileName);

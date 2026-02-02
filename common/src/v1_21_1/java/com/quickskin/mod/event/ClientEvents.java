@@ -297,7 +297,7 @@ public class ClientEvents {
 
             // Create and add the "Change Skin" button
             Button changeSkinButton = Button.builder(
-                    Component.literal("Change Skin"),
+                    Component.translatable("quickskin.button.change_skin"),
                     button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen))
             ).bounds(buttonX, buttonY, buttonWidth, buttonHeight).build();
 

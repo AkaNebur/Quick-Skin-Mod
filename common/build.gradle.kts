@@ -20,7 +20,7 @@ sourceSets {
             setSrcDirs(listOf("src/$versionDir/java"))
         }
         resources {
-            setSrcDirs(listOf("src/$versionDir/resources"))
+            setSrcDirs(listOf("src/main/resources", "src/$versionDir/resources"))
         }
     }
 }

@@ -139,7 +139,7 @@ public class LocalAssetManager {
 
         try (Stream<Path> paths = Files.walk(directory)) {
             for (Path path : paths.filter(Files::isRegularFile).toList()) {
-                String fileName = path.getFileName().toString().toLowerCase();
+                String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
 
                 // Process PNG files
                 if (fileName.endsWith(".png")) {
@@ -752,7 +752,7 @@ public class LocalAssetManager {
             // Register with texture manager
             ResourceLocation location = ResourceLocation.fromNamespaceAndPath(
                     QuickSkin.MOD_ID,
-                    "local/" + hash + "_" + quality.name().toLowerCase()
+                    "local/" + hash + "_" + quality.name().toLowerCase(Locale.ROOT)
             );
 
             Minecraft.getInstance().getTextureManager().register(location, dynamicTexture);

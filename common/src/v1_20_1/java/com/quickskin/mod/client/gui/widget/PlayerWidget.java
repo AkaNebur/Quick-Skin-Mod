@@ -811,6 +811,6 @@ public class PlayerWidget extends AbstractWidget {
     protected void updateWidgetNarration(NarrationElementOutput narrationElementOutput) {
         // Add accessibility narration
         narrationElementOutput.add(net.minecraft.client.gui.narration.NarratedElementType.TITLE,
-                Component.literal("Player preview"));
+                Component.translatable("quickskin.preview.narration"));
     }
 }
