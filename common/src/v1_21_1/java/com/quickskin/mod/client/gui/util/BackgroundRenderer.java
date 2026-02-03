@@ -9,9 +9,7 @@ import com.quickskin.mod.common.data.BackgroundStyle;
 import com.quickskin.mod.platform.PlatformHelper;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.LogoRenderer;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.renderer.CubeMap;
 import net.minecraft.client.renderer.PanoramaRenderer;
 import net.minecraft.resources.ResourceLocation;
@@ -125,6 +123,9 @@ public class BackgroundRenderer {
             panoramaRenderer = new PanoramaRenderer(PANORAMA_CUBE_MAP);
         }
 
+        // Sync panorama time with global time source (same as TitleScreen via mixin)
+        PanoramaTimeSync.syncPanoramaRenderer(panoramaRenderer);
+
         // Render the panorama background
         panoramaRenderer.render(graphics, screen.width, screen.height, 1.0F, partialTick);
 
@@ -136,12 +137,12 @@ public class BackgroundRenderer {
         graphics.fill(0, 0, screen.width, screen.height, 0x60000000);
     }
 
-
     /**
-     * Cleans up blur resources when screen is closed
-     * MUST be called from screen's removed() or onClose() method
+     * Cleans up resources when screen is closed.
+     * MUST be called from screen's removed() or onClose() method.
      */
     public static void cleanup() {
         BlurHandler.cleanup();
+        // Don't reset panoramaRenderer - keep it for consistent time accumulation
     }
 }

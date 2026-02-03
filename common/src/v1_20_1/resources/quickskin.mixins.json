@@ -10,6 +10,7 @@
     "CapeLayerMixin",
     "ItemInHandRendererMixin",
     "MixinAbstractClientPlayer",
+    "PanoramaRendererMixin",
     "compat.ReplayModCompatMixin",
     "compat.PasConfiguratorMixin",
     "compat.PasConfiguratorAccessor"
