@@ -3,6 +3,7 @@ package com.quickskin.mod.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.BackgroundStyle;
 import com.quickskin.mod.common.data.SkinSortMode;
 import com.quickskin.mod.platform.PlatformHelper;
 
@@ -71,6 +72,9 @@ public class ClientConfig {
 
     // Sorting Settings
     public String skinSortMode = "LATEST_LAST"; // Skin list sorting mode
+
+    // Menu Background Style
+    public String menuBackgroundStyle = "opaque_stars"; // "opaque_stars" or "vanilla_blur"
 
     // --- NEW --- Modpack Settings
     public boolean enablePlayerOwnSkinSystem = true; // When enabled, automatically downloads and protects the player's own skin.
@@ -262,6 +266,23 @@ public class ClientConfig {
      */
     public void setSkinSortMode(SkinSortMode mode) {
         this.skinSortMode = mode.name();
+        save();
+    }
+
+    /**
+     * Get menu background style with fallback to default
+     * @return Menu background style enum
+     */
+    public BackgroundStyle getMenuBackgroundStyle() {
+        return BackgroundStyle.fromId(menuBackgroundStyle);
+    }
+
+    /**
+     * Set menu background style
+     * @param style The background style to set
+     */
+    public void setMenuBackgroundStyle(BackgroundStyle style) {
+        this.menuBackgroundStyle = style.getId();
         save();
     }
 }

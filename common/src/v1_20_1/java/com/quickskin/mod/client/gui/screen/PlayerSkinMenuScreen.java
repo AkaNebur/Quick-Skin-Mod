@@ -6,6 +6,7 @@ import com.quickskin.mod.client.gui.panel.ActionButtonsPanel;
 import com.quickskin.mod.client.gui.panel.LinkButtonsPanel;
 import com.quickskin.mod.client.gui.panel.PlayerPreviewPanel;
 import com.quickskin.mod.client.gui.panel.SkinListPanel;
+import com.quickskin.mod.client.gui.util.BackgroundRenderer;
 import com.quickskin.mod.client.gui.util.FileDialogHelper;
 import com.quickskin.mod.client.gui.util.GuiScaleManager;
 import com.quickskin.mod.client.gui.util.SkinImporter;
@@ -577,74 +578,9 @@ public class PlayerSkinMenuScreen extends Screen {
      * This includes a tiled, scrolling texture and a vignette overlay for depth.
      */
     private void renderBackgroundEffects(GuiGraphics graphics, float partialTick) {
-        // 1. Fill with solid black as a base layer.
-        graphics.fill(0, 0, this.width, this.height, 0xFF000000);
-
-        // 2. Render the moving star pattern.
-        renderStarPattern(graphics, partialTick);
-
-        // 3. Render a vignette overlay for a darker, focused feel around the edges.
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.setShaderColor(0.0F, 0.0F, 0.0F, 0.75F);
-        // Stretch Minecraft's vignette texture to cover the entire screen.
-        graphics.blit(VIGNETTE_LOCATION, 0, 0, 0, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
-
-        // 4. Reset render state to avoid affecting other GUI elements.
-        RenderSystem.disableBlend();
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        BackgroundRenderer.renderBackground(this, graphics, partialTick);
     }
 
-    /**
-     * Renders the animated star pattern (OPTIMIZED - pre-tiled texture cache, 1 draw call)
-     */
-    private void renderStarPattern(GuiGraphics graphics, float partialTick) {
-        double pixelsPerSecond = 5.0;
-        int tileSize = com.quickskin.mod.client.gui.StarPatternCache.getTileSize();
-
-        // Calculate smooth scrolling offset
-        int tickCount = this.minecraft != null ? this.minecraft.gui.getGuiTicks() : 0;
-        double smoothTime = (tickCount + partialTick) / 20.0;
-        double offsetX = (smoothTime * pixelsPerSecond) % tileSize;
-
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 0.15F);
-
-        // Use the pre-tiled cached texture
-        ResourceLocation cacheTexture = com.quickskin.mod.client.gui.StarPatternCache.getTextureLocation();
-        int cacheWidth = com.quickskin.mod.client.gui.StarPatternCache.getTextureWidth();
-        int cacheHeight = com.quickskin.mod.client.gui.StarPatternCache.getTextureHeight();
-
-        // Calculate UV coordinates for smooth sub-pixel scrolling
-        // The offset creates the scrolling effect via UV manipulation
-        float u0 = (float)offsetX / (float)cacheWidth;
-        float v0 = 0.0f;
-        float u1 = u0 + ((float)this.width / (float)cacheWidth);
-        float v1 = (float)this.height / (float)cacheHeight;
-
-        // Render a single quad with the scrolling UV coordinates
-        var pose = graphics.pose();
-        pose.pushPose();
-
-        RenderSystem.setShaderTexture(0, cacheTexture);
-        RenderSystem.setShader(net.minecraft.client.renderer.GameRenderer::getPositionTexShader);
-
-        com.mojang.blaze3d.vertex.Tesselator tesselator = com.mojang.blaze3d.vertex.Tesselator.getInstance();
-        com.mojang.blaze3d.vertex.BufferBuilder bufferBuilder = tesselator.getBuilder();
-
-        bufferBuilder.begin(com.mojang.blaze3d.vertex.VertexFormat.Mode.QUADS, com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_TEX);
-        bufferBuilder.vertex(pose.last().pose(), 0, this.height, 0).uv(u0, v1).endVertex();
-        bufferBuilder.vertex(pose.last().pose(), this.width, this.height, 0).uv(u1, v1).endVertex();
-        bufferBuilder.vertex(pose.last().pose(), this.width, 0, 0).uv(u1, v0).endVertex();
-        bufferBuilder.vertex(pose.last().pose(), 0, 0, 0).uv(u0, v0).endVertex();
-        tesselator.end();
-
-        pose.popPose();
-
-        RenderSystem.disableBlend();
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-    }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
@@ -694,6 +630,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
     @Override
     public void removed() {
+        BackgroundRenderer.cleanup();
         super.removed();
 
         // Only restore GUI scale if we're actually closing (not just opening a modal)

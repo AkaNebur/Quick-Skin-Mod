@@ -5,6 +5,7 @@ import com.quickskin.mod.client.gui.effect.BlurHandler;
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import com.quickskin.mod.client.gui.widget.TabButton;
 import com.quickskin.mod.client.input.KeybindRegistry;
+import com.quickskin.mod.common.data.BackgroundStyle;
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.config.ServerConfig;
 import com.quickskin.mod.networking.ModNetworking;
@@ -88,6 +89,7 @@ public class SettingsScreen extends Screen {
     private Checkbox enableStyledButtonsCheckbox;
     private Checkbox enablePlayerPreviewCustomizationCheckbox;
     private Checkbox hideBuiltInCapesCheckbox;
+    private Checkbox menuBackgroundCheckbox;
     private Button keybindButton;
 
     // State for keybind editing
@@ -235,6 +237,19 @@ public class SettingsScreen extends Screen {
                 Component.translatable("quickskin.settings.hide_builtin_capes.tooltip")
         ));
         guiEditSettingWidgets.add(hideBuiltInCapesCheckbox);
+        currentY += spacing;
+
+        // Menu Background Style
+        menuBackgroundCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+                Component.translatable("quickskin.settings.menu_background"),
+                config.getMenuBackgroundStyle() == BackgroundStyle.VANILLA_BLUR
+        );
+        menuBackgroundCheckbox.setTooltip(Tooltip.create(
+                Component.translatable("quickskin.settings.menu_background.tooltip")
+        ));
+        guiEditSettingWidgets.add(menuBackgroundCheckbox);
     }
 
     private void createClientSettings() {
@@ -602,6 +617,13 @@ public class SettingsScreen extends Screen {
             config.enablePlayerPreviewCustomization = enablePlayerPreviewCustomizationCheckbox.selected();
             config.enablePlayerOwnSkinSystem = enablePlayerOwnSkinSystemCheckbox.selected();
             config.hideBuiltInCapes = hideBuiltInCapesCheckbox.selected();
+
+            // Save menu background style
+            if (menuBackgroundCheckbox != null) {
+                BackgroundStyle newStyle = menuBackgroundCheckbox.selected() ?
+                    BackgroundStyle.VANILLA_BLUR : BackgroundStyle.OPAQUE_STARS;
+                config.setMenuBackgroundStyle(newStyle);
+            }
 
             // If transparency setting changed, flag for a reload
             if (oldTransparencySetting != config.disableSkinTransparency) {
