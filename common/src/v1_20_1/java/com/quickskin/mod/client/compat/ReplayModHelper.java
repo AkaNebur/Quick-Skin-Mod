@@ -59,7 +59,7 @@ public class ReplayModHelper {
             for (Player player : mc.level.players()) {
                 // Skip the camera entity
                 if (!player.getClass().getName().equals(CAMERA_ENTITY_CLASS)) {
-                    QuickSkin.LOGGER.info("[ReplayCompat] Found recorded player in replay: {} ({})",
+                    QuickSkin.LOGGER.debug("[ReplayCompat] Found recorded player in replay: {} ({})",
                         player.getName().getString(), player.getUUID());
                     return player.getUUID();
                 }
@@ -72,7 +72,7 @@ public class ReplayModHelper {
                 UUID uuid = info.getProfile().getId();
                 // Skip if this looks like the camera entity UUID
                 if (mc.player != null && !uuid.equals(mc.player.getUUID())) {
-                    QuickSkin.LOGGER.info("[ReplayCompat] Found player from player info: {} ({})",
+                    QuickSkin.LOGGER.debug("[ReplayCompat] Found player from player info: {} ({})",
                         info.getProfile().getName(), uuid);
                     return uuid;
                 }
@@ -158,7 +158,7 @@ public class ReplayModHelper {
         }
 
         resetSkinAppliedState();
-        QuickSkin.LOGGER.info("[ReplayCompat] Starting player watcher for replay");
+        QuickSkin.LOGGER.debug("[ReplayCompat] Starting player watcher for replay");
 
         // Start a background thread that checks for players every 200ms for up to 10 seconds
         Thread watcherThread = new Thread(() -> {
@@ -205,7 +205,7 @@ public class ReplayModHelper {
         com.quickskin.mod.client.services.LocalAssetManager assetManager =
                 com.quickskin.mod.client.services.LocalAssetManager.getInstance();
 
-        QuickSkin.LOGGER.info("[ReplayCompat] Applying saved skin to recorded player: {}", targetPlayerId);
+        QuickSkin.LOGGER.debug("[ReplayCompat] Applying saved skin to recorded player: {}", targetPlayerId);
 
         // Check if there's a saved skin
         if (!config.activeSkinHash.isEmpty()) {
@@ -218,7 +218,7 @@ public class ReplayModHelper {
                 com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                         .applySkin(targetPlayerId, skinId, modelType);
 
-                QuickSkin.LOGGER.info("[ReplayCompat] Applied saved skin: {} with model type: {} to player {}",
+                QuickSkin.LOGGER.debug("[ReplayCompat] Applied saved skin: {} with model type: {} to player {}",
                         metadata.friendlyName(), modelType, targetPlayerId);
             }
         }
@@ -230,7 +230,7 @@ public class ReplayModHelper {
             com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                     .applyCape(targetPlayerId, capeId);
 
-            QuickSkin.LOGGER.info("[ReplayCompat] Applied saved cape: {} to player {}", capeId, targetPlayerId);
+            QuickSkin.LOGGER.debug("[ReplayCompat] Applied saved cape: {} to player {}", capeId, targetPlayerId);
         }
     }
 }

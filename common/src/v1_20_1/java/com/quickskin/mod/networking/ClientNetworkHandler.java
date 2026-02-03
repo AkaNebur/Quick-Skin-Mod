@@ -38,7 +38,7 @@ public class ClientNetworkHandler {
 
         // Queue work on main thread (CRITICAL for thread safety!)
         context.queue(() -> {
-            QuickSkin.LOGGER.info("Received appearance sync for player {}: skin={}, cape={}, model={}",
+            QuickSkin.LOGGER.debug("Received appearance sync for player {}: skin={}, cape={}, model={}",
                     playerId, skinId, capeId, model);
 
             // Apply appearance through service
@@ -56,7 +56,7 @@ public class ClientNetworkHandler {
         byte[] imageData = PacketHelper.readByteArray(buf);
 
         context.queue(() -> {
-            QuickSkin.LOGGER.info("Received {} texture from server: {} (size: {} bytes)",
+            QuickSkin.LOGGER.debug("Received {} texture from server: {} (size: {} bytes)",
                     textureType, hash, imageData.length);
 
             // Store in network texture cache (not local assets, so it won't appear in skin list)
@@ -77,7 +77,7 @@ public class ClientNetworkHandler {
         String metadataJson = PacketHelper.readString(buf);
 
         context.queue(() -> {
-            QuickSkin.LOGGER.info("Received animation metadata for: {}", hash);
+            QuickSkin.LOGGER.debug("Received animation metadata for: {}", hash);
 
             // Store animation metadata both in memory cache and to disk
             try {
@@ -150,7 +150,7 @@ public class ClientNetworkHandler {
 
             if (!animManager.isAnimated(animationId)) {
                 animManager.registerAnimation(animationId, capeId, textureLocation, atlasImage, metadata);
-                QuickSkin.LOGGER.info("Registered animation for network cape: {} ({} frames)", hash, metadata.frameCount());
+                QuickSkin.LOGGER.debug("Registered animation for network cape: {} ({} frames)", hash, metadata.frameCount());
             }
 
         } catch (Exception e) {
@@ -177,7 +177,7 @@ public class ClientNetworkHandler {
         String configJson = PacketHelper.readString(buf);
 
         context.queue(() -> {
-            QuickSkin.LOGGER.info("Received server config sync");
+            QuickSkin.LOGGER.debug("Received server config sync");
 
             // Get current server override to detect changes
             com.quickskin.mod.config.ClientConfig clientConfig = com.quickskin.mod.config.ClientConfig.getInstance();
@@ -212,11 +212,11 @@ public class ClientNetworkHandler {
                 boolean isInSettingsScreen = mc.screen instanceof com.quickskin.mod.client.gui.screen.SettingsScreen;
 
                 if (mc.screen == null || !isInSettingsScreen) {
-                    QuickSkin.LOGGER.info("Server transparency setting changed, reloading textures immediately (screen: {})",
+                    QuickSkin.LOGGER.debug("Server transparency setting changed, reloading textures immediately (screen: {})",
                         mc.screen != null ? mc.screen.getClass().getSimpleName() : "null");
                     PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
                 } else {
-                    QuickSkin.LOGGER.info("Server transparency setting changed, marking reload as pending");
+                    QuickSkin.LOGGER.debug("Server transparency setting changed, marking reload as pending");
                     pendingTransparencyReload = true;
                 }
             }
@@ -231,7 +231,7 @@ public class ClientNetworkHandler {
                     com.quickskin.mod.common.data.PlayerAppearanceRepository.getInstance().getAppearance(playerId);
 
                 if (currentAppearance != null) {
-                    QuickSkin.LOGGER.info("Syncing current appearance to server after config received");
+                    QuickSkin.LOGGER.debug("Syncing current appearance to server after config received");
                     NetworkSyncService.getInstance().syncAppearance(
                         playerId,
                         currentAppearance.getSkinId(),
@@ -249,7 +249,7 @@ public class ClientNetworkHandler {
      */
     public static void executePendingTransparencyReload() {
         if (pendingTransparencyReload) {
-            QuickSkin.LOGGER.info("Executing pending transparency reload");
+            QuickSkin.LOGGER.debug("Executing pending transparency reload");
             PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
             pendingTransparencyReload = false;
         }

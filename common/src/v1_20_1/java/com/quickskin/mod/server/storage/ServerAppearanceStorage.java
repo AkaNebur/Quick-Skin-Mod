@@ -43,7 +43,7 @@ public class ServerAppearanceStorage {
 
         try {
             Files.createDirectories(storageDirectory);
-            QuickSkin.LOGGER.info("ServerAppearanceStorage initialized at: {}", storageDirectory);
+            QuickSkin.LOGGER.debug("ServerAppearanceStorage initialized at: {}", storageDirectory);
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to create appearance storage directory", e);
         }
@@ -75,7 +75,7 @@ public class ServerAppearanceStorage {
             ServerPlayerAppearanceRepository.getInstance().setAppearance(appearance);
 
             if (ServerConfig.getInstance().enableVerboseLogging) {
-                QuickSkin.LOGGER.info("Loaded appearance for player: {} (skin={}, cape={}, model={})",
+                QuickSkin.LOGGER.debug("Loaded appearance for player: {} (skin={}, cape={}, model={})",
                         playerId, appearance.getSkinId(), appearance.getCapeId(), appearance.getModel());
             }
 

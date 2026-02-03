@@ -28,7 +28,7 @@ public class KeybindRegistry {
      * Called from QuickSkinClient.init()
      */
     public static void init() {
-        QuickSkin.LOGGER.info("Registering keybinds...");
+        QuickSkin.LOGGER.debug("Registering keybinds...");
 
         // Create keybind for opening skin menu (default: none)
         OPEN_SKIN_MENU = new KeyMapping(
@@ -46,7 +46,7 @@ public class KeybindRegistry {
             handleKeyPresses(client);
         });
 
-        QuickSkin.LOGGER.info("Keybinds registered");
+        QuickSkin.LOGGER.debug("Keybinds registered");
     }
 
     /**
@@ -56,7 +56,7 @@ public class KeybindRegistry {
     private static void handleKeyPresses(Minecraft client) {
         // Check if open menu key was pressed
         while (OPEN_SKIN_MENU.consumeClick()) {
-            QuickSkin.LOGGER.info("Open skin menu key pressed - opening PlayerSkinMenuScreen");
+            QuickSkin.LOGGER.debug("Open skin menu key pressed - opening PlayerSkinMenuScreen");
 
             // Phase 8: Open skin selection screen
             if (client.player != null) {

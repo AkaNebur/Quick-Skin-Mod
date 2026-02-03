@@ -56,7 +56,7 @@ public class ModNetworking {
      * Called from QuickSkin.init() on both client and server
      */
     public static void init() {
-        QuickSkin.LOGGER.info("Initializing networking...");
+        QuickSkin.LOGGER.debug("Initializing networking...");
 
         // Register server-side packet receivers (C2S)
         NetworkManager.registerReceiver(
@@ -101,6 +101,6 @@ public class ModNetworking {
             ServerNetworkHandler::handleUpdateServerConfig
         );
 
-        QuickSkin.LOGGER.info("Networking initialized (server-side receivers ready)");
+        QuickSkin.LOGGER.debug("Networking initialized (server-side receivers ready)");
     }
 }

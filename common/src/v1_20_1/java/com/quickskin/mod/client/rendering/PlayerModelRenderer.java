@@ -54,14 +54,14 @@ public class PlayerModelRenderer {
      */
     private static void ensureModelsLoaded() {
         if (classicModel == null) {
-            QuickSkin.LOGGER.info("[PlayerModelRenderer] Initializing player models...");
+            QuickSkin.LOGGER.debug("[PlayerModelRenderer] Initializing player models...");
             Minecraft mc = Minecraft.getInstance();
             ModelPart classicRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER);
             classicModel = new PlayerModel<>(classicRoot, false);
 
             ModelPart slimRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER_SLIM);
             slimModel = new PlayerModel<>(slimRoot, true);
-            QuickSkin.LOGGER.info("[PlayerModelRenderer] Models initialized successfully");
+            QuickSkin.LOGGER.debug("[PlayerModelRenderer] Models initialized successfully");
         }
     }
 
@@ -835,7 +835,7 @@ public class PlayerModelRenderer {
 
         // Build cache on first render
         if (!grassBlockCacheBuilt) {
-            QuickSkin.LOGGER.info("[PlayerModelRenderer] Grass block cache initialized");
+            QuickSkin.LOGGER.debug("[PlayerModelRenderer] Grass block cache initialized");
             grassBlockCacheBuilt = true;
         }
 
@@ -1095,7 +1095,7 @@ public class PlayerModelRenderer {
      */
     public static void clearCachedPlayer() {
         cachedPlayer = null;
-        QuickSkin.LOGGER.info("[PlayerModelRenderer] Cached player cleared");
+        QuickSkin.LOGGER.debug("[PlayerModelRenderer] Cached player cleared");
     }
 
     /**
@@ -1163,12 +1163,12 @@ public class PlayerModelRenderer {
         isDraggingModel = false;
 
         // Log the final offsets
-        QuickSkin.LOGGER.info("========================================");
-        QuickSkin.LOGGER.info("[Debug Positioning] Model positioned!");
-        QuickSkin.LOGGER.info("[Debug Positioning] Set these values in PlayerModelRenderer:");
-        QuickSkin.LOGGER.info("[Debug Positioning]   debugOffsetX = {};", debugOffsetX);
-        QuickSkin.LOGGER.info("[Debug Positioning]   debugOffsetY = {};", debugOffsetY);
-        QuickSkin.LOGGER.info("========================================");
+        QuickSkin.LOGGER.debug("========================================");
+        QuickSkin.LOGGER.debug("[Debug Positioning] Model positioned!");
+        QuickSkin.LOGGER.debug("[Debug Positioning] Set these values in PlayerModelRenderer:");
+        QuickSkin.LOGGER.debug("[Debug Positioning]   debugOffsetX = {};", debugOffsetX);
+        QuickSkin.LOGGER.debug("[Debug Positioning]   debugOffsetY = {};", debugOffsetY);
+        QuickSkin.LOGGER.debug("========================================");
 
         return true;
     }

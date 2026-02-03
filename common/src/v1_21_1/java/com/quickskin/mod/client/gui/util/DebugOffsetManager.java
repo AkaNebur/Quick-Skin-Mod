@@ -136,6 +136,13 @@ public class DebugOffsetManager {
     }
 
     /**
+     * Check if debug mode is enabled
+     */
+    public static boolean isDebugMode() {
+        return debugMode;
+    }
+
+    /**
      * Enable debug mode (allows dragging models)
      */
     public static void setDebugMode(boolean enabled) {

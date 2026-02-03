@@ -30,7 +30,7 @@ public class SkinService implements ISkinService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.info("SkinService initialized");
+        QuickSkin.LOGGER.debug("SkinService initialized");
     }
 
     @Override
@@ -96,7 +96,7 @@ public class SkinService implements ISkinService {
         if (localLocation == null) {
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc.player != null && mc.getConnection() != null) {
-                QuickSkin.LOGGER.info("Skin {} not found locally, requesting from server", hash);
+                QuickSkin.LOGGER.debug("Skin {} not found locally, requesting from server", hash);
                 com.quickskin.mod.networking.NetworkSyncService.getInstance()
                     .requestTexture(mc.player.getUUID(), "skin", hash);
             }

@@ -23,11 +23,11 @@ public class CommonEvents {
      * Called from QuickSkin.init()
      */
     public static void init() {
-        QuickSkin.LOGGER.info("Registering common events...");
+        QuickSkin.LOGGER.debug("Registering common events...");
 
         // Player joins server
         PlayerEvent.PLAYER_JOIN.register(player -> {
-            QuickSkin.LOGGER.info("Player joined: {}", player.getName().getString());
+            QuickSkin.LOGGER.debug("Player joined: {}", player.getName().getString());
 
             // Phase 5: Load player's saved appearance from server storage
             com.quickskin.mod.common.data.PlayerAppearance savedAppearance =
@@ -64,7 +64,7 @@ public class CommonEvents {
 
         // Player quits server
         PlayerEvent.PLAYER_QUIT.register(player -> {
-            QuickSkin.LOGGER.info("Player quit: {}", player.getName().getString());
+            QuickSkin.LOGGER.debug("Player quit: {}", player.getName().getString());
 
             // Phase 5: Save player's appearance to server storage
             ServerAppearanceStorage.getInstance().savePlayerAppearance(player.getUUID());
@@ -105,7 +105,7 @@ public class CommonEvents {
 
         // Server starting
         LifecycleEvent.SERVER_STARTING.register(server -> {
-            QuickSkin.LOGGER.info("Server starting, initializing QuickSkin server components...");
+            QuickSkin.LOGGER.debug("Server starting, initializing QuickSkin server components...");
 
             // Phase 5: Initialize server-side storage
             ServerTextureCache.getInstance().init(server);
@@ -118,12 +118,12 @@ public class CommonEvents {
 
         // Server started (ready to accept players)
         LifecycleEvent.SERVER_STARTED.register(server -> {
-            QuickSkin.LOGGER.info("Server started, QuickSkin ready");
+            QuickSkin.LOGGER.debug("Server started, QuickSkin ready");
         });
 
         // Server stopping
         LifecycleEvent.SERVER_STOPPING.register(server -> {
-            QuickSkin.LOGGER.info("Server stopping, saving QuickSkin data...");
+            QuickSkin.LOGGER.debug("Server stopping, saving QuickSkin data...");
 
             // Phase 5: Save all pending texture data
             ServerTextureCache.getInstance().saveAll();
@@ -134,13 +134,13 @@ public class CommonEvents {
 
         // Server stopped
         LifecycleEvent.SERVER_STOPPED.register(server -> {
-            QuickSkin.LOGGER.info("Server stopped, QuickSkin cleanup complete");
+            QuickSkin.LOGGER.debug("Server stopped, QuickSkin cleanup complete");
 
             // Phase 5: Clear caches
             ServerTextureCache.getInstance().clear();
             ServerAnimationCache.getInstance().clear();
         });
 
-        QuickSkin.LOGGER.info("Common events registered");
+        QuickSkin.LOGGER.debug("Common events registered");
     }
 }

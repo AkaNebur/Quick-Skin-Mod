@@ -45,7 +45,7 @@ public class ServerConfig {
             try {
                 String json = Files.readString(configPath);
                 ServerConfig config = GSON.fromJson(json, ServerConfig.class);
-                QuickSkin.LOGGER.info("Loaded server configuration");
+                QuickSkin.LOGGER.debug("Loaded server configuration");
                 return config;
             } catch (Exception e) {
                 QuickSkin.LOGGER.error("Failed to load server configuration, using defaults", e);

@@ -1,5 +1,7 @@
 plugins {
     id("com.gradleup.shadow")
+    id("com.modrinth.minotaur")
+    id("net.darkhax.curseforgegradle")
 }
 
 fun Project.versionProp(base: String): String {
@@ -61,4 +63,55 @@ tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
     val shadowJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar")
     mustRunAfter(shadowJar)
     inputFile.set(shadowJar.get().archiveFile)
+}
+
+// ===== PUBLISHING CONFIGURATION =====
+
+val mcVersion = minecraftVersion
+val supportedGameVersions = when (mcVersion) {
+    "1.21.5" -> listOf("1.21.5")
+    "1.21.4" -> listOf("1.21.4")
+    "1.21.1" -> listOf("1.21.1")
+    "1.20.1" -> listOf("1.20.1")
+    else -> listOf(mcVersion)
+}
+
+val modLoaders = listOf("fabric")
+
+val changelogFile = rootProject.file(rootProject.property("changelog_file") as String)
+val changelogText = if (changelogFile.exists()) changelogFile.readText() else "No changelog provided"
+
+val modrinthToken: String? = findProperty("modrinth_token") as String? ?: System.getenv("MODRINTH_TOKEN")
+val curseforgeToken: String? = findProperty("curseforge_token") as String? ?: System.getenv("CURSEFORGE_TOKEN")
+
+modrinth {
+    token.set(modrinthToken ?: "")
+    projectId.set(rootProject.property("modrinth_id") as String)
+    versionNumber.set("${project.version}")
+    versionName.set("Quick Skin ${project.version} [Fabric] [MC $mcVersion]")
+    versionType.set("release")
+    uploadFile.set(tasks.named("remapJar"))
+    gameVersions.addAll(supportedGameVersions)
+    loaders.addAll(modLoaders)
+    changelog.set(changelogText)
+}
+
+tasks.register<net.darkhax.curseforgegradle.TaskPublishCurseForge>("publishCurseForge") {
+    dependsOn(tasks.named("remapJar"))
+    apiToken = curseforgeToken ?: ""
+    val mainFile = upload(rootProject.property("curseforge_id") as String, tasks.named("remapJar").get().outputs.files.singleFile)
+    mainFile.changelogType = "markdown"
+    mainFile.changelog = changelogText
+    mainFile.releaseType = "release"
+    supportedGameVersions.forEach { mainFile.addGameVersion(it) }
+    modLoaders.forEach { mainFile.addModLoader(it) }
+    doFirst {
+        if (curseforgeToken.isNullOrEmpty()) throw GradleException("curseforge_token not set!")
+    }
+}
+
+tasks.register("publishAll") {
+    group = "publishing"
+    description = "Publishes to both Modrinth and CurseForge"
+    dependsOn("modrinth", "publishCurseForge")
 }

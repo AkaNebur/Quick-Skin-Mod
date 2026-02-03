@@ -32,7 +32,7 @@ public class ModelService implements IModelService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.info("ModelService initialized");
+        QuickSkin.LOGGER.debug("ModelService initialized");
     }
 
     @Override

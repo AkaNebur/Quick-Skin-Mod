@@ -60,7 +60,7 @@ public class CustomNPCsIntegration {
         for (String modId : possibleModIds) {
             if (PlatformHelper.isModLoaded(modId)) {
                 MOD_AVAILABLE = true;
-                QuickSkin.LOGGER.info("[CustomNPCs Compat] Detected CustomNPCs mod ({}), enabling compatibility layer", modId);
+                QuickSkin.LOGGER.debug("[CustomNPCs Compat] Detected CustomNPCs mod ({}), enabling compatibility layer", modId);
                 initializeReflection();
                 return;
             }
@@ -70,7 +70,7 @@ public class CustomNPCsIntegration {
         try {
             Class.forName("noppes.npcs.api.NpcAPI");
             MOD_AVAILABLE = true;
-            QuickSkin.LOGGER.info("[CustomNPCs Compat] Detected CustomNPCs via class loading, enabling compatibility layer");
+            QuickSkin.LOGGER.debug("[CustomNPCs Compat] Detected CustomNPCs via class loading, enabling compatibility layer");
             initializeReflection();
         } catch (ClassNotFoundException e) {
             QuickSkin.LOGGER.debug("[CustomNPCs Compat] CustomNPCs not detected");

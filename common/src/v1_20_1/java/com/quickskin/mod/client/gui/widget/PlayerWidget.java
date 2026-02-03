@@ -321,7 +321,7 @@ public class PlayerWidget extends AbstractWidget {
                 break;
         }
         config.save();
-        QuickSkin.LOGGER.info("Saved {}% to config for context: {}", percentage, context);
+        QuickSkin.LOGGER.debug("Saved {}% to config for context: {}", percentage, context);
     }
 
     /**
@@ -379,7 +379,7 @@ public class PlayerWidget extends AbstractWidget {
                 return;
         }
         config.save();
-        QuickSkin.LOGGER.info("Saved position offset ({}, {}) to config for context: {}", offsetX, offsetY, context);
+        QuickSkin.LOGGER.debug("Saved position offset ({}, {}) to config for context: {}", offsetX, offsetY, context);
     }
 
     @Override
@@ -609,7 +609,7 @@ public class PlayerWidget extends AbstractWidget {
     public void setAnimation(String animation) {
         if (animation != null && !animation.isEmpty()) {
             previewData.setCurrentAnimation(animation);
-            QuickSkin.LOGGER.info("PlayerWidget animation set to: {}", animation);
+            QuickSkin.LOGGER.debug("PlayerWidget animation set to: {}", animation);
         }
     }
 
@@ -650,7 +650,7 @@ public class PlayerWidget extends AbstractWidget {
                 dragStartOffsetX = getPositionOffsetXFromConfig(config);
                 dragStartOffsetY = getPositionOffsetYFromConfig(config);
                 activeInteractionWidget = this; // Register as active for global event handling
-                QuickSkin.LOGGER.info("Started dragging player preview at ({}, {})", mouseX, mouseY);
+                QuickSkin.LOGGER.debug("Started dragging player preview at ({}, {})", mouseX, mouseY);
                 return true;
             }
             // In normal mode: left-click rotates
@@ -660,7 +660,7 @@ public class PlayerWidget extends AbstractWidget {
                 rotationDragStartYaw = targetYRotation;
                 shouldReturnToOriginal = false; // Cancel any ongoing return animation
                 activeInteractionWidget = this; // Register as active for global event handling
-                QuickSkin.LOGGER.info("Started rotating player preview at ({}, {})", mouseX, mouseY);
+                QuickSkin.LOGGER.debug("Started rotating player preview at ({}, {})", mouseX, mouseY);
                 return true;
             }
         }
@@ -671,7 +671,7 @@ public class PlayerWidget extends AbstractWidget {
             rotationDragStartYaw = targetYRotation;
             shouldReturnToOriginal = false; // Cancel any ongoing return animation
             activeInteractionWidget = this; // Register as active for global event handling
-            QuickSkin.LOGGER.info("Started rotating player preview at ({}, {})", mouseX, mouseY);
+            QuickSkin.LOGGER.debug("Started rotating player preview at ({}, {})", mouseX, mouseY);
             return true;
         }
 
@@ -688,7 +688,7 @@ public class PlayerWidget extends AbstractWidget {
             if (activeInteractionWidget == this) {
                 activeInteractionWidget = null; // Clear active widget
             }
-            QuickSkin.LOGGER.info("Stopped dragging player preview at ({}, {})", mouseX, mouseY);
+            QuickSkin.LOGGER.debug("Stopped dragging player preview at ({}, {})", mouseX, mouseY);
             handled = true;
         }
 
@@ -699,7 +699,7 @@ public class PlayerWidget extends AbstractWidget {
             if (activeInteractionWidget == this) {
                 activeInteractionWidget = null; // Clear active widget
             }
-            QuickSkin.LOGGER.info("Stopped rotating player preview, returning to original rotation");
+            QuickSkin.LOGGER.debug("Stopped rotating player preview, returning to original rotation");
             handled = true;
         }
 

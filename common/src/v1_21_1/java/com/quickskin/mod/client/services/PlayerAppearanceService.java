@@ -48,7 +48,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.info("PlayerAppearanceService initialized");
+        QuickSkin.LOGGER.debug("PlayerAppearanceService initialized");
     }
 
     @Override
@@ -58,7 +58,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             return;
         }
 
-        QuickSkin.LOGGER.info("Applying look to player {}: skin={}, cape={}, model={}",
+        QuickSkin.LOGGER.debug("Applying look to player {}: skin={}, cape={}, model={}",
                 playerId, skinId, capeId, model);
 
         // Get or create appearance
@@ -125,7 +125,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                         AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
                         BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
                         if (metadata != null && atlasImage != null) {
-                            QuickSkin.LOGGER.info("[PlayerAppearanceService] Registering local cape animation {} for player {}",
+                            QuickSkin.LOGGER.debug("[PlayerAppearanceService] Registering local cape animation {} for player {}",
                                 animationId, playerId);
                             AnimatedTextureManager.getInstance().registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
                         } else {
@@ -136,7 +136,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                         // Register known cape animation
                         String knownId = capeId.substring("known:".length());
                         capeService.loadKnownCape(knownId);
-                        QuickSkin.LOGGER.info("[PlayerAppearanceService] Registered known cape animation for player {}: {}", playerId, knownId);
+                        QuickSkin.LOGGER.debug("[PlayerAppearanceService] Registered known cape animation for player {}: {}", playerId, knownId);
                     }
                 }
             }
@@ -340,7 +340,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null) return;
 
-        QuickSkin.LOGGER.info("Reloading player skins for transparency change...");
+        QuickSkin.LOGGER.debug("Reloading player skins for transparency change...");
 
         // Clear texture alpha detection cache since transparency settings changed
         com.quickskin.mod.common.util.TextureAlphaDetector.clearCache();

@@ -56,7 +56,7 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.info("Syncing appearance to server: skin={}, cape={}, model={}", skinId, capeId, model);
+        QuickSkin.LOGGER.debug("Syncing appearance to server: skin={}, cape={}, model={}", skinId, capeId, model);
 
         // Upload skin texture if it's a local skin
         if (skinId != null && skinId.startsWith("local_skin:")) {
@@ -106,7 +106,7 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.info("Uploading {} texture to server: {} ({} bytes)", textureType, hash, textureData.length);
+        QuickSkin.LOGGER.debug("Uploading {} texture to server: {} ({} bytes)", textureType, hash, textureData.length);
 
         // Split into chunks if necessary
         int totalChunks = (int) Math.ceil((double) textureData.length / MAX_CHUNK_SIZE);
@@ -141,7 +141,7 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.info("Uploading animation metadata for: {}", hash);
+        QuickSkin.LOGGER.debug("Uploading animation metadata for: {}", hash);
 
         // Serialize metadata to JSON
         String metadataJson = serializeMetadata(metadata);
@@ -172,7 +172,7 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.info("Clearing appearance on server");
+        QuickSkin.LOGGER.debug("Clearing appearance on server");
 
         FriendlyByteBuf buf = PacketHelper.createUpdateAppearancePacket(playerId, "", "", "classic");
         NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
@@ -191,7 +191,7 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.info("Requesting {} texture from server: {}", textureType, hash);
+        QuickSkin.LOGGER.debug("Requesting {} texture from server: {}", textureType, hash);
 
         FriendlyByteBuf buf = PacketHelper.createRequestTexturePacket(playerId, textureType, hash);
         NetworkManager.sendToServer(ModNetworking.REQUEST_TEXTURE, buf);

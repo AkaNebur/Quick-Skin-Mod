@@ -32,21 +32,21 @@ public class ReplayModCompatMixin {
         ResourceLocation id = packet.getIdentifier();
 
         // Log to verify mixin is working - use INFO level so it shows up easily
-        QuickSkin.LOGGER.info("[ReplayCompat] Intercepted custom payload packet: {}", id);
+        QuickSkin.LOGGER.debug("[ReplayCompat] Intercepted custom payload packet: {}", id);
 
         // Check if the packet belongs to QuickSkin
         if (!id.getNamespace().equals(QuickSkin.MOD_ID)) {
             return;
         }
 
-        QuickSkin.LOGGER.info("[ReplayCompat] Processing QuickSkin packet: {}", id);
+        QuickSkin.LOGGER.debug("[ReplayCompat] Processing QuickSkin packet: {}", id);
 
         // Reconstruct data buffer - copy the internal data and reset reader index
         FriendlyByteBuf originalBuf = packet.getData();
         FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.copiedBuffer(originalBuf.copy()));
         buf.readerIndex(0); // Ensure we read from the beginning
 
-        QuickSkin.LOGGER.info("[ReplayCompat] Buffer readable bytes: {}", buf.readableBytes());
+        QuickSkin.LOGGER.debug("[ReplayCompat] Buffer readable bytes: {}", buf.readableBytes());
 
         // Create a dummy context for packet handling
         NetworkManager.PacketContext context = new NetworkManager.PacketContext() {
@@ -70,27 +70,27 @@ public class ReplayModCompatMixin {
         boolean handled = false;
         try {
             if (id.equals(ModNetworking.SYNC_APPEARANCE)) {
-                QuickSkin.LOGGER.info("[ReplayCompat] Handling SYNC_APPEARANCE");
+                QuickSkin.LOGGER.debug("[ReplayCompat] Handling SYNC_APPEARANCE");
                 ClientNetworkHandler.handleSyncAppearance(buf, context);
                 handled = true;
             } else if (id.equals(ModNetworking.SEND_TEXTURE)) {
-                QuickSkin.LOGGER.info("[ReplayCompat] Handling SEND_TEXTURE");
+                QuickSkin.LOGGER.debug("[ReplayCompat] Handling SEND_TEXTURE");
                 ClientNetworkHandler.handleSendTexture(buf, context);
                 handled = true;
             } else if (id.equals(ModNetworking.SEND_TEXTURE_CHUNK)) {
-                QuickSkin.LOGGER.info("[ReplayCompat] Handling SEND_TEXTURE_CHUNK");
+                QuickSkin.LOGGER.debug("[ReplayCompat] Handling SEND_TEXTURE_CHUNK");
                 ClientNetworkHandler.handleSendTextureChunk(buf, context);
                 handled = true;
             } else if (id.equals(ModNetworking.SEND_ANIMATION_METADATA)) {
-                QuickSkin.LOGGER.info("[ReplayCompat] Handling SEND_ANIMATION_METADATA");
+                QuickSkin.LOGGER.debug("[ReplayCompat] Handling SEND_ANIMATION_METADATA");
                 ClientNetworkHandler.handleSendAnimationMetadata(buf, context);
                 handled = true;
             } else if (id.equals(ModNetworking.SYNC_SERVER_CONFIG)) {
-                QuickSkin.LOGGER.info("[ReplayCompat] Handling SYNC_SERVER_CONFIG");
+                QuickSkin.LOGGER.debug("[ReplayCompat] Handling SYNC_SERVER_CONFIG");
                 ClientNetworkHandler.handleSyncServerConfig(buf, context);
                 handled = true;
             } else if (id.equals(ModNetworking.COOLDOWN_UPDATE)) {
-                QuickSkin.LOGGER.info("[ReplayCompat] Handling COOLDOWN_UPDATE");
+                QuickSkin.LOGGER.debug("[ReplayCompat] Handling COOLDOWN_UPDATE");
                 ClientNetworkHandler.handleCooldownUpdate(buf, context);
                 handled = true;
             } else {

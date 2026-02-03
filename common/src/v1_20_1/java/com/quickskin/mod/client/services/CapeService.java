@@ -38,7 +38,7 @@ public class CapeService implements ICapeService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.info("CapeService initialized");
+        QuickSkin.LOGGER.debug("CapeService initialized");
     }
 
     @Override
@@ -115,7 +115,7 @@ public class CapeService implements ICapeService {
 
                                 if (atlasImage != null) {
                                     animManager.registerAnimation(animationId, capeId, capeLocation, atlasImage, animMeta);
-                                    QuickSkin.LOGGER.info("Registered animation for network cape: {}", hash);
+                                    QuickSkin.LOGGER.debug("Registered animation for network cape: {}", hash);
                                 } else {
                                     QuickSkin.LOGGER.warn("Could not read image for network cape animation: {}", hash);
                                 }
@@ -147,7 +147,7 @@ public class CapeService implements ICapeService {
                     BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
                     if (animMeta != null && atlasImage != null) {
                         animManager.registerAnimation(animationId, capeId, capeLocation, atlasImage, animMeta);
-                        QuickSkin.LOGGER.info("Registered animation for local cape: {}", hash);
+                        QuickSkin.LOGGER.debug("Registered animation for local cape: {}", hash);
                     } else {
                         QuickSkin.LOGGER.warn("Could not register animation for local cape {}: metadata or image was null.", hash);
                     }
@@ -158,7 +158,7 @@ public class CapeService implements ICapeService {
             // If not found locally and we're connected to a server, request it
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc.player != null && mc.getConnection() != null) {
-                QuickSkin.LOGGER.info("Cape {} not found locally, requesting from server", hash);
+                QuickSkin.LOGGER.debug("Cape {} not found locally, requesting from server", hash);
                 com.quickskin.mod.networking.NetworkSyncService.getInstance()
                     .requestTexture(mc.player.getUUID(), "cape", hash);
             }
@@ -182,22 +182,22 @@ public class CapeService implements ICapeService {
                 String animationId = "cape_known_" + capeId;
                 AnimatedTextureManager animManager = AnimatedTextureManager.getInstance();
 
-                QuickSkin.LOGGER.info("[CapeService] Animation check: animationId={}, alreadyRegistered={}",
+                QuickSkin.LOGGER.debug("[CapeService] Animation check: animationId={}, alreadyRegistered={}",
                     animationId, animManager.isAnimated(animationId));
 
                 // Only register the animation if it's not already running
                 if (!animManager.isAnimated(animationId)) {
-                    QuickSkin.LOGGER.info("[CapeService] Starting animation registration for: {}", capeId);
+                    QuickSkin.LOGGER.debug("[CapeService] Starting animation registration for: {}", capeId);
                     try {
                         ResourceLocation capeTexture = cape.getTextureLocation();
-                        QuickSkin.LOGGER.info("[CapeService] Loading texture from: {}", capeTexture);
+                        QuickSkin.LOGGER.debug("[CapeService] Loading texture from: {}", capeTexture);
 
                         InputStream stream = Minecraft.getInstance().getResourceManager()
                                 .getResource(capeTexture).get().open();
                         BufferedImage atlasImage = ImageIO.read(stream);
                         stream.close();
 
-                        QuickSkin.LOGGER.info("[CapeService] Image loaded: {}x{}",
+                        QuickSkin.LOGGER.debug("[CapeService] Image loaded: {}x{}",
                             atlasImage != null ? atlasImage.getWidth() : "null",
                             atlasImage != null ? atlasImage.getHeight() : "null");
 
@@ -207,7 +207,7 @@ public class CapeService implements ICapeService {
                             int frameHeight = width / 2; // Cape frames are 2:1 ratio
                             int frameCount = height / frameHeight;
 
-                            QuickSkin.LOGGER.info("[CapeService] Calculated: width={}, height={}, frameHeight={}, frameCount={}",
+                            QuickSkin.LOGGER.debug("[CapeService] Calculated: width={}, height={}, frameHeight={}, frameCount={}",
                                 width, height, frameHeight, frameCount);
 
                             if (frameCount > 1) {
@@ -218,10 +218,10 @@ public class CapeService implements ICapeService {
                                 }
                                 AnimationMetadata metadata = new AnimationMetadata(frames, frameCount);
 
-                                QuickSkin.LOGGER.info("[CapeService] Calling registerAnimation...");
+                                QuickSkin.LOGGER.debug("[CapeService] Calling registerAnimation...");
                                 String fullCapeId = "known:" + capeId;
                                 animManager.registerAnimation(animationId, fullCapeId, capeTexture, atlasImage, metadata);
-                                QuickSkin.LOGGER.info("[CapeService] SUCCESS! Registered animation for KnownCape: {} ({} frames)", capeId, frameCount);
+                                QuickSkin.LOGGER.debug("[CapeService] SUCCESS! Registered animation for KnownCape: {} ({} frames)", capeId, frameCount);
                             } else {
                                 QuickSkin.LOGGER.warn("[CapeService] FAILED: frameCount <= 1, cannot register animation");
                             }
@@ -232,7 +232,7 @@ public class CapeService implements ICapeService {
                         QuickSkin.LOGGER.error("[CapeService] EXCEPTION during animation registration for: {}", capeId, e);
                     }
                 } else {
-                    QuickSkin.LOGGER.info("[CapeService] Animation already registered, skipping");
+                    QuickSkin.LOGGER.debug("[CapeService] Animation already registered, skipping");
                 }
             }
 

@@ -114,7 +114,7 @@ public class ClientConfig {
             try {
                 String json = Files.readString(configPath);
                 ClientConfig config = GSON.fromJson(json, ClientConfig.class);
-                QuickSkin.LOGGER.info("Loaded client configuration");
+                QuickSkin.LOGGER.debug("Loaded client configuration");
                 return config;
             } catch (Exception e) {
                 QuickSkin.LOGGER.error("Failed to load client configuration, using defaults", e);
@@ -166,9 +166,9 @@ public class ClientConfig {
     public void applyServerOverride(ServerConfig serverConfig) {
         this.serverOverride = serverConfig;
         if (serverConfig != null) {
-            QuickSkin.LOGGER.info("Applied server configuration override");
+            QuickSkin.LOGGER.debug("Applied server configuration override");
         } else {
-            QuickSkin.LOGGER.info("Cleared server configuration override");
+            QuickSkin.LOGGER.debug("Cleared server configuration override");
         }
     }
 

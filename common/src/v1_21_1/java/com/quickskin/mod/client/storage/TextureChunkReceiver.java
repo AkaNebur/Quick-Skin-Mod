@@ -44,7 +44,7 @@ public class TextureChunkReceiver {
             // All chunks received, assemble the complete texture
             byte[] completeData = assembly.assembleTexture();
             if (completeData != null) {
-                QuickSkin.LOGGER.info("Assembled complete texture from {} chunks: {} ({} bytes)",
+                QuickSkin.LOGGER.debug("Assembled complete texture from {} chunks: {} ({} bytes)",
                     totalChunks, hash, completeData.length);
 
                 // Store in network texture cache (must be on main thread)

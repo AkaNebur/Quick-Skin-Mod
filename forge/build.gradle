@@ -1,5 +1,7 @@
 plugins {
     id 'com.gradleup.shadow'
+    id 'com.modrinth.minotaur'
+    id 'net.darkhax.curseforgegradle'
 }
 
 architectury {
@@ -63,4 +65,48 @@ shadowJar {
 
 remapJar {
     inputFile.set shadowJar.archiveFile
+}
+
+// ===== PUBLISHING CONFIGURATION =====
+
+def mcVersion = "1.20.1"
+def supportedGameVersions = [mcVersion]
+def modLoaders = ["forge"]
+
+def changelogFile = rootProject.file(rootProject.property("changelog_file"))
+def changelogText = changelogFile.exists() ? changelogFile.text : "No changelog provided"
+
+def modrinthToken = findProperty("modrinth_token") ?: System.getenv("MODRINTH_TOKEN")
+def curseforgeToken = findProperty("curseforge_token") ?: System.getenv("CURSEFORGE_TOKEN")
+
+modrinth {
+    token = modrinthToken ?: ""
+    projectId = rootProject.property("modrinth_id")
+    versionNumber = "${project.version}"
+    versionName = "Quick Skin ${project.version} [Forge] [MC ${mcVersion}]"
+    versionType = "release"
+    uploadFile = remapJar
+    gameVersions = supportedGameVersions
+    loaders = modLoaders
+    changelog = changelogText
+}
+
+task publishCurseForge(type: net.darkhax.curseforgegradle.TaskPublishCurseForge) {
+    dependsOn remapJar
+    apiToken = curseforgeToken ?: ""
+    def mainFile = upload(rootProject.property("curseforge_id"), remapJar.archiveFile)
+    mainFile.changelogType = "markdown"
+    mainFile.changelog = changelogText
+    mainFile.releaseType = "release"
+    supportedGameVersions.each { mainFile.addGameVersion(it) }
+    modLoaders.each { mainFile.addModLoader(it) }
+    doFirst {
+        if (!curseforgeToken) throw new GradleException("curseforge_token not set!")
+    }
+}
+
+task publishAll {
+    group = "publishing"
+    description = "Publishes to both Modrinth and CurseForge"
+    dependsOn "modrinth", "publishCurseForge"
 }

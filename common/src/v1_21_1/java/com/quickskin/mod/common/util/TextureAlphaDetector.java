@@ -84,7 +84,7 @@ public class TextureAlphaDetector {
                 Minecraft mc = Minecraft.getInstance();
                 mc.execute(() -> {
                     transparencyCache.put(textureLocation, hasAlpha);
-                    QuickSkin.LOGGER.info("Completed transparency analysis for {}: {}", textureLocation, hasAlpha);
+                    QuickSkin.LOGGER.debug("Completed transparency analysis for {}: {}", textureLocation, hasAlpha);
                 });
             } catch (Exception e) {
                 QuickSkin.LOGGER.error("Error during async transparency analysis for {}", textureLocation, e);

@@ -21,10 +21,10 @@ public class QuickSkinClient {
      * Called from platform-specific client entry points
      */
     public static void init() {
-        QuickSkin.LOGGER.info("Initializing {} (Client)", QuickSkin.MOD_NAME);
+        QuickSkin.LOGGER.debug("Initializing {} (Client)", QuickSkin.MOD_NAME);
 
         // Phase 2: Initialize client services
-        QuickSkin.LOGGER.info("Initializing client services...");
+        QuickSkin.LOGGER.debug("Initializing client services...");
         ModelService.init();
         SkinService.init();
         CapeService.init();
@@ -52,6 +52,6 @@ public class QuickSkinClient {
         // Phase 9: Load client config
         com.quickskin.mod.config.ClientConfig.getInstance();
 
-        QuickSkin.LOGGER.info("{} Client initialization complete", QuickSkin.MOD_NAME);
+        QuickSkin.LOGGER.debug("{} Client initialization complete", QuickSkin.MOD_NAME);
     }
 }

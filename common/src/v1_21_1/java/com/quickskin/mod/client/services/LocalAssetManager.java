@@ -81,7 +81,7 @@ public class LocalAssetManager {
      * Initialize asset manager and discover assets
      */
     public void init() {
-        QuickSkin.LOGGER.info("Initializing LocalAssetManager...");
+        QuickSkin.LOGGER.debug("Initializing LocalAssetManager...");
 
         // Get directories from platform helper
         skinsDirectory = PlatformHelper.getSkinsDirectory();
@@ -100,30 +100,30 @@ public class LocalAssetManager {
         // Load skin preferences
         preferencesFile = PlatformHelper.getConfigDirectory().resolve("skin-preferences.json");
         skinPreferences = SkinPreferences.load(preferencesFile);
-        QuickSkin.LOGGER.info("Loaded {} skin preferences", skinPreferences.size());
+        QuickSkin.LOGGER.debug("Loaded {} skin preferences", skinPreferences.size());
 
         // Discover assets
         discoverLocalAssets();
 
-        QuickSkin.LOGGER.info("LocalAssetManager initialized with {} assets", metadataCache.size());
+        QuickSkin.LOGGER.debug("LocalAssetManager initialized with {} assets", metadataCache.size());
     }
 
     /**
      * Scan filesystem for skins and capes, build metadata cache
      */
     public void discoverLocalAssets() {
-        QuickSkin.LOGGER.info("Discovering local assets...");
+        QuickSkin.LOGGER.debug("Discovering local assets...");
 
         metadataCache.clear();
         hashToSourcePath.clear();
 
         // Scan skins directory
         int skinsFound = scanDirectory(skinsDirectory, "skin");
-        QuickSkin.LOGGER.info("Found {} skins", skinsFound);
+        QuickSkin.LOGGER.debug("Found {} skins", skinsFound);
 
         // Scan capes directory
         int capesFound = scanDirectory(capesDirectory, "cape");
-        QuickSkin.LOGGER.info("Found {} capes", capesFound);
+        QuickSkin.LOGGER.debug("Found {} capes", capesFound);
     }
 
     /**
@@ -194,7 +194,7 @@ public class LocalAssetManager {
                             if (width > 0 && frameHeight > 0 && height > frameHeight && height % frameHeight == 0) {
                                 int frameCount = height / frameHeight;
                                 if (frameCount > 1) {
-                                    QuickSkin.LOGGER.info("Detected old animated cape strip without metadata: {}. Generating default timing.", path.getFileName());
+                                    QuickSkin.LOGGER.debug("Detected old animated cape strip without metadata: {}. Generating default timing.", path.getFileName());
 
                                     List<AnimationMetadata.FrameData> frames = new ArrayList<>();
                                     for (int i = 0; i < frameCount; i++) {
@@ -204,7 +204,7 @@ public class LocalAssetManager {
                                     AnimationMetadata generatedMeta = new AnimationMetadata(frames, frameCount);
 
                                     Files.writeString(metadataPathForCheck, generatedMeta.toJson());
-                                    QuickSkin.LOGGER.info("Saved default metadata for old cape: {}", hash);
+                                    QuickSkin.LOGGER.debug("Saved default metadata for old cape: {}", hash);
                                 }
                             }
                         }
@@ -313,7 +313,7 @@ public class LocalAssetManager {
     private AssetMetadata processGifAsset(Path path) {
         com.quickskin.mod.common.util.StbGifLoader.GifLoadResult result = null;
         try {
-            QuickSkin.LOGGER.info("Processing GIF cape: {}", path);
+            QuickSkin.LOGGER.debug("Processing GIF cape: {}", path);
 
             // Load GIF using STB Image
             try (var inputStream = Files.newInputStream(path)) {
@@ -372,7 +372,7 @@ public class LocalAssetManager {
                 resolution = SkinResolution.STANDARD;
             }
 
-            QuickSkin.LOGGER.info("GIF cape processed with STBImage: {} frames, hash: {}", frameCount, hash);
+            QuickSkin.LOGGER.debug("GIF cape processed with STBImage: {} frames, hash: {}", frameCount, hash);
 
             // Create metadata for animated cape
             return AssetMetadata.forAnimatedCape(
@@ -547,7 +547,7 @@ public class LocalAssetManager {
                 savePreferences();
             }
 
-            QuickSkin.LOGGER.info("Deleted asset: {}", path);
+            QuickSkin.LOGGER.debug("Deleted asset: {}", path);
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to delete asset: {}", path, e);
         }
@@ -641,7 +641,7 @@ public class LocalAssetManager {
             metadataCache.put(hash, updatedMetadata);
             hashToSourcePath.put(hash, newPath);
 
-            QuickSkin.LOGGER.info("Renamed asset from '{}' to '{}'", currentPath, newPath);
+            QuickSkin.LOGGER.debug("Renamed asset from '{}' to '{}'", currentPath, newPath);
             return RenameResult.SUCCESS;
 
         } catch (IOException e) {
@@ -654,7 +654,7 @@ public class LocalAssetManager {
      * Clear all caches and rediscover assets
      */
     public void reload() {
-        QuickSkin.LOGGER.info("Reloading local assets...");
+        QuickSkin.LOGGER.debug("Reloading local assets...");
         discoverLocalAssets();
     }
 
@@ -663,7 +663,7 @@ public class LocalAssetManager {
      * Call this when transparency settings change
      */
     public void clearTextureCache() {
-        QuickSkin.LOGGER.info("Clearing texture cache (will re-register with current settings)...");
+        QuickSkin.LOGGER.debug("Clearing texture cache (will re-register with current settings)...");
 
         // Unregister all textures from Minecraft's texture manager
         Minecraft mc = Minecraft.getInstance();
@@ -680,7 +680,7 @@ public class LocalAssetManager {
         // Clear our cache
         textureRegistry.clear();
 
-        QuickSkin.LOGGER.info("Texture cache cleared. Textures will reload on next use.");
+        QuickSkin.LOGGER.debug("Texture cache cleared. Textures will reload on next use.");
     }
 
     /**
@@ -688,7 +688,7 @@ public class LocalAssetManager {
      * Call this when skin transparency settings change
      */
     public void clearSkinTextureCache() {
-        QuickSkin.LOGGER.info("Clearing skin texture cache (will re-register with current settings)...");
+        QuickSkin.LOGGER.debug("Clearing skin texture cache (will re-register with current settings)...");
 
         Minecraft mc = Minecraft.getInstance();
         List<String> hashesToClear = new ArrayList<>();
@@ -716,7 +716,7 @@ public class LocalAssetManager {
             }
         }
 
-        QuickSkin.LOGGER.info("Cleared {} skin textures. Capes remain cached.", hashesToClear.size());
+        QuickSkin.LOGGER.debug("Cleared {} skin textures. Capes remain cached.", hashesToClear.size());
     }
 
     /**
@@ -858,10 +858,10 @@ public class LocalAssetManager {
      */
     public void setSkinModelPreference(String hash, String modelType) {
         if (skinPreferences != null) {
-            QuickSkin.LOGGER.info("Setting model preference for skin {}: {}", hash, modelType);
+            QuickSkin.LOGGER.debug("Setting model preference for skin {}: {}", hash, modelType);
             skinPreferences.setModelType(hash, modelType);
             savePreferences();
-            QuickSkin.LOGGER.info("Saved preferences to: {}", preferencesFile);
+            QuickSkin.LOGGER.debug("Saved preferences to: {}", preferencesFile);
         } else {
             QuickSkin.LOGGER.warn("Cannot set model preference - skinPreferences is null");
         }

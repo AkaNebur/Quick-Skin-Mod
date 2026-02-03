@@ -38,7 +38,7 @@ public class LocalAppearanceStorage {
      */
     public void init(Path configDirectory) {
         storageFile = configDirectory.resolve("quickskin_preferences.json");
-        QuickSkin.LOGGER.info("LocalAppearanceStorage initialized at: {}", storageFile);
+        QuickSkin.LOGGER.debug("LocalAppearanceStorage initialized at: {}", storageFile);
     }
 
     /**

@@ -52,7 +52,7 @@ public class StarPatternCache {
             cachedTexture = new DynamicTexture(cachedImage);
             cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache", cachedTexture);
 
-            QuickSkin.LOGGER.info("Star pattern cache loaded: {}x{} (pre-generated texture)",
+            QuickSkin.LOGGER.debug("Star pattern cache loaded: {}x{} (pre-generated texture)",
                 cachedTextureWidth, cachedTextureHeight);
 
         } catch (IOException e) {

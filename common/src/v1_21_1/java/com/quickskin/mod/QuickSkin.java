@@ -19,7 +19,7 @@ public class QuickSkin {
      * Called from platform-specific entry points (Forge @Mod, Fabric ModInitializer)
      */
     public static void init() {
-        LOGGER.info("Initializing {} (Common)", MOD_NAME);
+        LOGGER.debug("Initializing {} (Common)", MOD_NAME);
 
         // Phase 3: Register networking (server-side receivers)
         ModNetworking.init();
@@ -33,6 +33,6 @@ public class QuickSkin {
         // Phase 9: Pre-load server config (will be reloaded on server start)
         com.quickskin.mod.config.ServerConfig.getInstance();
 
-        LOGGER.info("{} Common initialization complete", MOD_NAME);
+        LOGGER.debug("{} Common initialization complete", MOD_NAME);
     }
 }

@@ -161,7 +161,7 @@ public class NetworkTextureCache {
             // Cache the location
             textureRegistry.put(hash, location);
 
-            QuickSkin.LOGGER.info("Registered network texture: {}", hash);
+            QuickSkin.LOGGER.debug("Registered network texture: {}", hash);
             return location;
 
         } catch (IOException e) {
@@ -196,7 +196,7 @@ public class NetworkTextureCache {
         textureDataCache.clear();
         textureRegistry.clear();
         textureTypeMap.clear();
-        QuickSkin.LOGGER.info("Cleared network texture cache");
+        QuickSkin.LOGGER.debug("Cleared network texture cache");
     }
 
     /**
@@ -227,7 +227,7 @@ public class NetworkTextureCache {
             }
         }
 
-        QuickSkin.LOGGER.info("Cleared {} network skin texture registrations (keeping raw data). Capes remain cached.", hashesToClear.size());
+        QuickSkin.LOGGER.debug("Cleared {} network skin texture registrations (keeping raw data). Capes remain cached.", hashesToClear.size());
     }
 
     /**
@@ -244,7 +244,7 @@ public class NetworkTextureCache {
             }
         }
 
-        QuickSkin.LOGGER.info("Reprocessing {} network skins with current transparency settings", skinHashes.size());
+        QuickSkin.LOGGER.debug("Reprocessing {} network skins with current transparency settings", skinHashes.size());
 
         // Re-store each skin with current settings (this will reprocess transparency from original data)
         for (String hash : skinHashes) {
@@ -266,7 +266,7 @@ public class NetworkTextureCache {
             }
         }
 
-        QuickSkin.LOGGER.info("Finished reprocessing network skins");
+        QuickSkin.LOGGER.debug("Finished reprocessing network skins");
     }
 
     /**

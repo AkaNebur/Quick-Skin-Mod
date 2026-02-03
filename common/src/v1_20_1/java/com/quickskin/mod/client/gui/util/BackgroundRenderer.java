@@ -115,27 +115,36 @@ public class BackgroundRenderer {
     }
 
     /**
-     * Renders vanilla-style background - shows panorama without UI buttons
+     * Renders vanilla-style background - shows panorama on title screen,
+     * or transparent overlay when in-game to show the world behind
      */
     private static void renderBlurredBackground(Screen screen, GuiGraphics graphics, float partialTick) {
-        // Initialize panorama renderer if needed
-        if (panoramaRenderer == null) {
-            panoramaRenderer = new PanoramaRenderer(PANORAMA_CUBE_MAP);
+        Minecraft minecraft = Minecraft.getInstance();
+
+        // Check if player is in a world
+        if (minecraft != null && minecraft.player != null && minecraft.level != null) {
+            // In-game: render semi-transparent overlay to show the world behind
+            graphics.fill(0, 0, screen.width, screen.height, 0x90000000);
+        } else {
+            // Title screen: render the panorama background
+            if (panoramaRenderer == null) {
+                panoramaRenderer = new PanoramaRenderer(PANORAMA_CUBE_MAP);
+            }
+
+            // Sync panorama time with global time source (same as TitleScreen via mixin)
+            PanoramaTimeSync.syncPanoramaRenderer(panoramaRenderer);
+
+            // Render the panorama background
+            panoramaRenderer.render(partialTick, 1.0F);
+
+            // Render panorama overlay (darkens the panorama like in title screen)
+            RenderSystem.enableBlend();
+            graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+            graphics.blit(PANORAMA_OVERLAY, 0, 0, 0, 0.0F, 0.0F, screen.width, screen.height, 16, 128);
+
+            // Add additional dark overlay for better UI readability
+            graphics.fill(0, 0, screen.width, screen.height, 0x60000000);
         }
-
-        // Sync panorama time with global time source (same as TitleScreen via mixin)
-        PanoramaTimeSync.syncPanoramaRenderer(panoramaRenderer);
-
-        // Render the panorama background
-        panoramaRenderer.render(partialTick, 1.0F);
-
-        // Render panorama overlay (darkens the panorama like in title screen)
-        RenderSystem.enableBlend();
-        graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
-        graphics.blit(PANORAMA_OVERLAY, 0, 0, 0, 0.0F, 0.0F, screen.width, screen.height, 16, 128);
-
-        // Add additional dark overlay for better UI readability
-        graphics.fill(0, 0, screen.width, screen.height, 0x60000000);
     }
 
     /**

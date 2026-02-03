@@ -81,7 +81,7 @@ public class PasCompatService {
             Path pasSkinDir = getPasSkinDirectory();
             if (!Files.exists(pasSkinDir)) {
                 Files.createDirectories(pasSkinDir);
-                QuickSkin.LOGGER.info("[PAS Compat] Created PAS skins directory: {}", pasSkinDir);
+                QuickSkin.LOGGER.debug("[PAS Compat] Created PAS skins directory: {}", pasSkinDir);
             }
 
             // 2. Generate a valid PAS filename from the friendly name
@@ -107,7 +107,7 @@ public class PasCompatService {
             if (skinData != null) {
                 // Write the file (overwriting if it exists is usually fine here as the user explicitly selected it)
                 Files.write(targetPath, skinData);
-                QuickSkin.LOGGER.info("[PAS Compat] Copied skin '{}' to PAS directory as {}",
+                QuickSkin.LOGGER.debug("[PAS Compat] Copied skin '{}' to PAS directory as {}",
                         metadata.friendlyName(), targetFileName);
 
                 // 4. Update the PAS screen state directly using accessor mixin
@@ -144,11 +144,11 @@ public class PasCompatService {
 
             // Set the entity name to the truncated name (max 16 chars)
             accessor.quickskin$setEntityName(shortName);
-            QuickSkin.LOGGER.info("[PAS Compat] Set entityName to: {}", shortName);
+            QuickSkin.LOGGER.debug("[PAS Compat] Set entityName to: {}", shortName);
 
             // Set the skin provider to "F" (File)
             accessor.quickskin$setSkinProvider("F");
-            QuickSkin.LOGGER.info("[PAS Compat] Set skinProvider to: F");
+            QuickSkin.LOGGER.debug("[PAS Compat] Set skinProvider to: F");
 
             // Determine and set the slim/wide model
             String fullHash = metadata.hash();
@@ -163,14 +163,14 @@ public class PasCompatService {
                 isSlim = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null);
             }
             accessor.quickskin$setIsSlim(isSlim);
-            QuickSkin.LOGGER.info("[PAS Compat] Set isSlim to: {}", isSlim);
+            QuickSkin.LOGGER.debug("[PAS Compat] Set isSlim to: {}", isSlim);
 
             // Force the screen to refresh by setting the screen to itself
             // This triggers the standard initialization chain properly
             Minecraft.getInstance().setScreen(pasScreen);
-            QuickSkin.LOGGER.info("[PAS Compat] Refreshed PAS screen");
+            QuickSkin.LOGGER.debug("[PAS Compat] Refreshed PAS screen");
 
-            QuickSkin.LOGGER.info("[PAS Compat] Successfully applied skin to armor stand: {}", shortName);
+            QuickSkin.LOGGER.debug("[PAS Compat] Successfully applied skin to armor stand: {}", shortName);
 
         } catch (Exception e) {
             QuickSkin.LOGGER.error("[PAS Compat] Failed to update PAS screen state", e);

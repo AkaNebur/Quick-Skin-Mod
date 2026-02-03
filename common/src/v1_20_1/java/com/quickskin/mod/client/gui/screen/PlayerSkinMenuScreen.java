@@ -416,7 +416,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 // Don't trigger callback during resize - we'll set model type manually
                 skinListPanel.setSelected(playerOwnSkin, !isResizing);
                 selectedSkin = playerOwnSkin;
-                QuickSkin.LOGGER.info("Auto-selected player's own skin in menu");
+                QuickSkin.LOGGER.debug("Auto-selected player's own skin in menu");
             }
         }
 
@@ -503,7 +503,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
                 if (atlasImage != null) {
                     // Register animation
-                    QuickSkin.LOGGER.info("Registering animation for cape in skin menu: {}", animationId);
+                    QuickSkin.LOGGER.debug("Registering animation for cape in skin menu: {}", animationId);
                     com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
                             .registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
                 }
@@ -663,7 +663,7 @@ public class PlayerSkinMenuScreen extends Screen {
         if (guiScaleForced) {
             guiScaleForced = false;
             GuiScaleManager.restoreOriginalGuiScale();
-            QuickSkin.LOGGER.info("PlayerSkinMenuScreen - GUI scale restored");
+            QuickSkin.LOGGER.debug("PlayerSkinMenuScreen - GUI scale restored");
         }
     }
 
@@ -712,7 +712,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
     @Override
     public void onFilesDrop(List<Path> files) {
-        QuickSkin.LOGGER.info("Files dropped: {}", files.size());
+        QuickSkin.LOGGER.debug("Files dropped: {}", files.size());
 
         // Filter for PNG files
         List<Path> pngFiles = files.stream()
@@ -724,7 +724,7 @@ public class PlayerSkinMenuScreen extends Screen {
             return;
         }
 
-        QuickSkin.LOGGER.info("Processing {} PNG files", pngFiles.size());
+        QuickSkin.LOGGER.debug("Processing {} PNG files", pngFiles.size());
 
         // Import all PNG files
         if (this.minecraft != null) {
@@ -732,7 +732,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 List<AssetMetadata> imported = SkinImporter.importSkins(pngFiles.toArray(new Path[0]));
 
                 if (!imported.isEmpty()) {
-                    QuickSkin.LOGGER.info("Successfully imported {} skins", imported.size());
+                    QuickSkin.LOGGER.debug("Successfully imported {} skins", imported.size());
 
                     // Reload the skin list
                     refreshSkinList();
@@ -760,7 +760,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
             // Get the model type preference for this specific skin
             String modelPreference = LocalAssetManager.getInstance().getSkinModelPreference(metadata.hash());
-            QuickSkin.LOGGER.info("onSkinSelected: Loading model preference for skin {}: {} (already active: {})",
+            QuickSkin.LOGGER.debug("onSkinSelected: Loading model preference for skin {}: {} (already active: {})",
                     metadata.friendlyName(), modelPreference, isSkinAlreadyActive);
 
             // Update the model buttons to reflect this skin's preference
@@ -775,7 +775,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
             // In selection mode, don't apply to local player - just update preview
             if (isSelectionMode()) {
-                QuickSkin.LOGGER.info("Selection mode active - skin preview updated but not applied to player");
+                QuickSkin.LOGGER.debug("Selection mode active - skin preview updated but not applied to player");
                 return;
             }
 
@@ -785,7 +785,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 // This makes the selection persist on the title screen.
                 config.activeSkinHash = metadata.hash();
                 config.save();
-                QuickSkin.LOGGER.info("Set active skin in config: {}", metadata.friendlyName());
+                QuickSkin.LOGGER.debug("Set active skin in config: {}", metadata.friendlyName());
 
                 // If in-game, apply the skin to the actual player entity.
                 if (this.minecraft != null && this.minecraft.player != null) {
@@ -799,7 +799,7 @@ public class PlayerSkinMenuScreen extends Screen {
                     if (targetUUID != null) {
                         com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                                 .applySkin(targetUUID, skinId, modelForService);
-                        QuickSkin.LOGGER.info("Applied skin to player: {} with model type: {}",
+                        QuickSkin.LOGGER.debug("Applied skin to player: {} with model type: {}",
                                 metadata.friendlyName(), modelForService);
                     }
                 }
@@ -818,7 +818,7 @@ public class PlayerSkinMenuScreen extends Screen {
             AssetMetadata metadata = selectedEntry.getMetadata();
             String skinId = "local_skin:" + metadata.hash();
 
-            QuickSkin.LOGGER.info("Changed model type to: {} for skin: {}", newModelType, metadata.friendlyName());
+            QuickSkin.LOGGER.debug("Changed model type to: {} for skin: {}", newModelType, metadata.friendlyName());
 
             // Save the model type preference for THIS SPECIFIC SKIN
             LocalAssetManager.getInstance().setSkinModelPreference(metadata.hash(), newModelType);
@@ -865,14 +865,14 @@ public class PlayerSkinMenuScreen extends Screen {
             return;
         }
 
-        QuickSkin.LOGGER.info("Importing skin: {}", filePath);
+        QuickSkin.LOGGER.debug("Importing skin: {}", filePath);
 
         // Import on main thread (Minecraft.getInstance().execute runs on main thread)
         if (this.minecraft != null) {
             this.minecraft.execute(() -> {
                 AssetMetadata metadata = SkinImporter.importSkin(filePath);
                 if (metadata != null) {
-                    QuickSkin.LOGGER.info("Successfully imported skin: {}", metadata.friendlyName());
+                    QuickSkin.LOGGER.debug("Successfully imported skin: {}", metadata.friendlyName());
 
                     // Reload the skin list
                     refreshSkinList();
@@ -1025,11 +1025,11 @@ public class PlayerSkinMenuScreen extends Screen {
                 AssetMetadata playerOwnSkin = LocalAssetManager.getInstance().getMetadata(config.playerOwnSkinHash);
                 if (playerOwnSkin != null) {
                     skinListPanel.setSelected(playerOwnSkin, true);
-                    QuickSkin.LOGGER.info("Auto-selected player's own skin after deletion");
+                    QuickSkin.LOGGER.debug("Auto-selected player's own skin after deletion");
                 }
             }
 
-            QuickSkin.LOGGER.info("Deleted skin: {}", metadata.friendlyName());
+            QuickSkin.LOGGER.debug("Deleted skin: {}", metadata.friendlyName());
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to delete skin: {}", metadata.friendlyName(), e);
             showError(Component.translatable("quickskin.error.delete_failed", e.getMessage()));
@@ -1045,7 +1045,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
         switch (result) {
             case SUCCESS:
-                QuickSkin.LOGGER.info("Successfully renamed skin to: {}", newName);
+                QuickSkin.LOGGER.debug("Successfully renamed skin to: {}", newName);
 
                 // Play success sound
                 if (minecraft != null) {
@@ -1117,7 +1117,7 @@ public class PlayerSkinMenuScreen extends Screen {
         searchButton.active = false;
         searchButton.setMessage(Component.translatable("quickskin.button.searching"));
 
-        QuickSkin.LOGGER.info("Searching for Mojang skin: {}", username);
+        QuickSkin.LOGGER.debug("Searching for Mojang skin: {}", username);
 
         // Fetch skin asynchronously
         MojangApiService.getInstance().fetchSkinByUsername(username)
@@ -1155,7 +1155,7 @@ public class PlayerSkinMenuScreen extends Screen {
             Path skinPath = SkinImporter.saveSkinImage(skinData.image, skinData.username);
 
             if (skinPath != null) {
-                QuickSkin.LOGGER.info("Successfully saved Mojang skin for: {}", skinData.username);
+                QuickSkin.LOGGER.debug("Successfully saved Mojang skin for: {}", skinData.username);
 
                 // Reload the asset manager to pick up the new file
                 LocalAssetManager.getInstance().reload();

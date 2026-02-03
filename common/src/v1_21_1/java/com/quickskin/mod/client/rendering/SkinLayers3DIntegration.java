@@ -118,7 +118,7 @@ public class SkinLayers3DIntegration {
             meshSetPositionMethod.setAccessible(true); // Required for accessing methods across module boundaries
 
             MOD_AVAILABLE = true;
-            QuickSkin.LOGGER.info("[3D Skin Layers] Integration enabled");
+            QuickSkin.LOGGER.debug("[3D Skin Layers] Integration enabled");
         } catch (Exception e) {
             MOD_AVAILABLE = false;
             QuickSkin.LOGGER.debug("[3D Skin Layers] Not available: {}", e.getMessage());
