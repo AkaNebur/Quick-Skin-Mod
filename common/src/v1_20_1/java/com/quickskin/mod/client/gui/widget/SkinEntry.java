@@ -16,6 +16,7 @@ import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -226,7 +227,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
 
     @Override
     public @NotNull List<? extends GuiEventListener> children() {
-        return List.of();
+        return Collections.emptyList();
     }
 
     @Override
