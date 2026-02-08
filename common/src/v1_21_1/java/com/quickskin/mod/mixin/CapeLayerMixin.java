@@ -2,6 +2,7 @@ package com.quickskin.mod.mixin;
 
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
+import com.quickskin.mod.client.services.CapeAnimationHelper;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.quickskin.mod.config.ClientConfig;
@@ -72,12 +73,7 @@ public class CapeLayerMixin {
         String capeId = service.getCapeId(player.getUUID());
 
         if (capeId != null && !capeId.isEmpty()) {
-            String animationId = null;
-            if (capeId.startsWith("local_cape:")) {
-                animationId = "cape_" + capeId.substring("local_cape:".length());
-            } else if (capeId.startsWith("known:")) {
-                animationId = "cape_known_" + capeId.substring("known:".length());
-            }
+            String animationId = CapeAnimationHelper.deriveAnimationId(capeId);
 
             if (animationId != null) {
                 ResourceLocation currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);

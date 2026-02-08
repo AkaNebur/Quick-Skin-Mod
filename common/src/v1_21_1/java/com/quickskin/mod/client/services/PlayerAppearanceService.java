@@ -301,7 +301,10 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
         // If the location is already cached, return it.
         if (appearance.getCapeLocation() != null) {
-            return appearance.getCapeLocation();
+            // Resolve animation frame at source level so any mod reading
+            // capeTexture (e.g. WaveyCapes) gets the current frame, not the atlas.
+            return CapeAnimationHelper.resolveCurrentFrame(
+                    appearance.getCapeLocation(), appearance.getCapeId());
         }
 
         // If not cached, try to resolve it now.
@@ -313,7 +316,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 // Trigger async transparency analysis for the cape texture
                 com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(location);
 
-                return location;
+                return CapeAnimationHelper.resolveCurrentFrame(location, appearance.getCapeId());
             }
         }
 
