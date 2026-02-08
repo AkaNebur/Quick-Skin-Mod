@@ -8,6 +8,7 @@ issueTrackerURL = "https://github.com/yourusername/quickskin/issues"
 modId = "quickskin"
 version = "${version}"
 displayName = "QuickSkin"
+displayTest = "IGNORE_ALL_VERSION"
 authors = "The Plum Team"
 description = '''
 QuickSkin - Customize your Minecraft player skin and cape in-game!

@@ -22,6 +22,14 @@ import java.util.UUID;
 public class ServerNetworkHandler {
 
     /**
+     * Checks if a player's client has QuickSkin installed and can receive our packets.
+     * Used to skip sending S2C packets to vanilla clients that don't have the mod.
+     */
+    private static boolean canReceiveQuickSkin(ServerPlayer player) {
+        return NetworkManager.canPlayerReceive(player, ModNetworking.SYNC_APPEARANCE);
+    }
+
+    /**
      * Handles skin/cape upload from client
      * Packet format: UUID (player) + String (textureType) + byte[] (imageData)
      */
@@ -286,18 +294,17 @@ public class ServerNetworkHandler {
      * @param imageData The texture image data
      */
     private static void broadcastTextureToOtherPlayers(ServerPlayer player, String textureType, String hash, byte[] imageData) {
-        // Send to all players except the sender
+        // Send to all players except the sender (only if they have QuickSkin)
         for (ServerPlayer otherPlayer : player.server.getPlayerList().getPlayers()) {
-            if (!otherPlayer.getUUID().equals(player.getUUID())) {
+            if (!otherPlayer.getUUID().equals(player.getUUID()) && canReceiveQuickSkin(otherPlayer)) {
                 // Create a fresh packet for each player to avoid buffer reuse issues
                 FriendlyByteBuf packet = PacketHelper.createSendTexturePacket(textureType, hash, imageData);
                 NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SEND_TEXTURE, packet);
             }
         }
 
-        QuickSkin.LOGGER.debug("Broadcasted {} texture from {} to {} players",
-                textureType, player.getName().getString(),
-                player.server.getPlayerList().getPlayerCount() - 1);
+        QuickSkin.LOGGER.debug("Broadcasted {} texture from {} to other players",
+                textureType, player.getName().getString());
     }
 
     /**
@@ -308,9 +315,9 @@ public class ServerNetworkHandler {
      * @param model The model type
      */
     private static void broadcastAppearanceToOtherPlayers(ServerPlayer player, String skinId, String capeId, String model) {
-        // Send to all players except the sender
+        // Send to all players except the sender (only if they have QuickSkin)
         for (ServerPlayer otherPlayer : player.server.getPlayerList().getPlayers()) {
-            if (!otherPlayer.getUUID().equals(player.getUUID())) {
+            if (!otherPlayer.getUUID().equals(player.getUUID()) && canReceiveQuickSkin(otherPlayer)) {
                 // Create a fresh packet for each player to avoid buffer reuse issues
                 FriendlyByteBuf packet = PacketHelper.createSyncAppearancePacket(
                         player.getUUID(), skinId, capeId, model
@@ -319,9 +326,8 @@ public class ServerNetworkHandler {
             }
         }
 
-        QuickSkin.LOGGER.debug("Broadcasted appearance from {} to {} players",
-                player.getName().getString(),
-                player.server.getPlayerList().getPlayerCount() - 1);
+        QuickSkin.LOGGER.debug("Broadcasted appearance from {} to other players",
+                player.getName().getString());
     }
 
     /**
@@ -331,6 +337,10 @@ public class ServerNetworkHandler {
      * @param targetPlayerId The player whose appearance to send
      */
     public static void sendAppearanceToPlayer(ServerPlayer recipient, UUID targetPlayerId) {
+        if (!canReceiveQuickSkin(recipient)) {
+            return;
+        }
+
         PlayerAppearance appearance = ServerPlayerAppearanceRepository.getInstance().getAppearance(targetPlayerId);
 
         if (appearance != null) {
@@ -428,6 +438,9 @@ public class ServerNetworkHandler {
      * @param textureData The texture data
      */
     private static void sendTextureToClient(ServerPlayer player, String textureType, String hash, byte[] textureData) {
+        if (!canReceiveQuickSkin(player)) {
+            return;
+        }
         FriendlyByteBuf packet = PacketHelper.createSendTexturePacket(textureType, hash, textureData);
         NetworkManager.sendToPlayer(player, ModNetworking.SEND_TEXTURE, packet);
         QuickSkin.LOGGER.debug("Sent {} texture {} to {}", textureType, hash, player.getName().getString());
@@ -440,17 +453,16 @@ public class ServerNetworkHandler {
      * @param metadataJson The animation metadata JSON
      */
     private static void broadcastAnimationMetadataToOtherPlayers(ServerPlayer player, String hash, String metadataJson) {
-        // Send to all players except the sender
+        // Send to all players except the sender (only if they have QuickSkin)
         for (ServerPlayer otherPlayer : player.server.getPlayerList().getPlayers()) {
-            if (!otherPlayer.getUUID().equals(player.getUUID())) {
+            if (!otherPlayer.getUUID().equals(player.getUUID()) && canReceiveQuickSkin(otherPlayer)) {
                 // Create a fresh packet for each player to avoid buffer reuse issues
                 FriendlyByteBuf packet = PacketHelper.createSendAnimationMetadataPacket(hash, metadataJson);
                 NetworkManager.sendToPlayer(otherPlayer, ModNetworking.SEND_ANIMATION_METADATA, packet);
             }
         }
 
-        QuickSkin.LOGGER.debug("Broadcasted animation metadata for {} to {} players",
-                hash, player.server.getPlayerList().getPlayerCount() - 1);
+        QuickSkin.LOGGER.debug("Broadcasted animation metadata for {} to other players", hash);
     }
 
     /**
@@ -458,6 +470,9 @@ public class ServerNetworkHandler {
      * @param player The player to send config to
      */
     public static void sendServerConfigToPlayer(ServerPlayer player) {
+        if (!canReceiveQuickSkin(player)) {
+            return;
+        }
         com.quickskin.mod.config.ServerConfig serverConfig = com.quickskin.mod.config.ServerConfig.getInstance();
         String configJson = serverConfig.toJson();
 
@@ -476,14 +491,15 @@ public class ServerNetworkHandler {
         com.quickskin.mod.config.ServerConfig serverConfig = com.quickskin.mod.config.ServerConfig.getInstance();
         String configJson = serverConfig.toJson();
 
-        // Send to ALL players (including the admin who made the change)
+        // Send to all players that have QuickSkin (including the admin who made the change)
         // IMPORTANT: Create a fresh packet buffer for each player to avoid buffer exhaustion
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            FriendlyByteBuf packet = PacketHelper.createSyncServerConfigPacket(configJson);
-            NetworkManager.sendToPlayer(player, ModNetworking.SYNC_SERVER_CONFIG, packet);
+            if (canReceiveQuickSkin(player)) {
+                FriendlyByteBuf packet = PacketHelper.createSyncServerConfigPacket(configJson);
+                NetworkManager.sendToPlayer(player, ModNetworking.SYNC_SERVER_CONFIG, packet);
+            }
         }
 
-        QuickSkin.LOGGER.debug("Broadcasted server config to all {} players",
-            server.getPlayerList().getPlayerCount());
+        QuickSkin.LOGGER.debug("Broadcasted server config to QuickSkin players");
     }
 }

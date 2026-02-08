@@ -43,26 +43,32 @@ public class CommonEvents {
                     .updateAppearance(player.getUUID(), "", "", "classic");
             }
 
-            // Phase 3: Send all other players' appearances to the joining player
-            ServerNetworkHandler.sendAllAppearancesToPlayer((ServerPlayer) player);
+            // Send QuickSkin data only to players that have the mod installed
+            ServerPlayer serverPlayer = (ServerPlayer) player;
+            boolean hasQuickSkin = NetworkManager.canPlayerReceive(serverPlayer, ModNetworking.SYNC_APPEARANCE);
 
-            // CRITICAL FIX: Also send THIS player's appearance to all OTHER players
-            // This ensures that existing players (like the host) see the joining player's appearance
-            // AND when the host first starts the server, future joining players will see the host
-            ServerNetworkHandler.sendAppearanceToAllPlayers((ServerPlayer) player);
+            if (hasQuickSkin) {
+                // Phase 3: Send all other players' appearances to the joining player
+                ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
 
-            // Phase 9: Sync server config to client
-            ServerNetworkHandler.sendServerConfigToPlayer((ServerPlayer) player);
+                // Phase 9: Sync server config to client
+                ServerNetworkHandler.sendServerConfigToPlayer(serverPlayer);
 
-            // Send current cooldown status to joining player
-            int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
-            if (cooldownSeconds > 0 && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())) {
-                long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID());
-                FriendlyByteBuf cooldownBuf = new FriendlyByteBuf(Unpooled.buffer());
-                cooldownBuf.writeLong(cooldownEndTime);
-                NetworkManager.sendToPlayer((ServerPlayer) player, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
-                QuickSkin.LOGGER.debug("Sent initial cooldown status to joining player {}", player.getName().getString());
+                // Send current cooldown status to joining player
+                int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
+                if (cooldownSeconds > 0 && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())) {
+                    long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID());
+                    FriendlyByteBuf cooldownBuf = new FriendlyByteBuf(Unpooled.buffer());
+                    cooldownBuf.writeLong(cooldownEndTime);
+                    NetworkManager.sendToPlayer(serverPlayer, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
+                    QuickSkin.LOGGER.debug("Sent initial cooldown status to joining player {}", player.getName().getString());
+                }
             }
+
+            // CRITICAL FIX: Send THIS player's appearance to all OTHER players that have QuickSkin
+            // This ensures that existing players (like the host) see the joining player's appearance
+            // (sendAppearanceToAllPlayers internally checks canReceiveQuickSkin for each recipient)
+            ServerNetworkHandler.sendAppearanceToAllPlayers(serverPlayer);
         });
 
         // Player quits server
@@ -86,20 +92,22 @@ public class CommonEvents {
         PlayerEvent.PLAYER_RESPAWN.register((player, conqueredEnd) -> {
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
-
-                // Phase 3: Re-send all appearances to the respawned player
-                ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
+                if (NetworkManager.canPlayerReceive(serverPlayer, ModNetworking.SYNC_APPEARANCE)) {
+                    // Phase 3: Re-send all appearances to the respawned player
+                    ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
+                }
             }
         });
 
         // Player changes dimension
         PlayerEvent.CHANGE_DIMENSION.register((player, oldLevel, newLevel) -> {
-
             // Re-sync appearance if needed (sometimes skins don't transfer across dimensions)
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
-                // Phase 3: Re-send all appearances to this player
-                ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
+                if (NetworkManager.canPlayerReceive(serverPlayer, ModNetworking.SYNC_APPEARANCE)) {
+                    // Phase 3: Re-send all appearances to this player
+                    ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
+                }
             }
         });
 
