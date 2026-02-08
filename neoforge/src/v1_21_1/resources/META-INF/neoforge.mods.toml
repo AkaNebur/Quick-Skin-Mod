@@ -19,6 +19,9 @@ logoFile = "icon.png"
 [[mixins]]
 config = "quickskin-neoforge.mixins.json"
 
+[[mixins]]
+config = "quickskin-ears.mixins.json"
+
 [[dependencies.quickskin]]
 modId = "neoforge"
 type = "required"

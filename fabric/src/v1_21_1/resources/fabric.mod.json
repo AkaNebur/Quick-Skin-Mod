@@ -24,7 +24,8 @@
     ]
   },
   "mixins": [
-    "quickskin.mixins.json"
+    "quickskin.mixins.json",
+    "quickskin-ears.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.16.0",

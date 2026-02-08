@@ -87,6 +87,12 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
                 // Trigger async transparency analysis for the skin texture
                 com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(skinLocation);
+
+                // Associate Ears features with this player (if Ears is available)
+                if (com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {
+                    String username = getPlayerUsername(playerId);
+                    com.quickskin.mod.client.compat.EarsCompatIntegration.associateWithPlayer(skinLocation, playerId, username);
+                }
             }
         }
 
@@ -308,6 +314,18 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
         PlayerAppearance appearance = repository.getAppearance(playerId);
         return appearance != null ? appearance.getModel() : null;
+    }
+
+    @Nullable
+    private String getPlayerUsername(UUID playerId) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level != null) {
+            net.minecraft.world.entity.player.Player player = mc.level.getPlayerByUUID(playerId);
+            if (player != null) {
+                return player.getGameProfile().getName();
+            }
+        }
+        return null;
     }
 
     /**

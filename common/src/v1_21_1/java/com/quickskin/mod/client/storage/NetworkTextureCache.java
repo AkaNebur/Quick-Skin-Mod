@@ -158,6 +158,22 @@ public class NetworkTextureCache {
 
             Minecraft.getInstance().getTextureManager().register(location, dynamicTexture);
 
+            // Parse Ears features from original unprocessed data (preserving alpha for Alfalfa)
+            String textureType = textureTypeMap.get(hash);
+            if ("skin".equals(textureType) && com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {
+                byte[] originalData = originalTextureData.get(hash);
+                if (originalData != null) {
+                    try {
+                        java.awt.image.BufferedImage originalImage = ImageIO.read(new ByteArrayInputStream(originalData));
+                        if (originalImage != null) {
+                            com.quickskin.mod.client.compat.EarsCompatIntegration.parseAndStoreFeatures(location, originalImage);
+                        }
+                    } catch (IOException e) {
+                        // silently skip Ears parsing
+                    }
+                }
+            }
+
             // Cache the location
             textureRegistry.put(hash, location);
 

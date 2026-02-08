@@ -680,6 +680,11 @@ public class LocalAssetManager {
         // Clear our cache
         textureRegistry.clear();
 
+        // Clear Ears features cache
+        if (com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {
+            com.quickskin.mod.client.compat.EarsCompatIntegration.clearAllFeatures();
+        }
+
         QuickSkin.LOGGER.debug("Texture cache cleared. Textures will reload on next use.");
     }
 
@@ -756,6 +761,16 @@ public class LocalAssetManager {
             );
 
             Minecraft.getInstance().getTextureManager().register(location, dynamicTexture);
+
+            // Parse Ears features from the original unprocessed image (preserving alpha for Alfalfa data)
+            AssetMetadata metadata = getMetadata(hash);
+            if (metadata != null && "skin".equals(metadata.type())
+                    && com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {
+                BufferedImage originalImage = getSourceImage(hash);
+                if (originalImage != null) {
+                    com.quickskin.mod.client.compat.EarsCompatIntegration.parseAndStoreFeatures(location, originalImage);
+                }
+            }
 
             // Cache in registry
             qualityMap = textureRegistry.computeIfAbsent(hash, k -> new ConcurrentHashMap<>());

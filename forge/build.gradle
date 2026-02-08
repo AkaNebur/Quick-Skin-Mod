@@ -12,6 +12,7 @@ architectury {
 loom {
     forge {
         mixinConfig "quickskin.mixins.json"
+        mixinConfig "quickskin-ears.mixins.json"
     }
 }
 
