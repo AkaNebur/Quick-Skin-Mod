@@ -4,6 +4,7 @@ import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.config.ServerConfig;
 import com.quickskin.mod.networking.packets.PacketHelper;
+import com.quickskin.mod.server.data.QuickSkinPlayerTracker;
 import com.quickskin.mod.server.data.ServerCooldownManager;
 import com.quickskin.mod.server.data.ServerPlayerAppearanceRepository;
 import com.quickskin.mod.server.storage.ServerAnimationCache;
@@ -26,7 +27,37 @@ public class ServerNetworkHandler {
      * Used to skip sending S2C packets to vanilla clients that don't have the mod.
      */
     private static boolean canReceiveQuickSkin(ServerPlayer player) {
-        return NetworkManager.canPlayerReceive(player, ModNetworking.SYNC_APPEARANCE);
+        return NetworkManager.canPlayerReceive(player, ModNetworking.SYNC_APPEARANCE)
+                || QuickSkinPlayerTracker.getInstance().isConfirmed(player.getUUID());
+    }
+
+    /**
+     * Tracks that a player has QuickSkin installed (they sent us a C2S packet).
+     * On first confirmation, triggers full sync for the player.
+     */
+    private static void trackModPresence(ServerPlayer player) {
+        if (QuickSkinPlayerTracker.getInstance().markConfirmed(player.getUUID())) {
+            QuickSkin.LOGGER.debug("First C2S packet from {} - confirmed QuickSkin, triggering full sync",
+                    player.getName().getString());
+
+            // Send all existing appearances to this newly confirmed player
+            sendAllAppearancesToPlayer(player);
+
+            // Send server config
+            sendServerConfigToPlayer(player);
+
+            // Send cooldown status if applicable
+            int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
+            if (cooldownSeconds > 0 && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())) {
+                long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID());
+                FriendlyByteBuf cooldownBuf = new FriendlyByteBuf(Unpooled.buffer());
+                cooldownBuf.writeLong(cooldownEndTime);
+                NetworkManager.sendToPlayer(player, ModNetworking.COOLDOWN_UPDATE, cooldownBuf);
+            }
+
+            // Broadcast this player's appearance to all other players
+            sendAppearanceToAllPlayers(player);
+        }
     }
 
     /**
@@ -47,6 +78,8 @@ public class ServerNetworkHandler {
                 QuickSkin.LOGGER.warn("Player UUID mismatch in upload texture packet");
                 return;
             }
+
+            trackModPresence(player);
 
             if (ServerConfig.getInstance().enableVerboseLogging) {
                 QuickSkin.LOGGER.debug("Received {} upload from player: {} (size: {} bytes)",
@@ -81,6 +114,8 @@ public class ServerNetworkHandler {
                 QuickSkin.LOGGER.warn("Player UUID mismatch in update appearance packet");
                 return;
             }
+
+            trackModPresence(player);
 
             // Check cooldown settings first to avoid unnecessary work
             int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
@@ -135,6 +170,8 @@ public class ServerNetworkHandler {
                 return;
             }
 
+            trackModPresence(player);
+
             if (ServerConfig.getInstance().enableVerboseLogging) {
                 QuickSkin.LOGGER.debug("Player {} requested {} texture: {}",
                         player.getName().getString(), textureType, hash);
@@ -167,6 +204,8 @@ public class ServerNetworkHandler {
             if (player == null) {
                 return;
             }
+
+            trackModPresence(player);
 
             // Validate chunk size (32KB safety limit to prevent oversized packets)
             if (chunkData.length > 32 * 1024) {
@@ -227,6 +266,8 @@ public class ServerNetworkHandler {
                 return;
             }
 
+            trackModPresence(player);
+
             if (ServerConfig.getInstance().enableVerboseLogging) {
                 QuickSkin.LOGGER.debug("Player {} uploaded animation metadata for: {}",
                         player.getName().getString(), hash);
@@ -254,6 +295,8 @@ public class ServerNetworkHandler {
             if (player == null) {
                 return;
             }
+
+            trackModPresence(player);
 
             // Check if player has admin permissions (operator level 2+)
             if (!player.hasPermissions(2)) {

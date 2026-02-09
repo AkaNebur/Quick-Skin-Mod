@@ -3,6 +3,7 @@ package com.quickskin.mod.event;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.networking.ModNetworking;
 import com.quickskin.mod.networking.ServerNetworkHandler;
+import com.quickskin.mod.server.data.QuickSkinPlayerTracker;
 import com.quickskin.mod.server.data.ServerCooldownManager;
 import com.quickskin.mod.server.storage.ServerAnimationCache;
 import com.quickskin.mod.server.storage.ServerAppearanceStorage;
@@ -45,7 +46,8 @@ public class CommonEvents {
 
             // Send QuickSkin data only to players that have the mod installed
             ServerPlayer serverPlayer = (ServerPlayer) player;
-            boolean hasQuickSkin = NetworkManager.canPlayerReceive(serverPlayer, ModNetworking.SYNC_APPEARANCE);
+            boolean hasQuickSkin = NetworkManager.canPlayerReceive(serverPlayer, ModNetworking.SYNC_APPEARANCE)
+                    || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID());
 
             if (hasQuickSkin) {
                 // Phase 3: Send all other players' appearances to the joining player
@@ -78,6 +80,9 @@ public class CommonEvents {
             // Phase 5: Save player's appearance to server storage
             ServerAppearanceStorage.getInstance().savePlayerAppearance(player.getUUID());
 
+            // Cleanup player tracker
+            QuickSkinPlayerTracker.getInstance().removePlayer(player.getUUID());
+
             // Cleanup cooldown data (only if cooldown feature is enabled)
             int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
             if (cooldownSeconds > 0) {
@@ -92,7 +97,8 @@ public class CommonEvents {
         PlayerEvent.PLAYER_RESPAWN.register((player, conqueredEnd) -> {
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
-                if (NetworkManager.canPlayerReceive(serverPlayer, ModNetworking.SYNC_APPEARANCE)) {
+                if (NetworkManager.canPlayerReceive(serverPlayer, ModNetworking.SYNC_APPEARANCE)
+                        || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID())) {
                     // Phase 3: Re-send all appearances to the respawned player
                     ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
                 }
@@ -104,7 +110,8 @@ public class CommonEvents {
             // Re-sync appearance if needed (sometimes skins don't transfer across dimensions)
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
-                if (NetworkManager.canPlayerReceive(serverPlayer, ModNetworking.SYNC_APPEARANCE)) {
+                if (NetworkManager.canPlayerReceive(serverPlayer, ModNetworking.SYNC_APPEARANCE)
+                        || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID())) {
                     // Phase 3: Re-send all appearances to this player
                     ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
                 }
@@ -147,6 +154,7 @@ public class CommonEvents {
             // Phase 5: Clear caches
             ServerTextureCache.getInstance().clear();
             ServerAnimationCache.getInstance().clear();
+            QuickSkinPlayerTracker.getInstance().clear();
         });
 
         QuickSkin.LOGGER.debug("Common events registered");
