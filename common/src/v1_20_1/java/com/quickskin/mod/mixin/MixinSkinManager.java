@@ -2,8 +2,6 @@ package com.quickskin.mod.mixin;
 
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
-import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -13,6 +11,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.SkinManager;
 import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,12 +28,18 @@ import java.util.UUID;
 @Mixin(SkinManager.class)
 public class MixinSkinManager {
 
-    @WrapMethod(method = "registerSkins")
+    @Unique
+    private static final ThreadLocal<Boolean> quickskin$processing = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    @Inject(method = "registerSkins", at = @At("HEAD"), cancellable = true)
     private void quickskin$wrapRegisterSkins(
             GameProfile profile,
             SkinManager.SkinTextureCallback callback,
             boolean requireSecure,
-            Operation<Void> original) {
+            CallbackInfo ci) {
+
+        // Prevent recursion when we re-invoke registerSkins with the wrapped callback
+        if (quickskin$processing.get()) return;
 
         UUID localUuid = null;
         try {
@@ -81,12 +89,15 @@ public class MixinSkinManager {
                     callback.onSkinTextureAvailable(type, location, texture);
                 };
 
-                original.call(profile, wrappedCallback, requireSecure);
-                return;
+                // Cancel original call and re-invoke with the wrapped callback
+                ci.cancel();
+                quickskin$processing.set(true);
+                try {
+                    ((SkinManager) (Object) this).registerSkins(profile, wrappedCallback, requireSecure);
+                } finally {
+                    quickskin$processing.set(false);
+                }
             }
         }
-
-        // Not the local player or no QuickSkin skin — pass through unchanged
-        original.call(profile, callback, requireSecure);
     }
 }
