@@ -180,6 +180,9 @@ public class ClientEvents {
                 com.quickskin.mod.client.storage.LocalAppearanceStorage.getInstance()
                         .savePlayerPreferences(player.getUUID());
             }
+
+            // Re-register appearance for Essential's title screen player model
+            com.quickskin.mod.client.compat.EssentialCompatIntegration.registerMenuAppearance();
         });
 
         // Respawn event (player dies and respawns)
@@ -204,6 +207,11 @@ public class ClientEvents {
 
             // Check for Essential mod compatibility
             boolean essentialPresent = com.quickskin.mod.client.compat.EssentialCompatIntegration.isAvailable();
+
+            // Ensure Essential's player model uses QuickSkin's skin/cape
+            if (essentialPresent) {
+                com.quickskin.mod.client.compat.EssentialCompatIntegration.registerMenuAppearance();
+            }
 
             // Inject QuickSkin button
             int buttonX = 0;

@@ -1,11 +1,18 @@
 package com.quickskin.mod.client.compat;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.services.LocalAssetManager;
+import com.quickskin.mod.client.services.PlayerAppearanceService;
+import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.platform.PlatformHelper;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
+
+import java.util.UUID;
 
 /**
  * Compatibility integration for Essential mod.
@@ -84,5 +91,47 @@ public class EssentialCompatIntegration {
         }
 
         return bottomWidget;
+    }
+
+    /**
+     * Pre-registers the local player's saved skin/cape into PlayerAppearanceService
+     * so that existing mixins can intercept Essential's player model lookups on the title screen.
+     * Should be called after init, after world quit, and on screen init when Essential is present.
+     */
+    public static void registerMenuAppearance() {
+        if (!isAvailable()) return;
+
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.getUser() == null) return;
+
+        // Don't attempt if TextureManager isn't ready yet (e.g. during early init)
+        if (mc.getTextureManager() == null) {
+            QuickSkin.LOGGER.debug("[Essential Compat] TextureManager not ready, skipping menu appearance registration");
+            return;
+        }
+
+        UUID playerUuid = mc.getUser().getProfileId();
+        if (playerUuid == null) return;
+
+        ClientConfig config = ClientConfig.getInstance();
+        LocalAssetManager assetManager = LocalAssetManager.getInstance();
+        PlayerAppearanceService service = PlayerAppearanceService.getInstance();
+
+        // Register saved skin
+        if (!config.activeSkinHash.isEmpty()) {
+            AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+            if (metadata != null) {
+                String skinId = "local_skin:" + config.activeSkinHash;
+                String modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+                service.applySkin(playerUuid, skinId, modelType);
+                QuickSkin.LOGGER.info("[Essential Compat] Registered menu skin for UUID {}: {}", playerUuid, metadata.friendlyName());
+            }
+        }
+
+        // Register saved cape
+        if (!config.activeCapeHash.isEmpty()) {
+            service.applyCape(playerUuid, config.activeCapeHash);
+            QuickSkin.LOGGER.info("[Essential Compat] Registered menu cape for UUID {}: {}", playerUuid, config.activeCapeHash);
+        }
     }
 }

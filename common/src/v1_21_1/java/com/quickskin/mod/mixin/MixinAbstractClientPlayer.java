@@ -1,7 +1,12 @@
 package com.quickskin.mod.mixin;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
+import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.TextureQuality;
+import com.quickskin.mod.config.ClientConfig;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.PlayerSkin;
@@ -71,7 +76,14 @@ public abstract class MixinAbstractClientPlayer {
 
         // Only intercept if we have custom data
         if (!hasCustomSkin && !hasCustomCape && !hasModelOverride) {
-            // No custom data - let the normal method (and other mods) run
+            // Title screen fallback: when no world is loaded and config has saved appearance,
+            // build a PlayerSkin directly regardless of UUID (covers Essential's fake player)
+            if (Minecraft.getInstance().level == null) {
+                PlayerSkin fallbackSkin = quickskin$buildTitleScreenFallback(self);
+                if (fallbackSkin != null) {
+                    cir.setReturnValue(fallbackSkin);
+                }
+            }
             return;
         }
 
@@ -164,6 +176,72 @@ public abstract class MixinAbstractClientPlayer {
                 QuickSkin.LOGGER.error("[MixinAbstractClientPlayer] Failed to access playerInfo field", e);
             }
         }
+        return null;
+    }
+
+    /**
+     * Builds a PlayerSkin from saved config for title screen fallback.
+     * Returns null if no saved skin/cape is configured.
+     */
+    @Unique
+    private static PlayerSkin quickskin$buildTitleScreenFallback(AbstractClientPlayer player) {
+        ClientConfig config = ClientConfig.getInstance();
+        boolean hasSkin = !config.activeSkinHash.isEmpty();
+        boolean hasCape = !config.activeCapeHash.isEmpty();
+
+        if (!hasSkin && !hasCape) {
+            return null;
+        }
+
+        LocalAssetManager assetManager = LocalAssetManager.getInstance();
+        ResourceLocation skinTexture = null;
+        PlayerSkin.Model skinModel = PlayerSkin.Model.WIDE;
+        ResourceLocation capeTexture = null;
+
+        if (hasSkin) {
+            skinTexture = assetManager.getTextureLocation(config.activeSkinHash, TextureQuality.FULL);
+            String modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+            if ("auto".equals(modelType)) {
+                AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+                if (metadata != null) {
+                    modelType = metadata.skinModel();
+                }
+            }
+            skinModel = "slim".equals(modelType) ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE;
+        }
+
+        if (hasCape) {
+            capeTexture = com.quickskin.mod.client.services.CapeService.getInstance()
+                    .getCapeLocation(null, config.activeCapeHash);
+        }
+
+        if (skinTexture == null && capeTexture == null) {
+            return null;
+        }
+
+        // Get the base skin from PlayerInfo to fill in missing fields
+        PlayerInfo playerInfo = quickskin$getPlayerInfo(player);
+        if (playerInfo != null) {
+            PlayerSkin originalSkin = playerInfo.getSkin();
+            if (originalSkin != null) {
+                return new PlayerSkin(
+                    skinTexture != null ? skinTexture : originalSkin.texture(),
+                    originalSkin.textureUrl(),
+                    capeTexture != null ? capeTexture : originalSkin.capeTexture(),
+                    originalSkin.elytraTexture(),
+                    hasSkin ? skinModel : originalSkin.model(),
+                    originalSkin.secure()
+                );
+            }
+        }
+
+        // Last resort: build with just our textures
+        if (skinTexture != null) {
+            return new PlayerSkin(
+                skinTexture, null, capeTexture, null, skinModel, false
+            );
+        }
+
         return null;
     }
 }

@@ -1,7 +1,13 @@
 package com.quickskin.mod.mixin;
 
 import com.mojang.authlib.GameProfile;
+import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
+import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.TextureQuality;
+import com.quickskin.mod.config.ClientConfig;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.resources.ResourceLocation;
@@ -55,6 +61,14 @@ public abstract class PlayerInfoMixin {
 
         // Only modify if we have custom data
         if (!hasCustomSkin && !hasCustomCape && !hasModelOverride) {
+            // Title screen fallback: when no world is loaded, build skin from config
+            if (Minecraft.getInstance().level == null) {
+                PlayerSkin fallback = quickskin$buildTitleScreenFallback(cir.getReturnValue());
+                if (fallback != null) {
+                    cir.setReturnValue(fallback);
+                    return;
+                }
+            }
             quickskin$cachedSkin = null;
             quickskin$cachedOriginalTexture = null;
             return;
@@ -125,5 +139,64 @@ public abstract class PlayerInfoMixin {
         quickskin$cachedModelName = currentModelName;
 
         cir.setReturnValue(customSkin);
+    }
+
+    /**
+     * Builds a PlayerSkin from saved config for title screen fallback.
+     * Returns null if no saved skin/cape is configured.
+     */
+    @Unique
+    private PlayerSkin quickskin$buildTitleScreenFallback(PlayerSkin original) {
+        ClientConfig config = ClientConfig.getInstance();
+        boolean hasSkin = !config.activeSkinHash.isEmpty();
+        boolean hasCape = !config.activeCapeHash.isEmpty();
+
+        if (!hasSkin && !hasCape) {
+            return null;
+        }
+
+        LocalAssetManager assetManager = LocalAssetManager.getInstance();
+        ResourceLocation skinTexture = null;
+        PlayerSkin.Model skinModel = (original != null) ? original.model() : PlayerSkin.Model.WIDE;
+        ResourceLocation capeTexture = null;
+
+        if (hasSkin) {
+            skinTexture = assetManager.getTextureLocation(config.activeSkinHash, TextureQuality.FULL);
+            String modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+            if ("auto".equals(modelType)) {
+                AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+                if (metadata != null) {
+                    modelType = metadata.skinModel();
+                }
+            }
+            skinModel = "slim".equals(modelType) ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE;
+        }
+
+        if (hasCape) {
+            capeTexture = com.quickskin.mod.client.services.CapeService.getInstance()
+                    .getCapeLocation(null, config.activeCapeHash);
+        }
+
+        if (skinTexture == null && capeTexture == null) {
+            return null;
+        }
+
+        QuickSkin.LOGGER.info("[PlayerInfoMixin] Title screen fallback: returning saved skin for profile {}", this.profile.getId());
+
+        if (original != null) {
+            return new PlayerSkin(
+                skinTexture != null ? skinTexture : original.texture(),
+                original.textureUrl(),
+                capeTexture != null ? capeTexture : original.capeTexture(),
+                original.elytraTexture(),
+                skinModel,
+                original.secure()
+            );
+        }
+
+        // Last resort: build with just our textures
+        return new PlayerSkin(
+            skinTexture, null, capeTexture, null, skinModel, false
+        );
     }
 }

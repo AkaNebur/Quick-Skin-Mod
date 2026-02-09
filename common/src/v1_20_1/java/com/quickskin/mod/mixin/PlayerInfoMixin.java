@@ -1,7 +1,13 @@
 package com.quickskin.mod.mixin;
 
 import com.mojang.authlib.GameProfile;
+import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
+import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.TextureQuality;
+import com.quickskin.mod.config.ClientConfig;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Final;
@@ -34,9 +40,22 @@ public abstract class PlayerInfoMixin {
             ResourceLocation customSkin = service.getSkinLocation(this.profile.getId());
             if (customSkin != null) {
                 cir.setReturnValue(customSkin);
+                return;
             }
         }
-        // If no active QuickSkin, let vanilla or other mods handle it
+
+        // Title screen fallback: when no world is loaded, return saved skin from config
+        if (Minecraft.getInstance().level == null) {
+            ClientConfig config = ClientConfig.getInstance();
+            if (!config.activeSkinHash.isEmpty()) {
+                ResourceLocation loc = LocalAssetManager.getInstance()
+                        .getTextureLocation(config.activeSkinHash, TextureQuality.FULL);
+                if (loc != null) {
+                    QuickSkin.LOGGER.info("[PlayerInfoMixin] Title screen fallback: returning saved skin for profile {}", this.profile.getId());
+                    cir.setReturnValue(loc);
+                }
+            }
+        }
     }
 
     /**
@@ -52,6 +71,27 @@ public abstract class PlayerInfoMixin {
             String customModel = service.getModelName(this.profile.getId());
             if (customModel != null) {
                 cir.setReturnValue(customModel);
+                return;
+            }
+        }
+
+        // Title screen fallback: return saved model type from config
+        if (Minecraft.getInstance().level == null) {
+            ClientConfig config = ClientConfig.getInstance();
+            if (!config.activeSkinHash.isEmpty()) {
+                LocalAssetManager assetManager = LocalAssetManager.getInstance();
+                String modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+                if ("auto".equals(modelType)) {
+                    AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+                    if (metadata != null) {
+                        modelType = metadata.skinModel();
+                    }
+                }
+                if (modelType != null) {
+                    // Convert to Minecraft model names: "classic" -> "default", "slim" stays "slim"
+                    String mcModel = "classic".equals(modelType) ? "default" : modelType;
+                    cir.setReturnValue(mcModel);
+                }
             }
         }
     }
@@ -76,9 +116,20 @@ public abstract class PlayerInfoMixin {
             ResourceLocation customCape = service.getCapeLocation(this.profile.getId());
 
             // If a custom cape is found (or still loading but intended), set it.
-            // If it's still loading, getCapeLocation will return null, correctly hiding the vanilla cape in the meantime.
             cir.setReturnValue(customCape);
+            return;
         }
-        // If no active QuickSkin cape, let vanilla or other mods handle it
+
+        // Title screen fallback: return saved cape from config
+        if (Minecraft.getInstance().level == null) {
+            ClientConfig config = ClientConfig.getInstance();
+            if (!config.activeCapeHash.isEmpty()) {
+                ResourceLocation capeLoc = com.quickskin.mod.client.services.CapeService.getInstance()
+                        .getCapeLocation(null, config.activeCapeHash);
+                if (capeLoc != null) {
+                    cir.setReturnValue(capeLoc);
+                }
+            }
+        }
     }
 }
