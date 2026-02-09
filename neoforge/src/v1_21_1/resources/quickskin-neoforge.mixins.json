@@ -8,7 +8,8 @@
     "PlayerInfoMixin",
     "MixinAbstractClientPlayer",
     "CapeLayerMixin",
-    "PlayerRendererMixin"
+    "PlayerRendererMixin",
+    "SkinManagerMixin"
   ],
   "mixins": [
   ],

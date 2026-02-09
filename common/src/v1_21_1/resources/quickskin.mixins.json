@@ -7,6 +7,8 @@
   "client": [
     "PlayerInfoMixin",
     "MixinAbstractClientPlayer",
+    "PlayerRendererMixin",
+    "SkinManagerMixin",
     "CapeLayerMixin",
     "ItemInHandRendererMixin",
     "PanoramaRendererMixin"

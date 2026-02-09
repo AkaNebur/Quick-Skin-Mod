@@ -6,6 +6,7 @@ import com.quickskin.mod.client.services.CapeAnimationHelper;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.quickskin.mod.config.ClientConfig;
+import net.minecraft.client.Minecraft;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -55,7 +56,24 @@ public class CapeLayerMixin {
             return; // No custom cape, let vanilla logic run
         }
 
-        ResourceLocation capeTexture = player.getSkin().capeTexture();
+        // Get cape texture from our service instead of player.getSkin().capeTexture(),
+        // because some mods (e.g. Essential) override getSkin() in a subclass,
+        // bypassing our MixinAbstractClientPlayer that sets the correct cape texture.
+        ResourceLocation capeTexture = service.getCapeLocation(player.getUUID());
+        if (capeTexture == null) {
+            // Fallback to config-based lookup for title screen
+            if (Minecraft.getInstance().level == null) {
+                ClientConfig config = ClientConfig.getInstance();
+                if (!config.activeCapeHash.isEmpty()) {
+                    capeTexture = com.quickskin.mod.client.services.CapeService.getInstance()
+                            .getCapeLocation(null, config.activeCapeHash);
+                }
+            }
+        }
+        if (capeTexture == null) {
+            // Fall back to player's skin cape (for non-Essential cases where our mixin set it)
+            capeTexture = player.getSkin().capeTexture();
+        }
 
         if (capeTexture == null) {
             ci.cancel(); // Don't render anything if QuickSkin wants to hide the cape
