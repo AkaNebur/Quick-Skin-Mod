@@ -235,16 +235,17 @@ public class ClientEvents {
             if (screen instanceof TitleScreen titleScreen) {
                 boolean positioned = false;
 
-                // If Essential is present, position below Essential's bottom-most widget
+                // If Essential is present, position to the left of Essential's bottom-most widget
                 if (essentialPresent) {
                     net.minecraft.client.gui.components.events.GuiEventListener bottomWidget =
                             com.quickskin.mod.client.compat.EssentialCompatIntegration.findBottomEssentialWidget(screen);
                     if (bottomWidget instanceof net.minecraft.client.gui.components.AbstractWidget essentialWidget) {
-                        buttonX = essentialWidget.getX();
-                        buttonY = essentialWidget.getY() + essentialWidget.getHeight() + spacing;
-                        buttonWidth = Math.max(80, essentialWidget.getWidth());
+                        buttonWidth = 20;
+                        buttonHeight = 20;
+                        buttonX = essentialWidget.getX() - buttonWidth - spacing;
+                        buttonY = essentialWidget.getY();
                         positioned = true;
-                        QuickSkin.LOGGER.debug("[Essential Compat] Positioned Change Skin button below Essential widget at ({}, {})", buttonX, buttonY);
+                        QuickSkin.LOGGER.debug("[Essential Compat] Positioned Change Skin button to the left of Essential widget at ({}, {})", buttonX, buttonY);
                     }
                 }
 
@@ -284,16 +285,17 @@ public class ClientEvents {
             } else if (screen instanceof PauseScreen pauseScreen) {
                 boolean positioned = false;
 
-                // If Essential is present, position below Essential's bottom-most widget
+                // If Essential is present, position to the left of Essential's bottom-most widget
                 if (essentialPresent) {
                     net.minecraft.client.gui.components.events.GuiEventListener bottomWidget =
                             com.quickskin.mod.client.compat.EssentialCompatIntegration.findBottomEssentialWidget(screen);
                     if (bottomWidget instanceof net.minecraft.client.gui.components.AbstractWidget essentialWidget) {
-                        buttonX = essentialWidget.getX();
-                        buttonY = essentialWidget.getY() + essentialWidget.getHeight() + spacing;
-                        buttonWidth = Math.max(80, essentialWidget.getWidth());
+                        buttonWidth = 20;
+                        buttonHeight = 20;
+                        buttonX = essentialWidget.getX() - buttonWidth - spacing;
+                        buttonY = essentialWidget.getY();
                         positioned = true;
-                        QuickSkin.LOGGER.debug("[Essential Compat] Positioned Change Skin button below Essential widget at ({}, {})", buttonX, buttonY);
+                        QuickSkin.LOGGER.debug("[Essential Compat] Positioned Change Skin button to the left of Essential widget at ({}, {})", buttonX, buttonY);
                     }
                 }
 
@@ -353,10 +355,21 @@ public class ClientEvents {
             }
 
             // Create and add the "Change Skin" button
-            final Button changeSkinButton = Button.builder(
-                    Component.translatable("quickskin.button.change_skin"),
-                    button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen))
-            ).bounds(buttonX, buttonY, buttonWidth, buttonHeight).build();
+            final Button changeSkinButton;
+            if (essentialPresent) {
+                // Use icon button when Essential is present
+                changeSkinButton = new com.quickskin.mod.client.gui.widget.IconActionButton(
+                        buttonX, buttonY, buttonWidth, buttonHeight,
+                        new ResourceLocation("quickskin", "textures/gui/quickskin_icon.png"),
+                        button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen)),
+                        Component.translatable("quickskin.button.change_skin")
+                );
+            } else {
+                changeSkinButton = Button.builder(
+                        Component.translatable("quickskin.button.change_skin"),
+                        button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen))
+                ).bounds(buttonX, buttonY, buttonWidth, buttonHeight).build();
+            }
 
             screenAccess.addRenderableWidget(changeSkinButton);
 
