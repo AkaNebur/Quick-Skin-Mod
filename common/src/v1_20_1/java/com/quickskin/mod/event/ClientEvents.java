@@ -222,6 +222,9 @@ public class ClientEvents {
 
             QuickSkin.LOGGER.debug("Screen initialized: {} (type: {})", screen.getClass().getSimpleName(), screenType);
 
+            // Check for Essential mod compatibility
+            boolean essentialPresent = com.quickskin.mod.client.compat.EssentialCompatIntegration.isAvailable();
+
             // Inject QuickSkin button
             int buttonX = 0;
             int buttonY = 0;
@@ -230,68 +233,102 @@ public class ClientEvents {
             int spacing = 4;
 
             if (screen instanceof TitleScreen titleScreen) {
-                // Position next to accessibility button on title screen
-                // The Y coordinate for the row with the vanilla language and accessibility buttons
-                final int vanillaButtonsY = titleScreen.height / 4 + 48 + 72;
+                boolean positioned = false;
 
-                net.minecraft.client.gui.components.ImageButton accessibilityButton = null;
+                // If Essential is present, position below Essential's bottom-most widget
+                if (essentialPresent) {
+                    net.minecraft.client.gui.components.events.GuiEventListener bottomWidget =
+                            com.quickskin.mod.client.compat.EssentialCompatIntegration.findBottomEssentialWidget(screen);
+                    if (bottomWidget instanceof net.minecraft.client.gui.components.AbstractWidget essentialWidget) {
+                        buttonX = essentialWidget.getX();
+                        buttonY = essentialWidget.getY() + essentialWidget.getHeight() + spacing;
+                        buttonWidth = Math.max(80, essentialWidget.getWidth());
+                        positioned = true;
+                        QuickSkin.LOGGER.debug("[Essential Compat] Positioned Change Skin button below Essential widget at ({}, {})", buttonX, buttonY);
+                    }
+                }
 
-                // Find the right-most ImageButton on the right half of the screen in that specific row
-                // This specifically targets vanilla buttons and avoids other mods' buttons
-                for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
-                    if (listener instanceof net.minecraft.client.gui.components.ImageButton imgButton) {
-                        if (imgButton.getY() == vanillaButtonsY &&
-                                imgButton.getX() > titleScreen.width / 2 &&
-                                imgButton.getWidth() == 20 &&
-                                imgButton.getHeight() == 20) {
-                            if (accessibilityButton == null || imgButton.getX() > accessibilityButton.getX()) {
-                                accessibilityButton = imgButton;
+                if (!positioned) {
+                    // Position next to accessibility button on title screen
+                    // The Y coordinate for the row with the vanilla language and accessibility buttons
+                    final int vanillaButtonsY = titleScreen.height / 4 + 48 + 72;
+
+                    net.minecraft.client.gui.components.ImageButton accessibilityButton = null;
+
+                    // Find the right-most ImageButton on the right half of the screen in that specific row
+                    // This specifically targets vanilla buttons and avoids other mods' buttons
+                    for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
+                        if (listener instanceof net.minecraft.client.gui.components.ImageButton imgButton) {
+                            if (imgButton.getY() == vanillaButtonsY &&
+                                    imgButton.getX() > titleScreen.width / 2 &&
+                                    imgButton.getWidth() == 20 &&
+                                    imgButton.getHeight() == 20) {
+                                if (accessibilityButton == null || imgButton.getX() > accessibilityButton.getX()) {
+                                    accessibilityButton = imgButton;
+                                }
                             }
                         }
                     }
-                }
 
-                // Position next to the found accessibility button
-                if (accessibilityButton != null) {
-                    buttonX = accessibilityButton.getX() + accessibilityButton.getWidth() + spacing;
-                    buttonY = accessibilityButton.getY();
-                } else {
-                    // Fallback if we couldn't find the accessibility button
-                    buttonX = titleScreen.width / 2 + 128;
-                    buttonY = titleScreen.height / 4 + 48 + 84;
+                    // Position next to the found accessibility button
+                    if (accessibilityButton != null) {
+                        buttonX = accessibilityButton.getX() + accessibilityButton.getWidth() + spacing;
+                        buttonY = accessibilityButton.getY();
+                    } else {
+                        // Fallback if we couldn't find the accessibility button
+                        buttonX = titleScreen.width / 2 + 128;
+                        buttonY = titleScreen.height / 4 + 48 + 84;
+                    }
                 }
 
             } else if (screen instanceof PauseScreen pauseScreen) {
-                // Position next to "Save and Quit to Title" button
-                Button saveAndQuitButton = null;
-                int maxWidth = 0;
+                boolean positioned = false;
 
-                // Find the widest button (vanilla buttons)
-                for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
-                    if (listener instanceof Button button && button.getWidth() > maxWidth) {
-                        maxWidth = button.getWidth();
+                // If Essential is present, position below Essential's bottom-most widget
+                if (essentialPresent) {
+                    net.minecraft.client.gui.components.events.GuiEventListener bottomWidget =
+                            com.quickskin.mod.client.compat.EssentialCompatIntegration.findBottomEssentialWidget(screen);
+                    if (bottomWidget instanceof net.minecraft.client.gui.components.AbstractWidget essentialWidget) {
+                        buttonX = essentialWidget.getX();
+                        buttonY = essentialWidget.getY() + essentialWidget.getHeight() + spacing;
+                        buttonWidth = Math.max(80, essentialWidget.getWidth());
+                        positioned = true;
+                        QuickSkin.LOGGER.debug("[Essential Compat] Positioned Change Skin button below Essential widget at ({}, {})", buttonX, buttonY);
                     }
                 }
 
-                // Find the bottom-most button with that max width (Save and Quit to Title)
-                if (maxWidth > 0) {
-                    int maxY = -1;
+                if (!positioned) {
+                    // Position next to "Save and Quit to Title" button
+                    Button saveAndQuitButton = null;
+                    int maxWidth = 0;
+
+                    // Find the widest button (vanilla buttons)
                     for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
-                        if (listener instanceof Button button && button.getWidth() == maxWidth && button.getY() > maxY) {
-                            maxY = button.getY();
-                            saveAndQuitButton = button;
+                        if (listener instanceof Button button && button.getWidth() > maxWidth) {
+                            maxWidth = button.getWidth();
                         }
                     }
-                }
 
-                if (saveAndQuitButton != null) {
-                    // Position directly next to the vanilla quit button
-                    buttonX = saveAndQuitButton.getX() + saveAndQuitButton.getWidth() + spacing;
-                    buttonY = saveAndQuitButton.getY();
-                } else {
-                    // Fallback position if we can't find the button
-                    buttonX = pauseScreen.width - buttonWidth - spacing;
-                    buttonY = spacing;
+                    // Find the bottom-most button with that max width (Save and Quit to Title)
+                    if (maxWidth > 0) {
+                        int maxY = -1;
+                        for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
+                            if (listener instanceof Button button && button.getWidth() == maxWidth && button.getY() > maxY) {
+                                maxY = button.getY();
+                                saveAndQuitButton = button;
+                            }
+                        }
+                    }
+
+                    if (saveAndQuitButton != null) {
+                        // Position directly next to the vanilla quit button
+                        buttonX = saveAndQuitButton.getX() + saveAndQuitButton.getWidth() + spacing;
+                        buttonY = saveAndQuitButton.getY();
+                    } else {
+                        // Fallback position if we can't find the button
+                        buttonX = pauseScreen.width - buttonWidth - spacing;
+                        buttonY = spacing;
+                    }
                 }
             } else {
                 // For other screens (world selection, etc.), use similar logic to PauseScreen
@@ -323,188 +360,198 @@ public class ClientEvents {
 
             screenAccess.addRenderableWidget(changeSkinButton);
 
-            // Create and add the PlayerWidget above the button using debug offsets
-            int widgetSize = 144;
-            int offsetX = DebugOffsetManager.getOffsetX(screenType);
-            int offsetY = DebugOffsetManager.getOffsetY(screenType);
+            // Skip PlayerWidget, rotate button, and animation buttons when Essential is present
+            // (Essential has its own player model rendering)
+            if (!essentialPresent) {
+                // Create and add the PlayerWidget above the button using debug offsets
+                int widgetSize = 144;
+                int offsetX = DebugOffsetManager.getOffsetX(screenType);
+                int offsetY = DebugOffsetManager.getOffsetY(screenType);
 
-            int widgetX = buttonX + offsetX;
-            int widgetY = buttonY + offsetY;
+                int widgetX = buttonX + offsetX;
+                int widgetY = buttonY + offsetY;
 
-            // Get player skin and model type from saved config or player
-            ResourceLocation skinLocation = null;
-            String modelType = "classic";
-            LocalPlayer player = Minecraft.getInstance().player;
+                // Get player skin and model type from saved config or player
+                ResourceLocation skinLocation = null;
+                String modelType = "classic";
+                LocalPlayer player = Minecraft.getInstance().player;
 
-            com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+                com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
 
-            // First priority: Use saved skin from config (works on title screen when player is null)
-            if (!config.activeSkinHash.isEmpty()) {
-                com.quickskin.mod.client.services.LocalAssetManager assetManager =
-                        com.quickskin.mod.client.services.LocalAssetManager.getInstance();
-                com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
-
-                if (metadata != null) {
-                    // Load the saved skin texture
-                    skinLocation = assetManager.getTextureLocation(config.activeSkinHash, com.quickskin.mod.common.data.TextureQuality.FULL);
-
-                    // Get saved model type preference for this skin
-                    modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
-
-                    // If auto mode, use the detected model type from metadata
-                    if ("auto".equals(modelType)) {
-                        modelType = metadata.skinModel();
-                    }
-
-                    QuickSkin.LOGGER.debug("Using saved skin for title screen widget: {} with model type: {}",
-                            metadata.friendlyName(), modelType);
-                }
-            }
-
-            // Second priority: Use current player skin (when in-game)
-            if (skinLocation == null && player != null) {
-                skinLocation = player.getSkinTextureLocation();
-
-                // Get model type from the active skin if available
+                // First priority: Use saved skin from config (works on title screen when player is null)
                 if (!config.activeSkinHash.isEmpty()) {
-                    LocalAssetManager assetManager = LocalAssetManager.getInstance();
-                    modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
-                    AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+                    com.quickskin.mod.client.services.LocalAssetManager assetManager =
+                            com.quickskin.mod.client.services.LocalAssetManager.getInstance();
+                    com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
 
-                    // If auto mode, detect from the active custom skin (if any)
-                    if ("auto".equals(modelType) && metadata != null) {
-                        // Use the detected model type from the custom skin metadata
-                        modelType = metadata.skinModel();
-                    } else {
-                        // Fallback: detect from the vanilla player's model
+                    if (metadata != null) {
+                        // Load the saved skin texture
+                        skinLocation = assetManager.getTextureLocation(config.activeSkinHash, com.quickskin.mod.common.data.TextureQuality.FULL);
+
+                        // Get saved model type preference for this skin
+                        modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+
+                        // If auto mode, use the detected model type from metadata
+                        if ("auto".equals(modelType)) {
+                            modelType = metadata.skinModel();
+                        }
+
+                        QuickSkin.LOGGER.debug("Using saved skin for title screen widget: {} with model type: {}",
+                                metadata.friendlyName(), modelType);
+                    }
+                }
+
+                // Second priority: Use current player skin (when in-game)
+                if (skinLocation == null && player != null) {
+                    skinLocation = player.getSkinTextureLocation();
+
+                    // Get model type from the active skin if available
+                    if (!config.activeSkinHash.isEmpty()) {
+                        LocalAssetManager assetManager = LocalAssetManager.getInstance();
+                        modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+                        AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
+
+                        // If auto mode, detect from the active custom skin (if any)
+                        if ("auto".equals(modelType) && metadata != null) {
+                            // Use the detected model type from the custom skin metadata
+                            modelType = metadata.skinModel();
+                        } else {
+                            // Fallback: detect from the vanilla player's model
+                            modelType = player.getModelName(); // "default" or "slim"
+                            // Convert Minecraft model names to our format
+                            if ("default".equals(modelType)) {
+                                modelType = "classic";
+                            }
+                        }
+                    } else if ("auto".equals(modelType)) {
+                        // No custom skin active, use vanilla player's model
                         modelType = player.getModelName(); // "default" or "slim"
                         // Convert Minecraft model names to our format
                         if ("default".equals(modelType)) {
                             modelType = "classic";
                         }
                     }
-                } else if ("auto".equals(modelType)) {
-                    // No custom skin active, use vanilla player's model
-                    modelType = player.getModelName(); // "default" or "slim"
-                    // Convert Minecraft model names to our format
-                    if ("default".equals(modelType)) {
-                        modelType = "classic";
+                }
+
+                // Fallback: Use default Steve skin
+                if (skinLocation == null) {
+                    skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
+                    modelType = "classic";
+                }
+
+                // Load saved cape from config
+                String capeId = config.activeCapeHash;
+                ResourceLocation capeLocation = null;
+                if (capeId != null && !capeId.isEmpty()) {
+                    // Use the service to resolve the location. This will also trigger animation registration.
+                    // The UUID is not used for local/known capes, so we can pass null.
+                    capeLocation = com.quickskin.mod.client.services.CapeService.getInstance().getCapeLocation(null, capeId);
+                }
+
+                // Save rotation and animation state from existing widget before creating new one
+                if (playerWidget != null) {
+                    titleScreenBodyYaw = playerWidget.getBodyYaw();
+                    titleScreenTargetRotation = playerWidget.getTargetYRotation();
+                    String currentAnimation = playerWidget.getAnimation();
+                    if (currentAnimation != null && !currentAnimation.isEmpty()) {
+                        setSharedAnimation(currentAnimation);
                     }
                 }
-            }
 
-            // Fallback: Use default Steve skin
-            if (skinLocation == null) {
-                skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
-                modelType = "classic";
-            }
-
-            // Load saved cape from config
-            String capeId = config.activeCapeHash;
-            ResourceLocation capeLocation = null;
-            if (capeId != null && !capeId.isEmpty()) {
-                // Use the service to resolve the location. This will also trigger animation registration.
-                // The UUID is not used for local/known capes, so we can pass null.
-                capeLocation = com.quickskin.mod.client.services.CapeService.getInstance().getCapeLocation(null, capeId);
-            }
-
-            // Save rotation and animation state from existing widget before creating new one
-            if (playerWidget != null) {
-                titleScreenBodyYaw = playerWidget.getBodyYaw();
-                titleScreenTargetRotation = playerWidget.getTargetYRotation();
-                String currentAnimation = playerWidget.getAnimation();
-                if (currentAnimation != null && !currentAnimation.isEmpty()) {
-                    setSharedAnimation(currentAnimation);
+                playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, capeLocation, capeId, modelType);
+                // Set context based on screen type
+                if ("title".equals(screenType)) {
+                    playerWidget.setContext(com.quickskin.mod.client.gui.widget.PlayerWidget.WidgetContext.TITLE_SCREEN);
+                } else if ("pause".equals(screenType)) {
+                    playerWidget.setContext(com.quickskin.mod.client.gui.widget.PlayerWidget.WidgetContext.PAUSE_MENU);
                 }
-            }
+                screenAccess.addRenderableWidget(playerWidget);
 
-            playerWidget = new PlayerWidget(widgetX, widgetY, widgetSize, widgetSize, skinLocation, capeLocation, capeId, modelType);
-            // Set context based on screen type
-            if ("title".equals(screenType)) {
-                playerWidget.setContext(com.quickskin.mod.client.gui.widget.PlayerWidget.WidgetContext.TITLE_SCREEN);
-            } else if ("pause".equals(screenType)) {
-                playerWidget.setContext(com.quickskin.mod.client.gui.widget.PlayerWidget.WidgetContext.PAUSE_MENU);
-            }
-            screenAccess.addRenderableWidget(playerWidget);
+                // Restore saved rotation and animation state
+                playerWidget.setRotationState(titleScreenBodyYaw, titleScreenTargetRotation);
+                String savedAnimation = getSharedAnimation();
+                if (savedAnimation != null && !savedAnimation.isEmpty()) {
+                    playerWidget.setAnimation(savedAnimation);
+                }
 
-            // Restore saved rotation and animation state
-            playerWidget.setRotationState(titleScreenBodyYaw, titleScreenTargetRotation);
-            String savedAnimation = getSharedAnimation();
-            if (savedAnimation != null && !savedAnimation.isEmpty()) {
-                playerWidget.setAnimation(savedAnimation);
-            }
+                // Create and add rotate button (above Change Skin button, aligned to the left edge)
+                int rotateButtonSize = 20;
+                int rotateButtonX = buttonX;
+                int rotateButtonY = buttonY - rotateButtonSize - spacing;
 
-            // Create and add rotate button (above Change Skin button, aligned to the left edge)
-            int rotateButtonSize = 20;
-            int rotateButtonX = buttonX;
-            int rotateButtonY = buttonY - rotateButtonSize - spacing;
+                com.quickskin.mod.client.gui.widget.RotateButton rotateButton =
+                        new com.quickskin.mod.client.gui.widget.RotateButton(
+                                rotateButtonX,
+                                rotateButtonY,
+                                rotateButtonSize,
+                                button -> playerWidget.toggleRotation()
+                        );
+                screenAccess.addRenderableWidget(rotateButton);
 
-            com.quickskin.mod.client.gui.widget.RotateButton rotateButton =
-                    new com.quickskin.mod.client.gui.widget.RotateButton(
-                            rotateButtonX,
-                            rotateButtonY,
-                            rotateButtonSize,
-                            button -> playerWidget.toggleRotation()
-                    );
-            screenAccess.addRenderableWidget(rotateButton);
+                // Register priority widgets (take precedence over model interaction)
+                playerWidget.clearPriorityWidgets(); // Clear old priorities
+                playerWidget.addPriorityWidget(changeSkinButton); // Change Skin button
+                playerWidget.addPriorityWidget(rotateButton); // Rotate button
 
-            // Register priority widgets (take precedence over model interaction)
-            playerWidget.clearPriorityWidgets(); // Clear old priorities
-            playerWidget.addPriorityWidget(changeSkinButton); // Change Skin button
-            playerWidget.addPriorityWidget(rotateButton); // Rotate button
+                // Clear animation buttons from previous screen
+                animationButtons.clear();
+                isAnimationDropdownOpen = false;
 
-            // Clear animation buttons from previous screen
-            animationButtons.clear();
-            isAnimationDropdownOpen = false;
+                // Only add animation buttons on title screen, not in-game (pause menu)
+                if ("title".equals(screenType)) {
+                    // Create animation toggle button (right of rotate button)
+                    int animToggleWidth = 20;
+                    int animToggleX = buttonX + buttonWidth - animToggleWidth;
+                    int animToggleY = rotateButtonY;
 
-            // Only add animation buttons on title screen, not in-game (pause menu)
-            if ("title".equals(screenType)) {
-                // Create animation toggle button (right of rotate button)
-                int animToggleWidth = 20;
-                int animToggleX = buttonX + buttonWidth - animToggleWidth;
-                int animToggleY = rotateButtonY;
+                    animationToggleButton = Button.builder(
+                            Component.literal(">"),
+                            button -> toggleAnimationDropdown()
+                    ).bounds(animToggleX, animToggleY, animToggleWidth, rotateButtonSize).build();
+                    screenAccess.addRenderableWidget(animationToggleButton);
 
-                animationToggleButton = Button.builder(
-                        Component.literal(">"),
-                        button -> toggleAnimationDropdown()
-                ).bounds(animToggleX, animToggleY, animToggleWidth, rotateButtonSize).build();
-                screenAccess.addRenderableWidget(animationToggleButton);
+                    // Register animation toggle button as priority widget
+                    playerWidget.addPriorityWidget(animationToggleButton);
 
-                // Register animation toggle button as priority widget
-                playerWidget.addPriorityWidget(animationToggleButton);
+                    // Create numbered animation buttons (dropdown)
+                    java.util.List<String> availableAnimations = getAvailableAnimations();
+                    for (int i = 0; i < availableAnimations.size(); i++) {
+                        final String animName = availableAnimations.get(i);
+                        final int index = i;
 
-                // Create numbered animation buttons (dropdown)
-                java.util.List<String> availableAnimations = getAvailableAnimations();
-                for (int i = 0; i < availableAnimations.size(); i++) {
-                    final String animName = availableAnimations.get(i);
-                    final int index = i;
-
-                    Button animButton = Button.builder(
-                            Component.literal(String.valueOf(index + 1)),
-                            button -> {
-                                // Set the animation on the player widget
-                                if (playerWidget != null) {
-                                    playerWidget.setAnimation(animName);
-                                    // Save animation state for persistence across all screens
-                                    setSharedAnimation(animName);
-                                    QuickSkin.LOGGER.debug("Animation {} activated: {}", index + 1, animName);
+                        Button animButton = Button.builder(
+                                Component.literal(String.valueOf(index + 1)),
+                                button -> {
+                                    // Set the animation on the player widget
+                                    if (playerWidget != null) {
+                                        playerWidget.setAnimation(animName);
+                                        // Save animation state for persistence across all screens
+                                        setSharedAnimation(animName);
+                                        QuickSkin.LOGGER.debug("Animation {} activated: {}", index + 1, animName);
+                                    }
+                                    toggleAnimationDropdown();
                                 }
-                                toggleAnimationDropdown();
-                            }
-                    ).bounds(animToggleX, animToggleY - (i + 1) * 22, animToggleWidth, rotateButtonSize).build();
+                        ).bounds(animToggleX, animToggleY - (i + 1) * 22, animToggleWidth, rotateButtonSize).build();
 
-                    animButton.visible = false;
-                    animButton.active = false;
-                    animationButtons.add(animButton);
-                    screenAccess.addRenderableWidget(animButton);
+                        animButton.visible = false;
+                        animButton.active = false;
+                        animationButtons.add(animButton);
+                        screenAccess.addRenderableWidget(animButton);
 
-                    // Register animation button as priority widget
-                    playerWidget.addPriorityWidget(animButton);
+                        // Register animation button as priority widget
+                        playerWidget.addPriorityWidget(animButton);
+                    }
                 }
+            } else {
+                // Essential is present - hide our player widget and controls
+                playerWidget = null;
+                animationButtons.clear();
+                isAnimationDropdownOpen = false;
+                QuickSkin.LOGGER.debug("[Essential Compat] Skipping PlayerWidget and controls (Essential provides its own)");
             }
 
-            QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) and PlayerWidget at ({}, {}) for screen type '{}'",
-                    buttonX, buttonY, widgetX, widgetY, screenType);
+            QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) for screen type '{}'",
+                    buttonX, buttonY, screenType);
         });
 
         // Use PRE event for scrolling so we can interrupt it
