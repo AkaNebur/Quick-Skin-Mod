@@ -1,6 +1,5 @@
 package com.quickskin.mod.mixin;
 
-import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -85,8 +84,6 @@ public abstract class MixinAbstractClientPlayer {
             }
 
             if (anyOverride) {
-                QuickSkin.LOGGER.info("[MixinAbstractClientPlayer] Overriding skin for {}: skin={}, model={}, cape={}",
-                        self.getName().getString(), skinTexture, skinModel, capeTexture);
                 cir.setReturnValue(new PlayerSkin(
                         skinTexture,
                         originalSkin.textureUrl(),
@@ -138,8 +135,6 @@ public abstract class MixinAbstractClientPlayer {
                 }
 
                 if (anyOverride) {
-                    QuickSkin.LOGGER.info("[MixinAbstractClientPlayer] Title screen fallback for {}: skin={}, cape={}",
-                            self.getName().getString(), skinTexture, capeTexture);
                     cir.setReturnValue(new PlayerSkin(
                             skinTexture,
                             originalSkin.textureUrl(),

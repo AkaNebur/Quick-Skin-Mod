@@ -42,7 +42,6 @@ public class EssentialCompatIntegration {
 
         if (PlatformHelper.isModLoaded("essential")) {
             MOD_AVAILABLE = true;
-            QuickSkin.LOGGER.debug("[Essential Compat] Detected Essential mod, enabling compatibility layer");
             return;
         }
 
@@ -50,9 +49,8 @@ public class EssentialCompatIntegration {
         try {
             Class.forName("gg.essential.Essential");
             MOD_AVAILABLE = true;
-            QuickSkin.LOGGER.debug("[Essential Compat] Detected Essential via class loading, enabling compatibility layer");
         } catch (ClassNotFoundException e) {
-            QuickSkin.LOGGER.debug("[Essential Compat] Essential not detected");
+            // Essential not detected
         }
     }
 
@@ -85,11 +83,6 @@ public class EssentialCompatIntegration {
             }
         }
 
-        if (bottomWidget != null) {
-            QuickSkin.LOGGER.debug("[Essential Compat] Found bottom Essential widget: {} at bottom y={}",
-                    bottomWidget.getClass().getSimpleName(), maxBottom);
-        }
-
         return bottomWidget;
     }
 
@@ -106,7 +99,6 @@ public class EssentialCompatIntegration {
 
         // Don't attempt if TextureManager isn't ready yet (e.g. during early init)
         if (mc.getTextureManager() == null) {
-            QuickSkin.LOGGER.debug("[Essential Compat] TextureManager not ready, skipping menu appearance registration");
             return;
         }
 
@@ -127,14 +119,12 @@ public class EssentialCompatIntegration {
             if (metadata != null) {
                 skinId = "local_skin:" + config.activeSkinHash;
                 modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
-                QuickSkin.LOGGER.info("[Essential Compat] Registered menu skin for UUID {}: {}", playerUuid, metadata.friendlyName());
             }
         }
 
         // Prepare saved cape
         if (!config.activeCapeHash.isEmpty()) {
             capeId = config.activeCapeHash;
-            QuickSkin.LOGGER.info("[Essential Compat] Registered menu cape for UUID {}: {}", playerUuid, capeId);
         }
 
         // Apply both together using applyLook

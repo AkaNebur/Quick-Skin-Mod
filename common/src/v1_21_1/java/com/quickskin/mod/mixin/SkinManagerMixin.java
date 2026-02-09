@@ -1,7 +1,6 @@
 package com.quickskin.mod.mixin;
 
 import com.mojang.authlib.GameProfile;
-import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.TextureQuality;
@@ -36,23 +35,16 @@ import java.util.concurrent.CompletableFuture;
 @Mixin(SkinManager.class)
 public class SkinManagerMixin {
 
-    @Unique
-    private static final java.util.Map<UUID, Long> quickskin$lastLogTime = new java.util.concurrent.ConcurrentHashMap<>();
-    @Unique
-    private static final long QUICKSKIN$LOG_INTERVAL_MS = 5000;
-
     /**
      * Shared helper that applies QuickSkin overrides to a PlayerSkin.
      * Used by both getInsecureSkin and getOrLoad mixin handlers.
      *
      * @param original the original PlayerSkin from Mojang/vanilla
      * @param uuid     the player's UUID
-     * @param profileName the player's name (for logging)
-     * @param shouldLog whether to emit log messages
      * @return the modified PlayerSkin, or the original if no overrides apply
      */
     @Unique
-    private static PlayerSkin quickskin$applyOverrides(PlayerSkin original, UUID uuid, String profileName, boolean shouldLog) {
+    private static PlayerSkin quickskin$applyOverrides(PlayerSkin original, UUID uuid) {
         if (original == null || uuid == null) return original;
 
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
@@ -100,10 +92,6 @@ public class SkinManagerMixin {
             }
 
             if (anyOverride) {
-                if (shouldLog) {
-                    QuickSkin.LOGGER.info("[SkinManagerMixin] Overriding skin for {}: skin={}, cape={}, model={}",
-                            profileName, skinTexture, capeTexture, skinModel);
-                }
                 return new PlayerSkin(
                         skinTexture,
                         original.textureUrl(),
@@ -154,10 +142,6 @@ public class SkinManagerMixin {
                 }
 
                 if (anyOverride) {
-                    if (shouldLog) {
-                        QuickSkin.LOGGER.info("[SkinManagerMixin] Title screen fallback for {}: skin={}, cape={}",
-                                profileName, skinTexture, capeTexture);
-                    }
                     return new PlayerSkin(
                             skinTexture,
                             original.textureUrl(),
@@ -174,20 +158,6 @@ public class SkinManagerMixin {
     }
 
     /**
-     * Determines if logging should occur for this UUID (throttled to once per 5s per player).
-     */
-    @Unique
-    private static boolean quickskin$shouldLog(UUID uuid) {
-        long now = System.currentTimeMillis();
-        Long lastLog = quickskin$lastLogTime.get(uuid);
-        boolean shouldLog = lastLog == null || now - lastLog > QUICKSKIN$LOG_INTERVAL_MS;
-        if (shouldLog) {
-            quickskin$lastLogTime.put(uuid, now);
-        }
-        return shouldLog;
-    }
-
-    /**
      * Intercept getInsecureSkin (synchronous path).
      * Used by vanilla code and any mod that calls SkinManager.getInsecureSkin() directly.
      */
@@ -196,8 +166,7 @@ public class SkinManagerMixin {
         UUID uuid = profile.getId();
         if (uuid == null) return;
 
-        boolean shouldLog = quickskin$shouldLog(uuid);
-        PlayerSkin result = quickskin$applyOverrides(cir.getReturnValue(), uuid, profile.getName(), shouldLog);
+        PlayerSkin result = quickskin$applyOverrides(cir.getReturnValue(), uuid);
         if (result != cir.getReturnValue()) {
             cir.setReturnValue(result);
         }
@@ -237,11 +206,9 @@ public class SkinManagerMixin {
         // Only wrap the future if we actually have overrides to apply
         if (!hasServiceOverrides && !hasTitleScreenFallback) return;
 
-        String profileName = profile.getName();
         CompletableFuture<PlayerSkin> original = cir.getReturnValue();
         CompletableFuture<PlayerSkin> modified = original.thenApply(skin -> {
-            boolean shouldLog = quickskin$shouldLog(uuid);
-            return quickskin$applyOverrides(skin, uuid, profileName, shouldLog);
+            return quickskin$applyOverrides(skin, uuid);
         });
         cir.setReturnValue(modified);
     }

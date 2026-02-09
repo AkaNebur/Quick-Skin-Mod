@@ -1,7 +1,6 @@
 package com.quickskin.mod.mixin;
 
 import com.mojang.authlib.GameProfile;
-import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -180,8 +179,6 @@ public abstract class PlayerInfoMixin {
         if (skinTexture == null && capeTexture == null) {
             return null;
         }
-
-        QuickSkin.LOGGER.info("[PlayerInfoMixin] Title screen fallback: returning saved skin for profile {}", this.profile.getId());
 
         if (original != null) {
             return new PlayerSkin(

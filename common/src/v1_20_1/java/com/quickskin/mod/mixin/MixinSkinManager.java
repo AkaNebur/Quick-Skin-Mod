@@ -79,8 +79,6 @@ public class MixinSkinManager {
                             MinecraftProfileTexture modifiedTexture = new MinecraftProfileTexture(
                                     "quickskin://local/" + config.activeSkinHash, meta);
 
-                            QuickSkin.LOGGER.info("[SkinManager Mixin] Replaced skin texture for {} with QuickSkin skin: {}",
-                                    profile.getName(), metadata.friendlyName());
                             callback.onSkinTextureAvailable(type, ourSkin, modifiedTexture);
                             return;
                         }

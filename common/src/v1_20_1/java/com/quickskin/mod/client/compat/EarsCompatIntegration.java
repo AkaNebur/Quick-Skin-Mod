@@ -76,10 +76,8 @@ public class EarsCompatIntegration {
             }
 
             MOD_AVAILABLE = true;
-            QuickSkin.LOGGER.info("[Ears Compat] Integration enabled");
         } catch (Exception e) {
             MOD_AVAILABLE = false;
-            QuickSkin.LOGGER.info("[Ears Compat] Not available: {}", e.getMessage());
         }
     }
 
@@ -143,11 +141,9 @@ public class EarsCompatIntegration {
             // Only store if features are not DISABLED
             if (features != null && !features.equals(earsFeaturesDisabled)) {
                 featuresCache.put(skinLocation, features);
-                QuickSkin.LOGGER.info("[Ears Compat] Parsed and stored Ears features for {}", skinLocation);
             } else {
                 // Remove any stale entry
                 featuresCache.remove(skinLocation);
-                QuickSkin.LOGGER.info("[Ears Compat] No Ears features found in skin {}", skinLocation);
             }
         } catch (Exception e) {
             QuickSkin.LOGGER.warn("[Ears Compat] Failed to parse Ears features for {}: {}", skinLocation, e.getMessage());
@@ -194,7 +190,6 @@ public class EarsCompatIntegration {
         try {
             Object storage = earsFeaturesStorageInstance.get(null);
             storagePutMethod.invoke(storage, username != null ? username : "", playerId, features);
-            QuickSkin.LOGGER.info("[Ears Compat] Associated features with player {} ({})", username, playerId);
         } catch (Exception e) {
             QuickSkin.LOGGER.warn("[Ears Compat] Failed to associate features with player: {}", e.getMessage());
         }
@@ -214,7 +209,6 @@ public class EarsCompatIntegration {
      */
     public static void clearAllFeatures() {
         featuresCache.clear();
-        QuickSkin.LOGGER.debug("[Ears Compat] Cleared all cached features");
     }
 
     /**

@@ -79,8 +79,6 @@ public class ClientEvents {
      * Called from QuickSkinClient.init()
      */
     public static void init() {
-        QuickSkin.LOGGER.debug("Registering client events...");
-
         CapeTransparencyEvents.register();
 
         // Client tick (fires every game tick, ~20 times per second)
@@ -134,8 +132,6 @@ public class ClientEvents {
 
         // Player joins world (client-side)
         ClientPlayerEvent.CLIENT_PLAYER_JOIN.register(player -> {
-            QuickSkin.LOGGER.debug("Local player joined world: {}", player.getName().getString());
-
             // Reset animation to idle when entering world
             setSharedAnimation("idle");
 
@@ -152,7 +148,6 @@ public class ClientEvents {
             if (minecraft != null && minecraft.hasSingleplayerServer()) {
                 com.quickskin.mod.config.ServerConfig serverConfig = com.quickskin.mod.config.ServerConfig.getInstance();
                 com.quickskin.mod.config.ClientConfig.getInstance().applyServerOverride(serverConfig);
-                QuickSkin.LOGGER.debug("Applied server config override for singleplayer world");
             }
 
             // Restore saved skin and model type from config
@@ -161,12 +156,6 @@ public class ClientEvents {
 
         // Player quits world (client-side)
         ClientPlayerEvent.CLIENT_PLAYER_QUIT.register(player -> {
-            if (player != null) {
-                QuickSkin.LOGGER.debug("Local player quit world: {}", player.getName().getString());
-            } else {
-                QuickSkin.LOGGER.debug("Local player quit world (player was null)");
-            }
-
             // *** THE FIX: Clear all active animations to stop background ticking and render lookups ***
             AnimatedTextureManager.getInstance().clearAnimations();
 
@@ -199,16 +188,12 @@ public class ClientEvents {
                         .savePlayerPreferences(player.getUUID());
             }
 
-            QuickSkin.LOGGER.debug("Cleared server config override and texture caches on world quit");
-
             // Re-register appearance for Essential's title screen player model
             com.quickskin.mod.client.compat.EssentialCompatIntegration.registerMenuAppearance();
         });
 
         // Respawn event (player dies and respawns)
         ClientPlayerEvent.CLIENT_PLAYER_RESPAWN.register((oldPlayer, newPlayer) -> {
-            QuickSkin.LOGGER.debug("Player respawned");
-
             // Re-apply appearance after respawn
             restoreSavedAppearance(newPlayer);
         });
@@ -222,8 +207,6 @@ public class ClientEvents {
             if (screenType == null) {
                 return; // Not a screen we care about
             }
-
-            QuickSkin.LOGGER.debug("Screen initialized: {} (type: {})", screen.getClass().getSimpleName(), screenType);
 
             // Check for Essential mod compatibility
             boolean essentialPresent = com.quickskin.mod.client.compat.EssentialCompatIntegration.isAvailable();
@@ -253,7 +236,6 @@ public class ClientEvents {
                         buttonX = essentialWidget.getX() - buttonWidth - spacing;
                         buttonY = essentialWidget.getY();
                         positioned = true;
-                        QuickSkin.LOGGER.debug("[Essential Compat] Positioned Change Skin button to the left of Essential widget at ({}, {})", buttonX, buttonY);
                     }
                 }
 
@@ -303,7 +285,6 @@ public class ClientEvents {
                         buttonX = essentialWidget.getX() - buttonWidth - spacing;
                         buttonY = essentialWidget.getY();
                         positioned = true;
-                        QuickSkin.LOGGER.debug("[Essential Compat] Positioned Change Skin button to the left of Essential widget at ({}, {})", buttonX, buttonY);
                     }
                 }
 
@@ -417,8 +398,6 @@ public class ClientEvents {
                             modelType = metadata.skinModel();
                         }
 
-                        QuickSkin.LOGGER.debug("Using saved skin for title screen widget: {} with model type: {}",
-                                metadata.friendlyName(), modelType);
                     }
                 }
 
@@ -548,7 +527,6 @@ public class ClientEvents {
                                         playerWidget.setAnimation(animName);
                                         // Save animation state for persistence across all screens
                                         setSharedAnimation(animName);
-                                        QuickSkin.LOGGER.debug("Animation {} activated: {}", index + 1, animName);
                                     }
                                     toggleAnimationDropdown();
                                 }
@@ -568,11 +546,8 @@ public class ClientEvents {
                 playerWidget = null;
                 animationButtons.clear();
                 isAnimationDropdownOpen = false;
-                QuickSkin.LOGGER.debug("[Essential Compat] Skipping PlayerWidget and controls (Essential provides its own)");
             }
 
-            QuickSkin.LOGGER.debug("Added 'Change Skin' button at ({}, {}) for screen type '{}'",
-                    buttonX, buttonY, screenType);
         });
 
         // Use PRE event for scrolling so we can interrupt it
@@ -595,7 +570,6 @@ public class ClientEvents {
                 // Forward the release event to the active PlayerWidget
                 boolean handled = activeWidget.mouseReleased(mouseX, mouseY, button);
                 if (handled) {
-                    QuickSkin.LOGGER.debug("Global mouse release forwarded to PlayerWidget");
                     return EventResult.interruptTrue(); // Consume the event
                 }
             }
@@ -611,7 +585,6 @@ public class ClientEvents {
             }
         });
 
-        QuickSkin.LOGGER.debug("Client events registered");
     }
 
     /**
@@ -666,7 +639,6 @@ public class ClientEvents {
     private static void ensurePlayerOwnSkinExists() {
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
         if (!config.enablePlayerOwnSkinSystem) {
-            QuickSkin.LOGGER.debug("Player's own skin system is disabled by config. Skipping download.");
             return;
         }
 
@@ -683,13 +655,11 @@ public class ClientEvents {
             AssetMetadata existingMetadata = LocalAssetManager.getInstance().getMetadata(config.playerOwnSkinHash);
             if (existingMetadata != null) {
                 // Player's skin already exists
-                QuickSkin.LOGGER.debug("Player's own skin already exists: {}", existingMetadata.friendlyName());
                 return;
             }
         }
 
         // Download player's own skin (async, won't block startup)
-        QuickSkin.LOGGER.debug("Downloading player's own skin: {}", playerName);
         com.quickskin.mod.client.services.MojangApiService.getInstance().fetchSkinByUsername(playerName)
                 .thenAccept(skinData -> {
                     if (minecraft != null) {
@@ -720,7 +690,6 @@ public class ClientEvents {
 
             // Convert legacy 64x32 skins to modern 64x64 format
             if (image.getHeight() == image.getWidth() / 2) {
-                QuickSkin.LOGGER.debug("Converting legacy 64x32 skin to modern format for: {}", skinData.username);
                 image = com.quickskin.mod.common.util.HDTextureProcessor.convertLegacyToModern(image);
             }
 
@@ -758,12 +727,10 @@ public class ClientEvents {
                 }
 
                 Files.write(targetPath, processedImageBytes);
-                QuickSkin.LOGGER.debug("Successfully saved player's own skin to: {}", targetPath);
 
                 // Reload assets to recognize the new file.
                 assetManager.reload();
             } else {
-                QuickSkin.LOGGER.debug("Player's skin already exists in list as '{}' - skipping save.", existingMetadata.friendlyName());
             }
 
             // Now that the skin is guaranteed to be in the asset manager, set its hash in the config.
@@ -785,17 +752,13 @@ public class ClientEvents {
                         com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                                 .applySkin(player.getUUID(), skinId, modelType);
 
-                        QuickSkin.LOGGER.debug("Auto-selected and applied player's own skin: {}", skinData.username);
                     }
                 } else {
-                    QuickSkin.LOGGER.debug("Auto-selected player's own skin (will apply on world join): {}", skinData.username);
                 }
             } else {
-                QuickSkin.LOGGER.debug("Active skin already set, not auto-selecting player's own skin");
             }
 
             config.save();
-            QuickSkin.LOGGER.debug("Player's own skin set: hash {}", finalHash);
 
         } catch (Exception e) {
             QuickSkin.LOGGER.error("Error handling player's own skin", e);
@@ -811,7 +774,6 @@ public class ClientEvents {
 
         if (isReplay) {
             // In replay mode - start a background watcher that will apply skins when player entities load
-            QuickSkin.LOGGER.debug("In replay mode - starting player watcher to apply skins when recorded player appears");
             com.quickskin.mod.client.compat.ReplayModHelper.startReplayPlayerWatcher();
             return;
         }
@@ -840,8 +802,6 @@ public class ClientEvents {
                 com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                         .applySkin(targetPlayerId, skinId, modelType);
 
-                QuickSkin.LOGGER.debug("Restored saved skin: {} with model type: {} to player {}",
-                        metadata.friendlyName(), modelType, targetPlayerId);
             } else {
                 QuickSkin.LOGGER.warn("Saved skin hash not found in assets: {}", config.activeSkinHash);
             }
@@ -865,8 +825,6 @@ public class ClientEvents {
                 com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                         .applySkin(targetPlayerId, skinId, modelType);
 
-                QuickSkin.LOGGER.debug("Auto-selected and applied player's own skin: {} with model type: {} to player {}",
-                        metadata.friendlyName(), modelType, targetPlayerId);
             }
         }
 
@@ -877,7 +835,6 @@ public class ClientEvents {
             com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                     .applyCape(targetPlayerId, capeId);
 
-            QuickSkin.LOGGER.debug("Restored saved cape: {} to player {}", capeId, targetPlayerId);
         }
     }
 
@@ -898,12 +855,9 @@ public class ClientEvents {
                 config.activeSkinHash = config.playerOwnSkinHash;
                 config.save();
 
-                QuickSkin.LOGGER.debug("Auto-selected player's own skin on startup: {}", metadata.friendlyName());
             } else {
-                QuickSkin.LOGGER.debug("Player's own skin hash exists in config but not in assets (will be downloaded)");
             }
         } else if (!config.activeSkinHash.isEmpty()) {
-            QuickSkin.LOGGER.debug("Active skin already set: {}", config.activeSkinHash);
         }
     }
 

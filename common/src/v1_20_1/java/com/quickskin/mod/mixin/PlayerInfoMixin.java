@@ -51,7 +51,6 @@ public abstract class PlayerInfoMixin {
                 ResourceLocation loc = LocalAssetManager.getInstance()
                         .getTextureLocation(config.activeSkinHash, TextureQuality.FULL);
                 if (loc != null) {
-                    QuickSkin.LOGGER.info("[PlayerInfoMixin] Title screen fallback: returning saved skin for profile {}", this.profile.getId());
                     cir.setReturnValue(loc);
                 }
             }

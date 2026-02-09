@@ -52,7 +52,6 @@ public class MixinAbstractClientPlayer {
                 ResourceLocation loc = LocalAssetManager.getInstance()
                         .getTextureLocation(config.activeSkinHash, TextureQuality.FULL);
                 if (loc != null) {
-                    QuickSkin.LOGGER.info("[MixinAbstractClientPlayer] Title screen fallback: returning saved skin for UUID {}", self.getUUID());
                     cir.setReturnValue(loc);
                 }
             }
