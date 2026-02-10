@@ -56,8 +56,6 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.debug("Syncing appearance to server: skin={}, cape={}, model={}", skinId, capeId, model);
-
         // Upload skin texture if it's a local skin
         if (skinId != null && skinId.startsWith("local_skin:")) {
             uploadLocalTexture(skinId, "skin");
@@ -81,7 +79,6 @@ public class NetworkSyncService {
         );
 
         NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
-        QuickSkin.LOGGER.debug("Sent UPDATE_APPEARANCE packet to server");
     }
 
     /**
@@ -106,8 +103,6 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.debug("Uploading {} texture to server: {} ({} bytes)", textureType, hash, textureData.length);
-
         // Split into chunks if necessary
         int totalChunks = (int) Math.ceil((double) textureData.length / MAX_CHUNK_SIZE);
 
@@ -126,7 +121,6 @@ public class NetworkSyncService {
             buf.writeByteArray(chunk);
 
             NetworkManager.sendToServer(ModNetworking.TEXTURE_CHUNK, buf);
-            QuickSkin.LOGGER.debug("Sent texture chunk {}/{} for {}", i + 1, totalChunks, hash);
         }
     }
 
@@ -141,8 +135,6 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.debug("Uploading animation metadata for: {}", hash);
-
         // Serialize metadata to JSON
         String metadataJson = serializeMetadata(metadata);
 
@@ -151,7 +143,6 @@ public class NetworkSyncService {
         buf.writeUtf(metadataJson);
 
         NetworkManager.sendToServer(ModNetworking.UPLOAD_ANIMATION_METADATA, buf);
-        QuickSkin.LOGGER.debug("Sent animation metadata for {}", hash);
     }
 
     /**
@@ -172,8 +163,6 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.debug("Clearing appearance on server");
-
         FriendlyByteBuf buf = PacketHelper.createUpdateAppearancePacket(playerId, "", "", "classic");
         NetworkManager.sendToServer(ModNetworking.UPDATE_APPEARANCE, buf);
     }
@@ -190,8 +179,6 @@ public class NetworkSyncService {
             QuickSkin.LOGGER.warn("Cannot request texture from server (not connected)");
             return;
         }
-
-        QuickSkin.LOGGER.debug("Requesting {} texture from server: {}", textureType, hash);
 
         FriendlyByteBuf buf = PacketHelper.createRequestTexturePacket(playerId, textureType, hash);
         NetworkManager.sendToServer(ModNetworking.REQUEST_TEXTURE, buf);

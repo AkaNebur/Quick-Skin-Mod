@@ -30,7 +30,6 @@ public class SkinService implements ISkinService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.debug("SkinService initialized");
     }
 
     @Override
@@ -53,9 +52,6 @@ public class SkinService implements ISkinService {
     @Override
     @Nullable
     public ResourceLocation loadMojangSkin(String username) {
-        // Phase 5: Implement Mojang API loading
-        QuickSkin.LOGGER.debug("Loading Mojang skin for: {}", username);
-
         try {
             // Generate a UUID from the username for offline mode
             UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(StandardCharsets.UTF_8));
@@ -64,8 +60,6 @@ public class SkinService implements ISkinService {
             // In a full implementation, this would fetch from Mojang's API
             // using the PlayerInfo or SkinManager to get the actual player skin
             ResourceLocation defaultSkin = DefaultPlayerSkin.getDefaultSkin(uuid);
-
-            QuickSkin.LOGGER.debug("Using default skin for: {} (UUID: {})", username, uuid);
             return defaultSkin;
 
         } catch (Exception e) {
@@ -77,14 +71,11 @@ public class SkinService implements ISkinService {
     @Override
     @Nullable
     public ResourceLocation loadLocalSkin(String hash) {
-        QuickSkin.LOGGER.debug("Loading local skin: {}", hash);
-
         // Check network cache first (for textures received from server)
         if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().hasTexture(hash)) {
             ResourceLocation networkLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
                     .getTextureLocation(hash);
             if (networkLocation != null) {
-                QuickSkin.LOGGER.debug("Loaded skin from network cache: {}", hash);
                 return networkLocation;
             }
         }
@@ -96,7 +87,6 @@ public class SkinService implements ISkinService {
         if (localLocation == null) {
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc.player != null && mc.getConnection() != null) {
-                QuickSkin.LOGGER.debug("Skin {} not found locally, requesting from server", hash);
                 com.quickskin.mod.networking.NetworkSyncService.getInstance()
                     .requestTexture(mc.player.getUUID(), "skin", hash);
             }

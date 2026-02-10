@@ -38,9 +38,6 @@ public class ClientNetworkHandler {
 
         // Queue work on main thread (CRITICAL for thread safety!)
         context.queue(() -> {
-            QuickSkin.LOGGER.debug("Received appearance sync for player {}: skin={}, cape={}, model={}",
-                    playerId, skinId, capeId, model);
-
             // Apply appearance through service
             PlayerAppearanceService.getInstance().applyLook(playerId, skinId, capeId, model);
         });
@@ -56,15 +53,10 @@ public class ClientNetworkHandler {
         byte[] imageData = PacketHelper.readByteArray(buf);
 
         context.queue(() -> {
-            QuickSkin.LOGGER.debug("Received {} texture from server: {} (size: {} bytes)",
-                    textureType, hash, imageData.length);
-
             // Store in network texture cache (not local assets, so it won't appear in skin list)
             // Pass textureType so transparency can be removed for skins if server config requires it
             com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
                     .storeTexture(hash, textureType, imageData);
-
-            QuickSkin.LOGGER.debug("Cached {} texture from server: {}", textureType, hash);
         });
     }
 
@@ -77,8 +69,6 @@ public class ClientNetworkHandler {
         String metadataJson = PacketHelper.readString(buf);
 
         context.queue(() -> {
-            QuickSkin.LOGGER.debug("Received animation metadata for: {}", hash);
-
             // Store animation metadata both in memory cache and to disk
             try {
                 // Parse the JSON metadata
@@ -92,9 +82,6 @@ public class ClientNetworkHandler {
                         .getCacheDirectory();
                 java.nio.file.Path metadataPath = cacheDir.resolve(hash + ".json");
                 java.nio.file.Files.writeString(metadataPath, metadataJson);
-
-                QuickSkin.LOGGER.debug("Saved animation metadata: {} frames, {} ms total duration",
-                        metadata.frameCount(), metadata.getTotalDuration());
 
                 // Register animation for this network texture
                 registerNetworkCapeAnimation(hash, metadata);
@@ -150,7 +137,6 @@ public class ClientNetworkHandler {
 
             if (!animManager.isAnimated(animationId)) {
                 animManager.registerAnimation(animationId, capeId, textureLocation, atlasImage, metadata);
-                QuickSkin.LOGGER.debug("Registered animation for network cape: {} ({} frames)", hash, metadata.frameCount());
             }
 
         } catch (Exception e) {
@@ -166,7 +152,6 @@ public class ClientNetworkHandler {
     private static void refreshPlayersUsingTexture(String hash) {
         // The animation will be picked up automatically when CapeService loads the cape
         // No need to manually refresh - CapeService.loadLocalCape() now checks for network animations
-        QuickSkin.LOGGER.debug("Animation metadata received for {}, will be applied when cape is loaded", hash);
     }
 
     /**
@@ -177,8 +162,6 @@ public class ClientNetworkHandler {
         String configJson = PacketHelper.readString(buf);
 
         context.queue(() -> {
-            QuickSkin.LOGGER.debug("Received server config sync");
-
             // Get current server override to detect changes
             com.quickskin.mod.config.ClientConfig clientConfig = com.quickskin.mod.config.ClientConfig.getInstance();
             com.quickskin.mod.config.ServerConfig oldServerConfig = clientConfig.getServerOverride();
@@ -200,9 +183,6 @@ public class ClientNetworkHandler {
                 )
             );
 
-            QuickSkin.LOGGER.debug("Server config override applied: disableSkinTransparency={}, skinChangeCooldownSeconds={}",
-                serverConfig.disableSkinTransparency, serverConfig.skinChangeCooldownSeconds);
-
             // If transparency setting changed, reload textures
             if (oldTransparencySetting != newTransparencySetting) {
                 Minecraft mc = Minecraft.getInstance();
@@ -212,11 +192,8 @@ public class ClientNetworkHandler {
                 boolean isInSettingsScreen = mc.screen instanceof com.quickskin.mod.client.gui.screen.SettingsScreen;
 
                 if (mc.screen == null || !isInSettingsScreen) {
-                    QuickSkin.LOGGER.debug("Server transparency setting changed, reloading textures immediately (screen: {})",
-                        mc.screen != null ? mc.screen.getClass().getSimpleName() : "null");
                     PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
                 } else {
-                    QuickSkin.LOGGER.debug("Server transparency setting changed, marking reload as pending");
                     pendingTransparencyReload = true;
                 }
             }
@@ -231,7 +208,6 @@ public class ClientNetworkHandler {
                     com.quickskin.mod.common.data.PlayerAppearanceRepository.getInstance().getAppearance(playerId);
 
                 if (currentAppearance != null) {
-                    QuickSkin.LOGGER.debug("Syncing current appearance to server after config received");
                     NetworkSyncService.getInstance().syncAppearance(
                         playerId,
                         currentAppearance.getSkinId(),
@@ -249,7 +225,6 @@ public class ClientNetworkHandler {
      */
     public static void executePendingTransparencyReload() {
         if (pendingTransparencyReload) {
-            QuickSkin.LOGGER.debug("Executing pending transparency reload");
             PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
             pendingTransparencyReload = false;
         }
@@ -266,9 +241,6 @@ public class ClientNetworkHandler {
         byte[] chunkData = buf.readByteArray();
 
         context.queue(() -> {
-            QuickSkin.LOGGER.debug("Received texture chunk {}/{} for: {} (size: {} bytes)",
-                    chunkIndex + 1, totalChunks, hash, chunkData.length);
-
             // Validate chunk data
             if (chunkData.length > 32 * 1024) {
                 QuickSkin.LOGGER.warn("Received oversized chunk: {} bytes (max: 32KB)", chunkData.length);
@@ -289,7 +261,6 @@ public class ClientNetworkHandler {
         long cooldownEndTime = buf.readLong();
 
         context.queue(() -> {
-            QuickSkin.LOGGER.debug("Received cooldown update. Ends at: {}", cooldownEndTime);
             com.quickskin.mod.client.services.CooldownService.getInstance().setCooldownEndTime(cooldownEndTime);
         });
     }

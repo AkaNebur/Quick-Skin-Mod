@@ -45,9 +45,6 @@ public class CapeLayerMixin {
         }
 
         if (!service.hasActiveCape(player.getUUID())) {
-            if (shouldLog) {
-                QuickSkin.LOGGER.debug("[CapeLayerMixin] No active cape for player {}, letting vanilla run", player.getName().getString());
-            }
             return;
         }
 
@@ -78,9 +75,6 @@ public class CapeLayerMixin {
                 ResourceLocation currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);
                 if (currentFrame != null) {
                     finalTexture = currentFrame;
-                    if (shouldLog) {
-                        QuickSkin.LOGGER.debug("[CapeLayerMixin] Animation frame: capeId={}, animationId={}, frame={}", capeId, animationId, currentFrame);
-                    }
                 } else {
                     if (shouldLog) {
                         QuickSkin.LOGGER.warn("[CapeLayerMixin] getCurrentFrameTexture returned null for animationId={}", animationId);

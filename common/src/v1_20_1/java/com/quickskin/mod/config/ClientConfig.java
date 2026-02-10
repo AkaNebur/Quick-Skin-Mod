@@ -114,7 +114,6 @@ public class ClientConfig {
             try {
                 String json = Files.readString(configPath);
                 ClientConfig config = GSON.fromJson(json, ClientConfig.class);
-                QuickSkin.LOGGER.debug("Loaded client configuration");
                 return config;
             } catch (Exception e) {
                 QuickSkin.LOGGER.error("Failed to load client configuration, using defaults", e);
@@ -165,11 +164,6 @@ public class ClientConfig {
      */
     public void applyServerOverride(ServerConfig serverConfig) {
         this.serverOverride = serverConfig;
-        if (serverConfig != null) {
-            QuickSkin.LOGGER.debug("Applied server configuration override");
-        } else {
-            QuickSkin.LOGGER.debug("Cleared server configuration override");
-        }
     }
 
     /**
@@ -250,8 +244,6 @@ public class ClientConfig {
         // Clamp and store
         float clampedSpeed = Math.max(0.01f, Math.min(speed, 10.0f));
         capeAnimationSpeeds.put(capeId, clampedSpeed);
-
-        QuickSkin.LOGGER.debug("Set animation speed for cape {}: {}", capeId, clampedSpeed);
     }
 
     /**

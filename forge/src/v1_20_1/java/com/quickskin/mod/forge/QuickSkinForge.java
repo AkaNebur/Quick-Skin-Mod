@@ -21,8 +21,6 @@ public class QuickSkinForge {
             QuickSkin.MOD_ID,
             FMLJavaModLoadingContext.get().getModEventBus()
         );
-
-        QuickSkin.LOGGER.info("QuickSkin loading on Forge platform");
     }
 
     /**
@@ -36,9 +34,7 @@ public class QuickSkinForge {
             // Initialize common code during the common setup phase
             // This ensures networking is registered at the correct time
             event.enqueueWork(() -> {
-                QuickSkin.LOGGER.info("QuickSkin common setup on Forge");
                 QuickSkin.init();
-                QuickSkin.LOGGER.info("QuickSkin Forge common initialization complete");
             });
         }
     }

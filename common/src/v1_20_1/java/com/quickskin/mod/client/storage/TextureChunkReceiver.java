@@ -44,14 +44,10 @@ public class TextureChunkReceiver {
             // All chunks received, assemble the complete texture
             byte[] completeData = assembly.assembleTexture();
             if (completeData != null) {
-                QuickSkin.LOGGER.debug("Assembled complete texture from {} chunks: {} ({} bytes)",
-                    totalChunks, hash, completeData.length);
-
                 // Store in network texture cache (must be on main thread)
                 // Note: textureType is null because S2C chunking isn't currently used
                 Minecraft.getInstance().execute(() -> {
                     NetworkTextureCache.getInstance().storeTexture(hash, null, completeData);
-                    QuickSkin.LOGGER.debug("Stored reassembled texture in network cache: {}", hash);
                 });
             }
             incompleteTextures.remove(hash);
@@ -63,7 +59,6 @@ public class TextureChunkReceiver {
      */
     public void clear() {
         incompleteTextures.clear();
-        QuickSkin.LOGGER.debug("Cleared all incomplete texture assemblies");
     }
 
     /**
@@ -92,15 +87,12 @@ public class TextureChunkReceiver {
 
             // Ignore duplicate chunks
             if (received[index]) {
-                QuickSkin.LOGGER.debug("Ignoring duplicate chunk: {}", index);
                 return false;
             }
 
             chunks[index] = data;
             received[index] = true;
             receivedCount++;
-
-            QuickSkin.LOGGER.debug("Received chunk {}/{}", receivedCount, chunks.length);
 
             return receivedCount == chunks.length;
         }

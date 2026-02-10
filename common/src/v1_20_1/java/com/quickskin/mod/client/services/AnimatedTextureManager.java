@@ -168,14 +168,12 @@ public class AnimatedTextureManager {
         AnimationState state = new AnimationState(animationId, textureLocation, atlasImage, metadata, speedMultiplier);
         animations.put(animationId, state);
 
-        QuickSkin.LOGGER.debug("Registered animation: {} with {} frames at speed {}x", animationId, metadata.frameCount(), speedMultiplier);
     }
 
     /**
      * Clear all animations (for texture cache reload)
      */
     public void clearAnimations() {
-        QuickSkin.LOGGER.debug("Clearing all animated texture registrations");
         for (AnimationState state : animations.values()) {
             state.cleanup();
         }
@@ -189,7 +187,6 @@ public class AnimatedTextureManager {
         AnimationState removed = animations.remove(animationId);
         if (removed != null) {
             removed.cleanup();
-            QuickSkin.LOGGER.debug("Unregistered and cleaned up animation: {}", animationId);
         }
     }
 
@@ -202,7 +199,6 @@ public class AnimatedTextureManager {
         AnimationState state = animations.get(animationId);
         if (state != null) {
             state.setSpeedMultiplier(speed);
-            QuickSkin.LOGGER.debug("Updated animation speed for {}: {}x", animationId, speed);
         }
     }
 

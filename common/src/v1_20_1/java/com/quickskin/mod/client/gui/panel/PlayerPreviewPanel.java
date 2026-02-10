@@ -202,7 +202,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
                                 playerWidget.setAnimation(animName);
                                 // Save animation state for persistence across all screens
                                 com.quickskin.mod.event.ClientEvents.setSharedAnimation(animName);
-                                com.quickskin.mod.QuickSkin.LOGGER.debug("Animation {} activated: {}", index + 1, animName);
                             }
                             toggleAnimationDropdown();
                         }
@@ -295,8 +294,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     private void setModelType(String modelType) {
         this.currentModelType = modelType;
-        com.quickskin.mod.QuickSkin.LOGGER.debug("[PlayerPreviewPanel] setModelType called: {}, callback is null: {}",
-            modelType, modelTypeChangeCallback == null);
 
         // Update preview widget
         if (playerWidget != null) {
@@ -310,7 +307,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
         // Notify callback to apply to actual player
         if (modelTypeChangeCallback != null) {
-            com.quickskin.mod.QuickSkin.LOGGER.debug("[PlayerPreviewPanel] Calling callback for model type: {}", modelType);
             modelTypeChangeCallback.accept(modelType);
         } else {
             com.quickskin.mod.QuickSkin.LOGGER.warn("[PlayerPreviewPanel] Callback is NULL! Cannot save model preference!");

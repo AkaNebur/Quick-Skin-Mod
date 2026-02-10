@@ -32,7 +32,6 @@ public class ModelService implements IModelService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.debug("ModelService initialized");
     }
 
     @Override
@@ -92,7 +91,6 @@ public class ModelService implements IModelService {
             return;
         }
         modelOverrides.put(playerId, model);
-        QuickSkin.LOGGER.debug("Model override set for player {}: {}", playerId, model);
     }
 
     @Override

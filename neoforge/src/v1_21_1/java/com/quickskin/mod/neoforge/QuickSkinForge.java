@@ -14,8 +14,6 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 public class QuickSkinForge {
 
     public QuickSkinForge(net.neoforged.bus.api.IEventBus modEventBus) {
-        QuickSkin.LOGGER.info("QuickSkin loading on NeoForge platform");
-
         // Note: Architectury automatically registers events for NeoForge
         // No manual event bus registration needed in 1.21.1
     }
@@ -31,9 +29,7 @@ public class QuickSkinForge {
             // Initialize common code during the common setup phase
             // This ensures networking is registered at the correct time
             event.enqueueWork(() -> {
-                QuickSkin.LOGGER.info("QuickSkin common setup on Forge");
                 QuickSkin.init();
-                QuickSkin.LOGGER.info("QuickSkin Forge common initialization complete");
             });
         }
     }

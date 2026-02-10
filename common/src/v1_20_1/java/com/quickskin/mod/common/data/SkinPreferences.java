@@ -99,7 +99,6 @@ public class SkinPreferences {
 
             String json = GSON.toJson(this);
             Files.writeString(path, json);
-            QuickSkin.LOGGER.debug("Successfully saved {} skin preferences to {}", preferences.size(), path);
         } catch (IOException e) {
             // Log error but don't crash
             QuickSkin.LOGGER.error("Failed to save skin preferences to {}: {}", path, e.getMessage());

@@ -48,7 +48,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.debug("PlayerAppearanceService initialized");
     }
 
     @Override
@@ -57,9 +56,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             QuickSkin.LOGGER.error("Cannot apply look: playerId is null");
             return;
         }
-
-        QuickSkin.LOGGER.debug("Applying look to player {}: skin={}, cape={}, model={}",
-                playerId, skinId, capeId, model);
 
         // Get or create appearance
         PlayerAppearance appearance = repository.getAppearance(playerId);
@@ -131,8 +127,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                         AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
                         BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
                         if (metadata != null && atlasImage != null) {
-                            QuickSkin.LOGGER.debug("[PlayerAppearanceService] Registering local cape animation {} for player {}",
-                                animationId, playerId);
                             AnimatedTextureManager.getInstance().registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
                         } else {
                             QuickSkin.LOGGER.warn("[PlayerAppearanceService] Failed to register local cape animation {} - metadata={}, atlasImage={}",
@@ -142,12 +136,10 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                         // Register known cape animation
                         String knownId = capeId.substring("known:".length());
                         capeService.loadKnownCape(knownId);
-                        QuickSkin.LOGGER.debug("[PlayerAppearanceService] Registered known cape animation for player {}: {}", playerId, knownId);
                     }
                 }
             }
         }
-
 
         // Refresh player renderer
         refreshPlayerRenderer(playerId);
@@ -168,7 +160,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         com.quickskin.mod.common.event.InternalEventBus.getInstance().post(
                 new com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent(playerId, appearance)
         );
-        QuickSkin.LOGGER.debug("Fired PlayerAppearanceUpdateEvent for {} (type: {})", playerId, updateType);
 
         // Sync to server if this is the local player
         Minecraft mc = Minecraft.getInstance();
@@ -211,8 +202,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
                 // Always refresh SkinLayers3D compatibility
                 refreshSkinLayers3D(player);
-
-                QuickSkin.LOGGER.debug("Refreshed renderer for player: {}", playerId);
             }
         }
     }
@@ -223,11 +212,10 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             java.lang.reflect.Method refreshMethod = skinLayersClass.getDeclaredMethod("refreshPlayer", net.minecraft.world.entity.player.Player.class);
             refreshMethod.setAccessible(true);
             refreshMethod.invoke(null, player);
-            QuickSkin.LOGGER.debug("Refreshed SkinLayers3D for player: {}", player.getUUID());
         } catch (ClassNotFoundException e) {
             // Mod not installed
         } catch (Exception e) {
-            QuickSkin.LOGGER.debug("Could not refresh SkinLayers3D (mod may have updated): {}", e.getMessage());
+            // SkinLayers3D mod may have updated
         }
     }
 
@@ -360,8 +348,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     public void reloadSkinsForTransparencyChange() {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null) return;
-
-        QuickSkin.LOGGER.debug("Reloading player skins for transparency change...");
 
         // Clear texture alpha detection cache since transparency settings changed
         com.quickskin.mod.common.util.TextureAlphaDetector.clearCache();

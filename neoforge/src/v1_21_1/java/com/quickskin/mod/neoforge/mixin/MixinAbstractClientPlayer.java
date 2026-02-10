@@ -50,8 +50,6 @@ public abstract class MixinAbstractClientPlayer {
         boolean shouldLog = lastLog == null || now - lastLog > LOG_INTERVAL_MS;
         if (shouldLog) {
             quickskin$lastLogTime.put(self.getUUID(), now);
-            QuickSkin.LOGGER.debug("[MixinAbstractClientPlayer HEAD] getSkin() called for {} (UUID={}) - hasCustomSkin={}, hasCustomCape={}, hasModelOverride={}",
-                self.getName().getString(), self.getUUID(), hasCustomSkin, hasCustomCape, hasModelOverride);
         }
 
         if (!hasCustomSkin && !hasCustomCape && !hasModelOverride) {
@@ -119,7 +117,6 @@ public abstract class MixinAbstractClientPlayer {
                 if (PlayerInfo.class.isAssignableFrom(field.getType())) {
                     field.setAccessible(true);
                     quickskin$playerInfoField = field;
-                    QuickSkin.LOGGER.debug("[MixinAbstractClientPlayer] Found playerInfo field: {}", field.getName());
                     break;
                 }
             }

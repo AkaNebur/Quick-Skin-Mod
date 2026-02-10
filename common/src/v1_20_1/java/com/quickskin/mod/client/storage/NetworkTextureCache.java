@@ -84,8 +84,6 @@ public class NetworkTextureCache {
 
                     // Convert back to PNG bytes
                     processedData = com.quickskin.mod.common.util.HDTextureProcessor.imageToPng(image);
-
-                    QuickSkin.LOGGER.debug("Removed transparency from network skin texture: {}", hash);
                 }
             } catch (IOException e) {
                 QuickSkin.LOGGER.error("Failed to process transparency for network texture: {}", hash, e);
@@ -94,7 +92,6 @@ public class NetworkTextureCache {
         }
 
         textureDataCache.put(hash, processedData);
-        QuickSkin.LOGGER.debug("Cached network texture: {} ({} bytes, type: {})", hash, processedData.length, textureType);
     }
 
     /**
@@ -166,8 +163,6 @@ public class NetworkTextureCache {
 
             // Cache the location
             textureRegistry.put(hash, location);
-
-            QuickSkin.LOGGER.debug("Registered network texture: {}", hash);
             return location;
 
         } catch (IOException e) {
@@ -194,7 +189,6 @@ public class NetworkTextureCache {
             try {
                 Minecraft.getInstance().getTextureManager().release(location);
             } catch (Exception e) {
-                QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
             }
         }
 
@@ -202,7 +196,6 @@ public class NetworkTextureCache {
         textureDataCache.clear();
         textureRegistry.clear();
         textureTypeMap.clear();
-        QuickSkin.LOGGER.debug("Cleared network texture cache");
     }
 
     /**
@@ -228,12 +221,9 @@ public class NetworkTextureCache {
                 try {
                     Minecraft.getInstance().getTextureManager().release(location);
                 } catch (Exception e) {
-                    QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
                 }
             }
         }
-
-        QuickSkin.LOGGER.debug("Cleared {} network skin texture registrations (keeping raw data). Capes remain cached.", hashesToClear.size());
     }
 
     /**
@@ -250,8 +240,6 @@ public class NetworkTextureCache {
             }
         }
 
-        QuickSkin.LOGGER.debug("Reprocessing {} network skins with current transparency settings", skinHashes.size());
-
         // Re-store each skin with current settings (this will reprocess transparency from original data)
         for (String hash : skinHashes) {
             byte[] originalData = originalTextureData.get(hash);
@@ -263,7 +251,6 @@ public class NetworkTextureCache {
                     try {
                         Minecraft.getInstance().getTextureManager().release(oldLocation);
                     } catch (Exception e) {
-                        QuickSkin.LOGGER.debug("Failed to release texture {}: {}", oldLocation, e.getMessage());
                     }
                 }
 
@@ -271,8 +258,6 @@ public class NetworkTextureCache {
                 storeTexture(hash, "skin", originalData);
             }
         }
-
-        QuickSkin.LOGGER.debug("Finished reprocessing network skins");
     }
 
     /**

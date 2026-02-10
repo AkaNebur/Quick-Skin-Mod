@@ -100,9 +100,6 @@ public class SkinModelDetector {
             float transparentRatio = (float) transparentPixels / totalPixels;
             boolean isSlim = transparentRatio > 0.5f;
 
-            QuickSkin.LOGGER.debug("Skin model detection: {}% transparent pixels -> {}",
-                    (int) (transparentRatio * 100), isSlim ? "slim" : "classic");
-
             return isSlim ? "slim" : "classic";
         }
 

@@ -39,7 +39,6 @@ public class MojangApiService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.debug("MojangApiService initialized");
     }
 
     /**
@@ -78,7 +77,6 @@ public class MojangApiService {
                         "$1-$2-$3-$4-$5"
                     );
 
-                    QuickSkin.LOGGER.debug("Found UUID for {}: {}", username, formattedUuid);
                     return UUID.fromString(formattedUuid);
                 } else if (responseCode == 204 || responseCode == 404) {
                     QuickSkin.LOGGER.warn("Player not found: {}", username);
@@ -144,7 +142,6 @@ public class MojangApiService {
                             }
                         }
 
-                        QuickSkin.LOGGER.debug("Found skin URL for UUID {}: {}", uuid, skinUrl);
                         return new SkinTextureData(skinUrl, modelType);
                     } else {
                         QuickSkin.LOGGER.warn("No skin found for UUID: {}", uuid);
@@ -181,7 +178,6 @@ public class MojangApiService {
                     BufferedImage image = ImageIO.read(inputStream);
                     inputStream.close();
 
-                    QuickSkin.LOGGER.debug("Successfully downloaded skin image from: {}", skinUrl);
                     return image;
                 } else {
                     QuickSkin.LOGGER.error("Failed to download skin image, response code: {}", responseCode);

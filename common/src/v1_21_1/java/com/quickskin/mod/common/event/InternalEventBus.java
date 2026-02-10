@@ -34,7 +34,6 @@ public class InternalEventBus {
      */
     public <T> void register(Class<T> eventType, Consumer<T> listener) {
         listeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(listener);
-        QuickSkin.LOGGER.debug("Registered listener for event: {}", eventType.getSimpleName());
     }
 
     /**
@@ -48,8 +47,6 @@ public class InternalEventBus {
         List<Consumer<?>> eventListeners = listeners.get(eventType);
 
         if (eventListeners != null && !eventListeners.isEmpty()) {
-            QuickSkin.LOGGER.debug("Posting event: {}", eventType.getSimpleName());
-
             for (Consumer<?> listener : eventListeners) {
                 try {
                     ((Consumer<T>) listener).accept(event);

@@ -39,7 +39,6 @@ public class ServerTextureCache {
 
         try {
             Files.createDirectories(storageDirectory);
-            QuickSkin.LOGGER.debug("ServerTextureCache initialized at: {}", storageDirectory);
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to create texture storage directory", e);
         }
@@ -59,8 +58,6 @@ public class ServerTextureCache {
 
         // Persist to disk asynchronously
         saveTextureToDisk(hash, textureData);
-
-        QuickSkin.LOGGER.debug("Stored texture: {} ({} bytes)", hash, textureData.length);
     }
 
     /**
@@ -76,7 +73,6 @@ public class ServerTextureCache {
      * Save all cached textures to disk
      */
     public void saveAll() {
-        QuickSkin.LOGGER.debug("Saving {} textures to disk...", textureCache.size());
         int saved = 0;
 
         for (Map.Entry<String, byte[]> entry : textureCache.entrySet()) {
@@ -84,8 +80,6 @@ public class ServerTextureCache {
                 saved++;
             }
         }
-
-        QuickSkin.LOGGER.debug("Saved {} textures", saved);
     }
 
     /**
@@ -93,7 +87,6 @@ public class ServerTextureCache {
      */
     public void clear() {
         textureCache.clear();
-        QuickSkin.LOGGER.debug("Cleared texture cache");
     }
 
     /**
@@ -134,8 +127,6 @@ public class ServerTextureCache {
                         QuickSkin.LOGGER.warn("Failed to load texture: {}", path, e);
                     }
                 });
-
-            QuickSkin.LOGGER.debug("Loaded {} textures from disk", textureCache.size());
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to load cached textures", e);
         }

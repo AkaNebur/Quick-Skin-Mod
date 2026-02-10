@@ -59,9 +59,6 @@ public class LinkButton extends Button {
     private static void openLink(String url) {
         // Open the link in the default browser
         Util.getPlatform().openUri(url);
-
-        // Log the action
-        QuickSkin.LOGGER.debug("Opening link: {}", url);
     }
 
     @Override

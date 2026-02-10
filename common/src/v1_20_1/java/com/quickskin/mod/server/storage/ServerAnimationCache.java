@@ -39,7 +39,6 @@ public class ServerAnimationCache {
 
         try {
             Files.createDirectories(storageDirectory);
-            QuickSkin.LOGGER.debug("ServerAnimationCache initialized at: {}", storageDirectory);
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to create animation storage directory", e);
         }
@@ -56,7 +55,6 @@ public class ServerAnimationCache {
     public void storeMetadata(String hash, String metadataJson) {
         metadataCache.put(hash, metadataJson);
         saveMetadataToDisk(hash, metadataJson);
-        QuickSkin.LOGGER.debug("Stored animation metadata for: {}", hash);
     }
 
     /**
@@ -74,7 +72,6 @@ public class ServerAnimationCache {
      */
     public void clear() {
         metadataCache.clear();
-        QuickSkin.LOGGER.debug("Cleared animation cache");
     }
 
     /**
@@ -113,8 +110,6 @@ public class ServerAnimationCache {
                         QuickSkin.LOGGER.warn("Failed to load animation metadata: {}", path, e);
                     }
                 });
-
-            QuickSkin.LOGGER.debug("Loaded {} animation metadata entries from disk", metadataCache.size());
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to load cached animation metadata", e);
         }

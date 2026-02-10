@@ -38,7 +38,6 @@ public class LocalAppearanceStorage {
      */
     public void init(Path configDirectory) {
         storageFile = configDirectory.resolve("quickskin_preferences.json");
-        QuickSkin.LOGGER.debug("LocalAppearanceStorage initialized at: {}", storageFile);
     }
 
     /**
@@ -98,8 +97,6 @@ public class LocalAppearanceStorage {
 
         // Save to disk
         savePreferencesData(data);
-
-        QuickSkin.LOGGER.debug("Saved preferences for player: {}", playerId);
     }
 
     /**

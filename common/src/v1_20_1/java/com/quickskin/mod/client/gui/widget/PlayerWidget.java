@@ -26,7 +26,6 @@ public class PlayerWidget extends AbstractWidget {
     private float bodyYaw = 20.0f; // 20 degrees for sideways pose (matching original)
     private float targetYRotation = 20.0f; // Target rotation for smooth animation
 
-
     // Display settings
     private float scale = 87.2f; // 10% smaller than previous (96.9 * 0.9 = 87.21)
     private static final float DEFAULT_SCALE = 87.2f; // Default scale value
@@ -321,7 +320,6 @@ public class PlayerWidget extends AbstractWidget {
                 break;
         }
         config.save();
-        QuickSkin.LOGGER.debug("Saved {}% to config for context: {}", percentage, context);
     }
 
     /**
@@ -379,7 +377,6 @@ public class PlayerWidget extends AbstractWidget {
                 return;
         }
         config.save();
-        QuickSkin.LOGGER.debug("Saved position offset ({}, {}) to config for context: {}", offsetX, offsetY, context);
     }
 
     @Override
@@ -418,12 +415,10 @@ public class PlayerWidget extends AbstractWidget {
                             com.quickskin.mod.client.services.LocalAssetManager.getInstance().getSourceImage(hash);
 
                         if (metadata != null && atlasImage != null) {
-                            QuickSkin.LOGGER.debug("[PlayerWidget] On-demand registration of local cape animation: {}", animationId);
                             animManager.registerAnimation(animationId, capeId, previewData.getCapeLocation(), atlasImage, metadata);
                         }
                     } else if (capeId.startsWith("known:")) {
                         String knownId = capeId.substring("known:".length());
-                        QuickSkin.LOGGER.debug("[PlayerWidget] On-demand registration of known cape animation: {}", knownId);
                         com.quickskin.mod.client.services.CapeService.getInstance().loadKnownCape(knownId);
                     }
                 }
@@ -545,7 +540,6 @@ public class PlayerWidget extends AbstractWidget {
         graphics.fill(centerX - 1, centerY - crosshairSize, centerX + 1, centerY + crosshairSize, crosshairColor);
     }
 
-
     /**
      * Update the skin texture
      */
@@ -609,7 +603,6 @@ public class PlayerWidget extends AbstractWidget {
     public void setAnimation(String animation) {
         if (animation != null && !animation.isEmpty()) {
             previewData.setCurrentAnimation(animation);
-            QuickSkin.LOGGER.debug("PlayerWidget animation set to: {}", animation);
         }
     }
 
@@ -650,7 +643,6 @@ public class PlayerWidget extends AbstractWidget {
                 dragStartOffsetX = getPositionOffsetXFromConfig(config);
                 dragStartOffsetY = getPositionOffsetYFromConfig(config);
                 activeInteractionWidget = this; // Register as active for global event handling
-                QuickSkin.LOGGER.debug("Started dragging player preview at ({}, {})", mouseX, mouseY);
                 return true;
             }
             // In normal mode: left-click rotates
@@ -660,7 +652,6 @@ public class PlayerWidget extends AbstractWidget {
                 rotationDragStartYaw = targetYRotation;
                 shouldReturnToOriginal = false; // Cancel any ongoing return animation
                 activeInteractionWidget = this; // Register as active for global event handling
-                QuickSkin.LOGGER.debug("Started rotating player preview at ({}, {})", mouseX, mouseY);
                 return true;
             }
         }
@@ -671,7 +662,6 @@ public class PlayerWidget extends AbstractWidget {
             rotationDragStartYaw = targetYRotation;
             shouldReturnToOriginal = false; // Cancel any ongoing return animation
             activeInteractionWidget = this; // Register as active for global event handling
-            QuickSkin.LOGGER.debug("Started rotating player preview at ({}, {})", mouseX, mouseY);
             return true;
         }
 
@@ -688,7 +678,6 @@ public class PlayerWidget extends AbstractWidget {
             if (activeInteractionWidget == this) {
                 activeInteractionWidget = null; // Clear active widget
             }
-            QuickSkin.LOGGER.debug("Stopped dragging player preview at ({}, {})", mouseX, mouseY);
             handled = true;
         }
 
@@ -699,7 +688,6 @@ public class PlayerWidget extends AbstractWidget {
             if (activeInteractionWidget == this) {
                 activeInteractionWidget = null; // Clear active widget
             }
-            QuickSkin.LOGGER.debug("Stopped rotating player preview, returning to original rotation");
             handled = true;
         }
 

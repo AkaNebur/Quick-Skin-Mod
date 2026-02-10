@@ -215,11 +215,6 @@ public class ServerNetworkHandler {
 
             // If all chunks received, store and broadcast
             if (completeTexture != null) {
-                if (ServerConfig.getInstance().enableVerboseLogging) {
-                    QuickSkin.LOGGER.debug("Received complete {} texture from player: {} (size: {} bytes)",
-                        textureType, player.getName().getString(), completeTexture.length);
-                }
-
                 // Store texture in server cache
                 ServerTextureCache.getInstance().storeTexture(hash, completeTexture);
 
@@ -245,11 +240,6 @@ public class ServerNetworkHandler {
             }
 
             trackModPresence(player);
-
-            if (ServerConfig.getInstance().enableVerboseLogging) {
-                QuickSkin.LOGGER.debug("Player {} uploaded animation metadata for: {}",
-                        player.getName().getString(), hash);
-            }
 
             // Phase 7: Store animation metadata
             ServerAnimationCache.getInstance().storeMetadata(hash, metadataJson);

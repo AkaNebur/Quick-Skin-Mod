@@ -56,8 +56,6 @@ public class SkinImporter {
                 return null;
             }
 
-            QuickSkin.LOGGER.debug("Importing skin: {}", fileName);
-
             // Copy file to skins directory (always save as PNG since content is converted to PNG)
             LocalAssetManager assetManager = LocalAssetManager.getInstance();
             String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
@@ -72,7 +70,6 @@ public class SkinImporter {
 
             // Save the processed image
             Files.write(targetPath, processedImageBytes);
-            QuickSkin.LOGGER.debug("Saved processed skin to: {}", targetPath);
 
             // Reload assets to pick up the new file
             assetManager.reload();
@@ -157,7 +154,6 @@ public class SkinImporter {
 
             // Convert legacy 64x32 skins to modern 64x64 format
             if (height == width / 2) {
-                QuickSkin.LOGGER.debug("Converting legacy 64x32 skin to modern format for: {}", username);
                 image = HDTextureProcessor.convertLegacyToModern(image);
             }
 
@@ -181,7 +177,6 @@ public class SkinImporter {
 
             // Save the image
             ImageIO.write(image, "PNG", targetPath.toFile());
-            QuickSkin.LOGGER.debug("Saved skin image to: {}", targetPath);
 
             return targetPath;
 

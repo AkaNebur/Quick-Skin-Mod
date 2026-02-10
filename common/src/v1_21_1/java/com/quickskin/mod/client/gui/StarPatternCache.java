@@ -59,9 +59,6 @@ public class StarPatternCache {
             cachedTexture = new DynamicTexture(cachedImage);
             cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache", cachedTexture);
 
-            QuickSkin.LOGGER.debug("Star pattern cache loaded: {}x{} (pre-generated texture)",
-                cachedTextureWidth, cachedTextureHeight);
-
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to load star pattern cache", e);
             createFallbackTexture();
@@ -128,7 +125,6 @@ public class StarPatternCache {
             cachedTexture = new DynamicTexture(fallbackImage);
             cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache_fallback", cachedTexture);
 
-            QuickSkin.LOGGER.debug("Created fallback star pattern texture: {}x{}", size, size);
         } catch (Exception e) {
             QuickSkin.LOGGER.error("Failed to create fallback texture", e);
         }

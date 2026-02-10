@@ -96,9 +96,6 @@ public class StbGifLoader {
                     throw new IOException("GIF has no frames");
                 }
 
-                QuickSkin.LOGGER.debug("Loaded GIF with {} frames, {}x{} per frame using STBImage",
-                    frameCount, width, height);
-
                 // Validate dimensions for cape
                 if (width != 64 || height != 32) {
                     QuickSkin.LOGGER.warn("GIF dimensions {}x{} don't match standard cape size (64x32), attempting to process anyway",

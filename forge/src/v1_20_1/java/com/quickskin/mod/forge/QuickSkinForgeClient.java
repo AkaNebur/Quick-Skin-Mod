@@ -16,8 +16,6 @@ public class QuickSkinForgeClient {
 
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
-        QuickSkin.LOGGER.info("QuickSkin client initialization on Forge");
-
         // Initialize client code on the main thread
         event.enqueueWork(() -> {
             QuickSkinClient.init();

@@ -39,11 +39,6 @@ public class ServerNetworkHandler {
                 return;
             }
 
-            if (ServerConfig.getInstance().enableVerboseLogging) {
-                QuickSkin.LOGGER.debug("Received {} upload from player: {} (size: {} bytes)",
-                        payload.textureType(), player.getName().getString(), payload.imageData().length);
-            }
-
             // Generate hash for this texture
             String hash = payload.playerId().toString() + "_" + payload.textureType();
 
@@ -83,11 +78,6 @@ public class ServerNetworkHandler {
                 }
             }
 
-            if (ServerConfig.getInstance().enableVerboseLogging) {
-                QuickSkin.LOGGER.debug("Player {} updated appearance: skin={}, cape={}, model={}",
-                        player.getName().getString(), payload.skinId(), payload.capeId(), payload.model());
-            }
-
             // Update server-side repository
             ServerPlayerAppearanceRepository.getInstance().updateAppearance(
                 payload.playerId(), payload.skinId(), payload.capeId(), payload.model()
@@ -116,11 +106,6 @@ public class ServerNetworkHandler {
 
             if (player == null) {
                 return;
-            }
-
-            if (ServerConfig.getInstance().enableVerboseLogging) {
-                QuickSkin.LOGGER.debug("Player {} requested {} texture: {}",
-                        player.getName().getString(), payload.textureType(), payload.hash());
             }
 
             // Phase 5: Load texture from server storage and send to client
@@ -171,11 +156,6 @@ public class ServerNetworkHandler {
 
             // If all chunks received, store and broadcast
             if (completeTexture != null) {
-                if (ServerConfig.getInstance().enableVerboseLogging) {
-                    QuickSkin.LOGGER.debug("Received complete {} texture from player: {} (size: {} bytes)",
-                        payload.textureType(), player.getName().getString(), completeTexture.length);
-                }
-
                 // Store texture in server cache
                 ServerTextureCache.getInstance().storeTexture(payload.hash(), completeTexture);
 
@@ -194,11 +174,6 @@ public class ServerNetworkHandler {
 
             if (player == null) {
                 return;
-            }
-
-            if (ServerConfig.getInstance().enableVerboseLogging) {
-                QuickSkin.LOGGER.debug("Player {} uploaded animation metadata for: {}",
-                        player.getName().getString(), payload.hash());
             }
 
             // Phase 7: Store animation metadata

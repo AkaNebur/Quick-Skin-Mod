@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.PlayerAppearance;
-import com.quickskin.mod.config.ServerConfig;
 import com.quickskin.mod.server.data.ServerPlayerAppearanceRepository;
 import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
@@ -43,7 +42,6 @@ public class ServerAppearanceStorage {
 
         try {
             Files.createDirectories(storageDirectory);
-            QuickSkin.LOGGER.debug("ServerAppearanceStorage initialized at: {}", storageDirectory);
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to create appearance storage directory", e);
         }
@@ -63,7 +61,6 @@ public class ServerAppearanceStorage {
         Path file = storageDirectory.resolve(playerId.toString() + ".json");
 
         if (!Files.exists(file)) {
-            QuickSkin.LOGGER.debug("No saved appearance for player: {}", playerId);
             return null;
         }
 
@@ -73,11 +70,6 @@ public class ServerAppearanceStorage {
 
             // Update the repository with loaded data
             ServerPlayerAppearanceRepository.getInstance().setAppearance(appearance);
-
-            if (ServerConfig.getInstance().enableVerboseLogging) {
-                QuickSkin.LOGGER.debug("Loaded appearance for player: {} (skin={}, cape={}, model={})",
-                        playerId, appearance.getSkinId(), appearance.getCapeId(), appearance.getModel());
-            }
 
             return appearance;
         } catch (IOException e) {
@@ -98,7 +90,6 @@ public class ServerAppearanceStorage {
         PlayerAppearance appearance = ServerPlayerAppearanceRepository.getInstance().getAppearance(playerId);
 
         if (appearance == null) {
-            QuickSkin.LOGGER.debug("No appearance to save for player: {}", playerId);
             return;
         }
 
@@ -107,7 +98,6 @@ public class ServerAppearanceStorage {
         try {
             String json = GSON.toJson(appearance);
             Files.writeString(file, json);
-            QuickSkin.LOGGER.debug("Saved appearance for player: {}", playerId);
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Failed to save appearance for player: {}", playerId, e);
         }

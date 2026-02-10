@@ -46,7 +46,6 @@ public class HDTextureProcessor {
 
             // Convert legacy (64x32) to modern (64x64)
             if (resolution == SkinResolution.LEGACY) {
-                QuickSkin.LOGGER.debug("Converting legacy skin to modern format");
                 image = convertLegacyToModern(image);
             }
 
@@ -107,7 +106,6 @@ public class HDTextureProcessor {
     private static void clearBlackOverlays(BufferedImage image, int scale) {
         // Check head overlay (hat layer) - (32-63, 0-15)
         if (isOverlayAllBlack(image, 32 * scale, 0, 32 * scale, 16 * scale)) {
-            QuickSkin.LOGGER.debug("Clearing all-black head overlay");
             clearArea(image, 32 * scale, 0, 32 * scale, 16 * scale, 0x00000000);
         }
     }

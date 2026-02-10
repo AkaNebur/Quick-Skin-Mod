@@ -50,11 +50,8 @@ public class NetworkSyncService {
 
         // Check if server supports QuickSkin packets
         if (!NetworkManager.canServerReceive(UpdateAppearancePayload.TYPE)) {
-            QuickSkin.LOGGER.debug("Server does not support QuickSkin (UpdateAppearancePayload). Skipping sync.");
             return;
         }
-
-        QuickSkin.LOGGER.debug("Syncing appearance to server: skin={}, cape={}, model={}", skinId, capeId, model);
 
         // Upload skin texture if it's a local skin
         if (skinId != null && skinId.startsWith("local_skin:")) {
@@ -79,7 +76,6 @@ public class NetworkSyncService {
         );
 
         NetworkManager.sendToServer(payload);
-        QuickSkin.LOGGER.debug("Sent UPDATE_APPEARANCE packet to server");
     }
 
     /**
@@ -90,7 +86,6 @@ public class NetworkSyncService {
     private void uploadLocalTexture(String textureId, String textureType) {
         // Check if server supports texture chunks
         if (!NetworkManager.canServerReceive(TextureChunkPayload.TYPE)) {
-            QuickSkin.LOGGER.debug("Server does not support QuickSkin (TextureChunkPayload). Skipping upload.");
             return;
         }
 
@@ -109,8 +104,6 @@ public class NetworkSyncService {
             QuickSkin.LOGGER.warn("Could not find texture data for hash: {}", hash);
             return;
         }
-
-        QuickSkin.LOGGER.debug("Uploading {} texture to server: {} ({} bytes)", textureType, hash, textureData.length);
 
         // Split into chunks if necessary
         int totalChunks = (int) Math.ceil((double) textureData.length / MAX_CHUNK_SIZE);
@@ -131,7 +124,6 @@ public class NetworkSyncService {
             );
 
             NetworkManager.sendToServer(payload);
-            QuickSkin.LOGGER.debug("Sent texture chunk {}/{} for {}", i + 1, totalChunks, hash);
         }
     }
 
@@ -151,15 +143,11 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.debug("Uploading animation metadata for: {}", hash);
-
         // Serialize metadata to JSON
         String metadataJson = serializeMetadata(metadata);
 
         UploadAnimationMetadataPayload payload = new UploadAnimationMetadataPayload(hash, metadataJson);
         NetworkManager.sendToServer(payload);
-
-        QuickSkin.LOGGER.debug("Sent animation metadata for {}", hash);
     }
 
     /**
@@ -185,8 +173,6 @@ public class NetworkSyncService {
             return;
         }
 
-        QuickSkin.LOGGER.debug("Clearing appearance on server");
-
         UpdateAppearancePayload payload = new UpdateAppearancePayload(playerId, "", "", "classic");
         NetworkManager.sendToServer(payload);
     }
@@ -208,8 +194,6 @@ public class NetworkSyncService {
         if (!NetworkManager.canServerReceive(RequestTexturePayload.TYPE)) {
             return;
         }
-
-        QuickSkin.LOGGER.debug("Requesting {} texture from server: {}", textureType, hash);
 
         RequestTexturePayload payload = new RequestTexturePayload(playerId, textureType, hash);
         NetworkManager.sendToServer(payload);
