@@ -64,6 +64,7 @@ public class PlayerSkinMenuScreen extends Screen {
     // GUI scale management
     private boolean guiScaleForced = false;
     private boolean isClosing = false;
+    private boolean openingSubScreen = false;
 
     // Player preview rotation state (preserved across resizes)
     private float savedBodyYaw = 20.0f;
@@ -349,6 +350,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 () -> {
                     // Open cape selection screen
                     if (minecraft != null) {
+                        openingSubScreen = true;
                         minecraft.setScreen(new PlayerCapeMenuScreen(this));
                     }
                 },
@@ -624,16 +626,26 @@ public class PlayerSkinMenuScreen extends Screen {
         graphics.fill(panelX + panelWidth - 1, panelY + 1, panelX + panelWidth, panelY + panelHeight - 1, 0x60FFFFFF);
     }
 
+    public void setOpeningSubScreen(boolean opening) {
+        this.openingSubScreen = opening;
+    }
+
     @Override
     public void removed() {
         BackgroundRenderer.cleanup();
         super.removed();
 
-        // Only restore GUI scale if we're actually closing (not just opening a modal)
-        // The isClosing flag is set by onClose() when truly exiting the menu
         if (isClosing) {
+            // Normal close via onClose() - safety restore (usually no-op)
+            restoreGuiScaleIfNeeded();
+        } else if (!openingSubScreen) {
+            // External close (Essential bypass) - must restore here
+            isClosing = true;  // Prevent init() from re-forcing during resizeDisplay()
             restoreGuiScaleIfNeeded();
         }
+        // else: sub-screen navigation, skip restore
+
+        openingSubScreen = false;
     }
 
     @Override
@@ -903,6 +915,7 @@ public class PlayerSkinMenuScreen extends Screen {
         if (minecraft == null) return;
 
         String displayName = truncateFileName(metadata.friendlyName());
+        openingSubScreen = true;
         minecraft.setScreen(new DeletionConfirmScreen(
                 this,
                 Component.translatable("quickskin.screen.delete.title"),
@@ -927,6 +940,7 @@ public class PlayerSkinMenuScreen extends Screen {
     public void showRenameDialog(AssetMetadata metadata) {
         if (minecraft == null) return;
 
+        openingSubScreen = true;
         minecraft.setScreen(new RenameScreen(
                 this,
                 Component.translatable("quickskin.screen.rename.title"),
@@ -949,6 +963,7 @@ public class PlayerSkinMenuScreen extends Screen {
     public void showUploadToMojangDialog(AssetMetadata metadata) {
         if (minecraft == null) return;
 
+        openingSubScreen = true;
         minecraft.setScreen(new UploadToMojangScreen(
                 this,
                 metadata,

@@ -52,6 +52,7 @@ public class LinkButtonsPanel extends AbstractWidget {
             @Override
             public void onPress() {
                 // Open settings screen
+                screen.setOpeningSubScreen(true);
                 Minecraft.getInstance().setScreen(
                     new com.quickskin.mod.client.gui.screen.SettingsScreen(screen)
                 );
