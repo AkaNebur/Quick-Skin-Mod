@@ -145,7 +145,7 @@ public class PlayerWidget extends AbstractWidget {
             return middleX + offsetX;
         }
         // Priority 4: Fallback to widget center if no reference
-        return getX() + getWidth() / 2 + offsetX;
+        return getX() + this.width / 2 + offsetX;
     }
 
     /**
@@ -168,7 +168,7 @@ public class PlayerWidget extends AbstractWidget {
             return (int)(buttonCenterY + DEFAULT_OFFSET_FROM_BUTTON_Y) + offsetY;
         }
         // Priority 3: Fallback to widget center if no reference
-        return getY() + getHeight() / 2 + 10 + offsetY; // Offset down slightly
+        return getY() + this.height / 2 + 10 + offsetY; // Offset down slightly
     }
 
     /**
@@ -611,6 +611,20 @@ public class PlayerWidget extends AbstractWidget {
      */
     public String getAnimation() {
         return previewData.getCurrentAnimation();
+    }
+
+    // --- Layout size override ---
+    // Report 0x0 size to the layout system so other mods' overlap detection
+    // (e.g. In-Game Account Switcher) won't be pushed away by this large decorative widget.
+    // Internal code uses this.width / this.height directly to bypass these overrides.
+    @Override
+    public int getWidth() {
+        return 0;
+    }
+
+    @Override
+    public int getHeight() {
+        return 0;
     }
 
     @Override
