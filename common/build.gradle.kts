@@ -36,8 +36,8 @@ dependencies {
     modImplementation("net.fabricmc:fabric-loader:${project.versionProp("fabric_loader_version")}")
     modImplementation("dev.architectury:architectury:${project.versionProp("architectury_api_version")}")
 
-    // WebP library only for 1.21.1
-    if (minecraftVersion == "1.21.1") {
+    // WebP library for 1.21.1+
+    if (minecraftVersion != "1.20.1") {
         implementation("org.sejda.imageio:webp-imageio:0.1.6")
     }
 }

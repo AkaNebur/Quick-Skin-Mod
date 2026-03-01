@@ -2,6 +2,7 @@ package com.quickskin.mod.mixin;
 
 import com.mojang.authlib.GameProfile;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -33,6 +34,8 @@ public abstract class PlayerInfoMixin {
      */
     @Inject(method = "getSkinLocation", at = @At("HEAD"), cancellable = true)
     private void quickskin$onGetSkinLocation(CallbackInfoReturnable<ResourceLocation> cir) {
+        if (CPMCompatIntegration.shouldDeferToCPM()) return;
+
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
 
         // Only override if QuickSkin has an active custom skin for this player
@@ -62,6 +65,8 @@ public abstract class PlayerInfoMixin {
      */
     @Inject(method = "getModelName", at = @At("HEAD"), cancellable = true)
     private void quickskin$onGetModelName(CallbackInfoReturnable<String> cir) {
+        if (CPMCompatIntegration.shouldDeferToCPM()) return;
+
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
 
         // Override if QuickSkin has an active custom model OR a model override for this player
@@ -100,6 +105,8 @@ public abstract class PlayerInfoMixin {
      */
     @Inject(method = "getCapeLocation", at = @At("HEAD"), cancellable = true)
     private void quickskin$onGetCapeLocation(CallbackInfoReturnable<ResourceLocation> cir) {
+        if (CPMCompatIntegration.shouldDeferToCPM()) return;
+
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
 
         // Only override if QuickSkin has an active custom cape for this player

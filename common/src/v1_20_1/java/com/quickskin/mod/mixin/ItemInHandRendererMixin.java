@@ -3,6 +3,7 @@ package com.quickskin.mod.mixin;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.model.geom.ModelPart;
@@ -38,6 +39,8 @@ public class ItemInHandRendererMixin {
     private VertexConsumer quickskin$redirectRenderHandBuffer(MultiBufferSource instance, RenderType renderType,
                                                               // Injected arguments from renderHand:
                                                               PoseStack poseStack, MultiBufferSource buffer, int packedLight, AbstractClientPlayer player, ModelPart arm, ModelPart sleeve) {
+        if (CPMCompatIntegration.shouldDeferToCPM()) return instance.getBuffer(renderType);
+
         // Check if transparency is disabled globally by config
         if (ClientConfig.getInstance().shouldDisableSkinTransparency()) {
             return instance.getBuffer(renderType);

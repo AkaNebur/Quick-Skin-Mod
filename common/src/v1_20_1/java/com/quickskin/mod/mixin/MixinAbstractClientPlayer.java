@@ -1,6 +1,7 @@
 package com.quickskin.mod.mixin;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -30,6 +31,8 @@ public class MixinAbstractClientPlayer {
      */
     @Inject(method = "getSkinTextureLocation", at = @At("HEAD"), cancellable = true)
     private void quickskin$getSkinTextureLocation(CallbackInfoReturnable<ResourceLocation> cir) {
+        if (CPMCompatIntegration.shouldDeferToCPM()) return;
+
         AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
 
         // Get QuickSkin's texture for this player
@@ -64,6 +67,8 @@ public class MixinAbstractClientPlayer {
      */
     @Inject(method = "getModelName", at = @At("HEAD"), cancellable = true)
     private void quickskin$getModelName(CallbackInfoReturnable<String> cir) {
+        if (CPMCompatIntegration.shouldDeferToCPM()) return;
+
         AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
 
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
@@ -103,6 +108,8 @@ public class MixinAbstractClientPlayer {
      */
     @Inject(method = "getCloakTextureLocation", at = @At("HEAD"), cancellable = true)
     private void quickskin$getCloakTextureLocation(CallbackInfoReturnable<ResourceLocation> cir) {
+        if (CPMCompatIntegration.shouldDeferToCPM()) return;
+
         AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
 
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();

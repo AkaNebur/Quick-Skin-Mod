@@ -1,6 +1,7 @@
 package com.quickskin.mod.mixin;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
 import com.quickskin.mod.client.services.CapeAnimationHelper;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
@@ -38,6 +39,7 @@ public class CapeLayerMixin {
                                             AbstractClientPlayer player, float limbSwing, float limbSwingAmount,
                                             float partialTicks, float ageInTicks, float netHeadYaw, float headPitch,
                                             CallbackInfo ci) {
+        if (CPMCompatIntegration.shouldDeferToCPM()) return;
 
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
 

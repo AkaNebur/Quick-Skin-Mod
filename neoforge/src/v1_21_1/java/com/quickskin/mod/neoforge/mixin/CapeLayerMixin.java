@@ -34,7 +34,6 @@ public class CapeLayerMixin {
                                             AbstractClientPlayer player, float limbSwing, float limbSwingAmount,
                                             float partialTicks, float ageInTicks, float netHeadYaw, float headPitch,
                                             CallbackInfo ci) {
-
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
 
         long now = System.currentTimeMillis();

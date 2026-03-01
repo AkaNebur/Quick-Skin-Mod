@@ -89,6 +89,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                     String username = getPlayerUsername(playerId);
                     com.quickskin.mod.client.compat.EarsCompatIntegration.associateWithPlayer(skinLocation, playerId, username);
                 }
+
+                // Invalidate CPM's model cache so it re-reads the new skin's embedded data
+                com.quickskin.mod.client.compat.CPMCompatIntegration.invalidatePlayerCache();
             }
         }
 

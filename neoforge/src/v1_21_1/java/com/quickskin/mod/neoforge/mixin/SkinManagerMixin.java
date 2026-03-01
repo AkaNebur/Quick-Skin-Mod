@@ -1,11 +1,14 @@
 package com.quickskin.mod.neoforge.mixin;
 
 import com.mojang.authlib.GameProfile;
+import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.HttpTexture;
 import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.client.resources.SkinManager;
 import net.minecraft.resources.ResourceLocation;
@@ -15,8 +18,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.io.File;
+import java.nio.file.Path;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * NeoForge-specific mixin on SkinManager to intercept skin resolution at the canonical level.
@@ -35,6 +42,10 @@ import java.util.concurrent.CompletableFuture;
  */
 @Mixin(SkinManager.class)
 public class SkinManagerMixin {
+
+    // Cache for HttpTexture-backed ResourceLocations (for CPM compat)
+    @Unique
+    private static final Map<String, ResourceLocation> quickskin$httpTextureCache = new ConcurrentHashMap<>();
 
     /**
      * Shared helper that applies QuickSkin overrides to a PlayerSkin.
@@ -59,7 +70,13 @@ public class SkinManagerMixin {
             boolean anyOverride = false;
 
             if (hasCustomSkin) {
-                ResourceLocation customSkin = service.getSkinLocation(uuid);
+                ResourceLocation customSkin;
+                if (CPMCompatIntegration.isAvailable()) {
+                    // When CPM is installed, register skin as HttpTexture so CPM can read pixel data
+                    customSkin = quickskin$getOrRegisterHttpTexture(uuid, service);
+                } else {
+                    customSkin = service.getSkinLocation(uuid);
+                }
                 if (customSkin != null) {
                     skinTexture = customSkin;
                     anyOverride = true;
@@ -152,6 +169,76 @@ public class SkinManagerMixin {
         }
 
         return original;
+    }
+
+    /**
+     * When CPM is installed, registers the QuickSkin skin file as an HttpTexture
+     * so that CPM can extract the file path and read embedded pixel data (3D model).
+     * CPM's skin loading pipeline checks `instanceof HttpTexture` and reads from the file field.
+     */
+    @Unique
+    private static ResourceLocation quickskin$getOrRegisterHttpTexture(UUID uuid, PlayerAppearanceService service) {
+        com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(uuid);
+        if (appearance == null) return null;
+
+        String skinId = appearance.getSkinId();
+        if (skinId == null || skinId.isEmpty()) return null;
+
+        // Extract hash from skinId (format: "local_skin:hash")
+        String hash = null;
+        if (skinId.startsWith("local_skin:")) {
+            hash = skinId.substring("local_skin:".length());
+        }
+
+        if (hash == null || hash.isEmpty()) {
+            // Not a local skin (could be network skin) - fall back to DynamicTexture
+            return service.getSkinLocation(uuid);
+        }
+
+        // Check cache first
+        ResourceLocation cached = quickskin$httpTextureCache.get(hash);
+        if (cached != null) {
+            // Verify it's still registered in TextureManager
+            if (Minecraft.getInstance().getTextureManager().getTexture(cached, null) != null) {
+                return cached;
+            }
+            quickskin$httpTextureCache.remove(hash);
+        }
+
+        // Find the skin file on disk
+        Path sourcePath = LocalAssetManager.getInstance().getSourcePath(hash);
+        if (sourcePath == null || !sourcePath.toFile().exists()) {
+            // File not found, fall back to DynamicTexture
+            return service.getSkinLocation(uuid);
+        }
+
+        // Create an HttpTexture pointing to the local file
+        File skinFile = sourcePath.toFile();
+        ResourceLocation location = ResourceLocation.fromNamespaceAndPath(
+                QuickSkin.MOD_ID,
+                "cpm_bridge/" + hash
+        );
+
+        // The HttpTexture constructor: (File file, String urlString, ResourceLocation fallback, boolean processLegacySkin, Runnable onDownloaded)
+        // - file: the local skin file CPM will read
+        // - urlString: dummy URL (CPM prefers file if it exists)
+        // - fallback: fallback texture if loading fails
+        // - processLegacySkin: true to handle old 64x32 skins
+        // - onDownloaded: callback after download (no-op for us)
+        HttpTexture httpTexture = new HttpTexture(
+                skinFile,
+                "file:///" + skinFile.getAbsolutePath().replace('\\', '/'),
+                ResourceLocation.withDefaultNamespace("textures/entity/player/wide/steve.png"),
+                true,
+                () -> {}
+        );
+
+        Minecraft.getInstance().getTextureManager().register(location, httpTexture);
+        quickskin$httpTextureCache.put(hash, location);
+
+        QuickSkin.LOGGER.info("[CPM Compat] Registered HttpTexture bridge for skin hash={} file={}", hash, skinFile.getAbsolutePath());
+
+        return location;
     }
 
     /**

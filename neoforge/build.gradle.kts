@@ -4,10 +4,13 @@ plugins {
     id("net.darkhax.curseforgegradle")
 }
 
-val minecraftVersion = project.findProperty("minecraft_version") as String
-require(minecraftVersion == "1.21.1") { "NeoForge requires minecraft_version = 1.21.1" }
+fun Project.versionProp(base: String): String {
+    val minecraftVersion = project.findProperty("minecraft_version") as String
+    return project.property("${base}_${minecraftVersion.replace(".", "_")}") as String
+}
 
-fun Project.prop(name: String) = project.property("${name}_1_21_1") as String
+val minecraftVersion = project.findProperty("minecraft_version") as String
+val versionDir = "v${minecraftVersion.replace(".", "_")}"
 
 architectury {
     platformSetupLoomIde()
@@ -16,8 +19,8 @@ architectury {
 
 sourceSets {
     main {
-        java.srcDir("src/v1_21_1/java")
-        resources.srcDir("src/v1_21_1/resources")
+        java.srcDir("src/$versionDir/java")
+        resources.srcDir("src/$versionDir/resources")
     }
 }
 
@@ -34,8 +37,8 @@ configurations {
 }
 
 dependencies {
-    "neoForge"("net.neoforged:neoforge:${project.prop("neoforge_version")}")
-    modImplementation("dev.architectury:architectury-neoforge:${project.prop("architectury_api_version")}")
+    "neoForge"("net.neoforged:neoforge:${project.versionProp("neoforge_version")}")
+    modImplementation("dev.architectury:architectury-neoforge:${project.versionProp("architectury_api_version")}")
 
     "common"(project(path = ":common", configuration = "namedElements")) { isTransitive = false }
     "shadowBundle"(project(path = ":common", configuration = "transformProductionNeoForge"))
@@ -64,7 +67,7 @@ tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
 
 // ===== PUBLISHING CONFIGURATION =====
 
-val mcVersion = "1.21.1"
+val mcVersion = minecraftVersion
 val supportedGameVersions = listOf(mcVersion)
 val modLoaders = listOf("neoforge")
 

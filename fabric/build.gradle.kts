@@ -24,6 +24,9 @@ sourceSets {
     }
 }
 
+// Ensure src/main/java is still included (entry points live there)
+// and version-specific java overrides (e.g. PlatformHelperImpl) come from src/$versionDir/java
+
 configurations {
     create("common")
     create("shadowBundle")
@@ -40,7 +43,7 @@ dependencies {
     "common"(project(path = ":common", configuration = "namedElements")) { isTransitive = false }
     "shadowBundle"(project(path = ":common", configuration = "transformProductionFabric"))
 
-    if (minecraftVersion == "1.21.1") {
+    if (minecraftVersion != "1.20.1") {
         "shadowBundle"("org.sejda.imageio:webp-imageio:0.1.6")
     }
 }
@@ -68,13 +71,7 @@ tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
 // ===== PUBLISHING CONFIGURATION =====
 
 val mcVersion = minecraftVersion
-val supportedGameVersions = when (mcVersion) {
-    "1.21.5" -> listOf("1.21.5")
-    "1.21.4" -> listOf("1.21.4")
-    "1.21.1" -> listOf("1.21.1")
-    "1.20.1" -> listOf("1.20.1")
-    else -> listOf(mcVersion)
-}
+val supportedGameVersions = listOf(mcVersion)
 
 val modLoaders = listOf("fabric")
 
