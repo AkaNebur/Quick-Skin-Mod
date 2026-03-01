@@ -1,6 +1,5 @@
 package com.quickskin.mod.client.gui.widget;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.Font;
@@ -18,21 +17,21 @@ public class RotateButton extends Button {
     @Override
     public void renderString(GuiGraphics pGuiGraphics, Font pFont, int pColor) {
         Component message = this.getMessage();
-        // In 1.21.6, graphics.pose() returns Matrix3x2fStack, use new PoseStack for 3D transforms
-        PoseStack poseStack = new PoseStack();
-        poseStack.pushPose();
+        // In 1.21.6, graphics.pose() returns Matrix3x2fStack with 2D push/pop/translate/scale
+        var pose = pGuiGraphics.pose();
+        pose.pushMatrix();
 
         float scale = 2.8F;
         float textWidth = pFont.width(message);
 
         // Translate to the center of the button to scale from that point
-        poseStack.translate(this.getX() + this.getWidth() / 1.8F, this.getY() + this.getHeight() / 4F, 0);
-        poseStack.scale(scale, scale, 1.0F);
+        pose.translate(this.getX() + this.getWidth() / 1.8F, this.getY() + this.getHeight() / 4F);
+        pose.scale(scale, scale);
 
         // Draw the string centered on the new (0, 0) origin
         pGuiGraphics.drawString(pFont, message, (int)(-textWidth / 2), (int)(-pFont.lineHeight / 2.0F + 1), pColor);
 
-        poseStack.popPose();
+        pose.popMatrix();
     }
 
     @Override

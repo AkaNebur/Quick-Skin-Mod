@@ -23,11 +23,11 @@ public class UploadToMojangScreen extends Screen {
     // Panel styling
     private static final int PANEL_BG = 0xB0000000;           // Darker semi-transparent background for frosted glass effect
     private static final int PANEL_OUTLINE = 0x60FFFFFF;      // Subtle white outline
-    private static final int TITLE_COLOR = 0xFFFFFF;          // White title
-    private static final int MESSAGE_COLOR = 0xFFFFFF;        // White message
-    private static final int INFO_COLOR = 0x40A040;           // Green info text
-    private static final int ERROR_COLOR = 0xFF4040;          // Red error text
-    private static final int SUCCESS_COLOR = 0x40FF40;        // Bright green success text
+    private static final int TITLE_COLOR = 0xFFFFFFFF;          // White title
+    private static final int MESSAGE_COLOR = 0xFFFFFFFF;        // White message
+    private static final int INFO_COLOR = 0xFF40A040;           // Green info text
+    private static final int ERROR_COLOR = 0xFFFF4040;          // Red error text
+    private static final int SUCCESS_COLOR = 0xFF40FF40;        // Bright green success text
 
     // Panel dimensions
     private final int panelWidth = 380;

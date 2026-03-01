@@ -12,7 +12,7 @@ public class StyledButton extends Button {
     private static final int NORMAL_BG = 0xB0000000;         // Dark semi-transparent background
     private static final int HOVER_BG = 0xC0202020;          // Slightly lighter on hover
     private static final int OUTLINE = 0x80FFFFFF;           // White outline
-    private static final int TEXT_COLOR = 0xFFFFFF;          // White text
+    private static final int TEXT_COLOR = 0xFFFFFFFF;          // White text
 
     public StyledButton(int x, int y, int width, int height, Component label, OnPress onPress) {
         super(x, y, width, height, label, onPress, DEFAULT_NARRATION);
@@ -55,7 +55,7 @@ public class StyledButton extends Button {
                      outlineColor);
 
         // Draw centered text
-        int textColor = this.active ? TEXT_COLOR : 0x666666;
+        int textColor = this.active ? TEXT_COLOR : 0xFF666666;
         graphics.drawCenteredString(
             net.minecraft.client.Minecraft.getInstance().font,
             this.getMessage(),

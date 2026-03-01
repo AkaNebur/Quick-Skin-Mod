@@ -36,6 +36,12 @@ public class PlayerModelRenderer {
     private static PlayerModel slimModel;
     private static PlayerCapeModel<?> capeModel;
 
+    // Static fields used to communicate cape data to the GuiSkinRendererMixin.
+    // Set before submitSkinRenderState, consumed during renderToTexture.
+    public static ResourceLocation pendingCapeTexture;
+    public static PlayerModel pendingCapeBodyModel;
+    public static PlayerCapeModel<?> pendingCapeModel;
+
     /**
      * Initialize models (lazy initialization)
      */
@@ -187,17 +193,24 @@ public class PlayerModelRenderer {
                 poseStack.popPose();
             }
 
-            // 1.21.6: renderEntityInInventory(GuiGraphics, int x1, int y1, int x2, int y2, float scale, Vector3f, Quaternionf, Quaternionf, LivingEntity)
+            // 1.21.6+: renderEntityInInventory(GuiGraphics, int x1, int y1, int x2, int y2, float scale, Vector3f, Quaternionf, Quaternionf, LivingEntity)
+            // The PiP renderer centers the entity origin (feet) at the vertical center of the bounding box.
+            // In 1.21.4, y was the feet position directly. In 1.21.6+ with the bounding box API,
+            // we need to construct the box so that its center corresponds to where the feet should be.
+            // Box center = (y0 + y1) / 2, so for feet at y: y0 = y - halfHeight, y1 = y + halfHeight
             int halfWidth = (int)(scale * 0.6f);
-            int height = (int)(scale * 2.0f);
+            // The entity feet are at the box center. The player extends ~1.8 blocks upward,
+            // so we need at least scale*2.0 above center to avoid clipping the head.
+            int topHalf = (int)(scale * 2.0f);
+            int bottomHalf = topHalf;
             InventoryScreen.renderEntityInInventory(
                     graphics,
                     x - halfWidth,
-                    y - height,
+                    y - topHalf,
                     x + halfWidth,
-                    y,
+                    y + bottomHalf,
                     (int) scale,
-                    new org.joml.Vector3f(0, 0, 0),  // translation offset
+                    new org.joml.Vector3f(0, 0, 0),
                     quaternionXZ,
                     quaternionY,
                     playerToRender
@@ -223,7 +236,9 @@ public class PlayerModelRenderer {
     /**
      * Manually render player model without requiring a player entity
      * Used on title screen where no world/player exists
-     * Replicates InventoryScreen.renderEntityInInventory() behavior EXACTLY
+     * In 1.21.6+, all GUI 3D rendering must go through the PiP system.
+     * Cape rendering is handled by CapeAwareModel which renders the cape
+     * inside renderToBuffer(), using the shared buffer source.
      */
     private static void renderPlayerModelManual(
             GuiGraphics graphics,
@@ -241,86 +256,17 @@ public class PlayerModelRenderer {
         // Select model based on type
         PlayerModel model = "slim".equals(playerData.getModelType() != null ? playerData.getModelType().toLowerCase(Locale.ROOT) : null) ? slimModel : classicModel;
 
-        // In 1.21.6, graphics.pose() returns Matrix3x2fStack, use new PoseStack for 3D transforms
-        PoseStack poseStack = new PoseStack();
-        poseStack.pushPose();
-
-        // Match InventoryScreen.renderEntityInInventory() transformations
-        poseStack.translate((double)x, (double)y, 50.0);
-
-        // Apply scale (negative Z flips the model to face forward)
-        // Cast to int to match InventoryScreen.renderEntityInInventory() behavior
-        float scaleCasted = (float)(int)scale;
-        Matrix4f scaleMatrix = (new Matrix4f()).scaling(scaleCasted, scaleCasted, -scaleCasted);
-        poseStack.mulPose(scaleMatrix);
-
-        // Apply rotations - match InventoryScreen's quaternion
-        Quaternionf quaternionf = (new Quaternionf()).rotateZ((float)Math.PI);
-        poseStack.mulPose(quaternionf);
-
-        // === NOW MATCH LivingEntityRenderer.render() EXACTLY ===
-
-        // Body rotation (without the 180 degree offset)
-        poseStack.mulPose(Axis.YP.rotationDegrees(-yRotation));
-
-        // Flip the model (line 82 in LivingEntityRenderer)
-        poseStack.scale(-1.0F, -1.0F, 1.0F);
-
-        // CRITICAL: Position the model at feet (line 84 in LivingEntityRenderer)
-        poseStack.translate(0.0F, -1.501F, 0.0F);
-
-        // 1.21.6: Lighting API changed to use Lighting.Entry enum
-        Minecraft.getInstance().gameRenderer.getLighting().setupFor(Lighting.Entry.ENTITY_IN_UI);
-
-        // Get Minecraft instance for tick count
         Minecraft mc = Minecraft.getInstance();
-
-        // Get buffer source
-        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
-
-        // Render grass block if sitting animation is active AND we're not in a world
-        // When in-game, animations are controlled by the game, so don't render the custom grass block
-        if ("sit".equals(playerData.getCurrentAnimation() != null ? playerData.getCurrentAnimation().toLowerCase(Locale.ROOT) : null) && mc.level == null) {
-            renderGrassBlock(poseStack, bufferSource);
-        }
 
         // Setup model pose with idle animation
         setupModelPoseWithAnimation(model, playerData, mouseX, mouseY, followMouse, x, y, mc);
 
-        // Render the model with skin texture
-        RenderType renderType = RenderType.entityTranslucent(playerData.getSkinLocation());
-        var vertexConsumer = bufferSource.getBuffer(renderType);
-
-        // Determine if using slim model
-        boolean isSlimModel = "slim".equals(playerData.getModelType() != null ? playerData.getModelType().toLowerCase(Locale.ROOT) : null);
-
-        // Render model
-        model.renderToBuffer(
-                poseStack,
-                vertexConsumer,
-                15728880, // Full brightness (light level) - same as InventoryScreen
-                OverlayTexture.NO_OVERLAY,
-                0xFFFFFFFF  // ARGB color format
-        );
-
-        // Render 3D skin layers (if mod is installed)
-        // The integration class handles all mod detection and graceful fallback
-        SkinLayers3DIntegration.render3DLayers(
-                poseStack,
-                bufferSource,
-                15728880,
-                OverlayTexture.NO_OVERLAY,
-                model,
-                playerData.getSkinLocation(),
-                isSlimModel
-        );
-
-        // Render cape AFTER model if present
+        // Set cape data for the GuiSkinRendererMixin to pick up during renderToTexture
+        ResourceLocation capeTexture = null;
         if (playerData.getCapeLocation() != null) {
-            ResourceLocation capeAtlasLocation = playerData.getCapeLocation();
+            capeTexture = playerData.getCapeLocation();
             String capeId = playerData.getCapeId();
 
-            ResourceLocation finalCapeTexture = capeAtlasLocation;
             String animationId = null;
             if (capeId != null) {
                 if (capeId.startsWith("local_cape:")) {
@@ -331,42 +277,32 @@ public class PlayerModelRenderer {
             }
 
             if (animationId != null) {
-                // Attempt to get the current frame. If it's not ready, we'll just fall back to the atlas.
                 ResourceLocation currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);
                 if (currentFrame != null) {
-                    finalCapeTexture = currentFrame;
+                    capeTexture = currentFrame;
                 }
             }
-
-            // Now render the cape using the final texture
-            RenderType capeRenderType = RenderType.entityTranslucent(finalCapeTexture);
-            var capeVertexConsumer = bufferSource.getBuffer(capeRenderType);
-
-            // In MC 1.21.4+, the cape is rendered via PlayerCapeModel which has its own body part.
-            // Copy the body rotation from the player model so the cape follows the body orientation,
-            // then render the whole cape model (it handles its own positioning internally).
-            // In MC 1.21.4+, the cape is a separate PlayerCapeModel.
-            // We render it by positioning it manually behind the player body.
-            poseStack.pushPose();
-            // Use the player body's transform to position at the body
-            model.body.translateAndRotate(poseStack);
-            // Move to the back of the body (Z=0.125 = 2 pixels behind center)
-            poseStack.translate(0.0, 0.0, 0.125);
-            // No Y rotation needed — the cape mesh already faces the correct direction
-            // Set a slight forward tilt for static preview
-            poseStack.mulPose(Axis.XP.rotationDegrees(6.0F));
-            // Render just the cape child part (not the whole model, to avoid body transform doubling)
-            capeModel.body.getChild("cape").render(poseStack, capeVertexConsumer, 15728880, OverlayTexture.NO_OVERLAY);
-            poseStack.popPose();
         }
+        pendingCapeTexture = capeTexture;
+        pendingCapeBodyModel = model;
+        pendingCapeModel = capeModel;
 
-        // Flush buffers - matches guiGraphics.flush() in InventoryScreen
-        bufferSource.endBatch();
+        // Submit to PiP system - cape rendering injected by GuiSkinRendererMixin
+        int boxHeight = (int)(scale * 2.3f);
+        int boxHalfWidth = (int)(scale * 1.0f);
 
-        poseStack.popPose();
-
-        // 1.21.6: Lighting API changed to use Lighting.Entry enum
-        Minecraft.getInstance().gameRenderer.getLighting().setupFor(Lighting.Entry.ITEMS_3D);
+        graphics.submitSkinRenderState(
+                model,
+                playerData.getSkinLocation(),
+                (float)(int) scale,
+                0.0f,
+                -45.0f + yRotation,
+                -1.0625f,
+                x - boxHalfWidth,
+                y - boxHeight,
+                x + boxHalfWidth,
+                y
+        );
     }
 
     /**

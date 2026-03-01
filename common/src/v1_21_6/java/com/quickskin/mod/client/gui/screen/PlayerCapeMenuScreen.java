@@ -106,7 +106,7 @@ public class PlayerCapeMenuScreen extends Screen {
     // Import feedback
     private String importMessage = "";
     private int importMessageTimer = 0;
-    private int importMessageColor = 0xFFFFFF;
+    private int importMessageColor = 0xFFFFFFFF;
 
     public PlayerCapeMenuScreen(@Nullable Screen parent) {
         super(Component.empty());
@@ -506,7 +506,7 @@ public class PlayerCapeMenuScreen extends Screen {
         }
 
         // Show processing message
-        showImportMessage(Component.translatable("quickskin.cape.processing").getString(), 0x55AAFF, 60);
+        showImportMessage(Component.translatable("quickskin.cape.processing").getString(), 0xFF55AAFF, 60);
 
         // Import on main thread
         if (this.minecraft != null) {
@@ -524,14 +524,14 @@ public class PlayerCapeMenuScreen extends Screen {
                         refreshCapeList();
                         updateGridDimensions();
 
-                        showImportMessage(Component.translatable("quickskin.cape.imported").getString(), 0x55FF55, 100);
+                        showImportMessage(Component.translatable("quickskin.cape.imported").getString(), 0xFF55FF55, 100);
                     } else {
                         QuickSkin.LOGGER.error("Failed to import cape: {}", filePath);
-                        showImportMessage(Component.translatable("quickskin.cape.invalid_ratio").getString(), 0xFF5555, 150);
+                        showImportMessage(Component.translatable("quickskin.cape.invalid_ratio").getString(), 0xFFFF5555, 150);
                     }
                 } catch (IOException e) {
                     QuickSkin.LOGGER.error("Failed to import cape", e);
-                    showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFF5555, 150);
+                    showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFFFF5555, 150);
                 }
             });
         }
@@ -630,10 +630,10 @@ public class PlayerCapeMenuScreen extends Screen {
                 removeCape();
             }
 
-            showImportMessage(Component.translatable("quickskin.cape.deleted").getString(), 0x55FF55, 100);
+            showImportMessage(Component.translatable("quickskin.cape.deleted").getString(), 0xFF55FF55, 100);
         } catch (Exception e) {
             QuickSkin.LOGGER.error("Failed to delete cape", e);
-            showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFF5555, 100);
+            showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFFFF5555, 100);
         }
     }
 
@@ -668,7 +668,7 @@ public class PlayerCapeMenuScreen extends Screen {
         // RenderSystem.setShaderColor() removed in 1.21.6
 
         // Title
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFF);
+        graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFFFF);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
@@ -747,7 +747,7 @@ public class PlayerCapeMenuScreen extends Screen {
         int headerY = startY + HEADER_HEIGHT / 2 - 4;
         if (headerY > gridY - 8 && headerY < gridY + gridHeight + 8) {
             int gridCenterX = this.gridX + (this.gridWidth / 2);
-            graphics.drawCenteredString(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFF);
+            graphics.drawCenteredString(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFFFF);
         }
         int currentY = startY + HEADER_HEIGHT;
 
@@ -800,8 +800,8 @@ public class PlayerCapeMenuScreen extends Screen {
         Component mainMessage = Component.translatable("quickskin.dropzone.capes.main");
         Component subMessage = Component.translatable("quickskin.dropzone.capes.sub");
 
-        int mainColor = isHovering ? 0xFFFFFF : 0xE0E0E0;
-        int subColor = isHovering ? 0xB0B0B0 : 0x909090;
+        int mainColor = isHovering ? 0xFFFFFFFF : 0xFFE0E0E0;
+        int subColor = isHovering ? 0xFFB0B0B0 : 0xFF909090;
 
         if (height > font.lineHeight * 2.5 && width > font.width(subMessage)) {
             graphics.drawCenteredString(this.font, mainMessage, centerX, centerY - font.lineHeight / 2 - 1, mainColor);
@@ -852,7 +852,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
             // Render "None" text centered
             graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.option.none"), x + capeDisplaySize / 2,
-                    y + capeDisplaySize / 2 - 4, 0xFFFFFF);
+                    y + capeDisplaySize / 2 - 4, 0xFFFFFFFF);
 
             // Highlight if selected or hovered
             if (isSelected(cape)) {
@@ -957,7 +957,7 @@ public class PlayerCapeMenuScreen extends Screen {
     private void renderLoadingTexture(GuiGraphics graphics, int x, int y) {
         graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0xFF222222);
         graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.loading"),
-                x + capeDisplaySize / 2, y + capeDisplaySize / 2 - 4, 0x888888);
+                x + capeDisplaySize / 2, y + capeDisplaySize / 2 - 4, 0xFF888888);
     }
 
     private void renderCustomIndicator(GuiGraphics graphics, int x, int y) {
@@ -1331,11 +1331,11 @@ public class PlayerCapeMenuScreen extends Screen {
                 .toList();
 
         if (validFiles.isEmpty()) {
-            showImportMessage(Component.translatable("quickskin.cape.no_files").getString(), 0xFFAA00, 100);
+            showImportMessage(Component.translatable("quickskin.cape.no_files").getString(), 0xFFFFAA00, 100);
             return;
         }
 
-        showImportMessage(Component.translatable("quickskin.cape.processing_count", validFiles.size()).getString(), 0x55AAFF, 60);
+        showImportMessage(Component.translatable("quickskin.cape.processing_count", validFiles.size()).getString(), 0xFF55AAFF, 60);
 
         CompletableFuture.runAsync(() -> {
             int successCount = 0;
@@ -1346,7 +1346,7 @@ public class PlayerCapeMenuScreen extends Screen {
                 Files.createDirectories(capesDir);
             } catch (IOException e) {
                 Minecraft.getInstance().execute(() ->
-                        showImportMessage(Component.translatable("quickskin.cape.error_directory").getString(), 0xFF5555, 100));
+                        showImportMessage(Component.translatable("quickskin.cape.error_directory").getString(), 0xFFFF5555, 100));
                 return;
             }
 
@@ -1374,14 +1374,14 @@ public class PlayerCapeMenuScreen extends Screen {
                     if (finalInvalidCount > 0) {
                         message += String.format(" (%d invalid)", finalInvalidCount);
                     }
-                    showImportMessage(message, finalSuccessCount > finalInvalidCount ? 0x55FF55 : 0xFFAA00, 200);
+                    showImportMessage(message, finalSuccessCount > finalInvalidCount ? 0xFF55FF55 : 0xFFFFAA00, 200);
                 } else {
-                    showImportMessage(Component.translatable("quickskin.cape.no_valid").getString(), 0xFF5555, 200);
+                    showImportMessage(Component.translatable("quickskin.cape.no_valid").getString(), 0xFFFF5555, 200);
                 }
             });
         }).exceptionally(throwable -> {
             Minecraft.getInstance().execute(() ->
-                    showImportMessage(Component.translatable("quickskin.cape.error_processing", throwable.getMessage()).getString(), 0xFF5555, 200));
+                    showImportMessage(Component.translatable("quickskin.cape.error_processing", throwable.getMessage()).getString(), 0xFFFF5555, 200));
             return null;
         });
     }

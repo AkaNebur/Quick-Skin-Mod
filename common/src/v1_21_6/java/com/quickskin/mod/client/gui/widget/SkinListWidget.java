@@ -118,8 +118,8 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
                 Component mainMessage = Component.translatable("quickskin.dropzone.skins.main");
                 Component subMessage = Component.translatable("quickskin.dropzone.skins.sub");
 
-                int mainColor = isHovering ? 0xFFFFFF : 0xE0E0E0;
-                int subColor = isHovering ? 0xB0B0B0 : 0x909090;
+                int mainColor = isHovering ? 0xFFFFFFFF : 0xFFE0E0E0;
+                int subColor = isHovering ? 0xFFB0B0B0 : 0xFF909090;
 
                 graphics.drawCenteredString(mc.font, mainMessage,
                     centerX, centerY - mc.font.lineHeight - 2, mainColor);

@@ -115,7 +115,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             // Fallback if texture not loaded
             graphics.fill(faceX, faceY, faceX + faceSize, faceY + faceSize, 0xFF333333);
             graphics.drawCenteredString(mc.font, "?", faceX + faceSize / 2,
-                faceY + faceSize / 2 - 4, 0xFFFFFF);
+                faceY + faceSize / 2 - 4, 0xFFFFFFFF);
         }
 
         // Render text info
@@ -131,7 +131,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         if (mc.font.width(displayName) > textMaxWidth) {
             displayName = mc.font.plainSubstrByWidth(displayName, textMaxWidth - mc.font.width("...")) + "...";
         }
-        graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFF);
+        graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
 
         // Model type and resolution
         String modelText = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null) ? "Slim" : "Classic";
@@ -139,7 +139,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             modelText += " • " + metadata.resolution().name();
         }
         graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
-            metadata.resolution().isHD() ? 0x55FF55 : 0xAAAAAA);
+            metadata.resolution().isHD() ? 0xFF55FF55 : 0xFFAAAAAA);
 
         // Render action buttons on hover (but not for player's own skin)
         this.isDeleteHovered = false;
@@ -158,7 +158,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             graphics.fill(deleteButtonX, deleteButtonY,
                 deleteButtonX + actionButtonSize, deleteButtonY + actionButtonSize,
                 deleteHovered ? 0xA0E04040 : 0x80C00000);
-            graphics.drawString(mc.font, "x", deleteButtonX + 3, deleteButtonY + 1, 0xFFFFFF);
+            graphics.drawString(mc.font, "x", deleteButtonX + 3, deleteButtonY + 1, 0xFFFFFFFF);
 
             this.isDeleteHovered = deleteHovered;
 

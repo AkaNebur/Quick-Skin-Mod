@@ -551,7 +551,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 this.title,
                 this.width / 2,
                 panelY + 10,
-                0xFFFFFF
+                0xFFFFFFFF
         );
 
         // Push pose (1.21.6: Matrix3x2fStack uses pushMatrix/popMatrix)

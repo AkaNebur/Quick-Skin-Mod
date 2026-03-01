@@ -20,9 +20,9 @@ public class DeletionConfirmScreen extends Screen {
     // Panel styling
     private static final int PANEL_BG = 0xB0000000;           // Darker semi-transparent background for frosted glass effect
     private static final int PANEL_OUTLINE = 0x60FFFFFF;      // Subtle white outline
-    private static final int TITLE_COLOR = 0xFFFFFF;          // White title
-    private static final int MESSAGE_COLOR = 0xFFFFFF;        // White message
-    private static final int WARNING_COLOR = 0xFFCC00;        // Orange warning text
+    private static final int TITLE_COLOR = 0xFFFFFFFF;          // White title
+    private static final int MESSAGE_COLOR = 0xFFFFFFFF;        // White message
+    private static final int WARNING_COLOR = 0xFFFFCC00;        // Orange warning text
 
     // Panel dimensions
     private final int panelWidth = 340;
