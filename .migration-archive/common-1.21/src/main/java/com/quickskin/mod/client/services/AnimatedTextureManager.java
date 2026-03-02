@@ -53,7 +53,6 @@ public class AnimatedTextureManager {
         private void loadFrames(String animationId, BufferedImage atlasImage) {
             try {
                 if (atlasImage == null) {
-                    QuickSkin.LOGGER.error("Could not read atlas image for animation: {}", atlasTextureLocation);
                     return;
                 }
 
@@ -70,7 +69,6 @@ public class AnimatedTextureManager {
                     frameResourceLocations[i] = Minecraft.getInstance().getTextureManager().register(frameId, frameTextures[i]);
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to load and slice animation frames for {}", atlasTextureLocation, e);
             }
         }
 
@@ -156,7 +154,6 @@ public class AnimatedTextureManager {
      */
     public void registerAnimation(String animationId, String capeId, ResourceLocation textureLocation, BufferedImage atlasImage, AnimationMetadata metadata) {
         if (metadata == null || metadata.frameCount() <= 1) {
-            QuickSkin.LOGGER.warn("Cannot register animation with invalid metadata (frameCount <= 1): {}", animationId);
             return;
         }
 
@@ -169,14 +166,12 @@ public class AnimatedTextureManager {
         AnimationState state = new AnimationState(animationId, textureLocation, atlasImage, metadata, speedMultiplier);
         animations.put(animationId, state);
 
-        QuickSkin.LOGGER.debug("Registered animation: {} with {} frames at speed {}x", animationId, metadata.frameCount(), speedMultiplier);
     }
 
     /**
      * Clear all animations (for texture cache reload)
      */
     public void clearAnimations() {
-        QuickSkin.LOGGER.info("Clearing all animated texture registrations");
         for (AnimationState state : animations.values()) {
             state.cleanup();
         }
@@ -190,7 +185,6 @@ public class AnimatedTextureManager {
         AnimationState removed = animations.remove(animationId);
         if (removed != null) {
             removed.cleanup();
-            QuickSkin.LOGGER.debug("Unregistered and cleaned up animation: {}", animationId);
         }
     }
 
@@ -203,7 +197,6 @@ public class AnimatedTextureManager {
         AnimationState state = animations.get(animationId);
         if (state != null) {
             state.setSpeedMultiplier(speed);
-            QuickSkin.LOGGER.debug("Updated animation speed for {}: {}x", animationId, speed);
         }
     }
 
@@ -273,15 +266,8 @@ public class AnimatedTextureManager {
 
         // DEBUG: Log when lookup fails (this could help diagnose the issue)
         if (!animations.isEmpty()) {
-            QuickSkin.LOGGER.debug("[AnimatedTextureManager] getAnimationFrame MISS for: {} (registered animations: {})",
-                atlasLocation, animations.keySet());
             // Log the atlas locations of all registered animations for comparison
             for (Map.Entry<String, AnimationState> entry : animations.entrySet()) {
-                QuickSkin.LOGGER.debug("[AnimatedTextureManager]   - {} has atlas: {} (equals={}, sameInstance={})",
-                    entry.getKey(),
-                    entry.getValue().atlasTextureLocation,
-                    atlasLocation.equals(entry.getValue().atlasTextureLocation),
-                    atlasLocation == entry.getValue().atlasTextureLocation);
             }
         }
 

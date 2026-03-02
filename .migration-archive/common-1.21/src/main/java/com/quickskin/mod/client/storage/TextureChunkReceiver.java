@@ -44,13 +44,10 @@ public class TextureChunkReceiver {
             // All chunks received, assemble the complete texture
             byte[] completeData = assembly.assembleTexture();
             if (completeData != null) {
-                QuickSkin.LOGGER.info("Assembled complete texture from {} chunks: {} ({} bytes)",
-                    totalChunks, hash, completeData.length);
 
                 // Store in network texture cache (must be on main thread)
                 Minecraft.getInstance().execute(() -> {
                     NetworkTextureCache.getInstance().storeTexture(hash, completeData);
-                    QuickSkin.LOGGER.debug("Stored reassembled texture in network cache: {}", hash);
                 });
             }
             incompleteTextures.remove(hash);
@@ -62,7 +59,6 @@ public class TextureChunkReceiver {
      */
     public void clear() {
         incompleteTextures.clear();
-        QuickSkin.LOGGER.debug("Cleared all incomplete texture assemblies");
     }
 
     /**
@@ -85,21 +81,17 @@ public class TextureChunkReceiver {
         public synchronized boolean addChunk(int index, byte[] data) {
             // Validate index
             if (index < 0 || index >= chunks.length) {
-                QuickSkin.LOGGER.warn("Invalid chunk index: {} (expected 0-{})", index, chunks.length - 1);
                 return false;
             }
 
             // Ignore duplicate chunks
             if (received[index]) {
-                QuickSkin.LOGGER.debug("Ignoring duplicate chunk: {}", index);
                 return false;
             }
 
             chunks[index] = data;
             received[index] = true;
             receivedCount++;
-
-            QuickSkin.LOGGER.debug("Received chunk {}/{}", receivedCount, chunks.length);
 
             return receivedCount == chunks.length;
         }
@@ -110,8 +102,6 @@ public class TextureChunkReceiver {
          */
         public byte @Nullable [] assembleTexture() {
             if (receivedCount != chunks.length) {
-                QuickSkin.LOGGER.warn("Cannot assemble texture: only {}/{} chunks received",
-                    receivedCount, chunks.length);
                 return null;
             }
 
@@ -119,7 +109,6 @@ public class TextureChunkReceiver {
             int totalSize = 0;
             for (byte[] chunk : chunks) {
                 if (chunk == null) {
-                    QuickSkin.LOGGER.error("Null chunk detected during assembly");
                     return null;
                 }
                 totalSize += chunk.length;

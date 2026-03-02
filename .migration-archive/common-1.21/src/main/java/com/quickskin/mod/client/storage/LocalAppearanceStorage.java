@@ -38,7 +38,6 @@ public class LocalAppearanceStorage {
      */
     public void init(Path configDirectory) {
         storageFile = configDirectory.resolve("quickskin_preferences.json");
-        QuickSkin.LOGGER.info("LocalAppearanceStorage initialized at: {}", storageFile);
     }
 
     /**
@@ -99,7 +98,6 @@ public class LocalAppearanceStorage {
         // Save to disk
         savePreferencesData(data);
 
-        QuickSkin.LOGGER.debug("Saved preferences for player: {}", playerId);
     }
 
     /**
@@ -115,7 +113,6 @@ public class LocalAppearanceStorage {
             PreferencesData data = GSON.fromJson(json, PreferencesData.class);
             return data != null ? data : new PreferencesData();
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load appearance preferences", e);
             return new PreferencesData();
         }
     }
@@ -132,7 +129,6 @@ public class LocalAppearanceStorage {
             String json = GSON.toJson(data);
             Files.writeString(storageFile, json);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to save appearance preferences", e);
         }
     }
 }

@@ -294,9 +294,6 @@ public class CustomNPCsIntegration {
 
         ResourceLocation expectedSkin = lastAppliedSkins.get(playerId);
         if (expectedSkin != null && !expectedSkin.equals(currentSkin)) {
-            QuickSkin.LOGGER.warn("[CustomNPCs Compat] Detected skin conflict for player {}! " +
-                "Expected: {}, Got: {}. This may indicate CustomNPCs is overriding Quick-Skin-Mod.",
-                playerId, expectedSkin, currentSkin);
             return true;
         }
 

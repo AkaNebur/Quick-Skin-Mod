@@ -40,7 +40,6 @@ public class ServerTextureCache {
         try {
             Files.createDirectories(storageDirectory);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to create texture storage directory", e);
         }
 
         // Load existing textures from disk
@@ -102,7 +101,6 @@ public class ServerTextureCache {
             Files.write(file, data);
             return true;
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to save texture: {}", hash, e);
             return false;
         }
     }
@@ -124,11 +122,9 @@ public class ServerTextureCache {
                         byte[] data = Files.readAllBytes(path);
                         textureCache.put(hash, data);
                     } catch (IOException e) {
-                        QuickSkin.LOGGER.warn("Failed to load texture: {}", path, e);
                     }
                 });
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load cached textures", e);
         }
     }
 }

@@ -186,7 +186,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
                                 playerWidget.setAnimation(animName);
                                 // Save animation state for persistence across all screens
                                 com.quickskin.mod.event.ClientEvents.setSharedAnimation(animName);
-                                com.quickskin.mod.QuickSkin.LOGGER.info("Animation {} activated: {}", index + 1, animName);
                             }
                             toggleAnimationDropdown();
                         }
@@ -280,16 +279,12 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
             if (textureData != null) {
                 String detected = com.quickskin.mod.common.util.SkinModelDetector.detectSkinModel(textureData);
-                com.quickskin.mod.QuickSkin.LOGGER.info("Preview: Auto-detected model from texture for {}: {}",
-                        metadata.friendlyName(), detected);
                 return detected;
             }
-        } catch (Exception e) {
-            com.quickskin.mod.QuickSkin.LOGGER.error("Failed to detect model from texture", e);
+        } catch (Exception ignored) {
         }
 
         // Fallback to metadata if detection fails
-        com.quickskin.mod.QuickSkin.LOGGER.warn("Preview: Falling back to metadata model: {}", metadata.skinModel());
         return metadata.skinModel() != null ? metadata.skinModel() : "classic";
     }
 
@@ -298,8 +293,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     private void setModelType(String modelType) {
         this.currentModelType = modelType;
-        com.quickskin.mod.QuickSkin.LOGGER.info("[PlayerPreviewPanel] setModelType called: {}, callback is null: {}",
-            modelType, modelTypeChangeCallback == null);
 
         // Update preview widget
         if (playerWidget != null) {
@@ -313,10 +306,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
         // Notify callback to apply to actual player
         if (modelTypeChangeCallback != null) {
-            com.quickskin.mod.QuickSkin.LOGGER.info("[PlayerPreviewPanel] Calling callback for model type: {}", modelType);
             modelTypeChangeCallback.accept(modelType);
-        } else {
-            com.quickskin.mod.QuickSkin.LOGGER.warn("[PlayerPreviewPanel] Callback is NULL! Cannot save model preference!");
         }
 
         updateModelButtonStates();

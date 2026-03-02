@@ -11,11 +11,9 @@ public class QuickSkinFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        QuickSkin.LOGGER.info("QuickSkin loading on Fabric platform");
 
         // Initialize common code
         QuickSkin.init();
 
-        QuickSkin.LOGGER.info("QuickSkin Fabric initialization complete");
     }
 }

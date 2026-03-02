@@ -74,7 +74,6 @@ public class ClientNetworkHandler {
                 refreshPlayersUsingTexture(payload.hash());
 
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to save animation metadata for: {}", payload.hash(), e);
             }
         });
     }
@@ -89,14 +88,12 @@ public class ClientNetworkHandler {
                 com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().getTextureLocation(hash);
 
             if (textureLocation == null) {
-                QuickSkin.LOGGER.warn("Cannot register animation for {}: texture not in network cache", hash);
                 return;
             }
 
             // Get the texture image from network cache
             byte[] textureData = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().getTextureData(hash);
             if (textureData == null) {
-                QuickSkin.LOGGER.warn("Cannot register animation for {}: texture data not available", hash);
                 return;
             }
 
@@ -105,7 +102,6 @@ public class ClientNetworkHandler {
             java.awt.image.BufferedImage atlasImage = javax.imageio.ImageIO.read(bais);
 
             if (atlasImage == null) {
-                QuickSkin.LOGGER.warn("Cannot register animation for {}: failed to read image", hash);
                 return;
             }
 
@@ -122,7 +118,6 @@ public class ClientNetworkHandler {
             }
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to register animation for network cape: {}", hash, e);
         }
     }
 
@@ -214,7 +209,6 @@ public class ClientNetworkHandler {
         context.queue(() -> {
             // Validate chunk data
             if (payload.chunkData().length > 32 * 1024) {
-                QuickSkin.LOGGER.warn("Received oversized chunk: {} bytes (max: 32KB)", payload.chunkData().length);
                 return;
             }
 

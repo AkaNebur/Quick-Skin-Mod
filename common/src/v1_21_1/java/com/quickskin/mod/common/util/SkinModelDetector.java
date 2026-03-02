@@ -115,7 +115,6 @@ public class SkinModelDetector {
             BufferedImage image = ImageIO.read(file);
             return detectSkinModel(image);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to detect skin model from file: {}", file, e);
             return "classic";
         }
     }
@@ -128,7 +127,6 @@ public class SkinModelDetector {
             BufferedImage image = ImageIO.read(new ByteArrayInputStream(data));
             return detectSkinModel(image);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to detect skin model from byte array", e);
             return "classic";
         }
     }
@@ -141,7 +139,6 @@ public class SkinModelDetector {
             BufferedImage image = ImageIO.read(input);
             return detectSkinModel(image);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to detect skin model from input stream", e);
             return "classic";
         }
     }

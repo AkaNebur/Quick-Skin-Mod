@@ -53,7 +53,6 @@ public class StarPatternCache {
             cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache", cachedTexture);
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load star pattern cache", e);
         }
     }
 

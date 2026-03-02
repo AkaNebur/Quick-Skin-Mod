@@ -31,7 +31,6 @@ public class HDTextureProcessor {
             byte[] imageBytes = input.readAllBytes();
 
             if (imageBytes.length == 0) {
-                QuickSkin.LOGGER.error("Failed to read image: input stream was empty");
                 return null;
             }
 
@@ -41,7 +40,6 @@ public class HDTextureProcessor {
             // Read image using ImageIO (TwelveMonkeys adds WebP, JPEG, and other format support)
             BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
             if (image == null) {
-                QuickSkin.LOGGER.error("Failed to read image: unsupported format ({}). The file may be corrupted or renamed with wrong extension.", detectedFormat);
                 return null;
             }
 
@@ -63,7 +61,6 @@ public class HDTextureProcessor {
             // Check if valid resolution
             SkinResolution resolution = SkinResolution.fromDimensions(width, height);
             if (resolution == null) {
-                QuickSkin.LOGGER.warn("Invalid skin dimensions: {}x{}", width, height);
                 return null;
             }
 
@@ -81,7 +78,6 @@ public class HDTextureProcessor {
             return imageToPng(image);
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to process HD skin", e);
             return null;
         }
     }
@@ -390,7 +386,6 @@ public class HDTextureProcessor {
     public static BufferedImage resizeAnimationStrip(BufferedImage source, int targetWidth) {
         int originalWidth = source.getWidth();
         if (originalWidth <= 0) {
-            QuickSkin.LOGGER.warn("Source image for resize has zero or negative width.");
             return source; // Return original if invalid
         }
         if (originalWidth == targetWidth) {
@@ -400,7 +395,6 @@ public class HDTextureProcessor {
         // A single cape frame has a 2:1 aspect ratio.
         int originalFrameHeight = originalWidth / 2;
         if (originalFrameHeight <= 0 || source.getHeight() % originalFrameHeight != 0) {
-            QuickSkin.LOGGER.warn("Invalid cape dimensions for resizing: {}x{}", originalWidth, source.getHeight());
             return source; // Return original if dimensions are not a valid strip
         }
 
@@ -473,7 +467,6 @@ public class HDTextureProcessor {
             ImageIO.write(image, "PNG", baos);
             return baos.toByteArray();
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to convert image to PNG", e);
             return null;
         }
     }
@@ -485,7 +478,6 @@ public class HDTextureProcessor {
         try {
             return ImageIO.read(new ByteArrayInputStream(data));
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to convert PNG to image", e);
             return null;
         }
     }

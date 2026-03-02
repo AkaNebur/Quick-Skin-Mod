@@ -75,7 +75,6 @@ public class ReplayModHelper {
             }
         }
 
-        QuickSkin.LOGGER.warn("[ReplayCompat] Could not find a recorded player in replay");
         return null;
     }
 
@@ -183,9 +182,7 @@ public class ReplayModHelper {
                 }
             }
 
-            if (attempts >= maxAttempts && !hasSkinBeenApplied()) {
-                QuickSkin.LOGGER.warn("[ReplayCompat] Gave up waiting for recorded player after {} attempts", attempts);
-            }
+            
         }, "QuickSkin-ReplayPlayerWatcher");
 
         watcherThread.setDaemon(true);

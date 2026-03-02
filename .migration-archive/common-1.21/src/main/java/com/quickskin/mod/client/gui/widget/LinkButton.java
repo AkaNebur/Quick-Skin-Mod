@@ -61,7 +61,6 @@ public class LinkButton extends Button {
         Util.getPlatform().openUri(url);
 
         // Log the action
-        QuickSkin.LOGGER.info("Opening link: {}", url);
     }
 
     @Override

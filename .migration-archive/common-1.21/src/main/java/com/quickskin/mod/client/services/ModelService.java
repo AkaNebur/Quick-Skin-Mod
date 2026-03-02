@@ -31,7 +31,6 @@ public class ModelService implements IModelService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.info("ModelService initialized");
     }
 
     @Override
@@ -80,7 +79,6 @@ public class ModelService implements IModelService {
         try {
             return SkinModelDetector.detectSkinModel(skinData);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to detect model type from skin data", e);
             return "classic";
         }
     }
@@ -91,7 +89,6 @@ public class ModelService implements IModelService {
             return;
         }
         modelOverrides.put(playerId, model);
-        QuickSkin.LOGGER.debug("Model override set for player {}: {}", playerId, model);
     }
 
     @Override

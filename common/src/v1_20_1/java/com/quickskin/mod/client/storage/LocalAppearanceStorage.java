@@ -112,7 +112,6 @@ public class LocalAppearanceStorage {
             PreferencesData data = GSON.fromJson(json, PreferencesData.class);
             return data != null ? data : new PreferencesData();
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load appearance preferences", e);
             return new PreferencesData();
         }
     }
@@ -129,7 +128,6 @@ public class LocalAppearanceStorage {
             String json = GSON.toJson(data);
             Files.writeString(storageFile, json);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to save appearance preferences", e);
         }
     }
 }

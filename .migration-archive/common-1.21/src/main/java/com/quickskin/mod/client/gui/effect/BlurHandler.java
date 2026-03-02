@@ -29,7 +29,6 @@ public class BlurHandler {
                     mc.getMainRenderTarget(), BLUR_SHADER);
                 blurShader.resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to load blur shader", e);
                 return;
             }
         }

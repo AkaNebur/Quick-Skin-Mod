@@ -39,8 +39,6 @@ public class ClientAnimationMetadataCache {
         }
 
         metadataCache.put(hash, metadata);
-        QuickSkin.LOGGER.debug("Cached animation metadata for: {} ({} frames)",
-                hash, metadata.frameCount());
     }
 
     /**
@@ -58,7 +56,6 @@ public class ClientAnimationMetadataCache {
      */
     public void clear() {
         metadataCache.clear();
-        QuickSkin.LOGGER.debug("Cleared client animation metadata cache");
     }
 
     /**

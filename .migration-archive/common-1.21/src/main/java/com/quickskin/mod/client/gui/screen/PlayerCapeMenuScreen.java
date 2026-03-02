@@ -359,9 +359,6 @@ public class PlayerCapeMenuScreen extends Screen {
             }
         }
 
-        QuickSkin.LOGGER.debug("Loaded {} local capes (including None) + {} default capes",
-                localCapes.size(), knownCapes.size());
-
         // Pre-register animations for all animated capes (for thumbnail rendering)
         registerAllAnimations();
     }
@@ -391,7 +388,6 @@ public class PlayerCapeMenuScreen extends Screen {
             }
         }
 
-        QuickSkin.LOGGER.info("Pre-registered animations for all animated capes in the menu");
     }
 
     /**
@@ -404,7 +400,6 @@ public class PlayerCapeMenuScreen extends Screen {
         ClientConfig config = ClientConfig.getInstance();
         if (!config.activeCapeHash.isEmpty()) {
             activeCapeId = config.activeCapeHash;
-            QuickSkin.LOGGER.debug("Found active cape in config: {}", activeCapeId);
         }
 
         // Second priority: Check PlayerAppearanceService (in-game only)
@@ -415,13 +410,11 @@ public class PlayerCapeMenuScreen extends Screen {
 
             if (appearance != null && appearance.getCapeId() != null && !appearance.getCapeId().isEmpty()) {
                 activeCapeId = appearance.getCapeId();
-                QuickSkin.LOGGER.debug("Found active cape in PlayerAppearanceService: {}", activeCapeId);
             }
         }
 
         // No active cape found
         if (activeCapeId == null || activeCapeId.isEmpty()) {
-            QuickSkin.LOGGER.debug("No active cape found");
             this.selectedCape = null;
             return;
         }
@@ -435,7 +428,6 @@ public class PlayerCapeMenuScreen extends Screen {
                 if (capeLocation != null && playerWidget != null) {
                     playerWidget.setCape(capeLocation, cape.getCapeId());
                 }
-                QuickSkin.LOGGER.info("Initialized selected cape: {}", cape.getFriendlyName());
                 return;
             }
         }
@@ -448,12 +440,10 @@ public class PlayerCapeMenuScreen extends Screen {
                 if (capeLocation != null && playerWidget != null) {
                     playerWidget.setCape(capeLocation, cape.getCapeId());
                 }
-                QuickSkin.LOGGER.info("Initialized selected cape: {}", cape.getFriendlyName());
                 return;
             }
         }
 
-        QuickSkin.LOGGER.warn("Could not find cape with ID '{}' in capes lists", activeCapeId);
         this.selectedCape = null;
     }
 
@@ -507,8 +497,6 @@ public class PlayerCapeMenuScreen extends Screen {
             return;
         }
 
-        QuickSkin.LOGGER.info("Importing cape: {}", filePath);
-
         // Show processing message
         showImportMessage("Processing cape...", 0x55AAFF, 60);
 
@@ -520,7 +508,6 @@ public class PlayerCapeMenuScreen extends Screen {
                     Files.createDirectories(capesDir);
 
                     if (processDroppedFile(filePath, capesDir)) {
-                        QuickSkin.LOGGER.info("Successfully imported cape: {}", filePath.getFileName());
 
                         // Reload assets
                         LocalAssetManager.getInstance().reload();
@@ -531,11 +518,9 @@ public class PlayerCapeMenuScreen extends Screen {
 
                         showImportMessage("✓ Imported cape", 0x55FF55, 100);
                     } else {
-                        QuickSkin.LOGGER.error("Failed to import cape: {}", filePath);
                         showImportMessage("⚠ Invalid cape file (must be 2:1 ratio or animation strip)", 0xFF5555, 150);
                     }
                 } catch (IOException e) {
-                    QuickSkin.LOGGER.error("Failed to import cape", e);
                     showImportMessage("⚠ Error: " + e.getMessage(), 0xFF5555, 150);
                 }
             });
@@ -554,7 +539,6 @@ public class PlayerCapeMenuScreen extends Screen {
         ClientConfig config = ClientConfig.getInstance();
         config.activeCapeHash = "";
         config.save();
-        QuickSkin.LOGGER.info("Cleared cape from config");
 
         // Remove from PlayerAppearanceService
         // Note: We use applyCape with empty string instead of removeCape
@@ -563,16 +547,12 @@ public class PlayerCapeMenuScreen extends Screen {
             // In-game: use the real player's UUID
             PlayerAppearanceService.getInstance()
                     .applyCape(minecraft.player.getUUID(), "");
-            QuickSkin.LOGGER.info("Removed cape from in-game player");
         } else {
             // Title screen: use cached player UUID if available
             java.util.UUID dummyUUID = getDummyPlayerUUID();
             if (dummyUUID != null) {
                 PlayerAppearanceService.getInstance()
                         .applyCape(dummyUUID, "");
-                QuickSkin.LOGGER.info("Removed cape from cached player");
-            } else {
-                QuickSkin.LOGGER.info("Removed cape from preview only");
             }
         }
     }
@@ -621,7 +601,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
         Path capePath = capeEntry.getPath();
         if (capePath == null) {
-            QuickSkin.LOGGER.error("Cannot delete cape: path is null");
             return;
         }
 
@@ -640,10 +619,8 @@ public class PlayerCapeMenuScreen extends Screen {
                 removeCape();
             }
 
-            QuickSkin.LOGGER.info("Deleted cape: {}", capeEntry.getFriendlyName());
             showImportMessage("✓ Deleted cape", 0x55FF55, 100);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to delete cape", e);
             showImportMessage("⚠ Failed to delete cape", 0xFF5555, 100);
         }
     }
@@ -852,7 +829,6 @@ public class PlayerCapeMenuScreen extends Screen {
         int rows = (int) Math.ceil((double) capes.size() / capesPerRow);
         return currentY + rows * (capeDisplaySize + capePadding);
     }
-
 
     private void renderDropZone(GuiGraphics graphics, int x, int y, int width, int height, int mouseX, int mouseY) {
         boolean isHovering = isMouseOver(mouseX, mouseY, x, y, width, height) &&
@@ -1189,20 +1165,17 @@ public class PlayerCapeMenuScreen extends Screen {
         }
 
         // Always update preview widget (works both in-game and on title screen)
-        QuickSkin.LOGGER.info("[PlayerCapeMenuScreen] Setting cape in preview widget: {}", capeLocation);
         playerWidget.setCape(capeLocation, capeId);
 
         // Save to config for persistence
         config.activeCapeHash = capeId;
         config.save();
-        QuickSkin.LOGGER.info("Saved cape to config: {}", capeId);
 
         // Apply to PlayerAppearanceService
         if (minecraft != null && minecraft.player != null) {
             // In-game: use the real player's UUID
             PlayerAppearanceService.getInstance()
                     .applyCape(minecraft.player.getUUID(), capeId);
-            QuickSkin.LOGGER.info("Applied cape to in-game player: {}", cape.getFriendlyName());
         } else {
             // Title screen: use a dummy UUID that matches the cached player if it exists
             // This allows entity rendering to work on title screen with cached player
@@ -1210,9 +1183,6 @@ public class PlayerCapeMenuScreen extends Screen {
             if (dummyUUID != null) {
                 PlayerAppearanceService.getInstance()
                         .applyCape(dummyUUID, capeId);
-                QuickSkin.LOGGER.info("Applied cape to cached player for preview: {}", cape.getFriendlyName());
-            } else {
-                QuickSkin.LOGGER.info("Applied cape to preview only (no cached player): {}", cape.getFriendlyName());
             }
         }
 
@@ -1232,7 +1202,6 @@ public class PlayerCapeMenuScreen extends Screen {
             var cachedPlayer = (net.minecraft.world.entity.player.Player) cachedPlayerField.get(null);
             return cachedPlayer != null ? cachedPlayer.getUUID() : null;
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to get cached player UUID", e);
             return null;
         }
     }
@@ -1532,7 +1501,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
             // Step 2: Process the source atlas based on its format
             if (isStandardFormat) {
-                QuickSkin.LOGGER.info("Processing as a standard cape format ({} frames): {}", frameCount, sourceFile.getFileName());
 
                 // ### START FIX: Unify cape resizing ###
                 // The resizeAnimationStrip method works for both single-frame (static) and multi-frame (animated) capes.
@@ -1542,7 +1510,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
                 // Check if the elytra area is transparent
                 if (isElytraAreaTransparent(normalizedAtlas)) {
-                    QuickSkin.LOGGER.info("Detected transparent elytra. Compositing with vanilla elytra.");
                     java.awt.image.BufferedImage vanillaElytraBase = getVanillaElytraImage();
                     if (vanillaElytraBase == null) { // Fallback if vanilla elytra fails to load
                         finalAtlas = normalizedAtlas;
@@ -1566,7 +1533,6 @@ public class PlayerCapeMenuScreen extends Screen {
                     finalAtlas = normalizedAtlas;
                 }
             } else {
-                QuickSkin.LOGGER.info("Processing non-standard image as a custom static cape: {}", sourceFile.getFileName());
                 java.awt.image.BufferedImage vanillaElytraBase = getVanillaElytraImage();
                 if (vanillaElytraBase == null) {
                     vanillaElytraBase = new java.awt.image.BufferedImage(64, 32, java.awt.image.BufferedImage.TYPE_INT_ARGB);
@@ -1598,7 +1564,6 @@ public class PlayerCapeMenuScreen extends Screen {
                 if (hash != null) {
                     Path metadataPath = LocalAssetManager.getInstance().getCacheDirectory().resolve(hash + ".json");
                     Files.writeString(metadataPath, animationMetadata.toJson());
-                    QuickSkin.LOGGER.info("Saved animation metadata for imported GIF: {}", metadataPath);
                 }
             }
 
@@ -1607,7 +1572,6 @@ public class PlayerCapeMenuScreen extends Screen {
             return true;
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Error processing dropped file {}: {}", sourceFile.getFileName(), e.getMessage());
         }
         return false;
     }
@@ -1642,7 +1606,6 @@ public class PlayerCapeMenuScreen extends Screen {
             ResourceLocation VANILLA_ELYTRA_TEXTURE = ResourceLocation.fromNamespaceAndPath("minecraft", "textures/entity/elytra.png");
             var resourceOptional = Minecraft.getInstance().getResourceManager().getResource(VANILLA_ELYTRA_TEXTURE);
             if (resourceOptional.isEmpty()) {
-                QuickSkin.LOGGER.error("Vanilla elytra texture resource not found");
                 return null;
             }
             java.io.InputStream stream = resourceOptional.get().open();
@@ -1650,7 +1613,6 @@ public class PlayerCapeMenuScreen extends Screen {
             stream.close();
             return image;
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load vanilla elytra texture for custom cape creation", e);
             return null;
         }
     }
@@ -1729,7 +1691,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
                 if (animationId != null) {
                     animManager.unregisterAnimation(animationId);
-                    QuickSkin.LOGGER.debug("[PlayerCapeMenuScreen] Unregistered animation on close: {}", animationId);
                 }
             }
         }
@@ -1746,7 +1707,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
                 if (animationId != null) {
                     animManager.unregisterAnimation(animationId);
-                    QuickSkin.LOGGER.debug("[PlayerCapeMenuScreen] Unregistered animation on close: {}", animationId);
                 }
             }
         }
@@ -1830,7 +1790,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
             if (selectedCape != null) {
                 float speed = ClientConfig.getInstance().getCapeAnimationSpeed(selectedCape.getCapeId());
-                QuickSkin.LOGGER.info("Saved animation speed for {}: {}x", selectedCape.getCapeId(), speed);
             }
         }
 

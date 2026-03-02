@@ -17,7 +17,6 @@ public class ModNetworking {
      * Called from QuickSkin.init() on both client and server
      */
     public static void init() {
-        QuickSkin.LOGGER.info("Initializing networking...");
 
         // Register C2S (Client to Server) payload receivers
         NetworkManager.registerReceiver(
@@ -75,12 +74,9 @@ public class ModNetworking {
             NetworkManager.registerS2CPayloadType(SyncServerConfigPayload.TYPE, SyncServerConfigPayload.CODEC);
             NetworkManager.registerS2CPayloadType(CooldownUpdatePayload.TYPE, CooldownUpdatePayload.CODEC);
 
-            QuickSkin.LOGGER.info("Registered S2C payload types for dedicated server");
         } else {
             // Client environment
-            QuickSkin.LOGGER.debug("Client environment detected, skipping S2C payload type registration (handled by ClientNetworking)");
         }
 
-        QuickSkin.LOGGER.info("Networking initialized (C2S receivers registered)");
     }
 }

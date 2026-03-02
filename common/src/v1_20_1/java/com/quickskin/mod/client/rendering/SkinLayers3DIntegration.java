@@ -166,7 +166,6 @@ public class SkinLayers3DIntegration {
                 renderLegLayer(poseStack, vertices, light, overlay, model.rightLeg, meshes.rightLegMesh);
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("[3D Skin Layers] Error rendering layers: {}", e.getMessage());
         }
     }
 
@@ -217,7 +216,6 @@ public class SkinLayers3DIntegration {
                 return meshes;
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("[3D Skin Layers] Failed to create meshes: {}", e.getMessage());
             return null;
         }
         return null;

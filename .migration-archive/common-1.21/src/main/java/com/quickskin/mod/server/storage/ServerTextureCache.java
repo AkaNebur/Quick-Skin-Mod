@@ -39,9 +39,7 @@ public class ServerTextureCache {
 
         try {
             Files.createDirectories(storageDirectory);
-            QuickSkin.LOGGER.info("ServerTextureCache initialized at: {}", storageDirectory);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to create texture storage directory", e);
         }
 
         // Load existing textures from disk
@@ -60,7 +58,6 @@ public class ServerTextureCache {
         // Persist to disk asynchronously
         saveTextureToDisk(hash, textureData);
 
-        QuickSkin.LOGGER.debug("Stored texture: {} ({} bytes)", hash, textureData.length);
     }
 
     /**
@@ -76,7 +73,6 @@ public class ServerTextureCache {
      * Save all cached textures to disk
      */
     public void saveAll() {
-        QuickSkin.LOGGER.info("Saving {} textures to disk...", textureCache.size());
         int saved = 0;
 
         for (Map.Entry<String, byte[]> entry : textureCache.entrySet()) {
@@ -85,7 +81,6 @@ public class ServerTextureCache {
             }
         }
 
-        QuickSkin.LOGGER.info("Saved {} textures", saved);
     }
 
     /**
@@ -93,7 +88,6 @@ public class ServerTextureCache {
      */
     public void clear() {
         textureCache.clear();
-        QuickSkin.LOGGER.info("Cleared texture cache");
     }
 
     /**
@@ -109,7 +103,6 @@ public class ServerTextureCache {
             Files.write(file, data);
             return true;
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to save texture: {}", hash, e);
             return false;
         }
     }
@@ -131,13 +124,10 @@ public class ServerTextureCache {
                         byte[] data = Files.readAllBytes(path);
                         textureCache.put(hash, data);
                     } catch (IOException e) {
-                        QuickSkin.LOGGER.warn("Failed to load texture: {}", path, e);
                     }
                 });
 
-            QuickSkin.LOGGER.info("Loaded {} textures from disk", textureCache.size());
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load cached textures", e);
         }
     }
 }

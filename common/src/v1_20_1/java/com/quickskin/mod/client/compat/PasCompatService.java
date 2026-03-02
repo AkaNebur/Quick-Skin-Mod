@@ -110,12 +110,9 @@ public class PasCompatService {
                 // 4. Update the PAS screen state directly using accessor mixin
                 updatePasScreenState(pasScreen, metadata, shortName);
 
-            } else {
-                QuickSkin.LOGGER.error("[PAS Compat] Failed to load skin data for hash: {}", metadata.hash());
             }
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("[PAS Compat] Failed to copy skin to PAS directory", e);
         }
     }
 
@@ -131,8 +128,6 @@ public class PasCompatService {
         try {
             // Check if this is a PasConfiguratorScreen
             if (!pasScreen.getClass().getName().equals(PAS_CONFIGURATOR_CLASS)) {
-                QuickSkin.LOGGER.warn("[PAS Compat] Screen is not PasConfiguratorScreen: {}",
-                        pasScreen.getClass().getName());
                 return;
             }
 
@@ -164,7 +159,6 @@ public class PasCompatService {
             Minecraft.getInstance().setScreen(pasScreen);
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("[PAS Compat] Failed to update PAS screen state", e);
         }
     }
 

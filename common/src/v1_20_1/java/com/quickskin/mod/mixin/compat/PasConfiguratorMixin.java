@@ -76,9 +76,7 @@ public abstract class PasConfiguratorMixin extends Screen {
             this.addRenderableWidget(quickskin$skinButton);
 
         } catch (NoSuchFieldException | IllegalAccessException e) {
-            QuickSkin.LOGGER.error("[PAS Compat] Failed to add QuickSkin button: {}", e.getMessage());
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("[PAS Compat] Unexpected error during initialization", e);
         }
     }
 

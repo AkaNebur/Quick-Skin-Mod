@@ -84,7 +84,6 @@ public class TextureAlphaDetector {
                     transparencyCache.put(textureLocation, hasAlpha);
                 });
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Error during async transparency analysis for {}", textureLocation, e);
                 // On error, cache as transparent (safe default)
                 Minecraft mc = Minecraft.getInstance();
                 mc.execute(() -> transparencyCache.put(textureLocation, true));
@@ -124,7 +123,6 @@ public class TextureAlphaDetector {
         } catch (IOException e) {
             return false;
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Unexpected error checking transparency for texture {}", textureLocation, e);
             return false;
         }
     }

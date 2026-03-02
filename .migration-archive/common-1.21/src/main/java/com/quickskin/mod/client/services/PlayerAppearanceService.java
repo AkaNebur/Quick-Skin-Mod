@@ -47,18 +47,13 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
     public static void init() {
         getInstance();
-        QuickSkin.LOGGER.info("PlayerAppearanceService initialized");
     }
 
     @Override
     public void applyLook(UUID playerId, @Nullable String skinId, @Nullable String capeId, @Nullable String model) {
         if (playerId == null) {
-            QuickSkin.LOGGER.error("Cannot apply look: playerId is null");
             return;
         }
-
-        QuickSkin.LOGGER.info("Applying look to player {}: skin={}, cape={}, model={}",
-                playerId, skinId, capeId, model);
 
         // Get or create appearance
         PlayerAppearance appearance = repository.getAppearance(playerId);
@@ -124,23 +119,16 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                         AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
                         BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
                         if (metadata != null && atlasImage != null) {
-                            QuickSkin.LOGGER.info("[PlayerAppearanceService] Registering local cape animation {} for player {}",
-                                animationId, playerId);
                             AnimatedTextureManager.getInstance().registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
-                        } else {
-                            QuickSkin.LOGGER.warn("[PlayerAppearanceService] Failed to register local cape animation {} - metadata={}, atlasImage={}",
-                                animationId, metadata != null, atlasImage != null);
                         }
                     } else if (capeId.startsWith("known:")) {
                         // Register known cape animation
                         String knownId = capeId.substring("known:".length());
                         capeService.loadKnownCape(knownId);
-                        QuickSkin.LOGGER.info("[PlayerAppearanceService] Registered known cape animation for player {}: {}", playerId, knownId);
                     }
                 }
             }
         }
-
 
         // Refresh player renderer
         refreshPlayerRenderer(playerId);
@@ -161,7 +149,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         com.quickskin.mod.common.event.InternalEventBus.getInstance().post(
                 new com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent(playerId, appearance)
         );
-        QuickSkin.LOGGER.debug("Fired PlayerAppearanceUpdateEvent for {} (type: {})", playerId, updateType);
 
         // Sync to server if this is the local player
         Minecraft mc = Minecraft.getInstance();
@@ -205,7 +192,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 // Always refresh SkinLayers3D compatibility
                 refreshSkinLayers3D(player);
 
-                QuickSkin.LOGGER.debug("Refreshed renderer for player: {}", playerId);
             }
         }
     }
@@ -216,11 +202,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             java.lang.reflect.Method refreshMethod = skinLayersClass.getDeclaredMethod("refreshPlayer", net.minecraft.world.entity.player.Player.class);
             refreshMethod.setAccessible(true);
             refreshMethod.invoke(null, player);
-            QuickSkin.LOGGER.debug("Refreshed SkinLayers3D for player: {}", player.getUUID());
         } catch (ClassNotFoundException e) {
             // Mod not installed
         } catch (Exception e) {
-            QuickSkin.LOGGER.debug("Could not refresh SkinLayers3D (mod may have updated): {}", e.getMessage());
         }
     }
 
@@ -266,7 +250,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         }
 
         // SLOW PATH - LOG THIS!
-        QuickSkin.LOGGER.warn("CACHE MISS for player {} skin! This should not happen frequently!", playerId);
 
         // If not cached, try to resolve it now.
         // This handles the race condition where SYNC_APPEARANCE arrives before SEND_TEXTURE
@@ -338,8 +321,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     public void reloadSkinsForTransparencyChange() {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null) return;
-
-        QuickSkin.LOGGER.info("Reloading player skins for transparency change...");
 
         // Clear texture alpha detection cache since transparency settings changed
         com.quickskin.mod.common.util.TextureAlphaDetector.clearCache();

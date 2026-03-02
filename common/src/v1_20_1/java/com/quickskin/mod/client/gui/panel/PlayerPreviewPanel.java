@@ -308,8 +308,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
         // Notify callback to apply to actual player
         if (modelTypeChangeCallback != null) {
             modelTypeChangeCallback.accept(modelType);
-        } else {
-            com.quickskin.mod.QuickSkin.LOGGER.warn("[PlayerPreviewPanel] Callback is NULL! Cannot save model preference!");
         }
 
         updateModelButtonStates();

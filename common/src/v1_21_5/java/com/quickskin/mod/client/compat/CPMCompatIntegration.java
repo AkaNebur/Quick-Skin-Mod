@@ -47,7 +47,6 @@ public class CPMCompatIntegration {
         CHECKED = true;
 
         boolean modLoaded = PlatformHelper.isModLoaded("cpm");
-        QuickSkin.LOGGER.info("[CPM Compat] isModLoaded('cpm') = {}", modLoaded);
 
         if (modLoaded) {
             MOD_AVAILABLE = true;
@@ -58,11 +57,9 @@ public class CPMCompatIntegration {
         // Fallback class-based detection
         try {
             Class.forName("com.tom.cpm.client.CustomPlayerModelsClient");
-            QuickSkin.LOGGER.info("[CPM Compat] Detected CPM via class fallback");
             MOD_AVAILABLE = true;
             initializeReflection();
         } catch (ClassNotFoundException e) {
-            QuickSkin.LOGGER.info("[CPM Compat] CPM not detected");
         }
     }
 
@@ -74,7 +71,6 @@ public class CPMCompatIntegration {
             Object clientInstance = instanceField.get(null);
             if (clientInstance == null) {
                 INIT_FAILED = true;
-                QuickSkin.LOGGER.warn("[CPM Compat] INSTANCE field is null");
                 return;
             }
 
@@ -91,14 +87,12 @@ public class CPMCompatIntegration {
             }
             if (managerField == null) {
                 INIT_FAILED = true;
-                QuickSkin.LOGGER.warn("[CPM Compat] Could not find 'manager' field in class hierarchy");
                 return;
             }
             managerField.setAccessible(true);
             managerInstance = managerField.get(clientInstance);
             if (managerInstance == null) {
                 INIT_FAILED = true;
-                QuickSkin.LOGGER.warn("[CPM Compat] manager instance is null");
                 return;
             }
 
@@ -114,13 +108,10 @@ public class CPMCompatIntegration {
                     clearCacheMethod = loaderInstance.getClass().getMethod("clearCache");
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.warn("[CPM Compat] Could not access ModelDefinitionLoader: {}", e.toString());
             }
 
-            QuickSkin.LOGGER.info("[CPM Compat] Successfully initialized reflection");
         } catch (Exception e) {
             INIT_FAILED = true;
-            QuickSkin.LOGGER.warn("[CPM Compat] Failed to initialize reflection: {}", e.toString());
         }
     }
 
@@ -162,9 +153,7 @@ public class CPMCompatIntegration {
 
         try {
             clearCacheMethod.invoke(loaderInstance);
-            QuickSkin.LOGGER.info("[CPM Compat] Cleared CPM model cache after skin change");
         } catch (Exception e) {
-            QuickSkin.LOGGER.warn("[CPM Compat] Failed to clear CPM cache: {}", e.toString());
         }
     }
 

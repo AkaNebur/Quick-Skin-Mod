@@ -243,15 +243,11 @@ public class SkinManagerMixin {
             Minecraft.getInstance().getTextureManager().register(location, (AbstractTexture) httpTexture);
             quickskin$httpTextureCache.put(hash, location);
 
-            QuickSkin.LOGGER.info("[CPM Compat] Registered HttpTexture bridge for skin hash={} file={}", hash, skinFile.getAbsolutePath());
-
             return location;
         } catch (ClassNotFoundException e) {
             // HttpTexture class doesn't exist in this MC version, fall back to DynamicTexture
-            QuickSkin.LOGGER.debug("[CPM Compat] HttpTexture class not found, falling back to DynamicTexture");
             return service.getSkinLocation(uuid);
         } catch (Exception e) {
-            QuickSkin.LOGGER.warn("[CPM Compat] Failed to create HttpTexture bridge, falling back to DynamicTexture", e);
             return service.getSkinLocation(uuid);
         }
     }

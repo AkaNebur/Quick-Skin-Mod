@@ -63,7 +63,6 @@ public class NetworkTextureCache {
      */
     public void storeTexture(String hash, @Nullable String textureType, byte[] textureData) {
         if (hash == null || textureData == null) {
-            QuickSkin.LOGGER.warn("Cannot store null texture data");
             return;
         }
 
@@ -95,16 +94,13 @@ public class NetworkTextureCache {
                     // Convert back to PNG bytes
                     processedData = com.quickskin.mod.common.util.HDTextureProcessor.imageToPng(image);
 
-                    QuickSkin.LOGGER.debug("Removed transparency from network skin texture: {}", hash);
                 }
             } catch (IOException e) {
-                QuickSkin.LOGGER.error("Failed to process transparency for network texture: {}", hash, e);
                 // Fall through to store original texture data
             }
         }
 
         textureDataCache.put(hash, processedData);
-        QuickSkin.LOGGER.debug("Cached network texture: {} ({} bytes, type: {})", hash, processedData.length, textureType);
     }
 
     /**
@@ -132,7 +128,6 @@ public class NetworkTextureCache {
         // Get texture data
         byte[] textureData = textureDataCache.get(hash);
         if (textureData == null) {
-            QuickSkin.LOGGER.warn("Network texture not found in cache: {}", hash);
             return null;
         }
 
@@ -140,7 +135,6 @@ public class NetworkTextureCache {
         try {
             BufferedImage bufferedImage = ImageIO.read(new ByteArrayInputStream(textureData));
             if (bufferedImage == null) {
-                QuickSkin.LOGGER.error("Failed to decode network texture: {}", hash);
                 return null;
             }
 
@@ -161,11 +155,9 @@ public class NetworkTextureCache {
             // Cache the location
             textureRegistry.put(hash, location);
 
-            QuickSkin.LOGGER.info("Registered network texture: {}", hash);
             return location;
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to register network texture: {}", hash, e);
             return null;
         }
     }
@@ -188,7 +180,6 @@ public class NetworkTextureCache {
             try {
                 Minecraft.getInstance().getTextureManager().release(location);
             } catch (Exception e) {
-                QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
             }
         }
 
@@ -196,7 +187,6 @@ public class NetworkTextureCache {
         textureDataCache.clear();
         textureRegistry.clear();
         textureTypeMap.clear();
-        QuickSkin.LOGGER.info("Cleared network texture cache");
     }
 
     /**
@@ -222,12 +212,10 @@ public class NetworkTextureCache {
                 try {
                     Minecraft.getInstance().getTextureManager().release(location);
                 } catch (Exception e) {
-                    QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
                 }
             }
         }
 
-        QuickSkin.LOGGER.info("Cleared {} network skin texture registrations (keeping raw data). Capes remain cached.", hashesToClear.size());
     }
 
     /**
@@ -244,8 +232,6 @@ public class NetworkTextureCache {
             }
         }
 
-        QuickSkin.LOGGER.info("Reprocessing {} network skins with current transparency settings", skinHashes.size());
-
         // Re-store each skin with current settings (this will reprocess transparency from original data)
         for (String hash : skinHashes) {
             byte[] originalData = originalTextureData.get(hash);
@@ -257,7 +243,6 @@ public class NetworkTextureCache {
                     try {
                         Minecraft.getInstance().getTextureManager().release(oldLocation);
                     } catch (Exception e) {
-                        QuickSkin.LOGGER.debug("Failed to release texture {}: {}", oldLocation, e.getMessage());
                     }
                 }
 
@@ -266,7 +251,6 @@ public class NetworkTextureCache {
             }
         }
 
-        QuickSkin.LOGGER.info("Finished reprocessing network skins");
     }
 
     /**

@@ -49,7 +49,6 @@ public class DebugOffsetManager {
             configPath = configDir.resolve(CONFIG_FILE);
             load();
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to initialize DebugOffsetManager", e);
         }
     }
 
@@ -58,7 +57,6 @@ public class DebugOffsetManager {
      */
     public static void load() {
         if (!Files.exists(configPath)) {
-            QuickSkin.LOGGER.info("Debug offset config not found, using defaults");
             return;
         }
 
@@ -76,11 +74,7 @@ public class DebugOffsetManager {
             skinMenuOffsetY = Integer.parseInt(props.getProperty("skinMenuOffsetY", String.valueOf(DEFAULT_SKIN_MENU_OFFSET_Y)));
             debugMode = Boolean.parseBoolean(props.getProperty("debugMode", "false"));
 
-            QuickSkin.LOGGER.info("Loaded debug offsets - Title: ({}, {}), WorldSel: ({}, {}), Pause: ({}, {}), SkinMenu: ({}, {}), Debug: {}",
-                titleScreenOffsetX, titleScreenOffsetY, worldSelectionOffsetX, worldSelectionOffsetY,
-                pauseScreenOffsetX, pauseScreenOffsetY, skinMenuOffsetX, skinMenuOffsetY, debugMode);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to load debug offsets", e);
         }
     }
 
@@ -101,11 +95,7 @@ public class DebugOffsetManager {
 
         try (OutputStream out = Files.newOutputStream(configPath)) {
             props.store(out, "QuickSkin Debug Offsets - Hold SHIFT and drag the player model to adjust positioning");
-            QuickSkin.LOGGER.info("Saved debug offsets - Title: ({}, {}), WorldSel: ({}, {}), Pause: ({}, {}), SkinMenu: ({}, {}), Debug: {}",
-                titleScreenOffsetX, titleScreenOffsetY, worldSelectionOffsetX, worldSelectionOffsetY,
-                pauseScreenOffsetX, pauseScreenOffsetY, skinMenuOffsetX, skinMenuOffsetY, debugMode);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to save debug offsets", e);
         }
     }
 
@@ -141,6 +131,5 @@ public class DebugOffsetManager {
     public static void setDebugMode(boolean enabled) {
         debugMode = enabled;
         save();
-        QuickSkin.LOGGER.info("Debug mode {}", enabled ? "ENABLED - Hold SHIFT and drag player models to reposition" : "DISABLED");
     }
 }

@@ -18,7 +18,6 @@ public class ClientNetworking {
      * Called from QuickSkinClient.init() only on client
      */
     public static void init() {
-        QuickSkin.LOGGER.info("Initializing client networking...");
 
         // Register S2C (Server to Client) payload receivers
         NetworkManager.registerReceiver(
@@ -63,6 +62,5 @@ public class ClientNetworking {
             ClientNetworkHandler::handleCooldownUpdate
         );
 
-        QuickSkin.LOGGER.info("Client networking initialized (client-side receivers ready)");
     }
 }

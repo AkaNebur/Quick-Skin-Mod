@@ -80,7 +80,6 @@ public class LocalAssetManager {
      * Initialize asset manager and discover assets
      */
     public void init() {
-        QuickSkin.LOGGER.info("Initializing LocalAssetManager...");
 
         // Get directories from platform helper
         skinsDirectory = PlatformHelper.getSkinsDirectory();
@@ -93,36 +92,30 @@ public class LocalAssetManager {
             Files.createDirectories(capesDirectory);
             Files.createDirectories(cacheDirectory);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to create asset directories", e);
         }
 
         // Load skin preferences
         preferencesFile = PlatformHelper.getConfigDirectory().resolve("skin-preferences.json");
         skinPreferences = SkinPreferences.load(preferencesFile);
-        QuickSkin.LOGGER.info("Loaded {} skin preferences", skinPreferences.size());
 
         // Discover assets
         discoverLocalAssets();
 
-        QuickSkin.LOGGER.info("LocalAssetManager initialized with {} assets", metadataCache.size());
     }
 
     /**
      * Scan filesystem for skins and capes, build metadata cache
      */
     public void discoverLocalAssets() {
-        QuickSkin.LOGGER.info("Discovering local assets...");
 
         metadataCache.clear();
         hashToSourcePath.clear();
 
         // Scan skins directory
         int skinsFound = scanDirectory(skinsDirectory, "skin");
-        QuickSkin.LOGGER.info("Found {} skins", skinsFound);
 
         // Scan capes directory
         int capesFound = scanDirectory(capesDirectory, "cape");
-        QuickSkin.LOGGER.info("Found {} capes", capesFound);
     }
 
     /**
@@ -160,7 +153,6 @@ public class LocalAssetManager {
                 }
             }
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to scan directory: {}", directory, e);
         }
 
         return count;
@@ -193,7 +185,6 @@ public class LocalAssetManager {
                             if (width > 0 && frameHeight > 0 && height > frameHeight && height % frameHeight == 0) {
                                 int frameCount = height / frameHeight;
                                 if (frameCount > 1) {
-                                    QuickSkin.LOGGER.info("Detected old animated cape strip without metadata: {}. Generating default timing.", path.getFileName());
 
                                     List<AnimationMetadata.FrameData> frames = new ArrayList<>();
                                     for (int i = 0; i < frameCount; i++) {
@@ -203,12 +194,10 @@ public class LocalAssetManager {
                                     AnimationMetadata generatedMeta = new AnimationMetadata(frames, frameCount);
 
                                     Files.writeString(metadataPathForCheck, generatedMeta.toJson());
-                                    QuickSkin.LOGGER.info("Saved default metadata for old cape: {}", hash);
                                 }
                             }
                         }
                     } catch (Exception e) {
-                        QuickSkin.LOGGER.warn("Could not check/generate missing metadata for cape '{}': {}", path.getFileName(), e.getMessage());
                     }
                 }
             }
@@ -221,14 +210,12 @@ public class LocalAssetManager {
                     String json = Files.readString(metadataPath);
                     animMeta = AnimationMetadata.fromJson(json);
                 } catch (IOException e) {
-                    QuickSkin.LOGGER.warn("Found metadata file for {} but failed to read it.", hash, e);
                 }
             }
 
             // Read image to get dimensions
             BufferedImage image = ImageIO.read(path.toFile());
             if (image == null) {
-                QuickSkin.LOGGER.warn("Failed to read image: {}", path);
                 return null;
             }
 
@@ -247,7 +234,6 @@ public class LocalAssetManager {
                 int frameHeight = (frameCount > 0) ? height / frameCount : height;
                 resolution = SkinResolution.fromDimensions(width, frameHeight);
                 if (resolution == null) {
-                    QuickSkin.LOGGER.warn("Invalid frame dimensions {}x{} for animated asset: {}", width, frameHeight, path);
                     return null;
                 }
             } else {
@@ -255,7 +241,6 @@ public class LocalAssetManager {
                 if ("skin".equals(type)) {
                     resolution = SkinResolution.fromDimensions(width, height);
                     if (resolution == null) {
-                        QuickSkin.LOGGER.warn("Invalid skin dimensions {}x{}: {}", width, height, path);
                         return null;
                     }
                     skinModel = SkinModelDetector.detectSkinModel(image);
@@ -266,16 +251,13 @@ public class LocalAssetManager {
                         isAnimated = frameCount > 1;
                         resolution = SkinResolution.fromDimensions(width, frameHeight);
                         if (resolution == null) {
-                            QuickSkin.LOGGER.warn("Invalid cape frame dimensions {}x{}: {}", width, frameHeight, path);
                             return null;
                         }
                     } else {
-                        QuickSkin.LOGGER.warn("Invalid cape dimensions {}x{}: {}", width, height, path);
                         return null;
                     }
                 }
             }
-
 
             // Get friendly name (filename without extension)
             String friendlyName = path.getFileName().toString();
@@ -299,7 +281,6 @@ public class LocalAssetManager {
             }
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to process PNG asset: {}", path, e);
             return null;
         }
     }
@@ -311,7 +292,6 @@ public class LocalAssetManager {
     private AssetMetadata processGifAsset(Path path) {
         com.quickskin.mod.common.util.StbGifLoader.GifLoadResult result = null;
         try {
-            QuickSkin.LOGGER.info("Processing GIF cape: {}", path);
 
             // Load GIF using STB Image
             try (var inputStream = Files.newInputStream(path)) {
@@ -369,8 +349,6 @@ public class LocalAssetManager {
                 resolution = SkinResolution.STANDARD;
             }
 
-            QuickSkin.LOGGER.info("GIF cape processed with STBImage: {} frames, hash: {}", frameCount, hash);
-
             // Create metadata for animated cape
             return AssetMetadata.forAnimatedCape(
                     hash,
@@ -382,7 +360,6 @@ public class LocalAssetManager {
             );
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to process GIF asset: {}", path, e);
             return null;
         } finally {
             // Clean up frames
@@ -409,7 +386,6 @@ public class LocalAssetManager {
                 String json = Files.readString(metadataPath);
                 return AnimationMetadata.fromJson(json);
             } catch (IOException e) {
-                QuickSkin.LOGGER.error("Failed to read animation metadata for {}", hash, e);
             }
         }
         return null;
@@ -459,7 +435,6 @@ public class LocalAssetManager {
     public byte[] loadTexture(String hash, TextureQuality quality) {
         Path sourcePath = hashToSourcePath.get(hash);
         if (sourcePath == null || !Files.exists(sourcePath)) {
-            QuickSkin.LOGGER.debug("Asset not found for hash: {}", hash);
             return null;
         }
 
@@ -497,7 +472,6 @@ public class LocalAssetManager {
             };
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load texture: {}", hash, e);
             return null;
         }
     }
@@ -527,9 +501,7 @@ public class LocalAssetManager {
                 savePreferences();
             }
 
-            QuickSkin.LOGGER.info("Deleted asset: {}", path);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to delete asset: {}", path, e);
         }
     }
 
@@ -618,11 +590,9 @@ public class LocalAssetManager {
             metadataCache.put(hash, updatedMetadata);
             hashToSourcePath.put(hash, newPath);
 
-            QuickSkin.LOGGER.info("Renamed asset from '{}' to '{}'", currentPath, newPath);
             return RenameResult.SUCCESS;
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to rename asset: {}", currentPath, e);
             return RenameResult.IO_ERROR;
         }
     }
@@ -631,7 +601,6 @@ public class LocalAssetManager {
      * Clear all caches and rediscover assets
      */
     public void reload() {
-        QuickSkin.LOGGER.info("Reloading local assets...");
         discoverLocalAssets();
     }
 
@@ -640,7 +609,6 @@ public class LocalAssetManager {
      * Call this when transparency settings change
      */
     public void clearTextureCache() {
-        QuickSkin.LOGGER.info("Clearing texture cache (will re-register with current settings)...");
 
         // Unregister all textures from Minecraft's texture manager
         Minecraft mc = Minecraft.getInstance();
@@ -649,7 +617,6 @@ public class LocalAssetManager {
                 try {
                     mc.getTextureManager().release(location);
                 } catch (Exception e) {
-                    QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
                 }
             }
         }
@@ -657,7 +624,6 @@ public class LocalAssetManager {
         // Clear our cache
         textureRegistry.clear();
 
-        QuickSkin.LOGGER.info("Texture cache cleared. Textures will reload on next use.");
     }
 
     /**
@@ -665,7 +631,6 @@ public class LocalAssetManager {
      * Call this when skin transparency settings change
      */
     public void clearSkinTextureCache() {
-        QuickSkin.LOGGER.info("Clearing skin texture cache (will re-register with current settings)...");
 
         Minecraft mc = Minecraft.getInstance();
         List<String> hashesToClear = new ArrayList<>();
@@ -686,14 +651,12 @@ public class LocalAssetManager {
                     try {
                         mc.getTextureManager().release(location);
                     } catch (Exception e) {
-                        QuickSkin.LOGGER.debug("Failed to release texture {}: {}", location, e.getMessage());
                     }
                 }
                 textureRegistry.remove(hash);
             }
         }
 
-        QuickSkin.LOGGER.info("Cleared {} skin textures. Capes remain cached.", hashesToClear.size());
     }
 
     /**
@@ -738,11 +701,9 @@ public class LocalAssetManager {
             qualityMap = textureRegistry.computeIfAbsent(hash, k -> new ConcurrentHashMap<>());
             qualityMap.put(quality, location);
 
-            QuickSkin.LOGGER.debug("Registered texture: {} ({})", hash, quality);
             return location;
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to register texture: {}", hash, e);
             return null;
         }
     }
@@ -762,7 +723,6 @@ public class LocalAssetManager {
         try {
             return ImageIO.read(sourcePath.toFile());
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to read source image for hash {}: {}", hash, e.getMessage());
             return null;
         }
     }
@@ -820,11 +780,9 @@ public class LocalAssetManager {
      */
     public String getSkinModelPreference(String hash) {
         if (skinPreferences == null) {
-            QuickSkin.LOGGER.warn("Cannot get model preference - skinPreferences is null, returning default 'auto'");
             return "auto";
         }
         String pref = skinPreferences.getModelType(hash);
-        QuickSkin.LOGGER.debug("Getting model preference for skin {}: {}", hash, pref);
         return pref;
     }
 
@@ -835,12 +793,8 @@ public class LocalAssetManager {
      */
     public void setSkinModelPreference(String hash, String modelType) {
         if (skinPreferences != null) {
-            QuickSkin.LOGGER.info("Setting model preference for skin {}: {}", hash, modelType);
             skinPreferences.setModelType(hash, modelType);
             savePreferences();
-            QuickSkin.LOGGER.info("Saved preferences to: {}", preferencesFile);
-        } else {
-            QuickSkin.LOGGER.warn("Cannot set model preference - skinPreferences is null");
         }
     }
 

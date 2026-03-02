@@ -82,7 +82,6 @@ public class PlayerSkinMenuScreen extends Screen {
     // Error toasts
     private final List<ErrorToast> errorToasts = new ArrayList<>();
 
-
     // Mojang search widgets
     private EditBox usernameSearchField;
     private Button searchButton;
@@ -347,7 +346,6 @@ public class PlayerSkinMenuScreen extends Screen {
                 // Don't trigger callback during resize - we'll set model type manually
                 skinListPanel.setSelected(playerOwnSkin, !isResizing);
                 selectedSkin = playerOwnSkin;
-                QuickSkin.LOGGER.info("Auto-selected player's own skin in menu");
             }
         }
 
@@ -405,7 +403,6 @@ public class PlayerSkinMenuScreen extends Screen {
             if (knownCape != null) {
                 return knownCape.getTextureLocation();
             } else {
-                QuickSkin.LOGGER.warn("Unknown cape ID: {}", id);
                 return null;
             }
         }
@@ -434,7 +431,6 @@ public class PlayerSkinMenuScreen extends Screen {
 
                 if (atlasImage != null) {
                     // Register animation
-                    QuickSkin.LOGGER.info("Registering animation for cape in skin menu: {}", animationId);
                     com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
                             .registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
                 }
@@ -640,7 +636,6 @@ public class PlayerSkinMenuScreen extends Screen {
         }
     }
 
-
     @Override
     public void onClose() {
         // Mark that we're truly closing (not just opening a modal)
@@ -663,7 +658,6 @@ public class PlayerSkinMenuScreen extends Screen {
         if (guiScaleForced) {
             guiScaleForced = false;
             GuiScaleManager.restoreOriginalGuiScale();
-            QuickSkin.LOGGER.info("PlayerSkinMenuScreen - GUI scale restored");
         }
     }
 
@@ -746,7 +740,6 @@ public class PlayerSkinMenuScreen extends Screen {
 
     @Override
     public void onFilesDrop(List<Path> files) {
-        QuickSkin.LOGGER.info("Files dropped: {}", files.size());
 
         // Filter for supported image files (PNG, WebP, JPG)
         List<Path> imageFiles = files.stream()
@@ -758,12 +751,9 @@ public class PlayerSkinMenuScreen extends Screen {
                 .toList();
 
         if (imageFiles.isEmpty()) {
-            QuickSkin.LOGGER.warn("No supported image files in drop (PNG, WebP, or JPG)");
             showError(Component.literal("Unsupported file format. Use PNG, WebP, or JPG."));
             return;
         }
-
-        QuickSkin.LOGGER.info("Processing {} image files", imageFiles.size());
 
         // Import all image files
         if (this.minecraft != null) {
@@ -771,7 +761,6 @@ public class PlayerSkinMenuScreen extends Screen {
                 List<AssetMetadata> imported = SkinImporter.importSkins(imageFiles.toArray(new Path[0]));
 
                 if (!imported.isEmpty()) {
-                    QuickSkin.LOGGER.info("Successfully imported {} skins", imported.size());
 
                     // Reload the skin list
                     refreshSkinList();
@@ -795,7 +784,6 @@ public class PlayerSkinMenuScreen extends Screen {
 
             // Get the model type preference for this specific skin
             String modelType = LocalAssetManager.getInstance().getSkinModelPreference(metadata.hash());
-            QuickSkin.LOGGER.info("onSkinSelected: Loading model preference for skin {}: {}", metadata.friendlyName(), modelType);
 
             // Update the model buttons to reflect this skin's preference
             playerPreviewPanel.setCurrentModelType(modelType);
@@ -816,7 +804,6 @@ public class PlayerSkinMenuScreen extends Screen {
                 // This makes the selection persist on the title screen.
                 config.activeSkinHash = metadata.hash();
                 config.save();
-                QuickSkin.LOGGER.info("Set active skin in config: {}", metadata.friendlyName());
 
                 // If in-game, apply the skin to the actual player entity.
                 if (this.minecraft != null && this.minecraft.player != null) {
@@ -827,8 +814,6 @@ public class PlayerSkinMenuScreen extends Screen {
 
                     com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                             .applySkin(this.minecraft.player.getUUID(), skinId, modelForService);
-                    QuickSkin.LOGGER.info("Applied skin to player: {} with model type: {}",
-                            metadata.friendlyName(), modelForService);
                 }
             }
         }
@@ -844,8 +829,6 @@ public class PlayerSkinMenuScreen extends Screen {
         if (selectedEntry != null) {
             AssetMetadata metadata = selectedEntry.getMetadata();
             String skinId = "local_skin:" + metadata.hash();
-
-            QuickSkin.LOGGER.info("Changed model type to: {} for skin: {}", newModelType, metadata.friendlyName());
 
             // Save the model type preference for THIS SPECIFIC SKIN
             LocalAssetManager.getInstance().setSkinModelPreference(metadata.hash(), newModelType);
@@ -888,14 +871,11 @@ public class PlayerSkinMenuScreen extends Screen {
             return;
         }
 
-        QuickSkin.LOGGER.info("Importing skin: {}", filePath);
-
         // Import on main thread (Minecraft.getInstance().execute runs on main thread)
         if (this.minecraft != null) {
             this.minecraft.execute(() -> {
                 AssetMetadata metadata = SkinImporter.importSkin(filePath);
                 if (metadata != null) {
-                    QuickSkin.LOGGER.info("Successfully imported skin: {}", metadata.friendlyName());
 
                     // Reload the skin list
                     refreshSkinList();
@@ -905,7 +885,6 @@ public class PlayerSkinMenuScreen extends Screen {
                         skinListPanel.setSelected(metadata);
                     }
                 } else {
-                    QuickSkin.LOGGER.error("Failed to import skin: {}", filePath);
                     // Show error message to user
                     showError(Component.literal("Failed to import skin"));
                 }
@@ -1005,7 +984,6 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Prevent deletion of the player's own skin
         if (config.enablePlayerOwnSkinSystem && metadata.hash().equals(config.playerOwnSkinHash)) {
-            QuickSkin.LOGGER.warn("Cannot delete player's own skin: {}", metadata.friendlyName());
             showError(Component.literal("Cannot delete your own skin!"));
             return;
         }
@@ -1031,13 +1009,10 @@ public class PlayerSkinMenuScreen extends Screen {
                 AssetMetadata playerOwnSkin = LocalAssetManager.getInstance().getMetadata(config.playerOwnSkinHash);
                 if (playerOwnSkin != null) {
                     skinListPanel.setSelected(playerOwnSkin, true);
-                    QuickSkin.LOGGER.info("Auto-selected player's own skin after deletion");
                 }
             }
 
-            QuickSkin.LOGGER.info("Deleted skin: {}", metadata.friendlyName());
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to delete skin: {}", metadata.friendlyName(), e);
             showError(Component.literal("Failed to delete skin: " + e.getMessage()));
         }
     }
@@ -1051,7 +1026,6 @@ public class PlayerSkinMenuScreen extends Screen {
 
         switch (result) {
             case SUCCESS:
-                QuickSkin.LOGGER.info("Successfully renamed skin to: {}", newName);
 
                 // Play success sound
                 if (minecraft != null) {
@@ -1075,22 +1049,18 @@ public class PlayerSkinMenuScreen extends Screen {
                 break;
 
             case NAME_TAKEN:
-                QuickSkin.LOGGER.warn("Rename failed: Name already exists");
                 showError(Component.literal("Error: A skin file with that name already exists."));
                 break;
 
             case INVALID_NAME:
-                QuickSkin.LOGGER.warn("Rename failed: Invalid name");
                 showError(Component.literal("Error: The name contains invalid characters or is empty."));
                 break;
 
             case IO_ERROR:
-                QuickSkin.LOGGER.error("Rename failed: IO error");
                 showError(Component.literal("Error: Could not rename the file. See logs."));
                 break;
 
             case NOT_FOUND:
-                QuickSkin.LOGGER.error("Rename failed: File not found");
                 showError(Component.literal("Error: Could not find the original file."));
                 break;
         }
@@ -1123,8 +1093,6 @@ public class PlayerSkinMenuScreen extends Screen {
         searchButton.active = false;
         searchButton.setMessage(Component.literal("Searching..."));
 
-        QuickSkin.LOGGER.info("Searching for Mojang skin: {}", username);
-
         // Fetch skin asynchronously
         MojangApiService.getInstance().fetchSkinByUsername(username)
                 .thenAccept(skinData -> {
@@ -1141,7 +1109,6 @@ public class PlayerSkinMenuScreen extends Screen {
                     }
                 })
                 .exceptionally(throwable -> {
-                    QuickSkin.LOGGER.error("Error fetching Mojang skin", throwable);
                     if (this.minecraft != null) {
                         this.minecraft.execute(() -> {
                             showError(Component.literal("Failed to fetch skin: " + throwable.getMessage()));
@@ -1161,7 +1128,6 @@ public class PlayerSkinMenuScreen extends Screen {
             Path skinPath = SkinImporter.saveSkinImage(skinData.image, skinData.username);
 
             if (skinPath != null) {
-                QuickSkin.LOGGER.info("Successfully saved Mojang skin for: {}", skinData.username);
 
                 // Reload the asset manager to pick up the new file
                 LocalAssetManager.getInstance().reload();
@@ -1201,7 +1167,6 @@ public class PlayerSkinMenuScreen extends Screen {
                 showError(Component.literal("Failed to save skin image"));
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Error handling Mojang skin", e);
             showError(Component.literal("Error: " + e.getMessage()));
         } finally {
             resetSearchButton();

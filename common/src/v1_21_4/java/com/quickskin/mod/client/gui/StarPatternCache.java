@@ -42,7 +42,6 @@ public class StarPatternCache {
             // Try to load the pre-generated star pattern cache texture
             var resourceOptional = mc.getResourceManager().getResource(STAR_PATTERN_CACHE);
             if (resourceOptional.isEmpty()) {
-                QuickSkin.LOGGER.warn("Star pattern cache texture not found, creating fallback");
                 createFallbackTexture();
                 return;
             }
@@ -70,7 +69,6 @@ public class StarPatternCache {
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL11.GL_REPEAT);
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load star pattern cache", e);
             createFallbackTexture();
         }
     }
@@ -137,7 +135,6 @@ public class StarPatternCache {
             mc.getTextureManager().register(cachedTextureLocation, cachedTexture);
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to create fallback texture", e);
         }
     }
 

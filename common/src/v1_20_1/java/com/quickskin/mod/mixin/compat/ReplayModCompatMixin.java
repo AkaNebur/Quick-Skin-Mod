@@ -80,11 +80,8 @@ public class ReplayModCompatMixin {
             } else if (id.equals(ModNetworking.COOLDOWN_UPDATE)) {
                 ClientNetworkHandler.handleCooldownUpdate(buf, context);
                 handled = true;
-            } else {
-                QuickSkin.LOGGER.warn("[ReplayCompat] Unknown QuickSkin packet: {}", id);
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("[ReplayCompat] Error handling packet: " + id, e);
         } finally {
             buf.release();
         }

@@ -55,7 +55,6 @@ public class AnimatedTextureManager {
         private void loadFrames(String animationId, BufferedImage atlasImage) {
             try {
                 if (atlasImage == null) {
-                    QuickSkin.LOGGER.error("Could not read atlas image for animation: {}", atlasTextureLocation);
                     return;
                 }
 
@@ -76,7 +75,6 @@ public class AnimatedTextureManager {
                     Minecraft.getInstance().getTextureManager().register(frameResourceLocations[i], frameTextures[i]);
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to load and slice animation frames for {}", atlasTextureLocation, e);
             }
         }
 
@@ -144,7 +142,6 @@ public class AnimatedTextureManager {
      */
     public void registerAnimation(String animationId, String capeId, ResourceLocation textureLocation, BufferedImage atlasImage, AnimationMetadata metadata) {
         if (metadata == null || metadata.frameCount() <= 1) {
-            QuickSkin.LOGGER.warn("Cannot register animation with invalid metadata (frameCount <= 1): {}", animationId);
             return;
         }
 

@@ -90,7 +90,6 @@ public enum KnownCapes {
     FROG("Frog Cape", "frog", "Personal cape for Grumm", false),
     SNAIL("Snail Cape", "snail", "Personal cape for Bile", false);
 
-
     private final String displayName;
     private final String id;
     private final String description;

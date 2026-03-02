@@ -79,7 +79,6 @@ public class SettingsScreen extends Screen {
     private final List<AbstractWidget> serverSettingWidgets = new ArrayList<>();
     private final List<AbstractWidget> modpackSettingWidgets = new ArrayList<>();
 
-
     // Client setting widgets
     private Checkbox showOverlayCheckbox;
     private Checkbox disableSkinTransparencyCheckbox;
@@ -291,7 +290,6 @@ public class SettingsScreen extends Screen {
                 return false; // Make the label non-interactive
             }
         });
-
 
         // Right Column
         // Skin Transparency Settings

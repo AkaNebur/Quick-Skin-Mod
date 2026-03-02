@@ -81,7 +81,6 @@ public class ClientConfig {
     public boolean enablePlayerOwnSkinSystem = true; // When enabled, automatically downloads and protects the player's own skin.
 
     // Logging Settings
-    public boolean enableVerboseLogging = false; // Enable verbose logging for cape animations and texture loading (default: false for silent operation)
 
     // Active Skin Settings (persisted state)
     public String activeSkinHash = "";
@@ -116,7 +115,6 @@ public class ClientConfig {
                 ClientConfig config = GSON.fromJson(json, ClientConfig.class);
                 return config;
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to load client configuration, using defaults", e);
             }
         }
 
@@ -139,7 +137,6 @@ public class ClientConfig {
             String json = GSON.toJson(this);
             Files.writeString(configPath, json);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to save client configuration", e);
         }
     }
 

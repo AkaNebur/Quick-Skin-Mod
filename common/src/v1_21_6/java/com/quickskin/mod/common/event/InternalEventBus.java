@@ -51,7 +51,6 @@ public class InternalEventBus {
                 try {
                     ((Consumer<T>) listener).accept(event);
                 } catch (Exception e) {
-                    QuickSkin.LOGGER.error("Error handling event {}", eventType.getSimpleName(), e);
                 }
             }
         }

@@ -22,7 +22,6 @@ public class BlurHandler {
      */
     public static void renderBlur() {
         if (!warned) {
-            QuickSkin.LOGGER.debug("BlurHandler: Blur effect is not supported on this Minecraft version (PostChain API changed in 1.21.4+)");
             warned = true;
         }
         // No-op: PostChain API is incompatible in 1.21.4+

@@ -56,7 +56,6 @@ public class PlatformHelperImpl {
         return FabricLoader.getInstance().isDevelopmentEnvironment();
     }
 
-
     /**
      * Sets a pixel in a NativeImage
      * For Fabric 1.21.1, directly calls setPixelRGBA with ABGR format

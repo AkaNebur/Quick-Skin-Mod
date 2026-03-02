@@ -60,7 +60,6 @@ public class CustomNPCsIntegration {
         for (String modId : possibleModIds) {
             if (PlatformHelper.isModLoaded(modId)) {
                 MOD_AVAILABLE = true;
-                QuickSkin.LOGGER.info("[CustomNPCs Compat] Detected CustomNPCs mod ({}), enabling compatibility layer", modId);
                 initializeReflection();
                 return;
             }
@@ -70,10 +69,8 @@ public class CustomNPCsIntegration {
         try {
             Class.forName("noppes.npcs.api.NpcAPI");
             MOD_AVAILABLE = true;
-            QuickSkin.LOGGER.info("[CustomNPCs Compat] Detected CustomNPCs via class loading, enabling compatibility layer");
             initializeReflection();
         } catch (ClassNotFoundException e) {
-            QuickSkin.LOGGER.debug("[CustomNPCs Compat] CustomNPCs not detected");
         }
     }
 
@@ -81,7 +78,6 @@ public class CustomNPCsIntegration {
         try {
             // Try to get NpcAPI class
             npcApiClass = Class.forName("noppes.npcs.api.NpcAPI");
-            QuickSkin.LOGGER.debug("[CustomNPCs Compat] Found NpcAPI class");
 
             // Try to find any player data or skin cache classes
             // These class names may vary between versions
@@ -95,14 +91,12 @@ public class CustomNPCsIntegration {
             for (String className : possiblePlayerDataClasses) {
                 try {
                     playerDataClass = Class.forName(className);
-                    QuickSkin.LOGGER.debug("[CustomNPCs Compat] Found player data class: {}", className);
                     break;
                 } catch (ClassNotFoundException ignored) {
                 }
             }
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.debug("[CustomNPCs Compat] Reflection initialization failed: {}", e.getMessage());
         }
     }
 
@@ -119,9 +113,6 @@ public class CustomNPCsIntegration {
         }
 
         lastAppliedSkins.put(playerId, skinLocation);
-
-        QuickSkin.LOGGER.debug("[CustomNPCs Compat] Registered skin change for player {}: {}",
-            playerId, skinLocation);
 
         // Try to invalidate any CustomNPCs skin cache
         invalidateCustomNPCsSkinCache(playerId);
@@ -162,13 +153,11 @@ public class CustomNPCsIntegration {
                     }
 
                     method.invoke(instance, playerId);
-                    QuickSkin.LOGGER.debug("[CustomNPCs Compat] Cleared skin cache via {}", methodName);
                     return;
                 } catch (NoSuchMethodException ignored) {
                 }
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.debug("[CustomNPCs Compat] Could not invalidate skin cache: {}", e.getMessage());
         }
     }
 
@@ -193,10 +182,7 @@ public class CustomNPCsIntegration {
             ResourceLocation quickSkin = service.getSkinLocation(playerId);
             if (quickSkin != null) {
                 // Log if CustomNPCs was trying to use a different skin
-                if (isAvailable() && defaultSkin != null && !defaultSkin.equals(quickSkin)) {
-                    QuickSkin.LOGGER.debug("[CustomNPCs Compat] Overriding CustomNPCs skin {} with QuickSkin {}",
-                        defaultSkin, quickSkin);
-                }
+                
                 return quickSkin;
             }
         }
@@ -259,10 +245,7 @@ public class CustomNPCsIntegration {
         if (hasCustomSkin) {
             ResourceLocation customSkin = service.getSkinLocation(playerId);
             if (customSkin != null) {
-                if (isAvailable() && !customSkin.equals(skinTexture)) {
-                    QuickSkin.LOGGER.debug("[CustomNPCs Compat] Overriding skin {} with QuickSkin {}",
-                        skinTexture, customSkin);
-                }
+                
                 skinTexture = customSkin;
             }
         }
@@ -314,9 +297,6 @@ public class CustomNPCsIntegration {
 
         ResourceLocation expectedSkin = lastAppliedSkins.get(playerId);
         if (expectedSkin != null && !expectedSkin.equals(currentSkin)) {
-            QuickSkin.LOGGER.warn("[CustomNPCs Compat] Detected skin conflict for player {}! " +
-                "Expected: {}, Got: {}. This may indicate CustomNPCs is overriding Quick-Skin-Mod.",
-                playerId, expectedSkin, currentSkin);
             return true;
         }
 
@@ -346,7 +326,6 @@ public class CustomNPCsIntegration {
 
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
         if (service.hasActiveSkin(playerId)) {
-            QuickSkin.LOGGER.debug("[CustomNPCs Compat] Force refreshing player {} due to potential conflict", playerId);
             service.refreshPlayerRenderer(playerId);
         }
     }

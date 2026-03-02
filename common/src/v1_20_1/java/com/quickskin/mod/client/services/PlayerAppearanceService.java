@@ -52,7 +52,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     @Override
     public void applyLook(UUID playerId, @Nullable String skinId, @Nullable String capeId, @Nullable String model) {
         if (playerId == null) {
-            QuickSkin.LOGGER.error("Cannot apply look: playerId is null");
             return;
         }
 
@@ -128,9 +127,6 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                         BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
                         if (metadata != null && atlasImage != null) {
                             AnimatedTextureManager.getInstance().registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
-                        } else {
-                            QuickSkin.LOGGER.warn("[PlayerAppearanceService] Failed to register local cape animation {} - metadata={}, atlasImage={}",
-                                animationId, metadata != null, atlasImage != null);
                         }
                     } else if (capeId.startsWith("known:")) {
                         // Register known cape animation

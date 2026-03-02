@@ -44,11 +44,8 @@ public class FileDialogHelper {
                 if (file != null && !file.isEmpty()) {
                     Path filePath = Path.of(file);
                     onFileSelected.accept(filePath);
-                } else {
-                    QuickSkin.LOGGER.debug(DIALOG_CANCELLED_MSG);
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Error opening file dialog", e);
             }
         });
     }
@@ -76,13 +73,9 @@ public class FileDialogHelper {
 
                 if (file != null && !file.isEmpty()) {
                     Path filePath = Path.of(file);
-                    QuickSkin.LOGGER.info("File selected: {}", filePath);
                     onFileSelected.accept(filePath);
-                } else {
-                    QuickSkin.LOGGER.debug(DIALOG_CANCELLED_MSG);
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Error opening file dialog", e);
             }
         });
     }
@@ -114,13 +107,9 @@ public class FileDialogHelper {
                     for (int i = 0; i < filePaths.length; i++) {
                         paths[i] = Path.of(filePaths[i]);
                     }
-                    QuickSkin.LOGGER.info("Selected {} files", paths.length);
                     onFilesSelected.accept(paths);
-                } else {
-                    QuickSkin.LOGGER.debug(DIALOG_CANCELLED_MSG);
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Error opening file dialog", e);
             }
         });
     }

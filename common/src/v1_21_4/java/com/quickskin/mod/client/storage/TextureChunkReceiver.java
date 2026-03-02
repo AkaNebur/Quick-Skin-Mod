@@ -80,7 +80,6 @@ public class TextureChunkReceiver {
         public synchronized boolean addChunk(int index, byte[] data) {
             // Validate index
             if (index < 0 || index >= chunks.length) {
-                QuickSkin.LOGGER.warn("Invalid chunk index: {} (expected 0-{})", index, chunks.length - 1);
                 return false;
             }
 
@@ -102,8 +101,6 @@ public class TextureChunkReceiver {
          */
         public byte @Nullable [] assembleTexture() {
             if (receivedCount != chunks.length) {
-                QuickSkin.LOGGER.warn("Cannot assemble texture: only {}/{} chunks received",
-                    receivedCount, chunks.length);
                 return null;
             }
 
@@ -111,7 +108,6 @@ public class TextureChunkReceiver {
             int totalSize = 0;
             for (byte[] chunk : chunks) {
                 if (chunk == null) {
-                    QuickSkin.LOGGER.error("Null chunk detected during assembly");
                     return null;
                 }
                 totalSize += chunk.length;

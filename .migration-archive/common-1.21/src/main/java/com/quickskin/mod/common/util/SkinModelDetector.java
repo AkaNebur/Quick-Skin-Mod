@@ -100,9 +100,6 @@ public class SkinModelDetector {
             float transparentRatio = (float) transparentPixels / totalPixels;
             boolean isSlim = transparentRatio > 0.5f;
 
-            QuickSkin.LOGGER.debug("Skin model detection: {}% transparent pixels -> {}",
-                    (int) (transparentRatio * 100), isSlim ? "slim" : "classic");
-
             return isSlim ? "slim" : "classic";
         }
 
@@ -118,7 +115,6 @@ public class SkinModelDetector {
             BufferedImage image = ImageIO.read(file);
             return detectSkinModel(image);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to detect skin model from file: {}", file, e);
             return "classic";
         }
     }
@@ -131,7 +127,6 @@ public class SkinModelDetector {
             BufferedImage image = ImageIO.read(new ByteArrayInputStream(data));
             return detectSkinModel(image);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to detect skin model from byte array", e);
             return "classic";
         }
     }
@@ -144,7 +139,6 @@ public class SkinModelDetector {
             BufferedImage image = ImageIO.read(input);
             return detectSkinModel(image);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to detect skin model from input stream", e);
             return "classic";
         }
     }

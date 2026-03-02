@@ -42,10 +42,8 @@ public class ServerConfig {
             try {
                 String json = Files.readString(configPath);
                 ServerConfig config = GSON.fromJson(json, ServerConfig.class);
-                QuickSkin.LOGGER.info("Loaded server configuration");
                 return config;
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to load server configuration, using defaults", e);
             }
         }
 
@@ -67,9 +65,7 @@ public class ServerConfig {
 
             String json = GSON.toJson(this);
             Files.writeString(configPath, json);
-            QuickSkin.LOGGER.debug("Saved server configuration");
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to save server configuration", e);
         }
     }
 
@@ -101,7 +97,6 @@ public class ServerConfig {
         try {
             return GSON.fromJson(json, ServerConfig.class);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to parse server config from JSON", e);
             return new ServerConfig();
         }
     }

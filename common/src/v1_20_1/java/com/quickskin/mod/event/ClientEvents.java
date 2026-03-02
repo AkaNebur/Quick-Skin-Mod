@@ -644,7 +644,6 @@ public class ClientEvents {
 
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft == null || minecraft.getUser() == null) {
-            QuickSkin.LOGGER.warn("Cannot download player skin: Minecraft user not available");
             return;
         }
 
@@ -666,14 +665,11 @@ public class ClientEvents {
                         minecraft.execute(() -> {
                             if (skinData != null) {
                                 handlePlayerOwnSkinFetched(skinData);
-                            } else {
-                                QuickSkin.LOGGER.warn("Failed to fetch player's own skin");
                             }
                         });
                     }
                 })
                 .exceptionally(throwable -> {
-                    QuickSkin.LOGGER.error("Error fetching player's own skin", throwable);
                     return null;
                 });
     }
@@ -701,13 +697,11 @@ public class ClientEvents {
             // Convert the (potentially modified) image to a byte array to compute its definitive hash.
             byte[] processedImageBytes = com.quickskin.mod.common.util.HDTextureProcessor.imageToPng(image);
             if (processedImageBytes == null) {
-                QuickSkin.LOGGER.error("Failed to convert processed player skin to byte array.");
                 return;
             }
 
             String finalHash = com.quickskin.mod.common.util.HashUtil.computeHash(processedImageBytes);
             if (finalHash == null) {
-                QuickSkin.LOGGER.error("Failed to compute hash for processed player skin.");
                 return;
             }
 
@@ -730,7 +724,6 @@ public class ClientEvents {
 
                 // Reload assets to recognize the new file.
                 assetManager.reload();
-            } else {
             }
 
             // Now that the skin is guaranteed to be in the asset manager, set its hash in the config.
@@ -753,15 +746,12 @@ public class ClientEvents {
                                 .applySkin(player.getUUID(), skinId, modelType);
 
                     }
-                } else {
                 }
-            } else {
             }
 
             config.save();
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Error handling player's own skin", e);
         }
     }
 
@@ -802,8 +792,6 @@ public class ClientEvents {
                 com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
                         .applySkin(targetPlayerId, skinId, modelType);
 
-            } else {
-                QuickSkin.LOGGER.warn("Saved skin hash not found in assets: {}", config.activeSkinHash);
             }
         } else if (!config.playerOwnSkinHash.isEmpty()) {
             // No skin selected, but player's own skin exists - auto-select it
@@ -855,9 +843,7 @@ public class ClientEvents {
                 config.activeSkinHash = config.playerOwnSkinHash;
                 config.save();
 
-            } else {
             }
-        } else if (!config.activeSkinHash.isEmpty()) {
         }
     }
 

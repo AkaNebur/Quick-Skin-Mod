@@ -53,7 +53,6 @@ public class NetworkTextureCache {
      */
     public void storeTexture(String hash, @Nullable String textureType, byte[] textureData) {
         if (hash == null || textureData == null) {
-            QuickSkin.LOGGER.warn("Cannot store null texture data");
             return;
         }
 
@@ -86,7 +85,6 @@ public class NetworkTextureCache {
                     processedData = com.quickskin.mod.common.util.HDTextureProcessor.imageToPng(image);
                 }
             } catch (IOException e) {
-                QuickSkin.LOGGER.error("Failed to process transparency for network texture: {}", hash, e);
                 // Fall through to store original texture data
             }
         }
@@ -119,7 +117,6 @@ public class NetworkTextureCache {
         // Get texture data
         byte[] textureData = textureDataCache.get(hash);
         if (textureData == null) {
-            QuickSkin.LOGGER.warn("Network texture not found in cache: {}", hash);
             return null;
         }
 
@@ -160,7 +157,6 @@ public class NetworkTextureCache {
             return location;
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to register network texture: {}", hash, e);
             return null;
         }
     }

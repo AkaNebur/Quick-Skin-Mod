@@ -80,7 +80,6 @@ public class ModelService implements IModelService {
         try {
             return SkinModelDetector.detectSkinModel(skinData);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to detect model type from skin data", e);
             return "classic";
         }
     }

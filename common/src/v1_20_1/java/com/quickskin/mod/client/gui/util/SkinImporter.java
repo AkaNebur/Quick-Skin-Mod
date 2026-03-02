@@ -32,14 +32,12 @@ public class SkinImporter {
      */
     public static AssetMetadata importSkin(Path sourcePath) {
         if (sourcePath == null || !Files.exists(sourcePath)) {
-            QuickSkin.LOGGER.error("Source file does not exist: {}", sourcePath);
             return null;
         }
 
         // Validate it's a PNG file
         String fileName = sourcePath.getFileName().toString();
         if (!fileName.toLowerCase(Locale.ROOT).endsWith(".png")) {
-            QuickSkin.LOGGER.error("File is not a PNG: {}", fileName);
             return null;
         }
 
@@ -50,7 +48,6 @@ public class SkinImporter {
             byte[] processedImageBytes = HDTextureProcessor.processHDSkin(inputStream, allowTransparency);
 
             if (processedImageBytes == null) {
-                QuickSkin.LOGGER.error("Failed to process skin file: {}", fileName);
                 return null;
             }
 
@@ -79,7 +76,6 @@ public class SkinImporter {
             }
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to process skin file", e);
         }
 
         return null;
@@ -137,7 +133,6 @@ public class SkinImporter {
      */
     public static Path saveSkinImage(BufferedImage image, String username) {
         if (image == null || username == null) {
-            QuickSkin.LOGGER.error("Invalid parameters for saveSkinImage");
             return null;
         }
 
@@ -146,7 +141,6 @@ public class SkinImporter {
             int width = image.getWidth();
             int height = image.getHeight();
             if (!isValidSkinDimension(width, height)) {
-                QuickSkin.LOGGER.error("Invalid skin dimensions {}x{} for {}", width, height, username);
                 return null;
             }
 
@@ -179,7 +173,6 @@ public class SkinImporter {
             return targetPath;
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to save skin image for: {}", username, e);
             return null;
         }
     }

@@ -52,7 +52,6 @@ public class NetworkSyncService {
         }
 
         if (mc.getConnection() == null) {
-            QuickSkin.LOGGER.warn("Cannot sync appearance to server (not connected)");
             return;
         }
 
@@ -90,7 +89,6 @@ public class NetworkSyncService {
         // Extract hash from texture ID
         String prefix = textureType.equals("skin") ? "local_skin:" : "local_cape:";
         if (!textureId.startsWith(prefix)) {
-            QuickSkin.LOGGER.warn("Invalid texture ID format: {}", textureId);
             return;
         }
 
@@ -99,7 +97,6 @@ public class NetworkSyncService {
         // Get texture bytes from LocalAssetManager (load at FULL quality)
         byte[] textureData = LocalAssetManager.getInstance().loadTexture(hash, com.quickskin.mod.common.data.TextureQuality.FULL);
         if (textureData == null) {
-            QuickSkin.LOGGER.warn("Could not find texture data for hash: {}", hash);
             return;
         }
 
@@ -159,7 +156,6 @@ public class NetworkSyncService {
     public void clearAppearance(UUID playerId) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.getConnection() == null) {
-            QuickSkin.LOGGER.warn("Cannot clear appearance on server (not connected)");
             return;
         }
 
@@ -176,7 +172,6 @@ public class NetworkSyncService {
     public void requestTexture(UUID playerId, String textureType, String hash) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.getConnection() == null) {
-            QuickSkin.LOGGER.warn("Cannot request texture from server (not connected)");
             return;
         }
 

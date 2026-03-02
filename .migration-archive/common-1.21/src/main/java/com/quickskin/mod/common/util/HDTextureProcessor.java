@@ -29,27 +29,22 @@ public class HDTextureProcessor {
         try {
             // Read all bytes first to allow multiple read attempts
             byte[] imageBytes = input.readAllBytes();
-            QuickSkin.LOGGER.debug("Read {} bytes from input stream", imageBytes.length);
 
             if (imageBytes.length == 0) {
-                QuickSkin.LOGGER.error("Failed to read image: input stream was empty");
                 return null;
             }
 
             // Detect and log the image format
             String detectedFormat = detectImageFormat(imageBytes);
-            QuickSkin.LOGGER.debug("Detected image format: {}", detectedFormat);
 
             // Read image using ImageIO (TwelveMonkeys adds WebP, JPEG, and other format support)
             BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
             if (image == null) {
-                QuickSkin.LOGGER.error("Failed to read image: unsupported format ({}). The file may be corrupted or renamed with wrong extension.", detectedFormat);
                 return null;
             }
 
             // Ensure image has alpha channel (TYPE_INT_ARGB = 2)
             if (image.getType() != BufferedImage.TYPE_INT_ARGB) {
-                QuickSkin.LOGGER.debug("Converting image to ARGB format (was type {})", image.getType());
                 BufferedImage argbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
                 // Copy pixels manually to preserve alpha
                 for (int y = 0; y < image.getHeight(); y++) {
@@ -66,13 +61,11 @@ public class HDTextureProcessor {
             // Check if valid resolution
             SkinResolution resolution = SkinResolution.fromDimensions(width, height);
             if (resolution == null) {
-                QuickSkin.LOGGER.warn("Invalid skin dimensions: {}x{}", width, height);
                 return null;
             }
 
             // Convert legacy (64x32) to modern (64x64)
             if (resolution == SkinResolution.LEGACY) {
-                QuickSkin.LOGGER.debug("Converting legacy skin to modern format");
                 image = convertLegacyToModern(image);
             }
 
@@ -85,7 +78,6 @@ public class HDTextureProcessor {
             return imageToPng(image);
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to process HD skin", e);
             return null;
         }
     }
@@ -133,7 +125,6 @@ public class HDTextureProcessor {
     private static void clearBlackOverlays(BufferedImage image, int scale) {
         // Check head overlay (hat layer) - (32-63, 0-15)
         if (isOverlayAllBlack(image, 32 * scale, 0, 32 * scale, 16 * scale)) {
-            QuickSkin.LOGGER.debug("Clearing all-black head overlay");
             clearArea(image, 32 * scale, 0, 32 * scale, 16 * scale, 0x00000000);
         }
     }
@@ -395,7 +386,6 @@ public class HDTextureProcessor {
     public static BufferedImage resizeAnimationStrip(BufferedImage source, int targetWidth) {
         int originalWidth = source.getWidth();
         if (originalWidth <= 0) {
-            QuickSkin.LOGGER.warn("Source image for resize has zero or negative width.");
             return source; // Return original if invalid
         }
         if (originalWidth == targetWidth) {
@@ -405,7 +395,6 @@ public class HDTextureProcessor {
         // A single cape frame has a 2:1 aspect ratio.
         int originalFrameHeight = originalWidth / 2;
         if (originalFrameHeight <= 0 || source.getHeight() % originalFrameHeight != 0) {
-            QuickSkin.LOGGER.warn("Invalid cape dimensions for resizing: {}x{}", originalWidth, source.getHeight());
             return source; // Return original if dimensions are not a valid strip
         }
 
@@ -478,7 +467,6 @@ public class HDTextureProcessor {
             ImageIO.write(image, "PNG", baos);
             return baos.toByteArray();
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to convert image to PNG", e);
             return null;
         }
     }
@@ -490,7 +478,6 @@ public class HDTextureProcessor {
         try {
             return ImageIO.read(new ByteArrayInputStream(data));
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to convert PNG to image", e);
             return null;
         }
     }

@@ -282,12 +282,9 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 String detected = com.quickskin.mod.common.util.SkinModelDetector.detectSkinModel(textureData);
                 return detected;
             }
-        } catch (Exception e) {
-            com.quickskin.mod.QuickSkin.LOGGER.error("Failed to detect model from texture", e);
-        }
+        } catch (Exception e) { /* ignored */ }
 
         // Fallback to metadata if detection fails
-        com.quickskin.mod.QuickSkin.LOGGER.warn("Preview: Falling back to metadata model: {}", metadata.skinModel());
         return metadata.skinModel() != null ? metadata.skinModel() : "classic";
     }
 
@@ -310,8 +307,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
         // Notify callback to apply to actual player
         if (modelTypeChangeCallback != null) {
             modelTypeChangeCallback.accept(modelType);
-        } else {
-            com.quickskin.mod.QuickSkin.LOGGER.warn("[PlayerPreviewPanel] Callback is NULL! Cannot save model preference!");
         }
 
         updateModelButtonStates();

@@ -97,10 +97,7 @@ public class StbGifLoader {
                 }
 
                 // Validate dimensions for cape
-                if (width != 64 || height != 32) {
-                    QuickSkin.LOGGER.warn("GIF dimensions {}x{} don't match standard cape size (64x32), attempting to process anyway",
-                        width, height);
-                }
+                
 
                 // Get the delays IntBuffer from the pointer
                 long delaysPtr = delaysBuffer.get(0);

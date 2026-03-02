@@ -79,14 +79,11 @@ public class MojangApiService {
 
                     return UUID.fromString(formattedUuid);
                 } else if (responseCode == 204 || responseCode == 404) {
-                    QuickSkin.LOGGER.warn("Player not found: {}", username);
                     return null;
                 } else {
-                    QuickSkin.LOGGER.error("Unexpected response code: {}", responseCode);
                     return null;
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to fetch UUID for username: {}", username, e);
                 return null;
             }
         });
@@ -144,15 +141,12 @@ public class MojangApiService {
 
                         return new SkinTextureData(skinUrl, modelType);
                     } else {
-                        QuickSkin.LOGGER.warn("No skin found for UUID: {}", uuid);
                         return null;
                     }
                 } else {
-                    QuickSkin.LOGGER.error("Unexpected response code: {}", responseCode);
                     return null;
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to fetch skin texture data for UUID: {}", uuid, e);
                 return null;
             }
         });
@@ -180,11 +174,9 @@ public class MojangApiService {
 
                     return image;
                 } else {
-                    QuickSkin.LOGGER.error("Failed to download skin image, response code: {}", responseCode);
                     return null;
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to download skin image from: {}", skinUrl, e);
                 return null;
             }
         });

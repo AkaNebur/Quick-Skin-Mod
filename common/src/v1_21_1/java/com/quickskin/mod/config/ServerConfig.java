@@ -22,7 +22,6 @@ public class ServerConfig {
     public int skinChangeCooldownSeconds = 0; // Cooldown in seconds for changing skin (0 = disabled)
 
     // Logging Settings
-    public boolean enableVerboseLogging = false; // Enable verbose logging for skin/cape changes (default: false for silent operation)
 
     private ServerConfig() {
         // Private constructor for singleton
@@ -47,7 +46,6 @@ public class ServerConfig {
                 ServerConfig config = GSON.fromJson(json, ServerConfig.class);
                 return config;
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Failed to load server configuration, using defaults", e);
             }
         }
 
@@ -70,7 +68,6 @@ public class ServerConfig {
             String json = GSON.toJson(this);
             Files.writeString(configPath, json);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to save server configuration", e);
         }
     }
 
@@ -102,7 +99,6 @@ public class ServerConfig {
         try {
             return GSON.fromJson(json, ServerConfig.class);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to parse server config from JSON", e);
             return new ServerConfig();
         }
     }

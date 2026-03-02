@@ -146,7 +146,6 @@ public class EarsCompatIntegration {
                 featuresCache.remove(skinLocation);
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.warn("[Ears Compat] Failed to parse Ears features for {}: {}", skinLocation, e.getMessage());
         }
     }
 
@@ -191,7 +190,6 @@ public class EarsCompatIntegration {
             Object storage = earsFeaturesStorageInstance.get(null);
             storagePutMethod.invoke(storage, username != null ? username : "", playerId, features);
         } catch (Exception e) {
-            QuickSkin.LOGGER.warn("[Ears Compat] Failed to associate features with player: {}", e.getMessage());
         }
     }
 

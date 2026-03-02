@@ -36,7 +36,6 @@ public class GuiScaleManager {
                 return true;
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to set menu GUI scale", e);
         }
         return false;
     }
@@ -66,7 +65,6 @@ public class GuiScaleManager {
             scaleChanged = false;
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to restore original GUI scale", e);
         }
     }
 

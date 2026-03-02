@@ -49,7 +49,6 @@ public class DebugOffsetManager {
             configPath = configDir.resolve(CONFIG_FILE);
             load();
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to initialize DebugOffsetManager", e);
         }
     }
 
@@ -76,7 +75,6 @@ public class DebugOffsetManager {
             debugMode = Boolean.parseBoolean(props.getProperty("debugMode", "false"));
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to load debug offsets", e);
         }
     }
 
@@ -98,7 +96,6 @@ public class DebugOffsetManager {
         try (OutputStream out = Files.newOutputStream(configPath)) {
             props.store(out, "QuickSkin Debug Offsets - Hold SHIFT and drag the player model to adjust positioning");
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to save debug offsets", e);
         }
     }
 

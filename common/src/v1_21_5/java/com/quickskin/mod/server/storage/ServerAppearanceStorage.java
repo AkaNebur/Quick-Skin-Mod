@@ -43,7 +43,6 @@ public class ServerAppearanceStorage {
         try {
             Files.createDirectories(storageDirectory);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to create appearance storage directory", e);
         }
     }
 
@@ -73,7 +72,6 @@ public class ServerAppearanceStorage {
 
             return appearance;
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load appearance for player: {}", playerId, e);
             return null;
         }
     }
@@ -99,7 +97,6 @@ public class ServerAppearanceStorage {
             String json = GSON.toJson(appearance);
             Files.writeString(file, json);
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to save appearance for player: {}", playerId, e);
         }
     }
 

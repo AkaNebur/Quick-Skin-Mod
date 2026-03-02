@@ -73,8 +73,6 @@ public class TextureAlphaDetector {
             return;
         }
 
-        QuickSkin.LOGGER.debug("Starting async transparency analysis for: {}", textureLocation);
-
         // Perform the analysis on a background thread
         CompletableFuture.runAsync(() -> {
             try {
@@ -84,10 +82,8 @@ public class TextureAlphaDetector {
                 Minecraft mc = Minecraft.getInstance();
                 mc.execute(() -> {
                     transparencyCache.put(textureLocation, hasAlpha);
-                    QuickSkin.LOGGER.info("Completed transparency analysis for {}: {}", textureLocation, hasAlpha);
                 });
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Error during async transparency analysis for {}", textureLocation, e);
                 // On error, cache as transparent (safe default)
                 Minecraft mc = Minecraft.getInstance();
                 mc.execute(() -> transparencyCache.put(textureLocation, true));
@@ -111,7 +107,6 @@ public class TextureAlphaDetector {
             // Try to get the resource
             Resource resource = mc.getResourceManager().getResource(textureLocation).orElse(null);
             if (resource == null) {
-                QuickSkin.LOGGER.debug("Could not find texture resource: {}", textureLocation);
                 return false;
             }
 
@@ -119,7 +114,6 @@ public class TextureAlphaDetector {
             try (InputStream inputStream = resource.open()) {
                 BufferedImage image = ImageIO.read(inputStream);
                 if (image == null) {
-                    QuickSkin.LOGGER.debug("Could not read image from resource: {}", textureLocation);
                     return false;
                 }
 
@@ -127,10 +121,8 @@ public class TextureAlphaDetector {
 
             }
         } catch (IOException e) {
-            QuickSkin.LOGGER.debug("Failed to check transparency for texture {}: {}", textureLocation, e.getMessage());
             return false;
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Unexpected error checking transparency for texture {}", textureLocation, e);
             return false;
         }
     }
@@ -169,6 +161,5 @@ public class TextureAlphaDetector {
     public static void clearCache() {
         transparencyCache.clear();
         pendingAnalysis.clear();
-        QuickSkin.LOGGER.debug("Cleared texture transparency cache");
     }
 }

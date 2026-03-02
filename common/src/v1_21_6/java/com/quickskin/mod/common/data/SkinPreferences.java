@@ -101,7 +101,6 @@ public class SkinPreferences {
             Files.writeString(path, json);
         } catch (IOException e) {
             // Log error but don't crash
-            QuickSkin.LOGGER.error("Failed to save skin preferences to {}: {}", path, e.getMessage());
         }
     }
 

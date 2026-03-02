@@ -431,7 +431,6 @@ public class PlayerSkinMenuScreen extends Screen {
             if (knownCape != null) {
                 return knownCape.getTextureLocation();
             } else {
-                QuickSkin.LOGGER.warn("Unknown cape ID: {}", id);
                 return null;
             }
         }
@@ -726,7 +725,6 @@ public class PlayerSkinMenuScreen extends Screen {
                 .toList();
 
         if (imageFiles.isEmpty()) {
-            QuickSkin.LOGGER.warn("No supported image files in drop (PNG, WebP, or JPG)");
             showError(Component.literal("Unsupported file format. Use PNG, WebP, or JPG."));
             return;
         }
@@ -861,7 +859,6 @@ public class PlayerSkinMenuScreen extends Screen {
                         skinListPanel.setSelected(metadata);
                     }
                 } else {
-                    QuickSkin.LOGGER.error("Failed to import skin: {}", filePath);
                     // Show error message to user
                     showError(Component.translatable("quickskin.error.import_failed"));
                 }
@@ -981,7 +978,6 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Prevent deletion of the player's own skin
         if (config.enablePlayerOwnSkinSystem && metadata.hash().equals(config.playerOwnSkinHash)) {
-            QuickSkin.LOGGER.warn("Cannot delete player's own skin: {}", metadata.friendlyName());
             showError(Component.translatable("quickskin.error.delete_own_skin"));
             return;
         }
@@ -1011,7 +1007,6 @@ public class PlayerSkinMenuScreen extends Screen {
             }
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to delete skin: {}", metadata.friendlyName(), e);
             showError(Component.translatable("quickskin.error.delete_failed", e.getMessage()));
         }
     }
@@ -1048,22 +1043,18 @@ public class PlayerSkinMenuScreen extends Screen {
                 break;
 
             case NAME_TAKEN:
-                QuickSkin.LOGGER.warn("Rename failed: Name already exists");
                 showError(Component.translatable("quickskin.error.rename_exists"));
                 break;
 
             case INVALID_NAME:
-                QuickSkin.LOGGER.warn("Rename failed: Invalid name");
                 showError(Component.translatable("quickskin.error.rename_invalid"));
                 break;
 
             case IO_ERROR:
-                QuickSkin.LOGGER.error("Rename failed: IO error");
                 showError(Component.translatable("quickskin.error.rename_failed"));
                 break;
 
             case NOT_FOUND:
-                QuickSkin.LOGGER.error("Rename failed: File not found");
                 showError(Component.translatable("quickskin.error.rename_not_found"));
                 break;
         }
@@ -1112,7 +1103,6 @@ public class PlayerSkinMenuScreen extends Screen {
                     }
                 })
                 .exceptionally(throwable -> {
-                    QuickSkin.LOGGER.error("Error fetching Mojang skin", throwable);
                     if (this.minecraft != null) {
                         this.minecraft.execute(() -> {
                             showError(Component.translatable("quickskin.error.fetch_skin_failed", throwable.getMessage()));
@@ -1171,7 +1161,6 @@ public class PlayerSkinMenuScreen extends Screen {
                 showError(Component.translatable("quickskin.error.save_image_failed"));
             }
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Error handling Mojang skin", e);
             showError(Component.translatable("quickskin.error.generic", e.getMessage()));
         } finally {
             resetSearchButton();

@@ -46,7 +46,6 @@ public class FileDialogHelper {
                     onFileSelected.accept(filePath);
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Error opening file dialog", e);
             }
         });
     }
@@ -77,7 +76,6 @@ public class FileDialogHelper {
                     onFileSelected.accept(filePath);
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Error opening file dialog", e);
             }
         });
     }
@@ -112,7 +110,6 @@ public class FileDialogHelper {
                     onFilesSelected.accept(paths);
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.error("Error opening file dialog", e);
             }
         });
     }

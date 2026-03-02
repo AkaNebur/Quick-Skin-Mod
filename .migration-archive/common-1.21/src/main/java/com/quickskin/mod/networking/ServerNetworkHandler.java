@@ -26,12 +26,8 @@ public class ServerNetworkHandler {
             ServerPlayer player = (ServerPlayer) context.getPlayer();
 
             if (player == null || !player.getUUID().equals(payload.playerId())) {
-                QuickSkin.LOGGER.warn("Player UUID mismatch in upload texture packet");
                 return;
             }
-
-            QuickSkin.LOGGER.info("Received {} upload from player: {} (size: {} bytes)",
-                    payload.textureType(), player.getName().getString(), payload.imageData().length);
 
             // Generate hash for this texture
             String hash = payload.playerId().toString() + "_" + payload.textureType();
@@ -52,7 +48,6 @@ public class ServerNetworkHandler {
             ServerPlayer player = (ServerPlayer) context.getPlayer();
 
             if (player == null || !player.getUUID().equals(payload.playerId())) {
-                QuickSkin.LOGGER.warn("Player UUID mismatch in update appearance packet");
                 return;
             }
 
@@ -66,14 +61,9 @@ public class ServerNetworkHandler {
             // Only check and enforce cooldown if feature is enabled
             if (isSkinChanging && cooldownSeconds > 0) {
                 if (ServerCooldownManager.getInstance().isPlayerOnCooldown(payload.playerId())) {
-                    QuickSkin.LOGGER.warn("Player {} tried to change skin during cooldown. Change rejected.",
-                        player.getName().getString());
                     return;
                 }
             }
-
-            QuickSkin.LOGGER.info("Player {} updated appearance: skin={}, cape={}, model={}",
-                    player.getName().getString(), payload.skinId(), payload.capeId(), payload.model());
 
             // Update server-side repository
             ServerPlayerAppearanceRepository.getInstance().updateAppearance(
@@ -88,7 +78,6 @@ public class ServerNetworkHandler {
                 CooldownUpdatePayload cooldownPayload = new CooldownUpdatePayload(cooldownEndTime);
                 NetworkManager.sendToPlayer(player, cooldownPayload);
 
-                QuickSkin.LOGGER.debug("Sent cooldown update to player {}", player.getName().getString());
             }
 
             // Phase 3: Broadcast to other players
@@ -107,15 +96,10 @@ public class ServerNetworkHandler {
                 return;
             }
 
-            QuickSkin.LOGGER.info("Player {} requested {} texture: {}",
-                    player.getName().getString(), payload.textureType(), payload.hash());
-
             // Phase 5: Load texture from server storage and send to client
             byte[] textureData = ServerTextureCache.getInstance().getTexture(payload.hash());
             if (textureData != null) {
                 sendTextureToClient(player, payload.textureType(), payload.hash(), textureData);
-            } else {
-                QuickSkin.LOGGER.warn("Requested texture not found: {}", payload.hash());
             }
         });
     }
@@ -133,28 +117,18 @@ public class ServerNetworkHandler {
 
             // Validate chunk size (32KB safety limit to prevent oversized packets)
             if (payload.chunkData().length > 32 * 1024) {
-                QuickSkin.LOGGER.warn("Rejecting oversized chunk from {}: {} bytes (max: 32KB)",
-                    player.getName().getString(), payload.chunkData().length);
                 return;
             }
 
             // Validate chunk index
             if (payload.chunkIndex() < 0 || payload.chunkIndex() >= payload.totalChunks()) {
-                QuickSkin.LOGGER.warn("Invalid chunk index from {}: {}/{}",
-                    player.getName().getString(), payload.chunkIndex(), payload.totalChunks());
                 return;
             }
 
             // Validate total chunks (prevent DoS with excessive chunk counts)
             if (payload.totalChunks() < 1 || payload.totalChunks() > 1000) {
-                QuickSkin.LOGGER.warn("Invalid total chunks from {}: {}",
-                    player.getName().getString(), payload.totalChunks());
                 return;
             }
-
-            QuickSkin.LOGGER.debug("Received texture chunk {}/{} from {} (type: {}, hash: {})",
-                payload.chunkIndex() + 1, payload.totalChunks(), player.getName().getString(),
-                payload.textureType(), payload.hash());
 
             // Add chunk to assembler
             byte[] completeTexture = com.quickskin.mod.server.storage.TextureChunkAssembler.getInstance()
@@ -162,8 +136,6 @@ public class ServerNetworkHandler {
 
             // If all chunks received, store and broadcast
             if (completeTexture != null) {
-                QuickSkin.LOGGER.info("Received complete {} texture from player: {} (size: {} bytes)",
-                    payload.textureType(), player.getName().getString(), completeTexture.length);
 
                 // Store texture in server cache
                 ServerTextureCache.getInstance().storeTexture(payload.hash(), completeTexture);
@@ -184,9 +156,6 @@ public class ServerNetworkHandler {
             if (player == null) {
                 return;
             }
-
-            QuickSkin.LOGGER.info("Player {} uploaded animation metadata for: {}",
-                    player.getName().getString(), payload.hash());
 
             // Phase 7: Store animation metadata
             ServerAnimationCache.getInstance().storeMetadata(payload.hash(), payload.metadataJson());
@@ -209,13 +178,8 @@ public class ServerNetworkHandler {
 
             // Check if player has admin permissions (operator level 2+)
             if (!player.hasPermissions(2)) {
-                QuickSkin.LOGGER.warn("Player {} tried to change server config without permission",
-                    player.getName().getString());
                 return;
             }
-
-            QuickSkin.LOGGER.info("Admin {} updated server config: {} = {}",
-                player.getName().getString(), payload.key(), payload.value());
 
             // Update server config based on key
             com.quickskin.mod.config.ServerConfig serverConfig =
@@ -226,7 +190,6 @@ public class ServerNetworkHandler {
                     serverConfig.disableSkinTransparency = payload.value();
                     break;
                 default:
-                    QuickSkin.LOGGER.warn("Unknown server config key: {}", payload.key());
                     return;
             }
 
@@ -251,9 +214,6 @@ public class ServerNetworkHandler {
             }
         }
 
-        QuickSkin.LOGGER.debug("Broadcasted {} texture from {} to {} players",
-                textureType, player.getName().getString(),
-                player.server.getPlayerList().getPlayerCount() - 1);
     }
 
     /**
@@ -269,9 +229,6 @@ public class ServerNetworkHandler {
             }
         }
 
-        QuickSkin.LOGGER.debug("Broadcasted appearance from {} to {} players",
-                player.getName().getString(),
-                player.server.getPlayerList().getPlayerCount() - 1);
     }
 
     /**
@@ -303,7 +260,6 @@ public class ServerNetworkHandler {
                 if (skinData != null) {
                     SendTexturePayload skinPayload = new SendTexturePayload("skin", hash, skinData);
                     NetworkManager.sendToPlayer(recipient, skinPayload);
-                    QuickSkin.LOGGER.debug("Sent skin texture {} to {}", hash, recipient.getName().getString());
                 }
             }
 
@@ -314,20 +270,16 @@ public class ServerNetworkHandler {
                 if (capeData != null) {
                     SendTexturePayload capePayload = new SendTexturePayload("cape", hash, capeData);
                     NetworkManager.sendToPlayer(recipient, capePayload);
-                    QuickSkin.LOGGER.debug("Sent cape texture {} to {}", hash, recipient.getName().getString());
 
                     // Also send animation metadata if available
                     String metadata = ServerAnimationCache.getInstance().getMetadata(hash);
                     if (metadata != null) {
                         SendAnimationMetadataPayload animPayload = new SendAnimationMetadataPayload(hash, metadata);
                         NetworkManager.sendToPlayer(recipient, animPayload);
-                        QuickSkin.LOGGER.debug("Sent animation metadata for {} to {}", hash, recipient.getName().getString());
                     }
                 }
             }
 
-            QuickSkin.LOGGER.debug("Sent appearance of {} to {}",
-                    targetPlayerId, recipient.getName().getString());
         }
     }
 
@@ -342,7 +294,6 @@ public class ServerNetworkHandler {
             }
         }
 
-        QuickSkin.LOGGER.debug("Sent all player appearances to {}", player.getName().getString());
     }
 
     /**
@@ -360,9 +311,6 @@ public class ServerNetworkHandler {
                 }
             }
 
-            QuickSkin.LOGGER.debug("Sent appearance of {} to all other players", player.getName().getString());
-        } else {
-            QuickSkin.LOGGER.debug("No appearance found for {}, skipping broadcast to other players", player.getName().getString());
         }
     }
 
@@ -372,7 +320,6 @@ public class ServerNetworkHandler {
     private static void sendTextureToClient(ServerPlayer player, String textureType, String hash, byte[] textureData) {
         SendTexturePayload payload = new SendTexturePayload(textureType, hash, textureData);
         NetworkManager.sendToPlayer(player, payload);
-        QuickSkin.LOGGER.debug("Sent {} texture {} to {}", textureType, hash, player.getName().getString());
     }
 
     /**
@@ -388,8 +335,6 @@ public class ServerNetworkHandler {
             }
         }
 
-        QuickSkin.LOGGER.debug("Broadcasted animation metadata for {} to {} players",
-                hash, player.server.getPlayerList().getPlayerCount() - 1);
     }
 
     /**
@@ -402,7 +347,6 @@ public class ServerNetworkHandler {
         SyncServerConfigPayload payload = new SyncServerConfigPayload(configJson);
         NetworkManager.sendToPlayer(player, payload);
 
-        QuickSkin.LOGGER.debug("Sent server config to {}", player.getName().getString());
     }
 
     /**
@@ -420,7 +364,5 @@ public class ServerNetworkHandler {
             NetworkManager.sendToPlayer(player, payload);
         }
 
-        QuickSkin.LOGGER.info("Broadcasted server config to all {} players",
-            server.getPlayerList().getPlayerCount());
     }
 }

@@ -63,7 +63,6 @@ public class SkinService implements ISkinService {
             return defaultSkin;
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to load Mojang skin for: {}", username, e);
             return null;
         }
     }

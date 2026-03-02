@@ -236,8 +236,6 @@ public class SkinManagerMixin {
         Minecraft.getInstance().getTextureManager().register(location, httpTexture);
         quickskin$httpTextureCache.put(hash, location);
 
-        QuickSkin.LOGGER.info("[CPM Compat] Registered HttpTexture bridge for skin hash={} file={}", hash, skinFile.getAbsolutePath());
-
         return location;
     }
 

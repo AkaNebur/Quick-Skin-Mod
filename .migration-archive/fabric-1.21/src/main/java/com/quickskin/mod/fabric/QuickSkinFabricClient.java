@@ -12,7 +12,6 @@ public class QuickSkinFabricClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        QuickSkin.LOGGER.info("QuickSkin client initialization on Fabric");
 
         // Initialize client code
         QuickSkinClient.init();

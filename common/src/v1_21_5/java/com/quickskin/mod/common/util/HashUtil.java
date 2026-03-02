@@ -38,7 +38,6 @@ public class HashUtil {
             return bytesToHex(digest.digest());
 
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to compute hash for file: {}", path, e);
             return null;
         }
     }
@@ -52,7 +51,6 @@ public class HashUtil {
             digest.update(data);
             return bytesToHex(digest.digest());
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to compute hash for byte array", e);
             return null;
         }
     }

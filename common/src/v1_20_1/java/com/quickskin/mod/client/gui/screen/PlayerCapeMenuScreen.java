@@ -449,7 +449,6 @@ public class PlayerCapeMenuScreen extends Screen {
             }
         }
 
-        QuickSkin.LOGGER.warn("Could not find cape with ID '{}' in capes lists", activeCapeId);
         this.selectedCape = null;
     }
 
@@ -524,11 +523,9 @@ public class PlayerCapeMenuScreen extends Screen {
 
                         showImportMessage(Component.translatable("quickskin.cape.imported").getString(), 0x55FF55, 100);
                     } else {
-                        QuickSkin.LOGGER.error("Failed to import cape: {}", filePath);
                         showImportMessage(Component.translatable("quickskin.cape.invalid_ratio").getString(), 0xFF5555, 150);
                     }
                 } catch (IOException e) {
-                    QuickSkin.LOGGER.error("Failed to import cape", e);
                     showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFF5555, 150);
                 }
             });
@@ -611,7 +608,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
         Path capePath = capeEntry.getPath();
         if (capePath == null) {
-            QuickSkin.LOGGER.error("Cannot delete cape: path is null");
             return;
         }
 
@@ -632,7 +628,6 @@ public class PlayerCapeMenuScreen extends Screen {
 
             showImportMessage(Component.translatable("quickskin.cape.deleted").getString(), 0x55FF55, 100);
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to delete cape", e);
             showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFF5555, 100);
         }
     }
@@ -1131,7 +1126,6 @@ public class PlayerCapeMenuScreen extends Screen {
             var cachedPlayer = (net.minecraft.world.entity.player.Player) cachedPlayerField.get(null);
             return cachedPlayer != null ? cachedPlayer.getUUID() : null;
         } catch (Exception e) {
-            QuickSkin.LOGGER.error("Failed to get cached player UUID", e);
             return null;
         }
     }
@@ -1502,7 +1496,6 @@ public class PlayerCapeMenuScreen extends Screen {
             return true;
 
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Error processing dropped file {}: {}", sourceFile.getFileName(), e.getMessage());
         }
         return false;
     }
@@ -1537,7 +1530,6 @@ public class PlayerCapeMenuScreen extends Screen {
             ResourceLocation VANILLA_ELYTRA_TEXTURE = new ResourceLocation("minecraft", "textures/entity/elytra.png");
             var resourceOptional = Minecraft.getInstance().getResourceManager().getResource(VANILLA_ELYTRA_TEXTURE);
             if (resourceOptional.isEmpty()) {
-                QuickSkin.LOGGER.error("Vanilla elytra texture resource not found");
                 return null;
             }
             java.io.InputStream stream = resourceOptional.get().open();
@@ -1545,7 +1537,6 @@ public class PlayerCapeMenuScreen extends Screen {
             stream.close();
             return image;
         } catch (IOException e) {
-            QuickSkin.LOGGER.error("Failed to load vanilla elytra texture for custom cape creation", e);
             return null;
         }
     }

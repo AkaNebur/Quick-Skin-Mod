@@ -102,12 +102,9 @@ public class CapeService implements ICapeService {
 
                                 if (atlasImage != null) {
                                     animManager.registerAnimation(animationId, capeId, capeLocation, atlasImage, animMeta);
-                                } else {
-                                    QuickSkin.LOGGER.warn("Could not read image for network cape animation: {}", hash);
                                 }
                             }
                         } catch (Exception e) {
-                            QuickSkin.LOGGER.error("Failed to register animation for network cape: {}", hash, e);
                         }
                     }
                 }
@@ -133,8 +130,6 @@ public class CapeService implements ICapeService {
                     BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
                     if (animMeta != null && atlasImage != null) {
                         animManager.registerAnimation(animationId, capeId, capeLocation, atlasImage, animMeta);
-                    } else {
-                        QuickSkin.LOGGER.warn("Could not register animation for local cape {}: metadata or image was null.", hash);
                     }
                 }
             }
@@ -187,14 +182,9 @@ public class CapeService implements ICapeService {
 
                                 String fullCapeId = "known:" + capeId;
                                 animManager.registerAnimation(animationId, fullCapeId, capeTexture, atlasImage, metadata);
-                            } else {
-                                QuickSkin.LOGGER.warn("[CapeService] FAILED: frameCount <= 1, cannot register animation");
                             }
-                        } else {
-                            QuickSkin.LOGGER.warn("[CapeService] FAILED: atlasImage is null");
                         }
                     } catch (Exception e) {
-                        QuickSkin.LOGGER.error("[CapeService] EXCEPTION during animation registration for: {}", capeId, e);
                     }
                 }
             }

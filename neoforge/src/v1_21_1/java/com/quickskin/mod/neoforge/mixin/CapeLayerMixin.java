@@ -24,9 +24,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = CapeLayer.class, priority = 1100)
 public class CapeLayerMixin {
 
-    private static final java.util.Map<java.util.UUID, Long> lastLogTime = new java.util.concurrent.ConcurrentHashMap<>();
-    private static final long LOG_INTERVAL_MS = 2000;
-
     @Inject(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;FFFFFF)V",
             at = @At("HEAD"),
             cancellable = true)
@@ -35,13 +32,6 @@ public class CapeLayerMixin {
                                             float partialTicks, float ageInTicks, float netHeadYaw, float headPitch,
                                             CallbackInfo ci) {
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
-
-        long now = System.currentTimeMillis();
-        Long lastLog = lastLogTime.get(player.getUUID());
-        boolean shouldLog = (lastLog == null || now - lastLog > LOG_INTERVAL_MS);
-        if (shouldLog) {
-            lastLogTime.put(player.getUUID(), now);
-        }
 
         // Check service-based cape
         boolean hasServiceCape = service.hasActiveCape(player.getUUID());
@@ -100,20 +90,9 @@ public class CapeLayerMixin {
                 ResourceLocation currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);
                 if (currentFrame != null) {
                     finalTexture = currentFrame;
-                } else {
-                    if (shouldLog) {
-                        QuickSkin.LOGGER.warn("[CapeLayerMixin] getCurrentFrameTexture returned null for animationId={}", animationId);
-                    }
-                }
-            } else {
-                if (shouldLog) {
-                    QuickSkin.LOGGER.warn("[CapeLayerMixin] Could not derive animationId from capeId={}", capeId);
                 }
             }
         } else {
-            if (shouldLog) {
-                QuickSkin.LOGGER.warn("[CapeLayerMixin] capeId is null/empty, falling back to atlas lookup for texture={}", capeTexture);
-            }
             java.util.Optional<ResourceLocation> animFrame = AnimatedTextureManager.getInstance()
                     .getAnimationFrame(capeTexture);
             finalTexture = animFrame.orElse(capeTexture);

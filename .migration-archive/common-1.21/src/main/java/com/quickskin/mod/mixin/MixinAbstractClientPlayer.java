@@ -37,10 +37,6 @@ public abstract class MixinAbstractClientPlayer {
     private static boolean quickskin$fieldSearched = false;
 
     // Throttle logging to avoid spam
-    @Unique
-    private static final java.util.Map<java.util.UUID, Long> quickskin$lastLogTime = new java.util.concurrent.ConcurrentHashMap<>();
-    @Unique
-    private static final long LOG_INTERVAL_MS = 5000;
 
     /**
      * Inject at HEAD with lowest priority to intercept before other mods.
@@ -61,13 +57,6 @@ public abstract class MixinAbstractClientPlayer {
 
         // Throttled debug logging to confirm mixin is running
         long now = System.currentTimeMillis();
-        Long lastLog = quickskin$lastLogTime.get(self.getUUID());
-        boolean shouldLog = lastLog == null || now - lastLog > LOG_INTERVAL_MS;
-        if (shouldLog) {
-            quickskin$lastLogTime.put(self.getUUID(), now);
-            QuickSkin.LOGGER.debug("[MixinAbstractClientPlayer HEAD] getSkin() called for {} (UUID={}) - hasCustomSkin={}, hasCustomCape={}, hasModelOverride={}",
-                self.getName().getString(), self.getUUID(), hasCustomSkin, hasCustomCape, hasModelOverride);
-        }
 
         // Only intercept if we have custom data
         if (!hasCustomSkin && !hasCustomCape && !hasModelOverride) {
@@ -78,7 +67,6 @@ public abstract class MixinAbstractClientPlayer {
         // Get the base skin from PlayerInfo using reflection (works on both Fabric and NeoForge)
         PlayerInfo playerInfo = quickskin$getPlayerInfo(self);
         if (playerInfo == null) {
-            QuickSkin.LOGGER.warn("[MixinAbstractClientPlayer] PlayerInfo is null for {}", self.getName().getString());
             return;
         }
 
@@ -148,12 +136,8 @@ public abstract class MixinAbstractClientPlayer {
                 if (PlayerInfo.class.isAssignableFrom(field.getType())) {
                     field.setAccessible(true);
                     quickskin$playerInfoField = field;
-                    QuickSkin.LOGGER.debug("[MixinAbstractClientPlayer] Found playerInfo field: {}", field.getName());
                     break;
                 }
-            }
-            if (quickskin$playerInfoField == null) {
-                QuickSkin.LOGGER.error("[MixinAbstractClientPlayer] Could not find playerInfo field in AbstractClientPlayer!");
             }
         }
 
@@ -161,7 +145,6 @@ public abstract class MixinAbstractClientPlayer {
             try {
                 return (PlayerInfo) quickskin$playerInfoField.get(player);
             } catch (IllegalAccessException e) {
-                QuickSkin.LOGGER.error("[MixinAbstractClientPlayer] Failed to access playerInfo field", e);
             }
         }
         return null;

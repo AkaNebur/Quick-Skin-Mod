@@ -77,7 +77,6 @@ public class CPMCompatIntegration {
             Object clientInstance = instanceField.get(null);
             if (clientInstance == null) {
                 INIT_FAILED = true;
-                QuickSkin.LOGGER.warn("[CPM Compat] INSTANCE field is null");
                 return;
             }
 
@@ -94,14 +93,12 @@ public class CPMCompatIntegration {
             }
             if (managerField == null) {
                 INIT_FAILED = true;
-                QuickSkin.LOGGER.warn("[CPM Compat] Could not find 'manager' field in class hierarchy");
                 return;
             }
             managerField.setAccessible(true);
             managerInstance = managerField.get(clientInstance);
             if (managerInstance == null) {
                 INIT_FAILED = true;
-                QuickSkin.LOGGER.warn("[CPM Compat] manager instance is null");
                 return;
             }
 
@@ -117,13 +114,10 @@ public class CPMCompatIntegration {
                     clearCacheMethod = loaderInstance.getClass().getMethod("clearCache");
                 }
             } catch (Exception e) {
-                QuickSkin.LOGGER.warn("[CPM Compat] Could not access ModelDefinitionLoader: {}", e.toString());
             }
 
-            QuickSkin.LOGGER.info("[CPM Compat] Successfully initialized reflection for CPM compatibility");
         } catch (Exception e) {
             INIT_FAILED = true;
-            QuickSkin.LOGGER.warn("[CPM Compat] Failed to initialize reflection: {}", e.getMessage());
         }
     }
 
@@ -165,9 +159,7 @@ public class CPMCompatIntegration {
 
         try {
             clearCacheMethod.invoke(loaderInstance);
-            QuickSkin.LOGGER.info("[CPM Compat] Cleared CPM model cache after skin change");
         } catch (Exception e) {
-            QuickSkin.LOGGER.warn("[CPM Compat] Failed to clear CPM cache: {}", e.toString());
         }
     }
 
@@ -192,7 +184,6 @@ public class CPMCompatIntegration {
             if (playerInfo != null) {
                 ((QuickSkinPlayerInfoAccess) playerInfo)
                         .quickskin$forceReRegisterSkins();
-                QuickSkin.LOGGER.info("[CPM Compat] Forced skin re-registration for player {}", playerId);
             }
         }
     }
@@ -239,9 +230,6 @@ public class CPMCompatIntegration {
 
         Minecraft.getInstance().getTextureManager().register(location, httpTexture);
         httpTextureCache.put(hash, location);
-
-        QuickSkin.LOGGER.info("[CPM Compat] Registered HttpTexture bridge for skin hash={} file={}",
-                hash, skinFile.getAbsolutePath());
 
         return location;
     }

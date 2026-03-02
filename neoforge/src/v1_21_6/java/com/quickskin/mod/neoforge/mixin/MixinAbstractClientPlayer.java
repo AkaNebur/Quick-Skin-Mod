@@ -1,6 +1,5 @@
 package com.quickskin.mod.neoforge.mixin;
 
-import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -27,11 +26,6 @@ public abstract class MixinAbstractClientPlayer {
     @Unique
     private static boolean quickskin$fieldSearched = false;
 
-    @Unique
-    private static final java.util.Map<java.util.UUID, Long> quickskin$lastLogTime = new java.util.concurrent.ConcurrentHashMap<>();
-    @Unique
-    private static final long LOG_INTERVAL_MS = 5000;
-
     @Inject(method = "getSkin", at = @At("HEAD"), cancellable = true)
     private void quickskin$overrideSkinAtHead(CallbackInfoReturnable<PlayerSkin> cir) {
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
@@ -45,20 +39,12 @@ public abstract class MixinAbstractClientPlayer {
         boolean hasCustomCape = service.hasActiveCape(self.getUUID());
         boolean hasModelOverride = service.hasModelOverride(self.getUUID());
 
-        long now = System.currentTimeMillis();
-        Long lastLog = quickskin$lastLogTime.get(self.getUUID());
-        boolean shouldLog = lastLog == null || now - lastLog > LOG_INTERVAL_MS;
-        if (shouldLog) {
-            quickskin$lastLogTime.put(self.getUUID(), now);
-        }
-
         if (!hasCustomSkin && !hasCustomCape && !hasModelOverride) {
             return;
         }
 
         PlayerInfo playerInfo = quickskin$getPlayerInfo(self);
         if (playerInfo == null) {
-            QuickSkin.LOGGER.warn("[MixinAbstractClientPlayer] PlayerInfo is null for {}", self.getName().getString());
             return;
         }
 
@@ -120,16 +106,12 @@ public abstract class MixinAbstractClientPlayer {
                     break;
                 }
             }
-            if (quickskin$playerInfoField == null) {
-                QuickSkin.LOGGER.error("[MixinAbstractClientPlayer] Could not find playerInfo field in AbstractClientPlayer!");
-            }
         }
 
         if (quickskin$playerInfoField != null) {
             try {
                 return (PlayerInfo) quickskin$playerInfoField.get(player);
             } catch (IllegalAccessException e) {
-                QuickSkin.LOGGER.error("[MixinAbstractClientPlayer] Failed to access playerInfo field", e);
             }
         }
         return null;

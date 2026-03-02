@@ -72,7 +72,6 @@ public class ServerNetworkHandler {
             ServerPlayer player = (ServerPlayer) context.getPlayer();
 
             if (player == null || !player.getUUID().equals(playerId)) {
-                QuickSkin.LOGGER.warn("Player UUID mismatch in upload texture packet");
                 return;
             }
 
@@ -103,7 +102,6 @@ public class ServerNetworkHandler {
             ServerPlayer player = (ServerPlayer) context.getPlayer();
 
             if (player == null || !player.getUUID().equals(playerId)) {
-                QuickSkin.LOGGER.warn("Player UUID mismatch in update appearance packet");
                 return;
             }
 
@@ -118,7 +116,6 @@ public class ServerNetworkHandler {
             // Only check and enforce cooldown if feature is enabled
             if (isSkinChanging && cooldownSeconds > 0) {
                 if (ServerCooldownManager.getInstance().isPlayerOnCooldown(playerId)) {
-                    QuickSkin.LOGGER.warn("Player {} tried to change skin during cooldown. Change rejected.", player.getName().getString());
                     return;
                 }
             }
@@ -162,8 +159,6 @@ public class ServerNetworkHandler {
             byte[] textureData = ServerTextureCache.getInstance().getTexture(hash);
             if (textureData != null) {
                 sendTextureToClient(player, textureType, hash, textureData);
-            } else {
-                QuickSkin.LOGGER.warn("Requested texture not found: {}", hash);
             }
         });
     }
@@ -190,22 +185,16 @@ public class ServerNetworkHandler {
 
             // Validate chunk size (32KB safety limit to prevent oversized packets)
             if (chunkData.length > 32 * 1024) {
-                QuickSkin.LOGGER.warn("Rejecting oversized chunk from {}: {} bytes (max: 32KB)",
-                    player.getName().getString(), chunkData.length);
                 return;
             }
 
             // Validate chunk index
             if (chunkIndex < 0 || chunkIndex >= totalChunks) {
-                QuickSkin.LOGGER.warn("Invalid chunk index from {}: {}/{}",
-                    player.getName().getString(), chunkIndex, totalChunks);
                 return;
             }
 
             // Validate total chunks (prevent DoS with excessive chunk counts)
             if (totalChunks < 1 || totalChunks > 1000) {
-                QuickSkin.LOGGER.warn("Invalid total chunks from {}: {}",
-                    player.getName().getString(), totalChunks);
                 return;
             }
 
@@ -268,8 +257,6 @@ public class ServerNetworkHandler {
 
             // Check if player has admin permissions (operator level 2+)
             if (!player.hasPermissions(2)) {
-                QuickSkin.LOGGER.warn("Player {} tried to change server config without permission",
-                    player.getName().getString());
                 return;
             }
 
@@ -282,7 +269,6 @@ public class ServerNetworkHandler {
                     serverConfig.disableSkinTransparency = value;
                     break;
                 default:
-                    QuickSkin.LOGGER.warn("Unknown server config key: {}", key);
                     return;
             }
 
