@@ -36,8 +36,13 @@ public class ClientNetworkHandler {
         String capeId = PacketHelper.readString(buf);
         String model = PacketHelper.readString(buf);
 
+        org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
+                "handleSyncAppearance: player={} skinId={} model={}", playerId, skinId, model);
+
         // Queue work on main thread (CRITICAL for thread safety!)
         context.queue(() -> {
+            org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
+                    "handleSyncAppearance EXECUTING on main thread for {}", playerId);
             // Apply appearance through service
             PlayerAppearanceService.getInstance().applyLook(playerId, skinId, capeId, model);
         });
@@ -52,7 +57,12 @@ public class ClientNetworkHandler {
         String hash = PacketHelper.readString(buf);
         byte[] imageData = PacketHelper.readByteArray(buf);
 
+        org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
+                "handleSendTexture: type={} hash={} size={}", textureType, hash, imageData.length);
+
         context.queue(() -> {
+            org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
+                    "handleSendTexture EXECUTING on main thread hash={}", hash);
             // Store in network texture cache (not local assets, so it won't appear in skin list)
             // Pass textureType so transparency can be removed for skins if server config requires it
             com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()

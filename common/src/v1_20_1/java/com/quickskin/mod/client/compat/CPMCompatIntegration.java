@@ -9,6 +9,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.HttpTexture;
 import net.minecraft.resources.ResourceLocation;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -28,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Environment(EnvType.CLIENT)
 public class CPMCompatIntegration {
+    private static final Logger CPMLOG = LoggerFactory.getLogger("QuickSkin-CPM");
     private static boolean MOD_AVAILABLE = false;
     private static boolean CHECKED = false;
     private static boolean INIT_FAILED = false;
@@ -125,11 +129,18 @@ public class CPMCompatIntegration {
      * Primary check: should QuickSkin defer to CPM right now?
      * Returns true when CPM's GUI is open or CPM is actively rendering a custom model.
      */
+    private static long lastDeferLog = 0;
+
     public static boolean shouldDeferToCPM() {
         if (!isAvailable()) {
             return false;
         }
-        return isCPMScreenOpen() || isCPMRenderingCustomModel();
+        // Only defer when CPM's editor/GUI is open.
+        // We must NOT defer during normal rendering -- isCPMRenderingCustomModel() returns
+        // true whenever CPM has loaded ANY model (including the Mojang default), which creates
+        // a chicken-and-egg problem: we need getSkinLocation to return our texture so CPM reads
+        // it, but CPM is "rendering" so we skip our override, so CPM never sees our texture.
+        return isCPMScreenOpen();
     }
 
     /**
@@ -171,6 +182,7 @@ public class CPMCompatIntegration {
      * HttpTexture bridge with the new skin file, so CPM gets the updated skin data.
      */
     public static void forceReRegisterSkins(java.util.UUID playerId) {
+        CPMLOG.info("forceReRegisterSkins called for {}", playerId);
         // Always clear CPM model cache
         invalidatePlayerCache();
 
@@ -181,10 +193,14 @@ public class CPMCompatIntegration {
         if (mc.player != null && mc.player.connection != null) {
             net.minecraft.client.multiplayer.PlayerInfo playerInfo =
                     mc.player.connection.getPlayerInfo(playerId);
+            CPMLOG.info("forceReRegisterSkins playerInfo={}", playerInfo != null);
             if (playerInfo != null) {
                 ((QuickSkinPlayerInfoAccess) playerInfo)
                         .quickskin$forceReRegisterSkins();
             }
+        } else {
+            CPMLOG.info("forceReRegisterSkins SKIPPED: player={} connection={}",
+                    mc.player != null, mc.player != null ? mc.player.connection != null : "N/A");
         }
     }
 
@@ -208,12 +224,25 @@ public class CPMCompatIntegration {
             if (Minecraft.getInstance().getTextureManager().getTexture(cached, null) != null) {
                 return cached;
             }
+            CPMLOG.info("getOrRegisterHttpTexture: cache STALE for {}", hash);
             httpTextureCache.remove(hash);
         }
 
-        // Find the skin file on disk
+        // Find the skin file on disk (local skins)
         Path sourcePath = LocalAssetManager.getInstance().getSourcePath(hash);
+        CPMLOG.info("getOrRegisterHttpTexture: localPath={} exists={}",
+                sourcePath, sourcePath != null && sourcePath.toFile().exists());
+
+        // Fallback: network-received textures stored in memory -- write to a temp file for CPM
         if (sourcePath == null || !sourcePath.toFile().exists()) {
+            sourcePath = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                    .getOrCreateTempFile(hash);
+            CPMLOG.info("getOrRegisterHttpTexture: networkTempFile={} exists={}",
+                    sourcePath, sourcePath != null && sourcePath.toFile().exists());
+        }
+
+        if (sourcePath == null || !sourcePath.toFile().exists()) {
+            CPMLOG.info("getOrRegisterHttpTexture: FAILED, no file for hash={}", hash);
             return null;
         }
 
@@ -231,6 +260,7 @@ public class CPMCompatIntegration {
         Minecraft.getInstance().getTextureManager().register(location, httpTexture);
         httpTextureCache.put(hash, location);
 
+        CPMLOG.info("getOrRegisterHttpTexture: REGISTERED {} file={}", location, skinFile.getAbsolutePath());
         return location;
     }
 

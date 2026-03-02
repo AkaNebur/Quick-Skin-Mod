@@ -11,6 +11,8 @@ import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.resources.ResourceLocation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -24,6 +26,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(value = PlayerInfo.class, priority = 1100) // Higher priority to override TLSkinCape and other mods
 public abstract class PlayerInfoMixin implements com.quickskin.mod.client.compat.QuickSkinPlayerInfoAccess {
+
+    private static final Logger CPMLOG = LoggerFactory.getLogger("QuickSkin-CPM");
 
     @Shadow
     @Final
@@ -56,11 +60,24 @@ public abstract class PlayerInfoMixin implements com.quickskin.mod.client.compat
      * When CPM is installed, returns an HttpTexture-backed ResourceLocation so CPM
      * can read the skin file and extract embedded 3D model data.
      */
+    // Throttle logging: only log once per player per second to avoid spam
+    private long lastLogTime = 0;
+
     @Inject(method = "getSkinLocation", at = @At("HEAD"), cancellable = true)
     private void quickskin$onGetSkinLocation(CallbackInfoReturnable<ResourceLocation> cir) {
-        if (CPMCompatIntegration.shouldDeferToCPM()) return;
+        boolean deferring = CPMCompatIntegration.shouldDeferToCPM();
+        long now2 = System.currentTimeMillis();
+        if ((now2 - lastLogTime) > 2000) {
+            CPMLOG.info("getSkinLocation ENTRY player={} deferToCPM={} hasActiveSkin={}",
+                    this.profile.getName(), deferring,
+                    PlayerAppearanceService.getInstance().hasActiveSkin(this.profile.getId()));
+            lastLogTime = now2;
+        }
+        if (deferring) return;
 
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
+        long now = System.currentTimeMillis();
+        boolean shouldLog = (now - lastLogTime) > 2000;
 
         // Only override if QuickSkin has an active custom skin for this player
         if (service.hasActiveSkin(this.profile.getId())) {
@@ -74,9 +91,23 @@ public abstract class PlayerInfoMixin implements com.quickskin.mod.client.compat
                     if (skinId.startsWith("local_skin:")) {
                         hash = skinId.substring("local_skin:".length());
                     }
+                    if (shouldLog) {
+                        CPMLOG.info("getSkinLocation player={} skinId={} hash={}",
+                                this.profile.getName(), skinId, hash);
+                    }
                     if (hash != null) {
                         ResourceLocation httpLoc = CPMCompatIntegration.getOrRegisterHttpTexture(hash);
+                        if (shouldLog) {
+                            CPMLOG.info("getSkinLocation httpLoc={}", httpLoc);
+                            if (httpLoc != null) {
+                                net.minecraft.client.renderer.texture.AbstractTexture tex =
+                                        Minecraft.getInstance().getTextureManager().getTexture(httpLoc, null);
+                                CPMLOG.info("getSkinLocation texture class={}",
+                                        tex != null ? tex.getClass().getName() : "null");
+                            }
+                        }
                         if (httpLoc != null) {
+                            if (shouldLog) lastLogTime = now;
                             cir.setReturnValue(httpLoc);
                             return;
                         }
@@ -85,6 +116,11 @@ public abstract class PlayerInfoMixin implements com.quickskin.mod.client.compat
             }
 
             ResourceLocation customSkin = service.getSkinLocation(this.profile.getId());
+            if (shouldLog) {
+                CPMLOG.info("getSkinLocation fallback customSkin={} player={}",
+                        customSkin, this.profile.getName());
+                lastLogTime = now;
+            }
             if (customSkin != null) {
                 cir.setReturnValue(customSkin);
                 return;
