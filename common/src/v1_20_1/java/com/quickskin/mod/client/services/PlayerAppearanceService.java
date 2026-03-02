@@ -90,8 +90,9 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                     com.quickskin.mod.client.compat.EarsCompatIntegration.associateWithPlayer(skinLocation, playerId, username);
                 }
 
-                // Invalidate CPM's model cache so it re-reads the new skin's embedded data
-                com.quickskin.mod.client.compat.CPMCompatIntegration.invalidatePlayerCache();
+                // Force CPM to re-read skin data: clears model cache AND re-triggers
+                // registerSkins() so CPM gets the HttpTexture bridge with the new skin file
+                com.quickskin.mod.client.compat.CPMCompatIntegration.forceReRegisterSkins(playerId);
             }
         }
 

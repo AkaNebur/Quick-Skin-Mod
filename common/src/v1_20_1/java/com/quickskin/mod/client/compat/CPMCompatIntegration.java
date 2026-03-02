@@ -1,13 +1,20 @@
 package com.quickskin.mod.client.compat;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.platform.PlatformHelper;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.HttpTexture;
+import net.minecraft.resources.ResourceLocation;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Compatibility integration for CustomPlayerModels (CPM) mod.
@@ -161,6 +168,94 @@ public class CPMCompatIntegration {
             QuickSkin.LOGGER.info("[CPM Compat] Cleared CPM model cache after skin change");
         } catch (Exception e) {
             QuickSkin.LOGGER.warn("[CPM Compat] Failed to clear CPM cache: {}", e.toString());
+        }
+    }
+
+    /**
+     * Forces re-registration of skin textures for a player.
+     * This clears CPM's model cache AND resets PlayerInfo's pending textures flag,
+     * causing registerSkins() to be called again on the next getSkinLocation() call.
+     * The re-registration flows through MixinSkinManager, which provides the
+     * HttpTexture bridge with the new skin file, so CPM gets the updated skin data.
+     */
+    public static void forceReRegisterSkins(java.util.UUID playerId) {
+        // Always clear CPM model cache
+        invalidatePlayerCache();
+
+        if (!isAvailable()) return;
+
+        // Reset PlayerInfo.pendingTextures so registerSkins() fires again
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && mc.player.connection != null) {
+            net.minecraft.client.multiplayer.PlayerInfo playerInfo =
+                    mc.player.connection.getPlayerInfo(playerId);
+            if (playerInfo != null) {
+                ((QuickSkinPlayerInfoAccess) playerInfo)
+                        .quickskin$forceReRegisterSkins();
+                QuickSkin.LOGGER.info("[CPM Compat] Forced skin re-registration for player {}", playerId);
+            }
+        }
+    }
+
+    // Cache of HttpTexture-backed ResourceLocations for CPM compatibility
+    private static final Map<String, ResourceLocation> httpTextureCache = new ConcurrentHashMap<>();
+
+    /**
+     * Gets or creates an HttpTexture-backed ResourceLocation for a local skin hash.
+     * CPM's skin loading pipeline checks {@code instanceof HttpTexture} and reads from
+     * the file field to extract embedded 3D model data from the skin PNG.
+     *
+     * @param hash the local skin content hash
+     * @return HttpTexture-backed ResourceLocation, or null if the file is not found
+     */
+    public static ResourceLocation getOrRegisterHttpTexture(String hash) {
+        if (hash == null || hash.isEmpty()) return null;
+
+        // Check cache first
+        ResourceLocation cached = httpTextureCache.get(hash);
+        if (cached != null) {
+            if (Minecraft.getInstance().getTextureManager().getTexture(cached, null) != null) {
+                return cached;
+            }
+            httpTextureCache.remove(hash);
+        }
+
+        // Find the skin file on disk
+        Path sourcePath = LocalAssetManager.getInstance().getSourcePath(hash);
+        if (sourcePath == null || !sourcePath.toFile().exists()) {
+            return null;
+        }
+
+        File skinFile = sourcePath.toFile();
+        ResourceLocation location = new ResourceLocation(QuickSkin.MOD_ID, "cpm_bridge/" + hash);
+
+        HttpTexture httpTexture = new HttpTexture(
+                skinFile,
+                "file:///" + skinFile.getAbsolutePath().replace('\\', '/'),
+                new ResourceLocation("textures/entity/player/wide/steve.png"),
+                true,
+                () -> {}
+        );
+
+        Minecraft.getInstance().getTextureManager().register(location, httpTexture);
+        httpTextureCache.put(hash, location);
+
+        QuickSkin.LOGGER.info("[CPM Compat] Registered HttpTexture bridge for skin hash={} file={}",
+                hash, skinFile.getAbsolutePath());
+
+        return location;
+    }
+
+    /**
+     * Evicts a hash from the HttpTexture cache so the next call to
+     * {@link #getOrRegisterHttpTexture} creates a fresh HttpTexture.
+     */
+    public static void evictHttpTextureCache(String hash) {
+        if (hash != null) {
+            ResourceLocation old = httpTextureCache.remove(hash);
+            if (old != null) {
+                Minecraft.getInstance().getTextureManager().release(old);
+            }
         }
     }
 

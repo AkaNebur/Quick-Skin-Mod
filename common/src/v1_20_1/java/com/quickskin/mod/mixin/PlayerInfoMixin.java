@@ -23,14 +23,38 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * Allows QuickSkin to override player skins, capes, and models
  */
 @Mixin(value = PlayerInfo.class, priority = 1100) // Higher priority to override TLSkinCape and other mods
-public abstract class PlayerInfoMixin {
+public abstract class PlayerInfoMixin implements com.quickskin.mod.client.compat.QuickSkinPlayerInfoAccess {
 
     @Shadow
     @Final
     private GameProfile profile;
 
+    @Shadow
+    private boolean pendingTextures;
+
+    @Shadow
+    private void registerTextures() {}
+
     /**
-     * Inject into getSkinLocation to override with QuickSkin texture
+     * Force re-registration of skin textures.
+     * Resets pendingTextures and directly calls registerTextures() so that
+     * registerSkins() fires immediately through MixinSkinManager,
+     * updating CPM's skin data with the new HttpTexture bridge.
+     *
+     * We must call registerTextures() directly because our getSkinLocation()
+     * HEAD injection cancels the original method (preventing registerTextures()
+     * from running naturally).
+     */
+    @Override
+    public void quickskin$forceReRegisterSkins() {
+        this.pendingTextures = false;
+        this.registerTextures();
+    }
+
+    /**
+     * Inject into getSkinLocation to override with QuickSkin texture.
+     * When CPM is installed, returns an HttpTexture-backed ResourceLocation so CPM
+     * can read the skin file and extract embedded 3D model data.
      */
     @Inject(method = "getSkinLocation", at = @At("HEAD"), cancellable = true)
     private void quickskin$onGetSkinLocation(CallbackInfoReturnable<ResourceLocation> cir) {
@@ -40,6 +64,26 @@ public abstract class PlayerInfoMixin {
 
         // Only override if QuickSkin has an active custom skin for this player
         if (service.hasActiveSkin(this.profile.getId())) {
+            // When CPM is available, return HttpTexture-backed location so CPM can
+            // read the skin file for embedded 3D model data
+            if (CPMCompatIntegration.isAvailable()) {
+                com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(this.profile.getId());
+                if (appearance != null && appearance.getSkinId() != null) {
+                    String skinId = appearance.getSkinId();
+                    String hash = null;
+                    if (skinId.startsWith("local_skin:")) {
+                        hash = skinId.substring("local_skin:".length());
+                    }
+                    if (hash != null) {
+                        ResourceLocation httpLoc = CPMCompatIntegration.getOrRegisterHttpTexture(hash);
+                        if (httpLoc != null) {
+                            cir.setReturnValue(httpLoc);
+                            return;
+                        }
+                    }
+                }
+            }
+
             ResourceLocation customSkin = service.getSkinLocation(this.profile.getId());
             if (customSkin != null) {
                 cir.setReturnValue(customSkin);
@@ -51,8 +95,16 @@ public abstract class PlayerInfoMixin {
         if (Minecraft.getInstance().level == null) {
             ClientConfig config = ClientConfig.getInstance();
             if (!config.activeSkinHash.isEmpty()) {
-                ResourceLocation loc = LocalAssetManager.getInstance()
-                        .getTextureLocation(config.activeSkinHash, TextureQuality.FULL);
+                ResourceLocation loc;
+                if (CPMCompatIntegration.isAvailable()) {
+                    loc = CPMCompatIntegration.getOrRegisterHttpTexture(config.activeSkinHash);
+                } else {
+                    loc = null;
+                }
+                if (loc == null) {
+                    loc = LocalAssetManager.getInstance()
+                            .getTextureLocation(config.activeSkinHash, TextureQuality.FULL);
+                }
                 if (loc != null) {
                     cir.setReturnValue(loc);
                 }
