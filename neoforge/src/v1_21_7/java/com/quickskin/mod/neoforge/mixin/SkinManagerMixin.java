@@ -21,6 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -117,8 +118,9 @@ public class SkinManagerMixin {
             }
         }
 
-        // Title screen config fallback
-        if (Minecraft.getInstance().level == null) {
+        // Config-based fallback for local player (title screen and in-world)
+        boolean isLocalPlayer = uuid.equals(Minecraft.getInstance().getUser().getProfileId());
+        if (isLocalPlayer) {
             ClientConfig config = ClientConfig.getInstance();
             boolean hasSkin = !config.activeSkinHash.isEmpty();
             boolean hasCape = !config.activeCapeHash.isEmpty();
@@ -277,7 +279,7 @@ public class SkinManagerMixin {
      * QuickSkin overrides when the future resolves.
      */
     @Inject(method = "getOrLoad", at = @At("RETURN"), cancellable = true)
-    private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<PlayerSkin>> cir) {
+    private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
         UUID uuid = profile.getId();
         if (uuid == null) return;
 
@@ -291,7 +293,8 @@ public class SkinManagerMixin {
                     || service.hasModelOverride(uuid);
         }
 
-        if (!hasServiceOverrides && Minecraft.getInstance().level == null) {
+        boolean isLocalPlayer = uuid.equals(Minecraft.getInstance().getUser().getProfileId());
+        if (!hasServiceOverrides && isLocalPlayer) {
             ClientConfig config = ClientConfig.getInstance();
             hasTitleScreenFallback = !config.activeSkinHash.isEmpty() || !config.activeCapeHash.isEmpty();
         }
@@ -300,9 +303,9 @@ public class SkinManagerMixin {
         if (!hasServiceOverrides && !hasTitleScreenFallback) return;
 
         String profileName = profile.getName();
-        CompletableFuture<PlayerSkin> original = cir.getReturnValue();
-        CompletableFuture<PlayerSkin> modified = original.thenApply(skin ->
-            quickskin$applyOverrides(skin, uuid, profileName)
+        CompletableFuture<Optional<PlayerSkin>> original = cir.getReturnValue();
+        CompletableFuture<Optional<PlayerSkin>> modified = original.thenApply(optSkin ->
+            optSkin.map(skin -> quickskin$applyOverrides(skin, uuid, profileName))
         );
         cir.setReturnValue(modified);
     }

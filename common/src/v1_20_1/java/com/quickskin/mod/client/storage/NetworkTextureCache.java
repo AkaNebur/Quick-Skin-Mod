@@ -125,14 +125,8 @@ public class NetworkTextureCache {
 
         // Load and register texture
         try {
-            BufferedImage bufferedImage = ImageIO.read(new ByteArrayInputStream(textureData));
-            if (bufferedImage == null) {
-                QuickSkin.LOGGER.error("Failed to decode network texture: {}", hash);
-                return null;
-            }
-
-            // Convert to NativeImage
-            NativeImage nativeImage = convertToNativeImage(bufferedImage);
+            // Load directly as NativeImage from PNG bytes (handles pixel format automatically)
+            NativeImage nativeImage = NativeImage.read(new ByteArrayInputStream(textureData));
 
             // Create dynamic texture
             DynamicTexture dynamicTexture = new DynamicTexture(nativeImage);
@@ -268,28 +262,4 @@ public class NetworkTextureCache {
         return textureDataCache.size();
     }
 
-    /**
-     * Convert BufferedImage to NativeImage for texture registration
-     */
-    private NativeImage convertToNativeImage(BufferedImage bufferedImage) {
-        int width = bufferedImage.getWidth();
-        int height = bufferedImage.getHeight();
-
-        NativeImage nativeImage = new NativeImage(width, height, true);
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int argb = bufferedImage.getRGB(x, y);
-                // NativeImage expects ABGR format
-                int a = (argb >> 24) & 0xFF;
-                int r = (argb >> 16) & 0xFF;
-                int g = (argb >> 8) & 0xFF;
-                int b = argb & 0xFF;
-                int abgr = (a << 24) | (b << 16) | (g << 8) | r;
-                nativeImage.setPixelRGBA(x, y, abgr);
-            }
-        }
-
-        return nativeImage;
-    }
 }

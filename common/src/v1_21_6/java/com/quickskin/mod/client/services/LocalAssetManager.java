@@ -714,14 +714,8 @@ public class LocalAssetManager {
         }
 
         try {
-            // Create BufferedImage from bytes
-            BufferedImage bufferedImage = ImageIO.read(new ByteArrayInputStream(textureData));
-            if (bufferedImage == null) {
-                return null;
-            }
-
-            // Convert BufferedImage to NativeImage
-            NativeImage nativeImage = convertToNativeImage(bufferedImage);
+            // Load directly as NativeImage from PNG bytes (handles pixel format automatically)
+            NativeImage nativeImage = NativeImage.read(new ByteArrayInputStream(textureData));
 
             // Create dynamic texture
             DynamicTexture dynamicTexture = new DynamicTexture(() -> "quickskin_local_" + hash, nativeImage);

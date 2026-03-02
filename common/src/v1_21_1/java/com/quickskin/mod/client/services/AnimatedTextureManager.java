@@ -4,7 +4,6 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.config.ClientConfig;
-import com.quickskin.mod.platform.PlatformHelper;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -12,7 +11,10 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -62,7 +64,10 @@ public class AnimatedTextureManager {
 
                 for (int i = 0; i < metadata.frameCount(); i++) {
                     BufferedImage frameImage = atlasImage.getSubimage(0, i * frameHeight, frameWidth, frameHeight);
-                    NativeImage nativeImage = convertToNativeImage(frameImage);
+                    // Convert frame to PNG bytes and load as NativeImage (handles pixel format automatically)
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    ImageIO.write(frameImage, "png", baos);
+                    NativeImage nativeImage = NativeImage.read(new ByteArrayInputStream(baos.toByteArray()));
 
                     frameTextures[i] = new DynamicTexture(nativeImage);
                     // Create a unique name for the frame texture to avoid conflicts
@@ -72,24 +77,6 @@ public class AnimatedTextureManager {
             } catch (Exception e) {
                 QuickSkin.LOGGER.error("Failed to load and slice animation frames for {}", atlasTextureLocation, e);
             }
-        }
-
-        private NativeImage convertToNativeImage(BufferedImage bufferedImage) {
-            int width = bufferedImage.getWidth();
-            int height = bufferedImage.getHeight();
-            NativeImage nativeImage = new NativeImage(width, height, true);
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    int argb = bufferedImage.getRGB(x, y);
-                    int a = (argb >> 24) & 0xFF;
-                    int r = (argb >> 16) & 0xFF;
-                    int g = (argb >> 8) & 0xFF;
-                    int b = argb & 0xFF;
-                    int abgr = (a << 24) | (b << 16) | (g << 8) | r;
-                    PlatformHelper.setPixel(nativeImage, x, y, abgr);
-                }
-            }
-            return nativeImage;
         }
 
         void tick() {

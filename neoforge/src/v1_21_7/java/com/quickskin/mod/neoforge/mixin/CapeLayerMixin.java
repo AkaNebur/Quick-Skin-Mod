@@ -9,7 +9,7 @@ import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.Minecraft;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.math.Axis;
+import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -18,7 +18,9 @@ import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -27,6 +29,9 @@ import java.util.UUID;
 
 @Mixin(value = CapeLayer.class, priority = 1100)
 public class CapeLayerMixin {
+
+    // In MC 1.21.4+, CapeLayer has its own cape model (PlayerCapeModel) separate from PlayerModel
+    @Shadow @Final private HumanoidModel<?> model;
 
     private static final java.util.Map<java.util.UUID, Long> lastLogTime = new java.util.concurrent.ConcurrentHashMap<>();
     private static final long LOG_INTERVAL_MS = 2000;
@@ -60,22 +65,31 @@ public class CapeLayerMixin {
             lastLogTime.put(playerUUID, now);
         }
 
-        if (!service.hasActiveCape(playerUUID)) {
-            return;
+        // Check service-based cape
+        boolean hasServiceCape = service.hasActiveCape(playerUUID);
+
+        // Check config-based cape for local player (works both title screen and in-world)
+        boolean hasConfigCape = false;
+        boolean isLocalPlayer = mc.player != null && playerUUID.equals(mc.player.getUUID());
+        if (!hasServiceCape && isLocalPlayer) {
+            ClientConfig config = ClientConfig.getInstance();
+            hasConfigCape = !config.activeCapeHash.isEmpty();
         }
 
-        // Get cape texture from our service instead of renderState.skin.capeTexture(),
-        // because some mods (e.g. Essential) override getSkin() in a subclass,
-        // bypassing our MixinAbstractClientPlayer that sets the correct cape texture.
-        ResourceLocation capeTexture = service.getCapeLocation(playerUUID);
-        if (capeTexture == null) {
-            // Fallback to config-based lookup for title screen
-            if (mc.level == null) {
-                ClientConfig config = ClientConfig.getInstance();
-                if (!config.activeCapeHash.isEmpty()) {
-                    capeTexture = com.quickskin.mod.client.services.CapeService.getInstance()
-                            .getCapeLocation(null, config.activeCapeHash);
-                }
+        if (!hasServiceCape && !hasConfigCape) {
+            return; // No cape from either source, let vanilla handle
+        }
+
+        // Get cape texture from our service or config fallback
+        ResourceLocation capeTexture = null;
+        if (hasServiceCape) {
+            capeTexture = service.getCapeLocation(playerUUID);
+        }
+        if (capeTexture == null && isLocalPlayer) {
+            ClientConfig config = ClientConfig.getInstance();
+            if (!config.activeCapeHash.isEmpty()) {
+                capeTexture = com.quickskin.mod.client.services.CapeService.getInstance()
+                        .getCapeLocation(null, config.activeCapeHash);
             }
         }
         if (capeTexture == null) {
@@ -132,18 +146,13 @@ public class CapeLayerMixin {
 
         VertexConsumer vertexconsumer = buffer.getBuffer(renderType);
 
-        poseStack.pushPose();
-        poseStack.translate(0.0D, 0.0D, 0.125D);
-
-        // Use pre-computed cape physics from the render state
-        poseStack.mulPose(Axis.XP.rotationDegrees(6.0F + renderState.capeFlap / 2.0F + renderState.capeLean));
-        poseStack.mulPose(Axis.ZP.rotationDegrees(renderState.capeLean2 / 2.0F));
-        poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - renderState.capeLean2 / 2.0F));
-
-        // Render the cloak part of the model
-        com.quickskin.mod.platform.PlatformHelper.renderCloak(((CapeLayer)(Object)this).getParentModel(), poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY);
-
-        poseStack.popPose();
+        // Use CapeLayer's own cape model (PlayerCapeModel) - the proper MC 1.21.4+ approach
+        // Copy body transforms from parent player model, then setup animation and render
+        @SuppressWarnings("unchecked")
+        HumanoidModel<PlayerRenderState> capeModel = (HumanoidModel<PlayerRenderState>) (HumanoidModel<?>) this.model;
+        ((CapeLayer)(Object)this).getParentModel().copyPropertiesTo(capeModel);
+        capeModel.setupAnim(renderState);
+        capeModel.renderToBuffer(poseStack, vertexconsumer, packedLight, OverlayTexture.NO_OVERLAY);
 
         ci.cancel();
     }

@@ -43,11 +43,37 @@ public class CapeLayerMixin {
             lastLogTime.put(player.getUUID(), now);
         }
 
-        if (!service.hasActiveCape(player.getUUID())) {
-            return;
+        // Check service-based cape
+        boolean hasServiceCape = service.hasActiveCape(player.getUUID());
+
+        // Check config-based cape for local player (works both title screen and in-world)
+        boolean hasConfigCape = false;
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        boolean isLocalPlayer = mc.player != null && player.getUUID().equals(mc.player.getUUID());
+        if (!hasServiceCape && isLocalPlayer) {
+            com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+            hasConfigCape = !config.activeCapeHash.isEmpty();
         }
 
-        ResourceLocation capeTexture = player.getSkin().capeTexture();
+        if (!hasServiceCape && !hasConfigCape) {
+            return; // No cape from either source, let vanilla handle
+        }
+
+        // Get cape texture from service or config fallback
+        ResourceLocation capeTexture = null;
+        if (hasServiceCape) {
+            capeTexture = player.getSkin().capeTexture();
+        }
+        if (capeTexture == null && isLocalPlayer) {
+            com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+            if (!config.activeCapeHash.isEmpty()) {
+                capeTexture = com.quickskin.mod.client.services.CapeService.getInstance()
+                        .getCapeLocation(null, config.activeCapeHash);
+            }
+        }
+        if (capeTexture == null) {
+            capeTexture = player.getSkin().capeTexture();
+        }
 
         if (capeTexture == null) {
             ci.cancel();

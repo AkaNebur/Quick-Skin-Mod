@@ -42,6 +42,11 @@ public class PlayerModelRenderer {
     public static PlayerModel pendingCapeBodyModel;
     public static PlayerCapeModel<?> pendingCapeModel;
 
+    // Tracks cape state hash to force PiP cache invalidation when cape changes.
+    // PiP only re-renders when submitted state differs; cape isn't part of the state,
+    // so we add an imperceptible scale nudge that varies with the cape identity.
+    private static int lastCapeStateHash = 0;
+
     /**
      * Initialize models (lazy initialization)
      */
@@ -193,6 +198,34 @@ public class PlayerModelRenderer {
                 poseStack.popPose();
             }
 
+            // Set cape data for GuiSkinRendererMixin (PiP bypasses CapeLayer in 1.21.6+)
+            ensureModelsLoaded();
+            ResourceLocation entityCapeTexture = null;
+            if (playerData.getCapeLocation() != null) {
+                entityCapeTexture = playerData.getCapeLocation();
+                String capeId = playerData.getCapeId();
+
+                String animationId = null;
+                if (capeId != null) {
+                    if (capeId.startsWith("local_cape:")) {
+                        animationId = "cape_" + capeId.substring("local_cape:".length());
+                    } else if (capeId.startsWith("known:")) {
+                        animationId = "cape_known_" + capeId.substring("known:".length());
+                    }
+                }
+
+                if (animationId != null) {
+                    ResourceLocation currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);
+                    if (currentFrame != null) {
+                        entityCapeTexture = currentFrame;
+                    }
+                }
+            }
+            PlayerModel bodyModel = "slim".equals(playerData.getModelType() != null ? playerData.getModelType().toLowerCase(Locale.ROOT) : null) ? slimModel : classicModel;
+            pendingCapeTexture = entityCapeTexture;
+            pendingCapeBodyModel = bodyModel;
+            pendingCapeModel = capeModel;
+
             // 1.21.6: renderEntityInInventory(GuiGraphics, int x1, int y1, int x2, int y2, float scale, Vector3f, Quaternionf, Quaternionf, LivingEntity)
             // The PiP renderer centers the entity origin (feet) at the vertical center of the bounding box.
             // In 1.21.4, y was the feet position directly. In 1.21.6 with the bounding box API,
@@ -237,8 +270,8 @@ public class PlayerModelRenderer {
      * Manually render player model without requiring a player entity
      * Used on title screen where no world/player exists
      * In 1.21.6+, all GUI 3D rendering must go through the PiP system.
-     * Cape rendering is handled by CapeAwareModel which renders the cape
-     * inside renderToBuffer(), using the shared buffer source.
+     * Cape rendering is handled by GuiSkinRendererMixin which renders the cape
+     * inside renderToTexture(), using the shared buffer source.
      */
     private static void renderPlayerModelManual(
             GuiGraphics graphics,
@@ -287,6 +320,14 @@ public class PlayerModelRenderer {
         pendingCapeBodyModel = model;
         pendingCapeModel = capeModel;
 
+        // Force PiP cache invalidation when cape changes by adding imperceptible scale nudge
+        int capeHash = capeTexture != null ? capeTexture.hashCode() : 0;
+        float scaleNudge = 0.0f;
+        if (capeHash != lastCapeStateHash) {
+            lastCapeStateHash = capeHash;
+        }
+        scaleNudge = 0.000001f * (capeHash & 0xFF);
+
         // Submit to PiP system - cape rendering injected by GuiSkinRendererMixin
         int boxHeight = (int)(scale * 2.3f);
         int boxHalfWidth = (int)(scale * 1.0f);
@@ -294,7 +335,7 @@ public class PlayerModelRenderer {
         graphics.submitSkinRenderState(
                 model,
                 playerData.getSkinLocation(),
-                (float)(int) scale,
+                (float)(int) scale + scaleNudge,
                 0.0f,
                 -45.0f + yRotation,
                 -1.0625f,

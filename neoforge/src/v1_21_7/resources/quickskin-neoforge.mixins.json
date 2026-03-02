@@ -9,7 +9,8 @@
     "MixinAbstractClientPlayer",
     "CapeLayerMixin",
     "PlayerRendererMixin",
-    "SkinManagerMixin"
+    "SkinManagerMixin",
+    "GuiSkinRendererMixin"
   ],
   "mixins": [
   ],

@@ -6,7 +6,6 @@ import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.model.geom.ModelPart;
-import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
@@ -36,13 +35,12 @@ public class PlayerRendererMixin {
             )
     )
     private VertexConsumer quickskin$redirectRenderHandBuffer(MultiBufferSource instance, RenderType renderType,
-                                                              PoseStack poseStack, MultiBufferSource buffer, int packedLight, AbstractClientPlayer player, ModelPart arm, ModelPart sleeve) {
+                                                              PoseStack poseStack, MultiBufferSource buffer, int packedLight, ResourceLocation skinTexture, ModelPart arm, boolean isSleeve) {
         // Check if transparency is disabled globally by config
         if (ClientConfig.getInstance().shouldDisableSkinTransparency()) {
             return instance.getBuffer(renderType);
         }
 
-        ResourceLocation skinTexture = player.getSkin().texture();
         if (skinTexture == null) {
             return instance.getBuffer(renderType);
         }

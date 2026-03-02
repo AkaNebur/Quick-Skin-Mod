@@ -104,8 +104,9 @@ public class SkinManagerMixin {
             }
         }
 
-        // Title screen config fallback
-        if (Minecraft.getInstance().level == null) {
+        // Config-based fallback for local player (title screen and in-world)
+        boolean isLocalPlayer = uuid.equals(Minecraft.getInstance().getUser().getProfileId());
+        if (isLocalPlayer) {
             ClientConfig config = ClientConfig.getInstance();
             boolean hasSkin = !config.activeSkinHash.isEmpty();
             boolean hasCape = !config.activeCapeHash.isEmpty();
@@ -202,7 +203,8 @@ public class SkinManagerMixin {
                     || service.hasModelOverride(uuid);
         }
 
-        if (!hasServiceOverrides && Minecraft.getInstance().level == null) {
+        boolean isLocalPlayer = uuid.equals(Minecraft.getInstance().getUser().getProfileId());
+        if (!hasServiceOverrides && isLocalPlayer) {
             ClientConfig config = ClientConfig.getInstance();
             hasTitleScreenFallback = !config.activeSkinHash.isEmpty() || !config.activeCapeHash.isEmpty();
         }
