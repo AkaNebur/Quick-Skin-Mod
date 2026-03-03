@@ -14,6 +14,8 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -36,6 +38,9 @@ public class NetworkTextureCache {
 
     // Track texture types (skin/cape) for selective clearing
     private final Map<String, String> textureTypeMap = new ConcurrentHashMap<>();
+
+    // Temp files written for CPM compatibility (hash -> path on disk)
+    private final Map<String, Path> tempFileCache = new ConcurrentHashMap<>();
 
     private NetworkTextureCache() {}
 
@@ -181,6 +186,37 @@ public class NetworkTextureCache {
     }
 
     /**
+     * Gets or creates a temp file containing the original (unprocessed) texture bytes.
+     * Used by CPM compatibility -- CPM needs a real file on disk to read embedded 3D model data.
+     *
+     * @param hash The texture hash
+     * @return Path to the temp file, or null if the texture is not in the network cache
+     */
+    @Nullable
+    public Path getOrCreateTempFile(String hash) {
+        if (hash == null) return null;
+
+        Path existing = tempFileCache.get(hash);
+        if (existing != null && Files.exists(existing)) {
+            return existing;
+        }
+
+        byte[] original = originalTextureData.get(hash);
+        if (original == null) return null;
+
+        try {
+            Path cpmCacheDir = PlatformHelper.getGameDirectory().resolve("quickskin").resolve("cpm-cache");
+            Files.createDirectories(cpmCacheDir);
+            Path tempFile = cpmCacheDir.resolve(hash + ".png");
+            Files.write(tempFile, original);
+            tempFileCache.put(hash, tempFile);
+            return tempFile;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
      * Clear all cached network textures
      */
     public void clear() {
@@ -191,6 +227,15 @@ public class NetworkTextureCache {
             } catch (Exception e) {
             }
         }
+
+        // Delete temp files written for CPM compatibility
+        for (Path tempFile : tempFileCache.values()) {
+            try {
+                Files.deleteIfExists(tempFile);
+            } catch (IOException e) {
+            }
+        }
+        tempFileCache.clear();
 
         originalTextureData.clear();
         textureDataCache.clear();

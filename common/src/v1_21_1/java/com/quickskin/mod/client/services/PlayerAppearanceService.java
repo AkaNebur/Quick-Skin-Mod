@@ -88,8 +88,10 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 // Notify CustomNPCs integration (if available) to handle any skin cache invalidation
                 CustomNPCsIntegration.onSkinApplied(playerId, skinLocation);
 
-                // Invalidate CPM's model cache so it re-reads the new skin's embedded data
-                CPMCompatIntegration.invalidatePlayerCache();
+                // Force CPM to switch to skin mode and re-read skin data.
+                // This clears CPM's selectedModel config and model cache so CPM
+                // reads model data from the new skin PNG instead of a .cpmmodel file.
+                CPMCompatIntegration.forceReRegisterSkins(playerId);
 
                 // Associate Ears features with this player (if Ears is available)
                 if (com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {

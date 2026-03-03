@@ -1,6 +1,7 @@
 package com.quickskin.mod.mixin;
 
 import com.mojang.authlib.GameProfile;
+import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.TextureQuality;
@@ -62,7 +63,30 @@ public class SkinManagerMixin {
             boolean anyOverride = false;
 
             if (hasCustomSkin) {
-                ResourceLocation customSkin = service.getSkinLocation(uuid);
+                ResourceLocation customSkin;
+                if (CPMCompatIntegration.isAvailable()) {
+                    // When CPM is installed, register skin as HttpTexture so CPM can
+                    // read pixel data and extract embedded 3D model from the PNG file.
+                    // CPM's 1.21+ pipeline checks instanceof HttpTexture on the texture.
+                    com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(uuid);
+                    String hash = null;
+                    if (appearance != null && appearance.getSkinId() != null) {
+                        String skinId = appearance.getSkinId();
+                        if (skinId.startsWith("local_skin:")) {
+                            hash = skinId.substring("local_skin:".length());
+                        }
+                    }
+                    if (hash != null) {
+                        customSkin = CPMCompatIntegration.getOrRegisterHttpTexture(hash);
+                        if (customSkin == null) {
+                            customSkin = service.getSkinLocation(uuid);
+                        }
+                    } else {
+                        customSkin = service.getSkinLocation(uuid);
+                    }
+                } else {
+                    customSkin = service.getSkinLocation(uuid);
+                }
                 if (customSkin != null) {
                     skinTexture = customSkin;
                     anyOverride = true;

@@ -207,6 +207,13 @@ public class SkinManagerMixin {
 
         // Find the skin file on disk
         Path sourcePath = LocalAssetManager.getInstance().getSourcePath(hash);
+
+        // Fallback: network-received textures stored in memory -- write to a temp file for CPM
+        if (sourcePath == null || !sourcePath.toFile().exists()) {
+            sourcePath = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                    .getOrCreateTempFile(hash);
+        }
+
         if (sourcePath == null || !sourcePath.toFile().exists()) {
             // File not found, fall back to DynamicTexture
             return service.getSkinLocation(uuid);

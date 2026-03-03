@@ -183,6 +183,27 @@ public class CPMCompatIntegration {
      */
     public static void forceReRegisterSkins(java.util.UUID playerId) {
         CPMLOG.info("forceReRegisterSkins called for {}", playerId);
+
+        // For the local player: reset CPM to skin mode so it reads from the
+        // new skin texture instead of keeping an explicitly selected model.
+        // Use mc.player.getUUID() (the in-game UUID) as primary check because on
+        // offline-mode servers the in-game UUID differs from mc.getUser().getProfileId().
+        java.util.UUID localUuid = null;
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc != null && mc.player != null) {
+                localUuid = mc.player.getUUID();
+            }
+            if (localUuid == null && mc != null && mc.getUser() != null) {
+                localUuid = mc.getUser().getProfileId();
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        if (localUuid != null && localUuid.equals(playerId)) {
+            resetToSkinMode();
+        }
+
         // Always clear CPM model cache
         invalidatePlayerCache();
 
@@ -201,6 +222,58 @@ public class CPMCompatIntegration {
         } else {
             CPMLOG.info("forceReRegisterSkins SKIPPED: player={} connection={}",
                     mc.player != null, mc.player != null ? mc.player.connection != null : "N/A");
+        }
+    }
+
+    /**
+     * Resets CPM to "skin mode" by clearing the explicitly selected model.
+     * In skin mode, CPM reads the 3D model from the skin PNG texture instead
+     * of using a .cpmmodel file selected via CPM's menu.
+     * Also notifies the server if CPM's network protocol is active.
+     */
+    private static void resetToSkinMode() {
+        if (!isAvailable()) return;
+
+        try {
+            // ModConfig.getCommonConfig() -> ConfigEntry
+            Class<?> modConfigClass = Class.forName("com.tom.cpm.shared.config.ModConfig");
+            Method getCommonConfig = modConfigClass.getMethod("getCommonConfig");
+            Object config = getCommonConfig.invoke(null);
+            if (config == null) return;
+
+            // Check if a model is currently selected
+            Method getString = config.getClass().getMethod("getString", String.class, String.class);
+            String currentModel = (String) getString.invoke(config, "selectedModel", null);
+            if (currentModel == null) {
+                CPMLOG.info("resetToSkinMode: already in skin mode");
+                return;
+            }
+
+            CPMLOG.info("resetToSkinMode: clearing selectedModel={}", currentModel);
+
+            // ConfigEntry.clearValue("selectedModel")
+            Method clearValue = config.getClass().getMethod("clearValue", String.class);
+            clearValue.invoke(config, "selectedModel");
+
+            // ModConfigFile.save()
+            Method save = config.getClass().getMethod("save");
+            save.invoke(config);
+
+            // Notify the server if CPM's network is active
+            Class<?> mcaClass = Class.forName("com.tom.cpm.shared.MinecraftClientAccess");
+            Method mcaGet = mcaClass.getMethod("get");
+            Object mca = mcaGet.invoke(null);
+            if (mca != null) {
+                Method getServerSideStatus = mcaClass.getMethod("getServerSideStatus");
+                Object status = getServerSideStatus.invoke(mca);
+                if (status != null && "INSTALLED".equals(status.toString())) {
+                    Method sendSkinUpdate = mcaClass.getMethod("sendSkinUpdate");
+                    sendSkinUpdate.invoke(mca);
+                    CPMLOG.info("resetToSkinMode: sent skin update to server");
+                }
+            }
+        } catch (Exception e) {
+            CPMLOG.warn("resetToSkinMode: failed", e);
         }
     }
 
