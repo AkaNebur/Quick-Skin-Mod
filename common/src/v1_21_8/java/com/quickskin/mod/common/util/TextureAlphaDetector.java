@@ -156,6 +156,17 @@ public class TextureAlphaDetector {
     }
 
     /**
+     * Directly cache a transparency result for a texture.
+     * Used by LocalAssetManager when registering DynamicTextures that aren't
+     * available through the resource manager.
+     */
+    public static void cacheTransparencyResult(ResourceLocation textureLocation, boolean hasTransparency) {
+        if (textureLocation != null) {
+            transparencyCache.put(textureLocation, hasTransparency);
+        }
+    }
+
+    /**
      * Clear the transparency cache (useful for resource pack reloads)
      */
     public static void clearCache() {

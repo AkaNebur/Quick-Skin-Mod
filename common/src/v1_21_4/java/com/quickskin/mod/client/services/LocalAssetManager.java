@@ -713,6 +713,18 @@ public class LocalAssetManager {
 
             Minecraft.getInstance().getTextureManager().register(location, dynamicTexture);
 
+            // Cache transparency info for the first-person arm rendering mixin
+            // DynamicTextures aren't accessible via resource manager, so we check here
+            boolean hasAlpha = false;
+            for (int y = 0; y < nativeImage.getHeight() && !hasAlpha; y += Math.max(1, nativeImage.getHeight() / 32)) {
+                for (int x = 0; x < nativeImage.getWidth() && !hasAlpha; x += Math.max(1, nativeImage.getWidth() / 32)) {
+                    int pixel = PlatformHelper.getPixel(nativeImage, x, y);
+                    int alpha = (pixel >> 24) & 0xFF;
+                    if (alpha < 255) hasAlpha = true;
+                }
+            }
+            com.quickskin.mod.common.util.TextureAlphaDetector.cacheTransparencyResult(location, hasAlpha);
+
             // Parse Ears features from the original unprocessed image (preserving alpha for Alfalfa data)
             AssetMetadata metadata = getMetadata(hash);
             if (metadata != null && "skin".equals(metadata.type())

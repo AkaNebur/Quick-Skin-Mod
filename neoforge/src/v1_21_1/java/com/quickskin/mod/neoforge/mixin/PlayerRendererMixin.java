@@ -2,7 +2,6 @@ package com.quickskin.mod.neoforge.mixin;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.model.geom.ModelPart;
@@ -48,8 +47,7 @@ public class PlayerRendererMixin {
         }
 
         // Determine if the skin needs a translucent render type
-        boolean needsTranslucent = skinTexture.getNamespace().equals(QuickSkin.MOD_ID)
-                || TextureAlphaDetector.hasTransparency(skinTexture);
+        boolean needsTranslucent = TextureAlphaDetector.hasTransparency(skinTexture);
 
         if (needsTranslucent) {
             // The vanilla method calls getBuffer for both the solid arm and the translucent sleeve.

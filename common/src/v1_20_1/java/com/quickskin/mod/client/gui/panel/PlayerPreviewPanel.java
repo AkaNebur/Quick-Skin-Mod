@@ -357,7 +357,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
             int iconX = getX() + (width - iconSize) / 2;
             int iconY = getY() + (height - iconSize) / 2;
             com.mojang.blaze3d.systems.RenderSystem.enableBlend();
-            com.quickskin.mod.platform.PlatformHelper.blit(graphics, cpmIconLocation,
+            graphics.blit(cpmIconLocation,
                     iconX, iconY, iconSize, iconSize,
                     0, 0, 64, 64, 64, 64);
             com.mojang.blaze3d.systems.RenderSystem.disableBlend();
