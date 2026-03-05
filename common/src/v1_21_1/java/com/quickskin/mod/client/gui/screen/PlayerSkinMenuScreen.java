@@ -367,6 +367,13 @@ public class PlayerSkinMenuScreen extends Screen {
                 skinListPanel.setSelected(metadata, !isResizing);
                 selectedSkin = metadata;
             }
+        } else if (!config.activeCpmModelHash.isEmpty() && skinListPanel != null) {
+            // Restore CPM model selection
+            AssetMetadata cpmModel = LocalAssetManager.getInstance().getMetadata(config.activeCpmModelHash);
+            if (cpmModel != null) {
+                skinListPanel.setSelected(cpmModel, !isResizing);
+                selectedSkin = cpmModel;
+            }
         } else if (config.activeSkinHash.isEmpty() && !config.playerOwnSkinHash.isEmpty() && skinListPanel != null) {
             // If no active skin is set, auto-select the player's own skin
             AssetMetadata playerOwnSkin = LocalAssetManager.getInstance().getMetadata(config.playerOwnSkinHash);
@@ -794,9 +801,10 @@ public class PlayerSkinMenuScreen extends Screen {
                 // Select the model in CPM
                 com.quickskin.mod.client.compat.CPMCompatIntegration.selectModel(modelFileName);
 
-                // Clear the active skin hash since we're using a CPM model now
+                // Save the CPM model hash and clear the active skin hash
                 com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
                 config.activeSkinHash = "";
+                config.activeCpmModelHash = metadata.hash();
                 config.save();
                 return;
             }
@@ -822,6 +830,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 // Always save the active skin hash to config, regardless of being in-game.
                 // This makes the selection persist on the title screen.
                 config.activeSkinHash = metadata.hash();
+                config.activeCpmModelHash = ""; // Clear CPM model since we're using a regular skin
                 config.save();
 
                 // If in-game, apply the skin to the actual player entity.

@@ -39,6 +39,9 @@ public class PlayerPreviewPanel extends AbstractWidget {
     @Nullable
     private AssetMetadata currentMetadata;
 
+    @Nullable
+    private net.minecraft.resources.ResourceLocation cpmIconLocation = null;
+
     public PlayerPreviewPanel(int x, int y, int width, int height) {
         super(x, y, width, height, Component.empty());
     }
@@ -259,6 +262,17 @@ public class PlayerPreviewPanel extends AbstractWidget {
     public void updateSkin(AssetMetadata metadata, net.minecraft.resources.ResourceLocation skinLocation) {
         if (playerWidget != null && metadata != null) {
             this.currentMetadata = metadata;
+
+            // CPM models can only be previewed in-game (CPM handles rendering)
+            boolean isInGame = net.minecraft.client.Minecraft.getInstance().player != null;
+            if (metadata.isCpmModel() && !isInGame) {
+                cpmIconLocation = skinLocation;
+                playerWidget.visible = false;
+                return;
+            }
+
+            cpmIconLocation = null;
+            playerWidget.visible = true;
             playerWidget.setSkin(skinLocation);
 
             // Update model type based on current mode
@@ -338,7 +352,16 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // This panel doesn't render anything itself - child widgets handle rendering
+        if (cpmIconLocation != null) {
+            int iconSize = Math.min(width, height) - 16;
+            int iconX = getX() + (width - iconSize) / 2;
+            int iconY = getY() + (height - iconSize) / 2;
+            com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+            com.quickskin.mod.platform.PlatformHelper.blit(graphics, cpmIconLocation,
+                    iconX, iconY, iconSize, iconSize,
+                    0, 0, 64, 64, 64, 64);
+            com.mojang.blaze3d.systems.RenderSystem.disableBlend();
+        }
     }
 
     @Override

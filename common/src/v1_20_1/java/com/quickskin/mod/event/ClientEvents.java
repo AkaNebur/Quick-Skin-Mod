@@ -730,8 +730,8 @@ public class ClientEvents {
             com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
             config.playerOwnSkinHash = finalHash;
 
-            // If no active skin is set, auto-select the player's own skin.
-            if (config.activeSkinHash.isEmpty()) {
+            // If no active skin or CPM model is set, auto-select the player's own skin.
+            if (config.activeSkinHash.isEmpty() && config.activeCpmModelHash.isEmpty()) {
                 config.activeSkinHash = finalHash;
 
                 // Apply it to the player if they're in a world.
@@ -793,8 +793,8 @@ public class ClientEvents {
                         .applySkin(targetPlayerId, skinId, modelType);
 
             }
-        } else if (!config.playerOwnSkinHash.isEmpty()) {
-            // No skin selected, but player's own skin exists - auto-select it
+        } else if (!config.playerOwnSkinHash.isEmpty() && config.activeCpmModelHash.isEmpty()) {
+            // No skin or CPM model selected, but player's own skin exists - auto-select it
             com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.playerOwnSkinHash);
 
             if (metadata != null) {
@@ -833,8 +833,8 @@ public class ClientEvents {
     public static void autoSelectPlayerOwnSkin() {
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
 
-        // Check if no skin is selected but player's own skin exists
-        if (config.activeSkinHash.isEmpty() && !config.playerOwnSkinHash.isEmpty()) {
+        // Check if no skin or CPM model is selected but player's own skin exists
+        if (config.activeSkinHash.isEmpty() && config.activeCpmModelHash.isEmpty() && !config.playerOwnSkinHash.isEmpty()) {
             LocalAssetManager assetManager = LocalAssetManager.getInstance();
             AssetMetadata metadata = assetManager.getMetadata(config.playerOwnSkinHash);
 
