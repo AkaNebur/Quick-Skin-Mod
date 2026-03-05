@@ -97,21 +97,27 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         if (textureLocation != null) {
             RenderSystem.enableBlend();
 
-            // Get texture dimensions for proper UV mapping
-            int textureWidth = metadata.resolution().getWidth();
-            int textureHeight = metadata.resolution().getHeight();
+            if (metadata.isCpmModel()) {
+                // For CPM models, render the full icon image (not face UV crop)
+                PlatformHelper.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
+                    0, 0, 64, 64, 64, 64);
+            } else {
+                // Get texture dimensions for proper UV mapping
+                int textureWidth = metadata.resolution().getWidth();
+                int textureHeight = metadata.resolution().getHeight();
 
-            // Scale UV coordinates proportionally for HD textures
-            float scaleX = textureWidth / 64.0f;
-            float scaleY = textureHeight / 64.0f;
+                // Scale UV coordinates proportionally for HD textures
+                float scaleX = textureWidth / 64.0f;
+                float scaleY = textureHeight / 64.0f;
 
-            // Render face (front + overlay)
-            PlatformHelper.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
-                8.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
-                textureWidth, textureHeight);
-            PlatformHelper.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
-                40.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
-                textureWidth, textureHeight);
+                // Render face (front + overlay)
+                PlatformHelper.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
+                    8.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
+                    textureWidth, textureHeight);
+                PlatformHelper.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
+                    40.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
+                    textureWidth, textureHeight);
+            }
 
             RenderSystem.disableBlend();
         } else {
@@ -137,12 +143,19 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFF);
 
         // Model type and resolution
-        String modelText = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null) ? "Slim" : "Classic";
-        if (metadata.resolution().isHD()) {
-            modelText += " • " + metadata.resolution().name();
+        String modelText;
+        int modelTextColor;
+        if (metadata.isCpmModel()) {
+            modelText = "CPM Model";
+            modelTextColor = 0x55AAFF;
+        } else {
+            modelText = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null) ? "Slim" : "Classic";
+            if (metadata.resolution().isHD()) {
+                modelText += " • " + metadata.resolution().name();
+            }
+            modelTextColor = metadata.resolution().isHD() ? 0x55FF55 : 0xAAAAAA;
         }
-        graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
-            metadata.resolution().isHD() ? 0x55FF55 : 0xAAAAAA);
+        graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2, modelTextColor);
 
         // Render action buttons on hover (but not for player's own skin)
         this.isDeleteHovered = false;
@@ -178,8 +191,8 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
 
             this.isEditHovered = editHovered;
 
-            // Upload button (only for premium users)
-            if (isPremiumAccount) {
+            // Upload button (only for premium users, not for CPM models)
+            if (isPremiumAccount && !metadata.isCpmModel()) {
                 int uploadButtonY = editButtonY + actionButtonSize + 2;
                 boolean uploadHovered = mouseX >= deleteButtonX && mouseX < deleteButtonX + actionButtonSize &&
                                        mouseY >= uploadButtonY && mouseY < uploadButtonY + actionButtonSize;

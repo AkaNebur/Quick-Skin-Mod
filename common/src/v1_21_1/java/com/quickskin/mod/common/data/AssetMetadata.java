@@ -110,4 +110,35 @@ public record AssetMetadata(
         return "cape".equals(type);
     }
 
+    /**
+     * Check if this is a CPM model
+     */
+    public boolean isCpmModel() {
+        return "cpmmodel".equals(type);
+    }
+
+    /**
+     * Create metadata for a CPM model file
+     */
+    public static AssetMetadata forCpmModel(
+            String hash,
+            String friendlyName,
+            Path path,
+            long fileSize,
+            long lastModifiedTime
+    ) {
+        return new AssetMetadata(
+                hash,
+                friendlyName,
+                "cpmmodel",
+                path,
+                SkinResolution.STANDARD,
+                false,
+                1,
+                fileSize,
+                null,
+                lastModifiedTime
+        );
+    }
+
 }

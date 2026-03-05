@@ -718,29 +718,55 @@ public class PlayerSkinMenuScreen extends Screen {
     @Override
     public void onFilesDrop(List<Path> files) {
 
-        // Filter for PNG files
-        List<Path> pngFiles = files.stream()
-                .filter(path -> path.toString().toLowerCase(Locale.ROOT).endsWith(".png"))
-                .toList();
+        // Split files into image files and cpmmodel files
+        List<Path> imageFiles = new ArrayList<>();
+        List<Path> cpmModelFiles = new ArrayList<>();
 
-        if (pngFiles.isEmpty()) {
+        for (Path path : files) {
+            String lower = path.toString().toLowerCase(Locale.ROOT);
+            if (lower.endsWith(".png")) {
+                imageFiles.add(path);
+            } else if (lower.endsWith(".cpmmodel")) {
+                cpmModelFiles.add(path);
+            }
+        }
+
+        if (imageFiles.isEmpty() && cpmModelFiles.isEmpty()) {
             return;
         }
 
-        // Import all PNG files
+        // Check CPM availability for .cpmmodel files
+        if (!cpmModelFiles.isEmpty() && !com.quickskin.mod.client.compat.CPMCompatIntegration.isAvailable()) {
+            showError(Component.literal("CPM mod required for .cpmmodel files."));
+            cpmModelFiles.clear();
+        }
+
+        final List<Path> finalCpmModelFiles = cpmModelFiles;
+
         if (this.minecraft != null) {
             this.minecraft.execute(() -> {
-                List<AssetMetadata> imported = SkinImporter.importSkins(pngFiles.toArray(new Path[0]));
+                List<AssetMetadata> imported = new ArrayList<>();
+
+                // Import image files as skins
+                if (!imageFiles.isEmpty()) {
+                    imported.addAll(SkinImporter.importSkins(imageFiles.toArray(new Path[0])));
+                }
+
+                // Import .cpmmodel files
+                for (Path cpmPath : finalCpmModelFiles) {
+                    AssetMetadata meta = SkinImporter.importCpmModel(cpmPath);
+                    if (meta != null) {
+                        imported.add(meta);
+                    }
+                }
 
                 if (!imported.isEmpty()) {
-
                     // Reload the skin list
                     refreshSkinList();
 
-                    // Auto-select the first imported skin
-                    if (skinListPanel != null && !imported.isEmpty()) {
-                        AssetMetadata firstImported = imported.get(0);
-                        skinListPanel.setSelected(firstImported);
+                    // Auto-select the first imported asset
+                    if (skinListPanel != null) {
+                        skinListPanel.setSelected(imported.get(0));
                     }
                 }
             });
@@ -753,6 +779,35 @@ public class PlayerSkinMenuScreen extends Screen {
     public void onSkinSelected(SkinEntry entry) {
         if (playerPreviewPanel != null && entry != null) {
             AssetMetadata metadata = entry.getMetadata();
+
+            if (metadata.isCpmModel()) {
+                // CPM model selected - tell CPM to use this model
+                // Update preview with the model icon
+                playerPreviewPanel.updateSkin(
+                        metadata,
+                        LocalAssetManager.getInstance().getTextureLocation(metadata.hash(), TextureQuality.PREVIEW)
+                );
+
+                // In selection mode, don't apply
+                if (isSelectionMode()) {
+                    return;
+                }
+
+                // Get the model filename relative to player_models/
+                Path modelsDir = com.quickskin.mod.client.compat.CPMCompatIntegration.getCPMModelsDirectory();
+                Path modelPath = metadata.path();
+                String modelFileName = modelsDir.relativize(modelPath).toString().replace('\\', '/');
+
+                // Select the model in CPM
+                com.quickskin.mod.client.compat.CPMCompatIntegration.selectModel(modelFileName);
+
+                // Clear the active skin hash since we're using a CPM model now
+                com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
+                config.activeSkinHash = "";
+                config.save();
+                return;
+            }
+
             com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
 
             // Check if this skin is already the active skin
@@ -860,9 +915,18 @@ public class PlayerSkinMenuScreen extends Screen {
         // Import on main thread (Minecraft.getInstance().execute runs on main thread)
         if (this.minecraft != null) {
             this.minecraft.execute(() -> {
-                AssetMetadata metadata = SkinImporter.importSkin(filePath);
-                if (metadata != null) {
+                AssetMetadata metadata;
+                if (filePath.toString().toLowerCase(Locale.ROOT).endsWith(".cpmmodel")) {
+                    if (!com.quickskin.mod.client.compat.CPMCompatIntegration.isAvailable()) {
+                        showError(Component.literal("CPM mod required for .cpmmodel files."));
+                        return;
+                    }
+                    metadata = SkinImporter.importCpmModel(filePath);
+                } else {
+                    metadata = SkinImporter.importSkin(filePath);
+                }
 
+                if (metadata != null) {
                     // Reload the skin list
                     refreshSkinList();
 

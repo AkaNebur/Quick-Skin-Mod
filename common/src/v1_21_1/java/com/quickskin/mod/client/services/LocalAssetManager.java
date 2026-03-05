@@ -114,6 +114,53 @@ public class LocalAssetManager {
 
         // Scan capes directory
         scanDirectory(capesDirectory, "cape");
+
+        // Scan CPM models directory if CPM is available
+        if (com.quickskin.mod.client.compat.CPMCompatIntegration.isAvailable()) {
+            scanCpmModels();
+        }
+    }
+
+    /**
+     * Scan CPM's player_models directory for .cpmmodel files
+     */
+    private void scanCpmModels() {
+        Path modelsDir = com.quickskin.mod.client.compat.CPMCompatIntegration.getCPMModelsDirectory();
+        if (!Files.exists(modelsDir)) return;
+
+        try (Stream<Path> paths = Files.walk(modelsDir)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String fileName = path.getFileName().toString();
+                if (!fileName.toLowerCase(Locale.ROOT).endsWith(".cpmmodel")) continue;
+
+                try {
+                    String hash = HashUtil.computeFileHash(path);
+                    if (hash == null) continue;
+
+                    // Parse the .cpmmodel to get its name
+                    var info = com.quickskin.mod.client.compat.CPMCompatIntegration.parseCpmModelInfo(path);
+                    String friendlyName = info != null ? info.name : fileName.substring(0, fileName.length() - 9);
+
+                    long fileSize = Files.size(path);
+                    long lastModifiedTime = Files.getLastModifiedTime(path).toMillis();
+
+                    AssetMetadata metadata = AssetMetadata.forCpmModel(hash, friendlyName, path, fileSize, lastModifiedTime);
+                    metadataCache.put(hash, metadata);
+                    hashToSourcePath.put(hash, path);
+
+                    // Cache icon PNG bytes if available
+                    if (info != null && info.iconPngBytes != null) {
+                        Path iconPath = cacheDirectory.resolve("cpm_icons").resolve(hash + ".png");
+                        Files.createDirectories(iconPath.getParent());
+                        Files.write(iconPath, info.iconPngBytes);
+                    }
+                } catch (Exception e) {
+                    // Skip invalid files
+                }
+            }
+        } catch (IOException e) {
+            // Directory walk failed
+        }
     }
 
     /**
@@ -423,10 +470,16 @@ public class LocalAssetManager {
     }
 
     /**
-     * Get all skins
+     * Get all skins (including CPM models)
      */
     public List<AssetMetadata> getAllSkins() {
-        return getAssetsByType("skin");
+        String playerOwnSkinHash = ClientConfig.getInstance().playerOwnSkinHash;
+        SkinSortMode sortMode = ClientConfig.getInstance().getSkinSortMode();
+
+        return metadataCache.values().stream()
+                .filter(meta -> "skin".equals(meta.type()) || "cpmmodel".equals(meta.type()))
+                .sorted(getSortComparator(sortMode, playerOwnSkinHash))
+                .toList();
     }
 
     /**
@@ -489,6 +542,21 @@ public class LocalAssetManager {
         } catch (IOException e) {
             return null;
         }
+    }
+
+    /**
+     * Load cached CPM model icon PNG bytes
+     */
+    private byte[] loadCpmModelIcon(String hash) {
+        Path iconPath = cacheDirectory.resolve("cpm_icons").resolve(hash + ".png");
+        if (Files.exists(iconPath)) {
+            try {
+                return Files.readAllBytes(iconPath);
+            } catch (IOException e) {
+                return null;
+            }
+        }
+        return null;
     }
 
     /**
@@ -574,7 +642,15 @@ public class LocalAssetManager {
 
             // Update the metadata cache with new friendly name and path
             AssetMetadata updatedMetadata;
-            if ("skin".equals(metadata.type())) {
+            if (metadata.isCpmModel()) {
+                updatedMetadata = AssetMetadata.forCpmModel(
+                        metadata.hash(),
+                        sanitizedName,
+                        newPath,
+                        metadata.fileSize(),
+                        metadata.lastModifiedTime()
+                );
+            } else if ("skin".equals(metadata.type())) {
                 updatedMetadata = AssetMetadata.forSkin(
                         metadata.hash(),
                         sanitizedName,
@@ -692,8 +768,14 @@ public class LocalAssetManager {
             return qualityMap.get(quality);
         }
 
-        // Load and register texture
-        byte[] textureData = loadTexture(hash, quality);
+        // For cpmmodel entries, load the cached icon PNG
+        AssetMetadata meta = getMetadata(hash);
+        byte[] textureData;
+        if (meta != null && meta.isCpmModel()) {
+            textureData = loadCpmModelIcon(hash);
+        } else {
+            textureData = loadTexture(hash, quality);
+        }
         if (textureData == null) {
             return null;
         }

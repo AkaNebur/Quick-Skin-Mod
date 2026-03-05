@@ -12,9 +12,10 @@ import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -382,6 +383,162 @@ public class CPMCompatIntegration {
         } catch (Exception e) {
             // Silently fail - don't spam logs during rendering
             return false;
+        }
+    }
+
+    /**
+     * Returns the CPM player_models directory path.
+     */
+    public static Path getCPMModelsDirectory() {
+        return PlatformHelper.getGameDirectory().resolve("player_models");
+    }
+
+    /**
+     * Selects a CPM model by setting the selectedModel config key.
+     * This is the inverse of resetToSkinMode().
+     * @param modelFileName The model filename relative to player_models/ (e.g. "MyModel.cpmmodel")
+     */
+    public static void selectModel(String modelFileName) {
+        if (!isAvailable()) return;
+
+        try {
+            Class<?> modConfigClass = Class.forName("com.tom.cpm.shared.config.ModConfig");
+            Method getCommonConfig = modConfigClass.getMethod("getCommonConfig");
+            Object config = getCommonConfig.invoke(null);
+            if (config == null) return;
+
+            CPMLOG.info("selectModel: setting selectedModel={}", modelFileName);
+
+            Method setString = config.getClass().getMethod("setString", String.class, String.class);
+            setString.invoke(config, "selectedModel", modelFileName);
+
+            Method save = config.getClass().getMethod("save");
+            save.invoke(config);
+
+            // Notify the server if CPM's network is active
+            Class<?> mcaClass = Class.forName("com.tom.cpm.shared.MinecraftClientAccess");
+            Method mcaGet = mcaClass.getMethod("get");
+            Object mca = mcaGet.invoke(null);
+            if (mca != null) {
+                Method getServerSideStatus = mcaClass.getMethod("getServerSideStatus");
+                Object status = getServerSideStatus.invoke(mca);
+                if (status != null && "INSTALLED".equals(status.toString())) {
+                    Method sendSkinUpdate = mcaClass.getMethod("sendSkinUpdate");
+                    sendSkinUpdate.invoke(mca);
+                    CPMLOG.info("selectModel: sent skin update to server");
+                }
+            }
+
+            // Clear the model cache so CPM reloads
+            invalidatePlayerCache();
+        } catch (Exception e) {
+            CPMLOG.warn("selectModel: failed", e);
+        }
+    }
+
+    /**
+     * Parsed info from a .cpmmodel file.
+     */
+    public static class CpmModelInfo {
+        public final String name;
+        public final String description;
+        public final byte[] iconPngBytes; // null if no icon
+
+        public CpmModelInfo(String name, String description, byte[] iconPngBytes) {
+            this.name = name;
+            this.description = description;
+            this.iconPngBytes = iconPngBytes;
+        }
+    }
+
+    /**
+     * Parses a .cpmmodel binary file to extract name, description, and icon.
+     * Standalone parser -- does not depend on CPM classes.
+     * @return parsed info, or null if the file is invalid
+     */
+    public static CpmModelInfo parseCpmModelInfo(Path path) {
+        try (InputStream fis = Files.newInputStream(path)) {
+            DataInputStream dis = new DataInputStream(fis);
+
+            // Verify header
+            int header = dis.read();
+            if (header != 0x53) return null;
+
+            // Read name (varint length + UTF bytes)
+            String name = readVarIntUTF(dis);
+            // Read description (varint length + UTF bytes)
+            String description = readVarIntUTF(dis);
+
+            // Skip dataBlock (varint length + bytes)
+            int dataBlockLen = readVarInt(dis);
+            skipFully(dis, dataBlockLen);
+
+            // Skip overflow (varint length + bytes)
+            int overflowLen = readVarInt(dis);
+            if (overflowLen > 0) {
+                skipFully(dis, overflowLen);
+                // Skip link data: 1 byte length + that many bytes
+                int linkLen = dis.read();
+                if (linkLen > 0) {
+                    skipFully(dis, linkLen);
+                }
+            }
+
+            // Read icon image block (varint length + PNG data)
+            int iconLen = readVarInt(dis);
+            byte[] iconPngBytes = null;
+            if (iconLen > 0) {
+                iconPngBytes = new byte[iconLen];
+                dis.readFully(iconPngBytes);
+            }
+
+            return new CpmModelInfo(
+                    name != null ? name : path.getFileName().toString(),
+                    description != null ? description : "",
+                    iconPngBytes
+            );
+        } catch (Exception e) {
+            // Return basic info from filename on parse failure
+            String fileName = path.getFileName().toString();
+            String nameWithoutExt = fileName;
+            if (fileName.endsWith(".cpmmodel")) {
+                nameWithoutExt = fileName.substring(0, fileName.length() - 9);
+            }
+            return new CpmModelInfo(nameWithoutExt, "", null);
+        }
+    }
+
+    private static int readVarInt(DataInputStream dis) throws IOException {
+        int result = 0;
+        int shift = 0;
+        byte b;
+        do {
+            b = dis.readByte();
+            result |= (b & 0x7F) << (shift * 7);
+            shift++;
+            if (shift > 5) throw new IOException("VarInt too big");
+        } while ((b & 0x80) != 0);
+        return result;
+    }
+
+    private static String readVarIntUTF(DataInputStream dis) throws IOException {
+        int len = readVarInt(dis);
+        if (len <= 0) return "";
+        byte[] bytes = new byte[len];
+        dis.readFully(bytes);
+        return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static void skipFully(DataInputStream dis, int n) throws IOException {
+        int remaining = n;
+        while (remaining > 0) {
+            long skipped = dis.skip(remaining);
+            if (skipped <= 0) {
+                dis.readByte(); // force read to advance
+                remaining--;
+            } else {
+                remaining -= (int) skipped;
+            }
         }
     }
 }

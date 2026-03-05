@@ -84,6 +84,53 @@ public class SkinImporter {
     }
 
     /**
+     * Import a .cpmmodel file to CPM's player_models directory
+     * @param sourcePath Source .cpmmodel file path
+     * @return The imported asset metadata, or null on failure
+     */
+    public static AssetMetadata importCpmModel(Path sourcePath) {
+        if (sourcePath == null || !Files.exists(sourcePath)) {
+            return null;
+        }
+
+        String fileName = sourcePath.getFileName().toString();
+        if (!fileName.toLowerCase(Locale.ROOT).endsWith(".cpmmodel")) {
+            return null;
+        }
+
+        try {
+            Path modelsDir = com.quickskin.mod.client.compat.CPMCompatIntegration.getCPMModelsDirectory();
+            Files.createDirectories(modelsDir);
+
+            Path targetPath = modelsDir.resolve(fileName);
+
+            // If file already exists, add a number
+            int counter = 1;
+            String nameWithoutExt = fileName.substring(0, fileName.length() - 9);
+            while (Files.exists(targetPath)) {
+                targetPath = modelsDir.resolve(nameWithoutExt + "_" + counter + ".cpmmodel");
+                counter++;
+            }
+
+            // Copy the file
+            Files.copy(sourcePath, targetPath);
+
+            // Reload assets to pick up the new file
+            LocalAssetManager assetManager = LocalAssetManager.getInstance();
+            assetManager.reload();
+
+            // Get the metadata for the imported file
+            String hash = HashUtil.computeFileHash(targetPath);
+            if (hash != null) {
+                return assetManager.getMetadata(hash);
+            }
+        } catch (IOException e) {
+        }
+
+        return null;
+    }
+
+    /**
      * Import multiple skin files
      * @param sourcePaths Array of source file paths
      * @return List of successfully imported assets
