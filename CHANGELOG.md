@@ -1,12 +1,7 @@
-# Update - 2.6.2.2
 ## News
-* **__Version support 1.21.4 - 1.21.8 Fabric / NeoForge__**
-> Many people had asked me for it, and finally it's here! I'll try to release the rest of the versions in the next few days.
-> *All versions should work correctly, but I haven't had time to test whether they all work in multiplayer on NeoForge/Fabric.*
-
-* **CPM mod compatibility**
+* **CPM (Customizable Player Models) mod compatibility**
+> You can now select and manage .cpmmodel files directly from the Quick Skin menu. Models from CPM's player_models directory appear in your skin list with their icons, and you can switch between them without leaving the game.
 
 ## Fixes
-* **Fixed button position of the mod In-Game Account Switcher**
-
-* **Reduce log spamming when you have a cape on server**
+* **Fixed first-person hand texture when using CPM**
+> The arm rendering in first-person view no longer has visual artifacts. Transparency detection now correctly identifies which skins actually need translucent rendering instead of forcing it for all custom skins.

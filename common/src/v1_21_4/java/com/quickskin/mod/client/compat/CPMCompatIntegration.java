@@ -158,6 +158,23 @@ public class CPMCompatIntegration {
     }
 
     /**
+     * Returns true if CPM has a bound player during rendering.
+     * Used by ItemInHandRendererMixin to avoid overriding CPM's texture in the RenderType
+     * during first-person arm rendering.
+     */
+    public static boolean isCPMActivelyRendering() {
+        if (!isAvailable() || INIT_FAILED || managerInstance == null || getBoundPlayerMethod == null) {
+            return false;
+        }
+        try {
+            Object boundPlayer = getBoundPlayerMethod.invoke(managerInstance);
+            return boundPlayer != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Returns true if CPM is currently rendering a custom model for a player.
      */
     private static boolean isCPMRenderingCustomModel() {

@@ -42,6 +42,8 @@ public class PlayerPreviewPanel extends AbstractWidget {
     @Nullable
     private net.minecraft.resources.ResourceLocation cpmIconLocation = null;
 
+    private boolean isCpmModel = false;
+
     public PlayerPreviewPanel(int x, int y, int width, int height) {
         super(x, y, width, height, Component.empty());
     }
@@ -262,12 +264,14 @@ public class PlayerPreviewPanel extends AbstractWidget {
     public void updateSkin(AssetMetadata metadata, net.minecraft.resources.ResourceLocation skinLocation) {
         if (playerWidget != null && metadata != null) {
             this.currentMetadata = metadata;
+            this.isCpmModel = metadata.isCpmModel();
 
             // CPM models can only be previewed in-game (CPM handles rendering)
             boolean isInGame = net.minecraft.client.Minecraft.getInstance().player != null;
-            if (metadata.isCpmModel() && !isInGame) {
+            if (isCpmModel && !isInGame) {
                 cpmIconLocation = skinLocation;
                 playerWidget.visible = false;
+                updateModelButtonStates();
                 return;
             }
 
@@ -283,6 +287,8 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 // Use explicitly selected model
                 playerWidget.setModelType(currentModelType);
             }
+
+            updateModelButtonStates();
         }
     }
 
@@ -339,6 +345,14 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     private void updateModelButtonStates() {
         if (autoModelButton != null && classicModelButton != null && slimModelButton != null) {
+            // Disable all model buttons when a CPM model is selected (CPM controls the model)
+            if (isCpmModel) {
+                autoModelButton.active = false;
+                classicModelButton.active = false;
+                slimModelButton.active = false;
+                return;
+            }
+
             boolean isAuto = "auto".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
             boolean isSlim = "slim".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
             boolean isClassic = "classic".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);

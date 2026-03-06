@@ -2,6 +2,7 @@ package com.quickskin.mod.neoforge.mixin;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.model.geom.ModelPart;
@@ -36,6 +37,13 @@ public class PlayerRendererMixin {
     )
     private VertexConsumer quickskin$redirectRenderHandBuffer(MultiBufferSource instance, RenderType renderType,
                                                               PoseStack poseStack, MultiBufferSource buffer, int packedLight, AbstractClientPlayer player, ModelPart arm, ModelPart sleeve) {
+        if (CPMCompatIntegration.shouldDeferToCPM()) return instance.getBuffer(renderType);
+
+        // When CPM has a bound player, it manages the texture pipeline and already converts
+        // entitySolid→entityTranslucent when needed. Overriding the RenderType here would
+        // use a different ResourceLocation, causing first-person arm texture artifacts.
+        if (CPMCompatIntegration.isCPMActivelyRendering()) return instance.getBuffer(renderType);
+
         // Check if transparency is disabled globally by config
         if (ClientConfig.getInstance().shouldDisableSkinTransparency()) {
             return instance.getBuffer(renderType);
