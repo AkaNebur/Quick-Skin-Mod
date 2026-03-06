@@ -46,6 +46,7 @@ public class LocalAssetManager {
     // Texture registration
     private final Map<String, Map<TextureQuality, ResourceLocation>> textureRegistry = new ConcurrentHashMap<>();
 
+
     // Directory paths
     private Path skinsDirectory;
     private Path capesDirectory;
@@ -488,6 +489,7 @@ public class LocalAssetManager {
     public AssetMetadata getMetadata(String hash) {
         return metadataCache.get(hash);
     }
+
 
     /**
      * Get source file path by hash

@@ -43,6 +43,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
     private net.minecraft.resources.ResourceLocation cpmIconLocation = null;
 
     private boolean isCpmModel = false;
+    private long skinChangedAt = 0;
 
     public PlayerPreviewPanel(int x, int y, int width, int height) {
         super(x, y, width, height, Component.empty());
@@ -245,8 +246,10 @@ public class PlayerPreviewPanel extends AbstractWidget {
         if (playerWidget != null && metadata != null) {
             this.currentMetadata = metadata;
             this.isCpmModel = metadata.isCpmModel();
+            this.skinChangedAt = System.currentTimeMillis();
+            this.lastCpmWearing = false;
 
-            // CPM models can only be previewed in-game (CPM handles rendering)
+            // CPM .cpmmodel files can only be previewed in-game (CPM handles rendering)
             boolean isInGame = net.minecraft.client.Minecraft.getInstance().player != null;
             if (isCpmModel && !isInGame) {
                 cpmIconLocation = skinLocation;
@@ -344,8 +347,9 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     private void updateModelButtonStates() {
         if (autoModelButton != null && classicModelButton != null && slimModelButton != null) {
-            // Disable all model buttons when a CPM model is selected (CPM controls the model)
-            if (isCpmModel) {
+            // Disable all model buttons when CPM controls the model
+            boolean cpmActive = isCpmModel || lastCpmWearing;
+            if (cpmActive) {
                 autoModelButton.active = false;
                 classicModelButton.active = false;
                 slimModelButton.active = false;
@@ -363,8 +367,25 @@ public class PlayerPreviewPanel extends AbstractWidget {
         }
     }
 
+    private boolean lastCpmWearing = false;
+
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // After a skin change, ignore CPM's stale state for 2s (CPM may still report old model)
+        // Only trust CPM state after the grace period, which lets CPM reload with the new texture
+        long elapsed = System.currentTimeMillis() - skinChangedAt;
+        boolean cpmWearing;
+        if (elapsed < 2000) {
+            // During grace period: only trust CPM if we ALSO selected a .cpmmodel
+            cpmWearing = isCpmModel;
+        } else {
+            cpmWearing = com.quickskin.mod.client.compat.CPMCompatIntegration.isLocalPlayerWearingCpmModel();
+        }
+        if (cpmWearing != lastCpmWearing) {
+            lastCpmWearing = cpmWearing;
+            updateModelButtonStates();
+        }
+
         if (cpmIconLocation != null) {
             int iconSize = Math.min(width, height) - 16;
             int iconX = getX() + (width - iconSize) / 2;

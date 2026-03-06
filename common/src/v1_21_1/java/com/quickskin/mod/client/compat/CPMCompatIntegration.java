@@ -395,6 +395,56 @@ public class CPMCompatIntegration {
     }
 
     /**
+     * Returns true if the local player currently has a CPM custom model active.
+     * Works for both .cpmmodel files and skins with embedded CPM data.
+     * Queries CPM's loader cache for the client player's model definition.
+     */
+    private static long lastWearingLog = 0;
+
+    public static boolean isLocalPlayerWearingCpmModel() {
+        if (!isAvailable() || INIT_FAILED || loaderInstance == null) return false;
+        try {
+            Method getPlayers = loaderInstance.getClass().getMethod("getPlayers");
+            java.util.List<?> players = (java.util.List<?>) getPlayers.invoke(loaderInstance);
+
+            boolean shouldLog = System.currentTimeMillis() - lastWearingLog > 3000;
+
+            if (shouldLog && !players.isEmpty()) {
+                lastWearingLog = System.currentTimeMillis();
+                CPMLOG.info("isLocalPlayerWearingCpmModel: {} player(s) in cache", players.size());
+            }
+
+            for (Object player : players) {
+                // Use getUUID + compare instead of isClientPlayer (which can throw internally)
+                Method getUUID = player.getClass().getMethod("getUUID");
+                java.util.UUID playerUuid = (java.util.UUID) getUUID.invoke(player);
+
+                java.util.UUID localUuid = null;
+                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+                if (mc.player != null) {
+                    localUuid = mc.player.getUUID();
+                } else if (mc.getUser() != null) {
+                    localUuid = mc.getUser().getProfileId();
+                }
+                if (localUuid == null || !localUuid.equals(playerUuid)) continue;
+
+                // getModelDefinition() returns non-null only when loaded + doRender() == true
+                Method getModelDef = player.getClass().getMethod("getModelDefinition");
+                Object modelDef = getModelDef.invoke(player);
+
+                if (shouldLog) {
+                    CPMLOG.info("isLocalPlayerWearingCpmModel: local player found, modelDef={}", modelDef != null);
+                }
+
+                return modelDef != null;
+            }
+        } catch (Exception e) {
+            CPMLOG.warn("isLocalPlayerWearingCpmModel: error", e);
+        }
+        return false;
+    }
+
+    /**
      * Returns the CPM player_models directory path.
      */
     public static Path getCPMModelsDirectory() {
