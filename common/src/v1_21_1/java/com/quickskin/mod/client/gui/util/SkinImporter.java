@@ -3,6 +3,7 @@ package com.quickskin.mod.client.gui.util;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.SkinResolution;
 import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.common.util.HDTextureProcessor;
 import com.quickskin.mod.config.ClientConfig;
@@ -149,32 +150,6 @@ public class SkinImporter {
     }
 
     /**
-     * Check if dimensions are valid for a skin
-     */
-    private static boolean isValidSkinDimension(int width, int height) {
-        // Legacy format: 64x32
-        if (width == 64 && height == 32) {
-            return true;
-        }
-
-        // Standard and HD formats
-        // Valid if width is 64 * (2^n) and height is width
-        if (width >= 64 && width <= 2048 && height >= 32 && height <= 1024) {
-            // Check if width is a power of 2 multiple of 64
-            if (width % 64 == 0) {
-                int scale = width / 64;
-                // scale should be a power of 2 (1, 2, 4, 8, 16, 32)
-                if ((scale & (scale - 1)) == 0) {
-                    // Height should be width or width/2 (for legacy)
-                    return height == width || height == width / 2;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
      * Save a BufferedImage as a skin file
      * @param image The image to save
      * @param username The username (used for filename)
@@ -186,15 +161,20 @@ public class SkinImporter {
         }
 
         try {
-            // Validate dimensions
+            // Check dimensions, resize to nearest valid if needed
             int width = image.getWidth();
             int height = image.getHeight();
-            if (!isValidSkinDimension(width, height)) {
-                return null;
+            SkinResolution resolution = SkinResolution.fromDimensions(width, height);
+            if (resolution == null) {
+                resolution = SkinResolution.findNearest(width, height);
+                if (resolution == null) {
+                    return null;
+                }
+                image = HDTextureProcessor.resizeToResolution(image, resolution);
             }
 
             // Convert legacy 64x32 skins to modern 64x64 format
-            if (height == width / 2) {
+            if (resolution == SkinResolution.LEGACY) {
                 image = HDTextureProcessor.convertLegacyToModern(image);
             }
 

@@ -58,10 +58,14 @@ public class HDTextureProcessor {
             int width = image.getWidth();
             int height = image.getHeight();
 
-            // Check if valid resolution
+            // Check if valid resolution, resize to nearest valid if not
             SkinResolution resolution = SkinResolution.fromDimensions(width, height);
             if (resolution == null) {
-                return null;
+                resolution = SkinResolution.findNearest(width, height);
+                if (resolution == null) {
+                    return null;
+                }
+                image = resizeToResolution(image, resolution);
             }
 
             // Convert legacy (64x32) to modern (64x64)
@@ -80,6 +84,26 @@ public class HDTextureProcessor {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * Resize an image to match the given SkinResolution dimensions.
+     * Uses nearest-neighbor interpolation to preserve pixel art sharpness.
+     */
+    public static BufferedImage resizeToResolution(BufferedImage image, SkinResolution resolution) {
+        int targetWidth = resolution.getWidth();
+        int targetHeight = resolution.getHeight();
+
+        if (image.getWidth() == targetWidth && image.getHeight() == targetHeight) {
+            return image;
+        }
+
+        BufferedImage resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = resized.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g.drawImage(image, 0, 0, targetWidth, targetHeight, null);
+        g.dispose();
+        return resized;
     }
 
     /**

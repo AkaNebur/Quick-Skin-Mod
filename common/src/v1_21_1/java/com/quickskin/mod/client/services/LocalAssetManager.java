@@ -279,14 +279,25 @@ public class LocalAssetManager {
                 int frameHeight = (frameCount > 0) ? height / frameCount : height;
                 resolution = SkinResolution.fromDimensions(width, frameHeight);
                 if (resolution == null) {
-                    return null;
+                    resolution = SkinResolution.findNearest(width, frameHeight);
+                    if (resolution == null) {
+                        return null;
+                    }
                 }
             } else {
                 // This is a static asset or a PNG animation strip without metadata.
                 if ("skin".equals(type)) {
                     resolution = SkinResolution.fromDimensions(width, height);
                     if (resolution == null) {
-                        return null;
+                        resolution = SkinResolution.findNearest(width, height);
+                        if (resolution == null) {
+                            return null;
+                        }
+                        // Resize the image and overwrite the file so loadTexture works correctly
+                        image = HDTextureProcessor.resizeToResolution(image, resolution);
+                        ImageIO.write(image, "PNG", path.toFile());
+                        width = image.getWidth();
+                        height = image.getHeight();
                     }
                     skinModel = SkinModelDetector.detectSkinModel(image);
                 } else { // Cape logic for static capes or PNG strips
@@ -296,7 +307,10 @@ public class LocalAssetManager {
                         isAnimated = frameCount > 1;
                         resolution = SkinResolution.fromDimensions(width, frameHeight);
                         if (resolution == null) {
-                            return null;
+                            resolution = SkinResolution.findNearest(width, frameHeight);
+                            if (resolution == null) {
+                                return null;
+                            }
                         }
                     } else {
                         return null;
