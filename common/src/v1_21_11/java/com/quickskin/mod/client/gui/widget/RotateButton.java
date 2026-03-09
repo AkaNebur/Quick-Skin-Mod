@@ -16,6 +16,8 @@ public class RotateButton extends Button {
 
     @Override
     protected void renderContents(GuiGraphics pGuiGraphics, int mouseX, int mouseY, float partialTick) {
+        // 1.21.11: renderContents is responsible for everything including background
+        renderDefaultSprite(pGuiGraphics);
         Font pFont = net.minecraft.client.Minecraft.getInstance().font;
         Component message = this.getMessage();
         // In 1.21.6+, graphics.pose() returns Matrix3x2fStack with 2D push/pop/translate/scale
