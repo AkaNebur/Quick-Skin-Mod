@@ -227,31 +227,46 @@ public class PlayerModelRenderer {
             pendingCapeBodyModel = bodyModel;
             pendingCapeModel = capeModel;
 
-            // 1.21.6+: renderEntityInInventory(GuiGraphics, int x1, int y1, int x2, int y2, float scale, Vector3f, Quaternionf, Quaternionf, LivingEntity)
-            // The PiP renderer centers the entity origin (feet) at the vertical center of the bounding box.
-            // In 1.21.4, y was the feet position directly. In 1.21.6+ with the bounding box API,
-            // we need to construct the box so that its center corresponds to where the feet should be.
-            // Box center = (y0 + y1) / 2, so for feet at y: y0 = y - halfHeight, y1 = y + halfHeight
+            // 1.21.11: renderEntityInInventory removed. We call submitEntityRenderState directly
+            // to preserve our own rotation (renderEntityInInventoryFollowsMouse overrides rotation).
             int halfWidth = (int)(scale * 0.6f);
-            // The entity feet are at the box center. The player extends ~1.8 blocks upward,
-            // so we need at least scale*2.0 above center to avoid clipping the head.
+            // Shift box center UP by ~bbHeight/2*scale to compensate for the bbHeight/2 offset
+            // that centers the entity visually (old method had feet at box center)
+            int entityHalfHeight = (int)(scale * 0.9f);
+            int yCenter = y - entityHalfHeight;
             int topHalf = (int)(scale * 2.0f);
             int bottomHalf = topHalf;
-            // 1.21.11: renderEntityInInventory removed, use renderEntityInInventoryFollowsMouse
-            // Pass center coords as mouse pos to neutralize mouse-based rotation (we set rotation on entity directly)
-            float centerX = (float) x;
-            float centerY = (float) y;
-            InventoryScreen.renderEntityInInventoryFollowsMouse(
-                    graphics,
-                    x - halfWidth,
-                    y - topHalf,
-                    x + halfWidth,
-                    y + bottomHalf,
-                    (int) scale,
-                    0.0625f,
-                    centerX,
-                    centerY,
-                    playerToRender
+            int x1 = x - halfWidth, y1 = yCenter - topHalf, x2 = x + halfWidth, y2 = yCenter + bottomHalf;
+
+            // Extract render state (replicating InventoryScreen.extractRenderState)
+            var dispatcher = mc.getEntityRenderDispatcher();
+            var renderer = dispatcher.getRenderer(playerToRender);
+            var renderState = renderer.createRenderState(playerToRender, 1.0f);
+            renderState.lightCoords = 15728880; // full bright
+            renderState.shadowPieces.clear();
+            renderState.outlineColor = 0;
+
+            // Set our rotation on the render state
+            if (renderState instanceof net.minecraft.client.renderer.entity.state.LivingEntityRenderState livingState) {
+                livingState.bodyRot = targetRotation;
+                livingState.yRot = yRotation;
+                livingState.xRot = 0;
+                // Normalize bounding box for scale=1
+                livingState.boundingBoxWidth /= livingState.scale;
+                livingState.boundingBoxHeight /= livingState.scale;
+                livingState.scale = 1.0f;
+            }
+
+            // Compute offset: center entity vertically (bbHeight/2 + small offset)
+            org.joml.Vector3f offset = new org.joml.Vector3f(0, renderState.boundingBoxHeight / 2.0f + 0.0625f, 0);
+
+            graphics.submitEntityRenderState(
+                    renderState,
+                    (float)(int) scale,
+                    offset,
+                    quaternionXZ,
+                    quaternionY,
+                    x1, y1, x2, y2
             );
 
             // Note: 3D Skin Layers mod handles entity rendering automatically via entity layers
