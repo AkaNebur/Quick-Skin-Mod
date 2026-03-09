@@ -1,0 +1,268 @@
+package com.quickskin.mod.client.services;
+
+import com.mojang.blaze3d.platform.NativeImage;
+import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.AnimationMetadata;
+import com.quickskin.mod.config.ClientConfig;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.resources.Identifier;
+import org.jetbrains.annotations.Nullable;
+
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Manages animated textures (capes, future skin animations)
+ * Tracks animation state and provides current frame for rendering
+ */
+@Environment(EnvType.CLIENT)
+public class AnimatedTextureManager {
+
+    private static AnimatedTextureManager instance;
+
+    /**
+     * Animation state for a single animated texture
+     */
+    private static class AnimationState {
+        final Identifier atlasTextureLocation;
+        final AnimationMetadata metadata;
+        final long startTime;
+
+        private final DynamicTexture[] frameTextures;
+        private final Identifier[] frameResourceLocations;
+        private int currentFrame = 0;
+        private float speedMultiplier; // Per-animation speed multiplier
+
+        AnimationState(String animationId, Identifier textureLocation, BufferedImage atlasImage, AnimationMetadata metadata, float speedMultiplier) {
+            this.atlasTextureLocation = textureLocation;
+            this.metadata = metadata;
+            this.startTime = System.currentTimeMillis();
+            this.speedMultiplier = speedMultiplier;
+
+            this.frameTextures = new DynamicTexture[metadata.frameCount()];
+            this.frameResourceLocations = new Identifier[metadata.frameCount()];
+            loadFrames(animationId, atlasImage);
+        }
+
+        private void loadFrames(String animationId, BufferedImage atlasImage) {
+            try {
+                if (atlasImage == null) {
+                    return;
+                }
+
+                int frameWidth = atlasImage.getWidth();
+                int frameHeight = (metadata.frameCount() > 0) ? atlasImage.getHeight() / metadata.frameCount() : atlasImage.getHeight();
+
+                for (int i = 0; i < metadata.frameCount(); i++) {
+                    BufferedImage frameImage = atlasImage.getSubimage(0, i * frameHeight, frameWidth, frameHeight);
+                    // Convert frame to PNG bytes and load as NativeImage (handles pixel format automatically)
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    ImageIO.write(frameImage, "png", baos);
+                    NativeImage nativeImage = NativeImage.read(new ByteArrayInputStream(baos.toByteArray()));
+
+                    final int frameIndex = i;
+                    frameTextures[i] = new DynamicTexture(() -> "quickskin_anim_frame_" + frameIndex, nativeImage);
+                    // Create a unique name for the frame texture to avoid conflicts
+                    String frameId = "quickskin/animated/" + animationId.replaceAll("[^a-zA-Z0-9/._-]", "_") + "_frame_" + i;
+                    frameResourceLocations[i] = Identifier.parse(frameId);
+                    Minecraft.getInstance().getTextureManager().register(frameResourceLocations[i], frameTextures[i]);
+                }
+            } catch (Exception e) {
+            }
+        }
+
+        void tick() {
+            if (metadata.frameCount() <= 1) {
+                currentFrame = 0;
+                return;
+            }
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            // Apply per-animation speed multiplier
+            long adjustedElapsed = (long)(elapsed * speedMultiplier);
+            currentFrame = metadata.getFrameAtTime(adjustedElapsed);
+        }
+
+        /**
+         * Update the speed multiplier for this animation
+         */
+        void setSpeedMultiplier(float speed) {
+            this.speedMultiplier = speed;
+        }
+
+        Identifier getCurrentFrameTexture() {
+            if (frameResourceLocations == null || currentFrame < 0 || currentFrame >= frameResourceLocations.length || frameResourceLocations[currentFrame] == null) {
+                return atlasTextureLocation; // Fallback to full atlas
+            }
+            return frameResourceLocations[currentFrame];
+        }
+
+        void cleanup() {
+            for (Identifier rl : frameResourceLocations) {
+                if (rl != null) {
+                    Minecraft.getInstance().getTextureManager().release(rl);
+                }
+            }
+            for (DynamicTexture tex : frameTextures) {
+                if (tex != null) {
+                    tex.close();
+                }
+            }
+        }
+    }
+
+    // Map of animation ID -> animation state
+    private final Map<String, AnimationState> animations = new ConcurrentHashMap<>();
+
+    private AnimatedTextureManager() {
+        // Private constructor for singleton
+    }
+
+    public static AnimatedTextureManager getInstance() {
+        if (instance == null) {
+            instance = new AnimatedTextureManager();
+        }
+        return instance;
+    }
+
+    /**
+     * Register an animated texture
+     * @param animationId Unique ID for this animation (e.g., "cape_<hash>")
+     * @param capeId The cape ID (e.g., "local_cape:hash" or "known:cape_name") for loading speed settings
+     * @param textureLocation Location of the atlas texture
+     * @param atlasImage The BufferedImage of the atlas
+     * @param metadata Animation metadata with frame timing
+     */
+    public void registerAnimation(String animationId, String capeId, Identifier textureLocation, BufferedImage atlasImage, AnimationMetadata metadata) {
+        if (metadata == null || metadata.frameCount() <= 1) {
+            return;
+        }
+
+        // If an old animation exists, clean it up first.
+        unregisterAnimation(animationId);
+
+        // Load the speed for this specific cape from config
+        float speedMultiplier = ClientConfig.getInstance().getCapeAnimationSpeed(capeId);
+
+        AnimationState state = new AnimationState(animationId, textureLocation, atlasImage, metadata, speedMultiplier);
+        animations.put(animationId, state);
+
+    }
+
+    /**
+     * Clear all animations (for texture cache reload)
+     */
+    public void clearAnimations() {
+        for (AnimationState state : animations.values()) {
+            state.cleanup();
+        }
+        animations.clear();
+    }
+
+    /**
+     * Unregister an animated texture
+     */
+    public void unregisterAnimation(String animationId) {
+        AnimationState removed = animations.remove(animationId);
+        if (removed != null) {
+            removed.cleanup();
+        }
+    }
+
+    /**
+     * Update the animation speed for a registered animation
+     * @param animationId The animation ID
+     * @param speed The new speed multiplier
+     */
+    public void setAnimationSpeed(String animationId, float speed) {
+        AnimationState state = animations.get(animationId);
+        if (state != null) {
+            state.setSpeedMultiplier(speed);
+        }
+    }
+
+    /**
+     * Check if an animation is registered
+     */
+    public boolean isAnimated(String animationId) {
+        return animations.containsKey(animationId);
+    }
+
+    /**
+     * Gets the Identifier for the current frame of an animation.
+     * @param animationId The ID of the animation.
+     * @return The Identifier for the current frame's texture, or null if the animation is not found.
+     */
+    @Nullable
+    public Identifier getCurrentFrameTexture(String animationId) {
+        AnimationState state = animations.get(animationId);
+        if (state != null) {
+            return state.getCurrentFrameTexture();
+        }
+        return null;
+    }
+
+    /**
+     * Get texture location for an animation
+     */
+    public Identifier getTextureLocation(String animationId) {
+        AnimationState state = animations.get(animationId);
+        if (state == null) {
+            return null;
+        }
+        return state.atlasTextureLocation;
+    }
+
+    /**
+     * Get animation metadata
+     */
+    public AnimationMetadata getMetadata(String animationId) {
+        AnimationState state = animations.get(animationId);
+        if (state == null) {
+            return null;
+        }
+        return state.metadata;
+    }
+
+    /**
+     * Checks if a given texture atlas corresponds to a running animation, and if so,
+     * returns the Identifier of the current animation frame.
+     *
+     * @param atlasLocation The Identifier of the static texture atlas.
+     * @return An Optional containing the current frame's Identifier if animated, otherwise an empty Optional.
+     */
+    public Optional<Identifier> getAnimationFrame(Identifier atlasLocation) {
+        if (atlasLocation == null) {
+            return Optional.empty();
+        }
+
+        // Find which, if any, running animation is using this atlas texture.
+        for (Map.Entry<String, AnimationState> entry : animations.entrySet()) {
+            AnimationState state = entry.getValue();
+            if (atlasLocation.equals(state.atlasTextureLocation)) {
+                // We found a match! Return the texture of the current frame.
+                return Optional.ofNullable(state.getCurrentFrameTexture());
+            }
+        }
+
+        // No running animation found for this atlas.
+        return Optional.empty();
+    }
+
+    /**
+     * Tick all animations (called each frame)
+     */
+    public void tick() {
+        for (AnimationState state : animations.values()) {
+            state.tick();
+        }
+    }
+}
