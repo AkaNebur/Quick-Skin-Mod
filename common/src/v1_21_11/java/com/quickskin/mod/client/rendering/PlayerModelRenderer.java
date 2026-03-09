@@ -230,8 +230,8 @@ public class PlayerModelRenderer {
             // 1.21.11: renderEntityInInventory removed. We call submitEntityRenderState directly
             // to preserve our own rotation (renderEntityInInventoryFollowsMouse overrides rotation).
             int halfWidth = (int)(scale * 0.6f);
-            // Shift box center UP by ~bbHeight/2*scale to compensate for the bbHeight/2 offset
-            // that centers the entity visually (old method had feet at box center)
+            // Shift box center UP by ~bbHeight/2 in screen space to keep feet at y
+            // (submitEntityRenderState offsets by bbHeight/2, centering the entity visually)
             int entityHalfHeight = (int)(scale * 0.9f);
             int yCenter = y - entityHalfHeight;
             int topHalf = (int)(scale * 2.0f);
@@ -246,12 +246,9 @@ public class PlayerModelRenderer {
             renderState.shadowPieces.clear();
             renderState.outlineColor = 0;
 
-            // Set our rotation on the render state
+            // createRenderState already copied the entity's rotation (set at lines 157-161),
+            // so we only need to normalize bounding box for scale=1
             if (renderState instanceof net.minecraft.client.renderer.entity.state.LivingEntityRenderState livingState) {
-                livingState.bodyRot = targetRotation;
-                livingState.yRot = yRotation;
-                livingState.xRot = 0;
-                // Normalize bounding box for scale=1
                 livingState.boundingBoxWidth /= livingState.scale;
                 livingState.boundingBoxHeight /= livingState.scale;
                 livingState.scale = 1.0f;
