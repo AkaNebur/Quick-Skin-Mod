@@ -86,7 +86,7 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
 
         // Show drop zone if list is mostly empty
         if (this.getItemCount() <= 2) {
-            int rowTop = this.getItemCount() > 0 ? this.getRowTop(this.getItemCount()) : this.getY();
+            int rowTop = this.getItemCount() > 0 ? this.getRowTop(this.getItemCount() - 1) + this.itemHeight : this.getY();
             int areaTop = Math.max(rowTop, this.getY());
             int areaBottom = this.getBottom();
 
