@@ -18,6 +18,8 @@ import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Items;
 import net.minecraft.client.model.HumanoidModel;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -49,6 +51,11 @@ public class CapeLayerMixin {
             Entity entity = mc.level.getEntity(renderState.id);
             if (entity instanceof AbstractClientPlayer player) {
                 playerUUID = player.getUUID();
+                // Don't render cape when elytra is equipped
+                if (player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) {
+                    ci.cancel();
+                    return;
+                }
             }
         }
 

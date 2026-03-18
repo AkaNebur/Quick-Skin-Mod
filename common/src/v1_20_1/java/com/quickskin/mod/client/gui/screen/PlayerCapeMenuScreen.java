@@ -896,18 +896,22 @@ public class PlayerCapeMenuScreen extends Screen {
         int textureWidth = 64;
         int textureHeight = 32;
 
-        // Check if it's a high resolution cape
-        if (cape.isLocal() && cape.getLocalCape() != null && cape.getLocalCape().resolution() != null && cape.getLocalCape().resolution().isHD()) {
-            int scale = cape.getLocalCape().resolution().getScale();
-            textureWidth *= scale;
-            textureHeight *= scale;
-        }
-
         // Cape coordinates (show back of cape)
         int u = 1;
         int v = 1;
         int uWidth = 10;
         int vHeight = 16;
+
+        // Check if it's a high resolution cape - scale texture dimensions and UV coordinates
+        if (cape.isLocal() && cape.getLocalCape() != null && cape.getLocalCape().resolution() != null && cape.getLocalCape().resolution().isHD()) {
+            int scale = cape.getLocalCape().resolution().getScale();
+            textureWidth *= scale;
+            textureHeight *= scale;
+            u *= scale;
+            v *= scale;
+            uWidth *= scale;
+            vHeight *= scale;
+        }
 
         float scaleFactor = capeDisplaySize / 56f;
 
@@ -1426,11 +1430,10 @@ public class PlayerCapeMenuScreen extends Screen {
             // Step 2: Process the source atlas based on its format
             if (isStandardFormat) {
 
-                // ### START FIX: Unify cape resizing ###
-                // The resizeAnimationStrip method works for both single-frame (static) and multi-frame (animated) capes.
-                // It correctly preserves the 2:1 aspect ratio for each frame.
-                java.awt.image.BufferedImage normalizedAtlas = com.quickskin.mod.common.util.HDTextureProcessor.resizeAnimationStrip(sourceAtlas, 64);
-                // ### END FIX ###
+                // Keep original HD resolution - no downscaling
+                java.awt.image.BufferedImage normalizedAtlas = sourceAtlas;
+                int capeWidth = normalizedAtlas.getWidth();
+                int capeFrameHeight = capeWidth / 2;
 
                 // Check if the elytra area is transparent
                 if (isElytraAreaTransparent(normalizedAtlas)) {
@@ -1440,15 +1443,18 @@ public class PlayerCapeMenuScreen extends Screen {
                     } else {
                         java.awt.image.BufferedImage compositeAtlas = new java.awt.image.BufferedImage(normalizedAtlas.getWidth(), normalizedAtlas.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
                         java.awt.Graphics2D g = compositeAtlas.createGraphics();
+                        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 
                         g.setComposite(java.awt.AlphaComposite.Clear);
                         g.fillRect(0, 0, normalizedAtlas.getWidth(), normalizedAtlas.getHeight());
                         g.setComposite(java.awt.AlphaComposite.SrcOver);
 
                         for(int i = 0; i < frameCount; i++) {
-                            int yOffset = i * 32;
-                            g.drawImage(vanillaElytraBase, 0, yOffset, null);
-                            g.drawImage(normalizedAtlas.getSubimage(0, yOffset, 64, 32), 0, yOffset, null);
+                            int yOffset = i * capeFrameHeight;
+                            // Scale vanilla elytra to match HD cape dimensions
+                            g.drawImage(vanillaElytraBase, 0, yOffset, capeWidth, yOffset + capeFrameHeight,
+                                    0, 0, vanillaElytraBase.getWidth(), vanillaElytraBase.getHeight(), null);
+                            g.drawImage(normalizedAtlas.getSubimage(0, yOffset, capeWidth, capeFrameHeight), 0, yOffset, null);
                         }
                         g.dispose();
                         finalAtlas = compositeAtlas;
