@@ -118,6 +118,16 @@
   "quickskin.cape.animation_speed": "Animation Speed: %s%%",
   "quickskin.cape.animation_speed_tooltip": "Controls animation speed for this cape (10%% - 300%%)",
 
+  "_comment_cape_adjust": "=== Cape Adjust Screen ===",
+  "quickskin.cape.adjust_title": "Adjust Cape Image",
+  "quickskin.cape.adjust_hint": "Drag to move · Scroll to zoom",
+  "quickskin.cape.adjust_reset": "Reset Position",
+  "quickskin.cape.adjust_apply": "Apply Cape",
+  "quickskin.cape.adjust_resolution": "Resolution:",
+  "quickskin.cape.adjust_preview": "Preview:",
+  "quickskin.cape.adjust_back": "Cape Back",
+  "quickskin.cape.adjust_front": "Front",
+
   "_comment_settings": "=== Settings Screen ===",
   "quickskin.settings.tab.client": "Client",
   "quickskin.settings.tab.gui_edit": "GUI Edit",

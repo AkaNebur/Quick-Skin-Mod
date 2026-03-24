@@ -800,6 +800,24 @@ public class LocalAssetManager {
             // Load directly as NativeImage from PNG bytes (handles pixel format automatically)
             NativeImage nativeImage = NativeImage.read(new ByteArrayInputStream(textureData));
 
+            // For animated capes, only register the FIRST FRAME on GPU instead of the full atlas.
+            // The animation system keeps the atlas in RAM and handles frame switching separately.
+            // This prevents massive VRAM waste and fixes incorrect UV rendering when
+            // the animation texture is used as a fallback.
+            if (meta != null && meta.isAnimated() && meta.frameCount() > 1 && quality == TextureQuality.FULL) {
+                int frameHeight = nativeImage.getHeight() / meta.frameCount();
+                if (frameHeight > 0 && frameHeight < nativeImage.getHeight()) {
+                    NativeImage firstFrame = new NativeImage(nativeImage.getWidth(), frameHeight, false);
+                    for (int y = 0; y < frameHeight; y++) {
+                        for (int x = 0; x < nativeImage.getWidth(); x++) {
+                            firstFrame.setPixelRGBA(x, y, nativeImage.getPixelRGBA(x, y));
+                        }
+                    }
+                    nativeImage.close();
+                    nativeImage = firstFrame;
+                }
+            }
+
             // Create dynamic texture
             DynamicTexture dynamicTexture = new DynamicTexture(nativeImage);
 

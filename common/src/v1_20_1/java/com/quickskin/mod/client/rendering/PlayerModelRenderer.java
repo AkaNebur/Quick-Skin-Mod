@@ -331,16 +331,18 @@ public class PlayerModelRenderer {
                 long now = System.currentTimeMillis();
                 if (now - lastCapeTextureUpdate >= CAPE_UPDATE_INTERVAL_MS) {
                     ResourceLocation currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);
-                    if (currentFrame != null) {
-                        cachedCapeTexture = currentFrame;
-                    }
+                    // Clear stale cache when switching to a non-animated cape
+                    cachedCapeTexture = currentFrame;
                     lastCapeTextureUpdate = now;
                 }
 
-                // Use cached texture
+                // Use cached texture if available (animated cape)
                 if (cachedCapeTexture != null) {
                     finalCapeTexture = cachedCapeTexture;
                 }
+            } else {
+                // No animation ID — clear any stale cached texture
+                cachedCapeTexture = null;
             }
 
             // Now render the cape using the final texture
