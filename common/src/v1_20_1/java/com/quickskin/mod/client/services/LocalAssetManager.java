@@ -311,6 +311,15 @@ public class LocalAssetManager {
                             if (resolution == null) {
                                 return null;
                             }
+                            // Resize the cape to valid dimensions and overwrite the file
+                            if (isAnimated) {
+                                image = HDTextureProcessor.resizeAnimationStrip(image, resolution.getWidth());
+                            } else {
+                                image = HDTextureProcessor.resizeToResolution(image, resolution);
+                            }
+                            ImageIO.write(image, "PNG", path.toFile());
+                            width = image.getWidth();
+                            height = image.getHeight();
                         }
                     } else {
                         return null;
@@ -403,11 +412,36 @@ public class LocalAssetManager {
             long fileSize = Files.size(path);
             long lastModifiedTime = Files.getLastModifiedTime(path).toMillis();
 
-            // Get resolution from first frame
+            // Get resolution from first frame, resize to nearest valid cape dimensions if needed
             SkinResolution resolution = SkinResolution.fromDimensions(width, height);
             if (resolution == null) {
-                resolution = SkinResolution.STANDARD;
+                resolution = SkinResolution.findNearest(width, height);
+                if (resolution == null) {
+                    return null;
+                }
+                // Resize the cached atlas frames to match valid cape dimensions
+                BufferedImage atlasImage = ImageIO.read(atlasPath.toFile());
+                if (atlasImage != null) {
+                    int targetW = resolution.getWidth();
+                    int targetH = resolution.getHeight();
+                    BufferedImage resizedAtlas = new BufferedImage(
+                            targetW, targetH * frameCount, BufferedImage.TYPE_INT_ARGB);
+                    java.awt.Graphics2D g = resizedAtlas.createGraphics();
+                    g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                            java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                    for (int i = 0; i < frameCount; i++) {
+                        g.drawImage(atlasImage,
+                                0, i * targetH, targetW, (i + 1) * targetH,
+                                0, i * height, width, (i + 1) * height,
+                                null);
+                    }
+                    g.dispose();
+                    ImageIO.write(resizedAtlas, "PNG", atlasPath.toFile());
+                }
             }
+
+            // Composite vanilla elytra on cache atlas if elytra area is transparent
+            compositeElytraOnAtlasIfNeeded(atlasPath, frameCount);
 
             // Create metadata for animated cape
             return AssetMetadata.forAnimatedCape(
@@ -522,8 +556,17 @@ public class LocalAssetManager {
             return null;
         }
 
+        // For GIF source files, use the cached PNG atlas (ImageIO only reads first GIF frame)
+        Path readPath = sourcePath;
+        if (sourcePath.toString().toLowerCase(Locale.ROOT).endsWith(".gif")) {
+            Path cachedAtlas = cacheDirectory.resolve("animated_capes").resolve(hash + ".png");
+            if (Files.exists(cachedAtlas)) {
+                readPath = cachedAtlas;
+            }
+        }
+
         try {
-            BufferedImage image = ImageIO.read(sourcePath.toFile());
+            BufferedImage image = ImageIO.read(readPath.toFile());
             if (image == null) {
                 return null;
             }
@@ -547,7 +590,7 @@ public class LocalAssetManager {
                     if (shouldRemoveTransparency) {
                         yield HDTextureProcessor.imageToPng(image);
                     } else {
-                        yield Files.readAllBytes(sourcePath); // Original
+                        yield Files.readAllBytes(readPath); // Original or cached atlas
                     }
                 }
                 case PREVIEW -> HDTextureProcessor.createPreview(image);
@@ -865,6 +908,16 @@ public class LocalAssetManager {
     @Nullable
     public BufferedImage getSourceImage(String hash) {
         Path sourcePath = getSourcePath(hash);
+
+        // For GIF source files, always use the cached PNG atlas
+        // (ImageIO.read on .gif only returns the first frame, not the full strip)
+        if (sourcePath != null && sourcePath.toString().toLowerCase(Locale.ROOT).endsWith(".gif")) {
+            Path cachedAtlas = cacheDirectory.resolve("animated_capes").resolve(hash + ".png");
+            if (Files.exists(cachedAtlas)) {
+                sourcePath = cachedAtlas;
+            }
+        }
+
         if (sourcePath == null) {
             // Also check cache for animated capes converted from GIFs
             Path cachedAtlas = cacheDirectory.resolve("animated_capes").resolve(hash + ".png");
@@ -957,6 +1010,66 @@ public class LocalAssetManager {
     private void savePreferences() {
         if (skinPreferences != null && preferencesFile != null) {
             skinPreferences.save(preferencesFile);
+        }
+    }
+
+    /**
+     * Check if the elytra area of a cape atlas is transparent, and if so,
+     * composite the vanilla elytra texture onto the cached atlas.
+     * This keeps the source GIF untouched while ensuring elytra renders correctly.
+     */
+    private void compositeElytraOnAtlasIfNeeded(Path atlasPath, int frameCount) {
+        try {
+            BufferedImage atlas = ImageIO.read(atlasPath.toFile());
+            if (atlas == null) return;
+
+            int capeW = atlas.getWidth();
+            int frameH = (frameCount > 0) ? atlas.getHeight() / frameCount : atlas.getHeight();
+
+            // Sample the elytra area (top-right of the cape) for transparency
+            double scale = capeW / 64.0;
+            int elytraX = (int) (22 * scale);
+            int elytraW = (int) (32 * scale);
+            int elytraH = (int) (16 * scale);
+            boolean allTransparent = true;
+            int samplePoints = 5;
+            for (int i = 0; i < samplePoints && allTransparent; i++) {
+                for (int j = 0; j < samplePoints && allTransparent; j++) {
+                    int x = Math.min(elytraX + (i * elytraW / (samplePoints - 1)), capeW - 1);
+                    int y = Math.min(j * elytraH / (samplePoints - 1), frameH - 1);
+                    int alpha = (atlas.getRGB(x, y) >> 24) & 0xFF;
+                    if (alpha > 10) allTransparent = false;
+                }
+            }
+
+            if (!allTransparent) return; // Elytra area has content, no compositing needed
+
+            // Load vanilla elytra texture
+            var resourceOpt = Minecraft.getInstance().getResourceManager()
+                    .getResource(new ResourceLocation("minecraft", "textures/entity/elytra.png"));
+            if (resourceOpt.isEmpty()) return;
+            BufferedImage elytra;
+            try (var stream = resourceOpt.get().open()) {
+                elytra = ImageIO.read(stream);
+            }
+            if (elytra == null) return;
+
+            // Composite elytra under each frame
+            BufferedImage composited = new BufferedImage(capeW, atlas.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            java.awt.Graphics2D g = composited.createGraphics();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                    java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            for (int i = 0; i < frameCount; i++) {
+                int yOff = i * frameH;
+                g.drawImage(elytra, 0, yOff, capeW, yOff + frameH,
+                        0, 0, elytra.getWidth(), elytra.getHeight(), null);
+                g.drawImage(atlas.getSubimage(0, yOff, capeW, frameH), 0, yOff, null);
+            }
+            g.dispose();
+
+            ImageIO.write(composited, "PNG", atlasPath.toFile());
+        } catch (Exception e) {
+            // Non-critical — elytra just won't have the vanilla fallback
         }
     }
 }

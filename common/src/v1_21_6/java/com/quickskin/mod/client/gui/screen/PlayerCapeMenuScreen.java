@@ -366,35 +366,37 @@ public class PlayerCapeMenuScreen extends Screen {
             }
         }
 
-        // Pre-register animations for all animated capes (for thumbnail rendering)
-        registerAllAnimations();
+        // Animations are registered lazily when capes become visible in the grid
     }
 
     /**
-     * Pre-register animations for all animated capes so thumbnails can display them
+     * Ensure an animated cape's animation is registered (lazy loading).
+     * Uses async registration for local capes to avoid freezing the render thread.
+     * The static first-frame texture is shown until the animation loads.
      */
-    private void registerAllAnimations() {
-        com.quickskin.mod.client.services.CapeService capeService =
-            com.quickskin.mod.client.services.CapeService.getInstance();
+    private void ensureAnimationRegistered(CapeEntry cape) {
+        if (!cape.isAnimated()) return;
 
-        // Register animations for local capes
-        for (CapeEntry cape : localCapes) {
-            if (cape.isAnimated()) {
-                String capeId = cape.getCapeId();
-                // Call getCapeLocation to trigger animation registration
-                capeService.getCapeLocation(null, capeId);
-            }
+        String capeId = cape.getCapeId();
+        String animationId = getAnimationIdForCape(capeId);
+        if (animationId == null) return;
+
+        com.quickskin.mod.client.services.AnimatedTextureManager animManager =
+            com.quickskin.mod.client.services.AnimatedTextureManager.getInstance();
+
+        if (animManager.isAnimated(animationId)) return;
+
+        ResourceLocation texLoc = cape.getTextureLocation();
+        if (texLoc == null) return;
+
+        if (capeId.startsWith("local_cape:")) {
+            // Async: disk I/O + pixel conversion on background thread
+            String hash = capeId.substring("local_cape:".length());
+            animManager.registerAnimationAsync(animationId, capeId, texLoc, hash);
+        } else if (capeId.startsWith("known:")) {
+            // Known capes are in resources (fast), use sync path
+            com.quickskin.mod.client.services.CapeService.getInstance().getCapeLocation(null, capeId);
         }
-
-        // Register animations for known capes
-        for (CapeEntry cape : knownCapes) {
-            if (cape.isAnimated()) {
-                String capeId = cape.getCapeId();
-                // Call getCapeLocation to trigger animation registration
-                capeService.getCapeLocation(null, capeId);
-            }
-        }
-
     }
 
     /**
@@ -507,28 +509,35 @@ public class PlayerCapeMenuScreen extends Screen {
         // Show processing message
         showImportMessage(Component.translatable("quickskin.cape.processing").getString(), 0xFF55AAFF, 60);
 
-        // Import on main thread
+        // F5: import on background thread, marshal UI back to render thread.
         if (this.minecraft != null) {
-            this.minecraft.execute(() -> {
+            CompletableFuture.runAsync(() -> {
                 Path capesDir = LocalAssetManager.getInstance().getCapesDirectory();
                 try {
                     Files.createDirectories(capesDir);
-
-                    if (processDroppedFile(filePath, capesDir)) {
-
-                        // Reload assets
-                        LocalAssetManager.getInstance().reload();
-
-                        // Refresh the cape list
-                        refreshCapeList();
-                        updateGridDimensions();
-
-                        showImportMessage(Component.translatable("quickskin.cape.imported").getString(), 0xFF55FF55, 100);
-                    } else {
-                        showImportMessage(Component.translatable("quickskin.cape.invalid_ratio").getString(), 0xFFFF5555, 150);
+                    boolean ok;
+                    try {
+                        ok = processDroppedFile(filePath, capesDir);
+                    } catch (Exception procEx) {
+                        final String msg = procEx.getMessage() != null ? procEx.getMessage() : procEx.getClass().getSimpleName();
+                        Minecraft.getInstance().execute(() ->
+                            showImportMessage(Component.translatable("quickskin.cape.error", msg).getString(), 0xFFFF5555, 150));
+                        return;
                     }
+                    final boolean imported = ok;
+                    Minecraft.getInstance().execute(() -> {
+                        if (imported) {
+                            LocalAssetManager.getInstance().reload();
+                            refreshCapeList();
+                            updateGridDimensions();
+                            showImportMessage(Component.translatable("quickskin.cape.imported").getString(), 0xFF55FF55, 100);
+                        } else {
+                            showImportMessage(Component.translatable("quickskin.cape.invalid_ratio").getString(), 0xFFFF5555, 150);
+                        }
+                    });
                 } catch (IOException e) {
-                    showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFFFF5555, 150);
+                    Minecraft.getInstance().execute(() ->
+                        showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFFFF5555, 150));
                 }
             });
         }
@@ -861,24 +870,12 @@ public class PlayerCapeMenuScreen extends Screen {
         // Regular cape rendering
         ResourceLocation texture = cape.getTextureLocation();
 
-        // If animated, get the current frame texture using animation ID lookup
-        // This is more reliable than atlas location lookup
+        // If animated, ensure registration (lazy) and get the current frame texture
         if (texture != null && cape.isAnimated()) {
-            String capeId = cape.getCapeId();
-            String animationId = null;
-            if (capeId.startsWith("local_cape:")) {
-                animationId = "cape_" + capeId.substring("local_cape:".length());
-            } else if (capeId.startsWith("known:")) {
-                animationId = "cape_known_" + capeId.substring("known:".length());
-            }
-
-            if (animationId != null) {
-                ResourceLocation currentFrame = com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
-                    .getCurrentFrameTexture(animationId);
-                if (currentFrame != null) {
-                    texture = currentFrame;
-                }
-            }
+            ensureAnimationRegistered(cape);
+            texture = com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
+                .getAnimationFrame(texture)
+                .orElse(texture);
         }
 
         // Render cape texture
@@ -1102,11 +1099,11 @@ public class PlayerCapeMenuScreen extends Screen {
         ClientConfig config = ClientConfig.getInstance();
 
         // NOTE: We do NOT unregister the old animation while the menu is open.
-        // All animated capes are pre-registered in registerAllAnimations() for thumbnail display.
+        // Animated capes are lazily registered via ensureAnimationRegistered() for thumbnail display.
         // If we unregister an animation when switching capes, the old cape's thumbnail will
         // fall back to using the full atlas texture, displaying all frames at once instead of
-        // animating properly. Animations will be cleaned up appropriately when the menu closes
-        // or when the game state changes (e.g., leaving the world).
+        // animating properly. Animations are kept alive and cleaned up on disconnect
+        // (clearAnimations) or resource reload.
 
         // IMPORTANT: Call CapeService.getCapeLocation() to trigger animation registration
         // This must be done BEFORE setting the preview widget
@@ -1348,11 +1345,17 @@ public class PlayerCapeMenuScreen extends Screen {
                 return;
             }
 
+            String[] firstError = new String[1];
             for (Path file : validFiles) {
-                if (processDroppedFile(file, capesDir)) {
-                    successCount++;
-                } else {
+                try {
+                    if (processDroppedFile(file, capesDir)) {
+                        successCount++;
+                    } else {
+                        invalidCount++;
+                    }
+                } catch (IOException e) {
                     invalidCount++;
+                    if (firstError[0] == null) firstError[0] = e.getMessage();
                 }
             }
 
@@ -1374,7 +1377,10 @@ public class PlayerCapeMenuScreen extends Screen {
                     }
                     showImportMessage(message, finalSuccessCount > finalInvalidCount ? 0xFF55FF55 : 0xFFFFAA00, 200);
                 } else {
-                    showImportMessage(Component.translatable("quickskin.cape.no_valid").getString(), 0xFFFF5555, 200);
+                    String msg = firstError[0] != null
+                            ? Component.translatable("quickskin.cape.error", firstError[0]).getString()
+                            : Component.translatable("quickskin.cape.no_valid").getString();
+                    showImportMessage(msg, 0xFFFF5555, 200);
                 }
             });
         }).exceptionally(throwable -> {
@@ -1384,7 +1390,7 @@ public class PlayerCapeMenuScreen extends Screen {
         });
     }
 
-    private boolean processDroppedFile(Path sourceFile, Path targetDir) {
+    private boolean processDroppedFile(Path sourceFile, Path targetDir) throws IOException {
         try {
             String lowerCaseName = sourceFile.toString().toLowerCase(Locale.ROOT);
             boolean isGif = lowerCaseName.endsWith(".gif");
@@ -1411,22 +1417,25 @@ public class PlayerCapeMenuScreen extends Screen {
                         sourceAtlas = new java.awt.image.BufferedImage(width, atlasHeight, java.awt.image.BufferedImage.TYPE_INT_ARGB);
                         for (int i = 0; i < frameCount; i++) {
                             com.mojang.blaze3d.platform.NativeImage frame = gifResult.frames()[i];
+                            int[] argbRow = new int[width];
                             for (int y = 0; y < height; y++) {
                                 for (int x = 0; x < width; x++) {
                                     int abgr = PlatformHelper.getPixel(frame, x, y);
-                                    // Convert ABGR to ARGB for BufferedImage
                                     int a = (abgr >> 24) & 0xFF;
                                     int b = (abgr >> 16) & 0xFF;
                                     int g = (abgr >> 8) & 0xFF;
                                     int r = abgr & 0xFF;
-                                    int argb = (a << 24) | (r << 16) | (g << 8) | b;
-                                    sourceAtlas.setRGB(x, i * height + y, argb);
+                                    argbRow[x] = (a << 24) | (r << 16) | (g << 8) | b;
                                 }
+                                sourceAtlas.setRGB(0, i * height + y, width, 1, argbRow, 0, width);
                             }
                         }
 
                         animationMetadata = gifResult.metadata();
-                        isStandardFormat = true;
+                        // Same rule as PNG: only the vanilla 64x32 size saves directly.
+                        // Any other frame size (including valid HD cape resolutions) goes
+                        // through CapeAdjustScreen so the user can preview before saving.
+                        isStandardFormat = (width == 64 && height == 32);
                     } finally {
                         // Clean up NativeImage frames
                         gifResult.close();
@@ -1439,22 +1448,33 @@ public class PlayerCapeMenuScreen extends Screen {
 
                 int w = image.getWidth();
                 int h = image.getHeight();
-                int frameHeightIfCape = w / 2;
 
-                isStandardFormat = false;
-                if (w > 0 && h > 0 && w % 2 == 0 && h % frameHeightIfCape == 0) {
-                    com.quickskin.mod.common.data.SkinResolution frameRes = com.quickskin.mod.common.data.SkinResolution.fromDimensions(w, frameHeightIfCape);
-                    if (frameRes != null) {
-                        isStandardFormat = true;
-                        frameCount = h / frameHeightIfCape;
-                    }
+                // For PNG imports, only save directly when it's the exact vanilla legacy
+                // cape size (64x32). Any other dimensions — including valid HD cape sizes
+                // like 128x64, 256x128, 512x256, etc. — go through CapeAdjustScreen so the
+                // user can preview the result (including elytra compositing) before saving.
+                isStandardFormat = (w == 64 && h == 32);
+                if (isStandardFormat) {
+                    frameCount = 1;
                 }
             }
 
             java.awt.image.BufferedImage finalAtlas;
 
             // Step 2: Process the source atlas based on its format
-            if (isStandardFormat) {
+            if (isGif && isStandardFormat) {
+                // Copy GIF directly to preserve compression — processGifAsset handles caching
+                String fileName = sourceFile.getFileName().toString();
+                String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+                Path targetPath = targetDir.resolve(fileName);
+                int counter = 1;
+                while (Files.exists(targetPath)) {
+                    targetPath = targetDir.resolve(nameWithoutExt + "_" + counter + ".gif");
+                    counter++;
+                }
+                Files.copy(sourceFile, targetPath);
+                return true;
+            } else if (isStandardFormat) {
 
                 // Keep original HD resolution - no downscaling
                 java.awt.image.BufferedImage normalizedAtlas = sourceAtlas;
@@ -1489,25 +1509,66 @@ public class PlayerCapeMenuScreen extends Screen {
                     finalAtlas = normalizedAtlas;
                 }
             } else {
-                java.awt.image.BufferedImage vanillaElytraBase = getVanillaElytraImage();
-                if (vanillaElytraBase == null) {
-                    vanillaElytraBase = new java.awt.image.BufferedImage(64, 32, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                // Non-standard image: open the cape adjustment screen
+                final java.awt.image.BufferedImage srcImage = sourceAtlas;
+                final Path srcFile = sourceFile;
+                final Path tgtDir = targetDir;
+                final int fc = frameCount;
+                final com.quickskin.mod.common.data.AnimationMetadata animMeta = animationMetadata;
+
+                if (this.minecraft != null) {
+                    this.minecraft.execute(() -> {
+                        this.minecraft.setScreen(new CapeAdjustScreen(this, srcImage, fc, composedCape -> {
+                            try {
+                                int composedW = composedCape.getWidth();
+                                int composedFrameH = composedW / 2;
+                                int composedFrameCount = (composedFrameH > 0) ? composedCape.getHeight() / composedFrameH : 1;
+
+                                java.awt.image.BufferedImage finalCape = composedCape;
+                                if (isElytraAreaTransparent(composedCape)) {
+                                    java.awt.image.BufferedImage elytra = getVanillaElytraImage();
+                                    if (elytra != null) {
+                                        java.awt.image.BufferedImage composite = new java.awt.image.BufferedImage(
+                                                composedW, composedCape.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                                        java.awt.Graphics2D g2 = composite.createGraphics();
+                                        g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                                                java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                                        for (int fi = 0; fi < composedFrameCount; fi++) {
+                                            int yOff = fi * composedFrameH;
+                                            g2.drawImage(elytra, 0, yOff, composedW, yOff + composedFrameH,
+                                                    0, 0, elytra.getWidth(), elytra.getHeight(), null);
+                                            g2.drawImage(composedCape.getSubimage(0, yOff, composedW, composedFrameH),
+                                                    0, yOff, null);
+                                        }
+                                        g2.dispose();
+                                        finalCape = composite;
+                                    }
+                                }
+
+                                Path savePath = resolveTargetPath(srcFile, tgtDir);
+                                saveImageWithAlpha(finalCape, savePath);
+
+                                // Save animation metadata for multi-frame strips
+                                if (animMeta != null && composedFrameCount > 1) {
+                                    String hash = HashUtil.computeFileHash(savePath);
+                                    if (hash != null) {
+                                        Path metadataPath = LocalAssetManager.getInstance().getCacheDirectory()
+                                                .resolve(hash + ".json");
+                                        Files.writeString(metadataPath, animMeta.toJson());
+                                    }
+                                }
+
+                                LocalAssetManager.getInstance().reload();
+                                refreshCapeList();
+                                updateGridDimensions();
+                                showImportMessage(Component.translatable("quickskin.cape.imported").getString(), 0xFF55FF55, 100);
+                            } catch (IOException e) {
+                                showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFFFF5555, 150);
+                            }
+                        }));
+                    });
                 }
-
-                java.awt.image.BufferedImage newCapeTexture = new java.awt.image.BufferedImage(64, 32, java.awt.image.BufferedImage.TYPE_INT_ARGB);
-                java.awt.Graphics2D g = newCapeTexture.createGraphics();
-
-                g.setComposite(java.awt.AlphaComposite.Clear);
-                g.fillRect(0, 0, 64, 32);
-                g.setComposite(java.awt.AlphaComposite.SrcOver);
-
-                g.drawImage(vanillaElytraBase, 0, 0, null);
-                g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                g.setRenderingHint(java.awt.RenderingHints.KEY_ALPHA_INTERPOLATION, java.awt.RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
-                g.drawImage(sourceAtlas, 0, 0, 22, 17, null);
-                g.dispose();
-
-                finalAtlas = newCapeTexture;
+                return true;
             }
 
             try (var baos = new java.io.ByteArrayOutputStream()) {
@@ -1528,8 +1589,8 @@ public class PlayerCapeMenuScreen extends Screen {
             return true;
 
         } catch (IOException e) {
+            throw e;
         }
-        return false;
     }
 
     private boolean isElytraAreaTransparent(java.awt.image.BufferedImage image) {
@@ -1622,51 +1683,12 @@ public class PlayerCapeMenuScreen extends Screen {
     public void onClose() {
         BackgroundRenderer.cleanup();
 
-        // Unregister all animations when closing the menu
-        unregisterAllAnimations();
+        // Animations are kept alive — each uses only one small GPU texture (~512KB).
+        // They are cleaned up on disconnect (clearAnimations) or resource reload.
+        // This avoids a micro-freeze from freeing large atlas NativeImages synchronously.
 
         if (minecraft != null) {
             minecraft.setScreen(parent);
-        }
-    }
-
-    /**
-     * Unregister all animations when the menu is closed to clean up resources
-     */
-    private void unregisterAllAnimations() {
-        com.quickskin.mod.client.services.AnimatedTextureManager animManager =
-            com.quickskin.mod.client.services.AnimatedTextureManager.getInstance();
-
-        // Unregister animations for all local capes
-        for (CapeEntry cape : localCapes) {
-            if (cape.isAnimated()) {
-                String capeId = cape.getCapeId();
-                String animationId = null;
-
-                if (capeId.startsWith("local_cape:")) {
-                    animationId = "cape_" + capeId.substring("local_cape:".length());
-                }
-
-                if (animationId != null) {
-                    animManager.unregisterAnimation(animationId);
-                }
-            }
-        }
-
-        // Unregister animations for all known capes
-        for (CapeEntry cape : knownCapes) {
-            if (cape.isAnimated()) {
-                String capeId = cape.getCapeId();
-                String animationId = null;
-
-                if (capeId.startsWith("known:")) {
-                    animationId = "cape_known_" + capeId.substring("known:".length());
-                }
-
-                if (animationId != null) {
-                    animManager.unregisterAnimation(animationId);
-                }
-            }
         }
     }
 
@@ -1751,21 +1773,23 @@ public class PlayerCapeMenuScreen extends Screen {
             }
         }
 
-        /**
-         * Get the animation ID for a given cape ID
-         */
-        private String getAnimationIdForCape(String capeId) {
-            if (capeId == null) return null;
+    }
 
-            if (capeId.startsWith("local_cape:")) {
-                String hash = capeId.substring("local_cape:".length());
-                return "cape_" + hash;
-            } else if (capeId.startsWith("known:")) {
-                String knownId = capeId.substring("known:".length());
-                return "cape_known_" + knownId;
-            }
+    /**
+     * Get the animation ID for a given cape ID.
+     * Shared by SpeedSlider, lazy registration, and unregister logic.
+     */
+    private String getAnimationIdForCape(String capeId) {
+        if (capeId == null) return null;
 
-            return null;
+        if (capeId.startsWith("local_cape:")) {
+            String hash = capeId.substring("local_cape:".length());
+            return "cape_" + hash;
+        } else if (capeId.startsWith("known:")) {
+            String knownId = capeId.substring("known:".length());
+            return "cape_known_" + knownId;
         }
+
+        return null;
     }
 }

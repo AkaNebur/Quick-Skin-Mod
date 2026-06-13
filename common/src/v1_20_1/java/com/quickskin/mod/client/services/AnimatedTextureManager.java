@@ -155,6 +155,20 @@ public class AnimatedTextureManager {
             return;
         }
 
+        // Defensive guard for legacy large capes imported before F1 caps existed
+        {
+            int fc = metadata.frameCount();
+            int fw = atlasImage.getWidth();
+            int fh = fc > 0 ? atlasImage.getHeight() / fc : atlasImage.getHeight();
+            long decodedBytes = (long) fc * fw * fh * 4;
+            if (decodedBytes > 64L * 1024 * 1024) {
+                long mb = decodedBytes / (1024 * 1024);
+                org.slf4j.LoggerFactory.getLogger(AnimatedTextureManager.class).warn(
+                    "[QuickSkin] Animated cape '{}' would require {} MB decoded — skipping frame pre-upload. Re-import to apply size limits. Cape will display as static first frame.", animationId, mb);
+                return;
+            }
+        }
+
         // If an old animation exists, clean it up first
         unregisterAnimation(animationId);
         pendingRegistrations.remove(animationId);

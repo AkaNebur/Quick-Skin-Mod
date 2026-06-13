@@ -1324,11 +1324,17 @@ public class PlayerCapeMenuScreen extends Screen {
                 return;
             }
 
+            String[] firstError = new String[1];
             for (Path file : validFiles) {
-                if (processDroppedFile(file, capesDir)) {
-                    successCount++;
-                } else {
+                try {
+                    if (processDroppedFile(file, capesDir)) {
+                        successCount++;
+                    } else {
+                        invalidCount++;
+                    }
+                } catch (IOException e) {
                     invalidCount++;
+                    if (firstError[0] == null) firstError[0] = e.getMessage();
                 }
             }
 
@@ -1350,7 +1356,10 @@ public class PlayerCapeMenuScreen extends Screen {
                     }
                     showImportMessage(message, finalSuccessCount > finalInvalidCount ? 0x55FF55 : 0xFFAA00, 200);
                 } else {
-                    showImportMessage(Component.translatable("quickskin.cape.no_valid").getString(), 0xFF5555, 200);
+                    String msg = firstError[0] != null
+                            ? Component.translatable("quickskin.cape.error", firstError[0]).getString()
+                            : Component.translatable("quickskin.cape.no_valid").getString();
+                    showImportMessage(msg, 0xFF5555, 200);
                 }
             });
         }).exceptionally(throwable -> {
@@ -1360,7 +1369,7 @@ public class PlayerCapeMenuScreen extends Screen {
         });
     }
 
-    private boolean processDroppedFile(Path sourceFile, Path targetDir) {
+    private boolean processDroppedFile(Path sourceFile, Path targetDir) throws IOException {
         try {
             String lowerCaseName = sourceFile.toString().toLowerCase(Locale.ROOT);
             boolean isGif = lowerCaseName.endsWith(".gif");
@@ -1402,7 +1411,9 @@ public class PlayerCapeMenuScreen extends Screen {
                         }
 
                         animationMetadata = gifResult.metadata();
-                        isStandardFormat = true;
+                        // Only the exact vanilla 64x32 size copies directly; HD GIFs go through
+                        // CapeAdjustScreen so the user can preview compositing before saving.
+                        isStandardFormat = (width == 64 && height == 32);
                     } finally {
                         // Clean up NativeImage frames
                         gifResult.close();
@@ -1415,22 +1426,31 @@ public class PlayerCapeMenuScreen extends Screen {
 
                 int w = image.getWidth();
                 int h = image.getHeight();
-                int frameHeightIfCape = w / 2;
 
-                isStandardFormat = false;
-                if (w > 0 && h > 0 && w % 2 == 0 && h % frameHeightIfCape == 0) {
-                    com.quickskin.mod.common.data.SkinResolution frameRes = com.quickskin.mod.common.data.SkinResolution.fromDimensions(w, frameHeightIfCape);
-                    if (frameRes != null) {
-                        isStandardFormat = true;
-                        frameCount = h / frameHeightIfCape;
-                    }
+                // Only the exact vanilla 64x32 PNG copies directly; HD PNGs go through
+                // CapeAdjustScreen so the user can preview compositing before saving.
+                isStandardFormat = (w == 64 && h == 32);
+                if (isStandardFormat) {
+                    frameCount = 1;
                 }
             }
 
             java.awt.image.BufferedImage finalAtlas;
 
             // Step 2: Process the source atlas based on its format
-            if (isStandardFormat) {
+            if (isGif && isStandardFormat) {
+                // Copy GIF directly to preserve compression — processGifAsset handles caching
+                String fileName = sourceFile.getFileName().toString();
+                String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+                Path targetPath = targetDir.resolve(fileName);
+                int counter = 1;
+                while (Files.exists(targetPath)) {
+                    targetPath = targetDir.resolve(nameWithoutExt + "_" + counter + ".gif");
+                    counter++;
+                }
+                Files.copy(sourceFile, targetPath);
+                return true;
+            } else if (isStandardFormat) {
 
                 // Keep original HD resolution - no downscaling
                 java.awt.image.BufferedImage normalizedAtlas = sourceAtlas;
@@ -1470,25 +1490,36 @@ public class PlayerCapeMenuScreen extends Screen {
                 final java.awt.image.BufferedImage srcImage = sourceAtlas;
                 final Path srcFile = sourceFile;
                 final Path tgtDir = targetDir;
+                final int fc = frameCount;
+                final com.quickskin.mod.common.data.AnimationMetadata animMeta = animationMetadata;
 
                 if (this.minecraft != null) {
                     this.minecraft.execute(() -> {
-                        this.minecraft.setScreen(new CapeAdjustScreen(this, srcImage, composedCape -> {
+                        this.minecraft.setScreen(new CapeAdjustScreen(this, srcImage, fc, composedCape -> {
                             // Callback: save the composed cape and reload
                             try {
+                                int composedW = composedCape.getWidth();
+                                int composedFrameH = composedW / 2;
+                                int composedFrameCount = (composedFrameH > 0) ? composedCape.getHeight() / composedFrameH : 1;
+
                                 // Composite vanilla elytra if the elytra area is transparent
                                 java.awt.image.BufferedImage finalCape = composedCape;
                                 if (isElytraAreaTransparent(composedCape)) {
                                     java.awt.image.BufferedImage elytra = getVanillaElytraImage();
                                     if (elytra != null) {
                                         java.awt.image.BufferedImage composite = new java.awt.image.BufferedImage(
-                                                composedCape.getWidth(), composedCape.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                                                composedW, composedCape.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
                                         java.awt.Graphics2D g2 = composite.createGraphics();
                                         g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
                                                 java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-                                        g2.drawImage(elytra, 0, 0, composedCape.getWidth(), composedCape.getHeight(),
-                                                0, 0, elytra.getWidth(), elytra.getHeight(), null);
-                                        g2.drawImage(composedCape, 0, 0, null);
+                                        // Composite elytra per frame
+                                        for (int fi = 0; fi < composedFrameCount; fi++) {
+                                            int yOff = fi * composedFrameH;
+                                            g2.drawImage(elytra, 0, yOff, composedW, yOff + composedFrameH,
+                                                    0, 0, elytra.getWidth(), elytra.getHeight(), null);
+                                            g2.drawImage(composedCape.getSubimage(0, yOff, composedW, composedFrameH),
+                                                    0, yOff, null);
+                                        }
                                         g2.dispose();
                                         finalCape = composite;
                                     }
@@ -1496,6 +1527,16 @@ public class PlayerCapeMenuScreen extends Screen {
 
                                 Path savePath = resolveTargetPath(srcFile, tgtDir);
                                 saveImageWithAlpha(finalCape, savePath);
+
+                                // Save animation metadata for multi-frame strips
+                                if (animMeta != null && composedFrameCount > 1) {
+                                    String hash = HashUtil.computeFileHash(savePath);
+                                    if (hash != null) {
+                                        Path metadataPath = LocalAssetManager.getInstance().getCacheDirectory()
+                                                .resolve(hash + ".json");
+                                        Files.writeString(metadataPath, animMeta.toJson());
+                                    }
+                                }
 
                                 LocalAssetManager.getInstance().reload();
                                 refreshCapeList();
@@ -1528,8 +1569,8 @@ public class PlayerCapeMenuScreen extends Screen {
             return true;
 
         } catch (IOException e) {
+            throw e;
         }
-        return false;
     }
 
     private boolean isElytraAreaTransparent(java.awt.image.BufferedImage image) {

@@ -1,7 +1,6 @@
 package com.quickskin.mod.client.gui.screen;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.util.BackgroundRenderer;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
@@ -9,6 +8,7 @@ import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.config.ClientConfig;
+import com.quickskin.mod.platform.PlatformHelper;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -18,7 +18,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 
 import java.awt.image.BufferedImage;
@@ -77,17 +77,17 @@ public class CapeAdjustScreen extends Screen {
     private boolean mirrorFrontBack = false;
 
     // Source image texture
-    private ResourceLocation sourceTextureLocation;
+    private Identifier sourceTextureLocation;
     private DynamicTexture sourceDynTexture;
 
     // Preview texture (cape back portion)
-    private ResourceLocation previewTextureLocation;
+    private Identifier previewTextureLocation;
     private DynamicTexture previewDynTexture;
     private boolean previewDirty = true;
 
     // 3D player model preview (mirrors the main cape menu)
     private PlayerWidget playerWidget;
-    private ResourceLocation lastPlayerWidgetCape;
+    private Identifier lastPlayerWidgetCape;
 
     public CapeAdjustScreen(Screen parent, BufferedImage sourceImage, Consumer<BufferedImage> onApply) {
         this(parent, sourceImage, 1, onApply);
@@ -112,9 +112,9 @@ public class CapeAdjustScreen extends Screen {
                 ? sourceImage.getSubimage(0, 0, sourceImage.getWidth(), srcFrameHeight)
                 : sourceImage;
         NativeImage nativeImage = convertToNativeImage(displayFrame);
-        sourceDynTexture = new DynamicTexture(nativeImage);
-        sourceTextureLocation = Minecraft.getInstance().getTextureManager()
-                .register("quickskin/cape_adjust_source", sourceDynTexture);
+        sourceDynTexture = new DynamicTexture(() -> "quickskin_cape_adjust_source", nativeImage);
+        sourceTextureLocation = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "cape_adjust_source");
+        Minecraft.getInstance().getTextureManager().register(sourceTextureLocation, sourceDynTexture);
 
         // Calculate grid display area (left 65% of screen, vertically centered)
         int availW = (int) (this.width * 0.6);
@@ -247,7 +247,7 @@ public class CapeAdjustScreen extends Screen {
             int widgetX = widgetAreaLeft + (widgetAreaW - widgetWidth) / 2;
             int widgetY = widgetAreaTop;
 
-            ResourceLocation skinLocation = null;
+            Identifier skinLocation = null;
             String modelType = "classic";
             LocalPlayer player = Minecraft.getInstance().player;
             ClientConfig config = ClientConfig.getInstance();
@@ -264,14 +264,14 @@ public class CapeAdjustScreen extends Screen {
                 }
             }
             if (skinLocation == null && player != null) {
-                skinLocation = player.getSkinTextureLocation();
+                skinLocation = player.getSkin().body().texturePath();
                 if ("auto".equals(modelType)) {
-                    String vanillaModel = player.getModelName(); // "default" or "slim"
-                    modelType = "slim".equals(vanillaModel) ? "slim" : "classic";
+                    modelType = player.getSkin().model()
+                            == net.minecraft.world.entity.player.PlayerModelType.SLIM ? "slim" : "classic";
                 }
             }
             if (skinLocation == null) {
-                skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
+                skinLocation = Identifier.fromNamespaceAndPath("minecraft", "textures/entity/player/wide/steve.png");
                 modelType = "classic";
             }
 
@@ -365,7 +365,7 @@ public class CapeAdjustScreen extends Screen {
                 int g = (argb >> 8) & 0xFF;
                 int b = argb & 0xFF;
                 int abgr = (a << 24) | (b << 16) | (g << 8) | r;
-                pixels.setPixelRGBA(x, y, abgr);
+                PlatformHelper.setPixel(pixels, x, y, abgr);
             }
         }
         sourceDynTexture.upload();
@@ -511,7 +511,7 @@ public class CapeAdjustScreen extends Screen {
             if (i == selectedResolution) {
                 int btnW2 = Math.min(this.width - resBtnX - 10, 120);
                 int by = gridY + i * 24;
-                graphics.renderOutline(resBtnX - 1, by - 1, btnW2 + 2, 22, 0xFF55FF55);
+                drawOutline(graphics, resBtnX - 1, by - 1, btnW2 + 2, 22, 0xFF55FF55);
             }
         }
 
@@ -532,7 +532,7 @@ public class CapeAdjustScreen extends Screen {
     private void renderSourceImage(GuiGraphics graphics) {
         if (sourceTextureLocation == null) return;
 
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+
 
         // Convert cape-space offset to display-space (uses first frame dimensions)
         int drawX = gridX + (int) (imgOffsetX * displayScale);
@@ -540,27 +540,27 @@ public class CapeAdjustScreen extends Screen {
         int drawW = (int) (sourceImage.getWidth() * imgScale * displayScale);
         int drawH = (int) (srcFrameHeight * imgScale * displayScale);
 
-        graphics.blit(sourceTextureLocation, drawX, drawY, drawW, drawH,
+        PlatformHelper.blit(graphics, sourceTextureLocation, drawX, drawY, drawW, drawH,
                 0, 0, sourceImage.getWidth(), srcFrameHeight,
                 sourceImage.getWidth(), srcFrameHeight);
     }
 
     private void renderCapeGridOverlay(GuiGraphics graphics) {
         // Cape template overlay — Outer border
-        graphics.renderOutline(gridX, gridY, gridW, gridH, 0xAAFFFFFF);
+        drawOutline(graphics, gridX, gridY, gridW, gridH, 0xAAFFFFFF);
 
         // --- Cape body faces ---
-        // Cape back: (1,1) size 10×16 at 1x
+        // Cape back: (1,1) size 10x16 at 1x
         int backX = gridX + (int) (1.0 / 64.0 * gridW);
         int backY = gridY + (int) (1.0 / 32.0 * gridH);
         int backW = (int) (10.0 / 64.0 * gridW);
         int backH = (int) (16.0 / 32.0 * gridH);
-        // Cape front: (12,1) size 10×16 at 1x
+        // Cape front: (12,1) size 10x16 at 1x
         int frontX = gridX + (int) (12.0 / 64.0 * gridW);
         int frontW = (int) (10.0 / 64.0 * gridW);
 
-        // --- Elytra wing (from ElytraModel: texOffs(22,0), box 10×20×2) ---
-        // Elytra UV occupies (22,0)→(46,22) on the 64×32 texture
+        // --- Elytra wing (from ElytraModel: texOffs(22,0), box 10x20x2) ---
+        // Elytra UV occupies (22,0)->(46,22) on the 64x32 texture
         int eTopX = gridX + (int) (24.0 / 64.0 * gridW);   // top face X
         int eTopW = (int) (10.0 / 64.0 * gridW);
         int eBotX = gridX + (int) (34.0 / 64.0 * gridW);   // bottom face X
@@ -579,29 +579,29 @@ public class CapeAdjustScreen extends Screen {
         int elytraRightX = gridX + (int) (46.0 / 64.0 * gridW);
 
         // Dim unused areas (5 rectangles covering everything outside cape body + elytra)
-        // 1. Gap between cape body top-right and elytra top: (22,0)→(24,2)
+        // 1. Gap between cape body top-right and elytra top: (22,0)->(24,2)
         graphics.fill(capeBodyRightX, gridY, eTopX, elytraTopStripBottom, 0x88000000);
-        // 2. Right of elytra top strip: (44,0)→(64,2)
+        // 2. Right of elytra top strip: (44,0)->(64,2)
         graphics.fill(eBotX + eBotW, gridY, gridX + gridW, elytraTopStripBottom, 0x88000000);
-        // 3. Right of elytra body: (46,2)→(64,22)
+        // 3. Right of elytra body: (46,2)->(64,22)
         graphics.fill(elytraRightX, elytraTopStripBottom, gridX + gridW, elytraBottomY, 0x88000000);
-        // 4. Below cape body, left of elytra: (0,17)→(22,22)
+        // 4. Below cape body, left of elytra: (0,17)->(22,22)
         graphics.fill(gridX, capeBodyBottomY, capeBodyRightX, elytraBottomY, 0x88000000);
-        // 5. Full bottom strip: (0,22)→(64,32)
+        // 5. Full bottom strip: (0,22)->(64,32)
         graphics.fill(gridX, elytraBottomY, gridX + gridW, gridY + gridH, 0x88000000);
 
         // --- Cape outlines ---
-        graphics.renderOutline(backX, backY, backW, backH, 0xFF5599FF);
+        drawOutline(graphics, backX, backY, backW, backH, 0xFF5599FF);
         if (!mirrorFrontBack) {
-            graphics.renderOutline(frontX, backY, frontW, backH, 0xFF55FF55);
+            drawOutline(graphics, frontX, backY, frontW, backH, 0xFF55FF55);
         } else {
             graphics.fill(frontX, backY, frontX + frontW, backY + backH, 0x88000000);
         }
 
         // Dim all elytra faces except the back/outer wing (barely visible in-game)
-        // Top + bottom faces: (24,0)→(44,2)
+        // Top + bottom faces: (24,0)->(44,2)
         graphics.fill(eTopX, gridY, eBotX + eBotW, elytraTopStripBottom, 0x88000000);
-        // Left side + front/inner + right side: (22,2)→(36,22)
+        // Left side + front/inner + right side: (22,2)->(36,22)
         graphics.fill(eLX, eLY, eBackX, eLY + eLH, 0x88000000);
 
         // --- Back/outer wing: wing silhouette outline + corner dimming ---
@@ -728,9 +728,9 @@ public class CapeAdjustScreen extends Screen {
         graphics.fill(rightPanelX - 1, previewStartY - 1,
                 rightPanelX + backPreviewW + 1, previewStartY + backPreviewH + 1, 0xFF333333);
 
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+
         // Cape back UV: (1*s, 1*s) size (10*s, 16*s)
-        graphics.blit(previewTextureLocation,
+        PlatformHelper.blit(graphics, previewTextureLocation,
                 rightPanelX, previewStartY, backPreviewW, backPreviewH,
                 1 * scale, 1 * scale, 10 * scale, 16 * scale, capeW, capeW / 2);
 
@@ -743,14 +743,14 @@ public class CapeAdjustScreen extends Screen {
         graphics.fill(frontX - 1, previewStartY - 1,
                 frontX + backPreviewW + 1, previewStartY + backPreviewH + 1, 0xFF333333);
 
-        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+
         // Cape front UV: (12*s, 1*s) size (10*s, 16*s)
-        graphics.blit(previewTextureLocation,
+        PlatformHelper.blit(graphics, previewTextureLocation,
                 frontX, previewStartY, backPreviewW, backPreviewH,
                 12 * scale, 1 * scale, 10 * scale, 16 * scale, capeW, capeW / 2);
 
         // --- Elytra preview (outer/back wing — the visible part in-game) ---
-        // ElytraModel: texOffs(22,0), box 10×20×2, texture 64×32
+        // ElytraModel: texOffs(22,0), box 10x20x2, texture 64x32
         // Back/outer face UV: (36, 2) size (10, 20)
         int elytraPreviewW = backPreviewW;
         int elytraPreviewH = (int) (elytraPreviewW * 2.0); // 10:20 aspect
@@ -769,9 +769,8 @@ public class CapeAdjustScreen extends Screen {
             graphics.fill(rightPanelX - 1, elytraY - 1,
                     rightPanelX + elytraPreviewW + 1, elytraY + elytraPreviewH + 1, 0xFF333333);
 
-            RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
             // Back/outer wing UV: (36*s, 2*s) size (10*s, 20*s)
-            graphics.blit(previewTextureLocation,
+            PlatformHelper.blit(graphics, previewTextureLocation,
                     rightPanelX, elytraY, elytraPreviewW, elytraPreviewH,
                     36 * scale, 2 * scale, 10 * scale, 20 * scale, capeW, capeW / 2);
 
@@ -812,9 +811,9 @@ public class CapeAdjustScreen extends Screen {
         }
 
         NativeImage ni = convertToNativeImage(cape);
-        previewDynTexture = new DynamicTexture(ni);
-        previewTextureLocation = Minecraft.getInstance().getTextureManager()
-                .register("quickskin/cape_adjust_preview", previewDynTexture);
+        previewDynTexture = new DynamicTexture(() -> "quickskin_cape_adjust_preview", ni);
+        previewTextureLocation = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "cape_adjust_preview");
+        Minecraft.getInstance().getTextureManager().register(previewTextureLocation, previewDynTexture);
     }
 
     /**
@@ -862,8 +861,11 @@ public class CapeAdjustScreen extends Screen {
     // --- Input handling ---
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (super.mouseClicked(mouseX, mouseY, button)) return true;
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
+        if (super.mouseClicked(event, focused)) return true;
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.buttonInfo().button();
 
         // Start dragging if clicked inside the grid area
         if (button == 0 && mouseX >= gridX && mouseX <= gridX + gridW
@@ -879,17 +881,21 @@ public class CapeAdjustScreen extends Screen {
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent event) {
+        int button = event.buttonInfo().button();
         if (button == 0 && isDragging) {
             isDragging = false;
             previewDirty = true;
             return true;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
+        return super.mouseReleased(event);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double dragX, double dragY) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.buttonInfo().button();
         if (isDragging && button == 0) {
             // Convert display-space drag to cape-space
             double deltaX = (mouseX - dragStartX) / displayScale;
@@ -900,16 +906,16 @@ public class CapeAdjustScreen extends Screen {
             previewDirty = true;
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return super.mouseDragged(event, dragX, dragY);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
         if (mouseX >= gridX && mouseX <= gridX + gridW
                 && mouseY >= gridY && mouseY <= gridY + gridH) {
             // Zoom centered on mouse position
             double oldScale = imgScale;
-            double zoomFactor = delta > 0 ? 1.15 : 1.0 / 1.15;
+            double zoomFactor = deltaY > 0 ? 1.15 : 1.0 / 1.15;
             imgScale *= zoomFactor;
 
             // Clamp scale (using first frame dimensions)
@@ -930,7 +936,7 @@ public class CapeAdjustScreen extends Screen {
             previewDirty = true;
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+        return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
     }
 
     private void applyAndClose() {
@@ -963,6 +969,26 @@ public class CapeAdjustScreen extends Screen {
         return false;
     }
 
+    @Override
+    protected void renderBlurredBackground(GuiGraphics guiGraphics) {
+        // Disable the default blur effect - we have our own custom background
+    }
+
+    @Override
+    public void renderBackground(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Disable the default dark background overlay - we render our own custom background
+    }
+
+    /**
+     * Draws an outline immediately using fill calls.
+     */
+    private static void drawOutline(GuiGraphics graphics, int x, int y, int width, int height, int color) {
+        graphics.fill(x, y, x + width, y + 1, color);
+        graphics.fill(x, y + height - 1, x + width, y + height, color);
+        graphics.fill(x, y + 1, x + 1, y + height - 1, color);
+        graphics.fill(x + width - 1, y + 1, x + width, y + height - 1, color);
+    }
+
     /**
      * Convert BufferedImage to NativeImage for texture registration
      */
@@ -978,7 +1004,7 @@ public class CapeAdjustScreen extends Screen {
                 int g = (argb >> 8) & 0xFF;
                 int b = argb & 0xFF;
                 int abgr = (a << 24) | (b << 16) | (g << 8) | r;
-                nativeImage.setPixelRGBA(x, y, abgr);
+                PlatformHelper.setPixel(nativeImage, x, y, abgr);
             }
         }
         return nativeImage;

@@ -25,6 +25,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.SoftReference;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -45,6 +46,9 @@ public class LocalAssetManager {
 
     // Texture registration
     private final Map<String, Map<TextureQuality, ResourceLocation>> textureRegistry = new ConcurrentHashMap<>();
+
+    // F8: GC-friendly cache of decoded source BufferedImages
+    private final Map<String, SoftReference<BufferedImage>> sourceImageCache = new ConcurrentHashMap<>();
 
     // Directory paths
     private Path skinsDirectory;
@@ -145,7 +149,12 @@ public class LocalAssetManager {
                     AssetMetadata metadata = processGifAsset(path);
                     if (metadata != null) {
                         metadataCache.put(metadata.hash(), metadata);
-                        hashToSourcePath.put(metadata.hash(), path);
+                        // Point to the cached PNG atlas so loadTexture/getSourceImage get the
+                        // full multi-frame image. ImageIO.read of a .gif only returns the first
+                        // frame, so the atlas path is what downstream consumers actually need.
+                        // Fall back to the .gif path if the atlas wasn't written (shouldn't happen).
+                        Path cachedAtlas = cacheDirectory.resolve("animated_capes").resolve(metadata.hash() + ".png");
+                        hashToSourcePath.put(metadata.hash(), Files.exists(cachedAtlas) ? cachedAtlas : path);
                         count++;
                     }
                 }
@@ -167,39 +176,39 @@ public class LocalAssetManager {
                 return null;
             }
 
+            // F9: read image once upfront, use for both metadata synthesis and dimension check.
+            BufferedImage image = ImageIO.read(path.toFile());
+            if (image == null) {
+                return null;
+            }
+
             // For capes, check if it's an old animation strip missing metadata and generate it.
             if ("cape".equals(type)) {
                 Path metadataPathForCheck = cacheDirectory.resolve(hash + ".json");
                 if (!Files.exists(metadataPathForCheck)) {
-                    // No metadata found. Let's see if this PNG is a multi-frame strip.
-                    try (InputStream is = Files.newInputStream(path)) {
-                        BufferedImage imageForCheck = ImageIO.read(is);
-                        if (imageForCheck != null) {
-                            int width = imageForCheck.getWidth();
-                            int height = imageForCheck.getHeight();
-                            // Cape frames have a 2:1 aspect ratio.
-                            int frameHeight = width / 2;
+                    int width = image.getWidth();
+                    int height = image.getHeight();
+                    int frameHeight = width / 2; // Cape frames have a 2:1 aspect ratio.
 
-                            if (width > 0 && frameHeight > 0 && height > frameHeight && height % frameHeight == 0) {
-                                int frameCount = height / frameHeight;
-                                if (frameCount > 1) {
-                                        List<AnimationMetadata.FrameData> frames = new ArrayList<>();
-                                    for (int i = 0; i < frameCount; i++) {
-                                        // Use 50ms per frame (20 FPS) as a sensible default.
-                                        frames.add(new AnimationMetadata.FrameData(50, i));
-                                    }
-                                    AnimationMetadata generatedMeta = new AnimationMetadata(frames, frameCount);
-
-                                    Files.writeString(metadataPathForCheck, generatedMeta.toJson());
-                                }
+                    if (width > 0 && frameHeight > 0 && height > frameHeight && height % frameHeight == 0) {
+                        int fc = height / frameHeight;
+                        if (fc > 1) {
+                            List<AnimationMetadata.FrameData> frames = new ArrayList<>();
+                            for (int i = 0; i < fc; i++) {
+                                // Use 50ms per frame (20 FPS) as a sensible default.
+                                frames.add(new AnimationMetadata.FrameData(50, i));
+                            }
+                            AnimationMetadata generatedMeta = new AnimationMetadata(frames, fc);
+                            try {
+                                Files.writeString(metadataPathForCheck, generatedMeta.toJson());
+                            } catch (IOException ignored) {
                             }
                         }
-                    } catch (Exception e) {
                     }
                 }
             }
 
-            // Check for animation metadata first
+            // Check for animation metadata
             Path metadataPath = cacheDirectory.resolve(hash + ".json");
             AnimationMetadata animMeta = null;
             if (Files.exists(metadataPath)) {
@@ -208,12 +217,6 @@ public class LocalAssetManager {
                     animMeta = AnimationMetadata.fromJson(json);
                 } catch (IOException e) {
                 }
-            }
-
-            // Read image to get dimensions
-            BufferedImage image = ImageIO.read(path.toFile());
-            if (image == null) {
-                return null;
             }
 
             int width = image.getWidth();
@@ -263,6 +266,15 @@ public class LocalAssetManager {
                             if (resolution == null) {
                                 return null;
                             }
+                            // Resize the cape to valid dimensions and overwrite the file
+                            if (isAnimated) {
+                                image = HDTextureProcessor.resizeAnimationStrip(image, resolution.getWidth());
+                            } else {
+                                image = HDTextureProcessor.resizeToResolution(image, resolution);
+                            }
+                            ImageIO.write(image, "PNG", path.toFile());
+                            width = image.getWidth();
+                            height = image.getHeight();
                         }
                     } else {
                         return null;
@@ -304,15 +316,45 @@ public class LocalAssetManager {
     private AssetMetadata processGifAsset(Path path) {
         com.quickskin.mod.common.util.StbGifLoader.GifLoadResult result = null;
         try {
-            // Load GIF using STB Image
-            try (var inputStream = Files.newInputStream(path)) {
-                result = com.quickskin.mod.common.util.StbGifLoader.loadGif(inputStream);
-            }
-
-            // Compute hash of original GIF
+            // Compute hash of original GIF first so we can check the cache before decoding.
             String hash = HashUtil.computeFileHash(path);
             if (hash == null) {
                 return null;
+            }
+
+            // F7: cache-hit fast path. Skip STB decode if cached atlas + metadata
+            // exist and are newer than the source GIF.
+            Path cachedAtlasFast = cacheDirectory.resolve("animated_capes").resolve(hash + ".png");
+            Path cachedMetaFast = cacheDirectory.resolve(hash + ".json");
+            if (Files.exists(cachedAtlasFast) && Files.exists(cachedMetaFast)) {
+                try {
+                    long srcMtime = Files.getLastModifiedTime(path).toMillis();
+                    long atlasMtime = Files.getLastModifiedTime(cachedAtlasFast).toMillis();
+                    long metaMtime = Files.getLastModifiedTime(cachedMetaFast).toMillis();
+                    if (atlasMtime >= srcMtime && metaMtime >= srcMtime) {
+                        AnimationMetadata cachedMeta = AnimationMetadata.fromJson(Files.readString(cachedMetaFast));
+                        BufferedImage atlasImg = ImageIO.read(cachedAtlasFast.toFile());
+                        if (cachedMeta != null && atlasImg != null && cachedMeta.frameCount() > 0) {
+                            int cw = atlasImg.getWidth();
+                            int ch = atlasImg.getHeight() / cachedMeta.frameCount();
+                            SkinResolution res = SkinResolution.fromDimensions(cw, ch);
+                            if (res == null) res = SkinResolution.STANDARD;
+                            String fn = path.getFileName().toString();
+                            int di = fn.lastIndexOf('.');
+                            if (di > 0) fn = fn.substring(0, di);
+                            return AssetMetadata.forAnimatedCape(
+                                hash, fn, path, res,
+                                Files.size(path), cachedMeta.frameCount(), srcMtime);
+                        }
+                    }
+                } catch (IOException ignored) {
+                    // Fall through to full decode on any cache read failure.
+                }
+            }
+
+            // Load GIF using STB Image
+            try (var inputStream = Files.newInputStream(path)) {
+                result = com.quickskin.mod.common.util.StbGifLoader.loadGif(inputStream);
             }
 
             // Create PNG atlas from frames (stack vertically)
@@ -339,6 +381,9 @@ public class LocalAssetManager {
             Path atlasPath = cacheDir.resolve(hash + ".png");
             atlas.writeToFile(atlasPath);
             atlas.close();
+
+            // Composite vanilla elytra on cache atlas if elytra area is transparent
+            compositeElytraOnAtlasIfNeeded(atlasPath, frameCount);
 
             // Save animation metadata to cache
             Path metadataPath = cacheDirectory.resolve(hash + ".json");
@@ -707,6 +752,7 @@ public class LocalAssetManager {
         }
 
         // Load and register texture
+        AssetMetadata meta = getMetadata(hash);
         byte[] textureData = loadTexture(hash, quality);
         if (textureData == null) {
             return null;
@@ -715,6 +761,24 @@ public class LocalAssetManager {
         try {
             // Load directly as NativeImage from PNG bytes (handles pixel format automatically)
             NativeImage nativeImage = NativeImage.read(new ByteArrayInputStream(textureData));
+
+            // For animated capes, only register the FIRST FRAME on GPU instead of the full atlas.
+            // The animation system keeps the atlas in RAM and handles frame switching separately.
+            // This prevents massive VRAM waste and fixes incorrect UV rendering when
+            // the animation texture is used as a fallback.
+            if (meta != null && meta.isAnimated() && meta.frameCount() > 1 && quality == TextureQuality.FULL) {
+                int frameHeight = nativeImage.getHeight() / meta.frameCount();
+                if (frameHeight > 0 && frameHeight < nativeImage.getHeight()) {
+                    NativeImage firstFrame = new NativeImage(nativeImage.getWidth(), frameHeight, false);
+                    for (int y = 0; y < frameHeight; y++) {
+                        for (int x = 0; x < nativeImage.getWidth(); x++) {
+                            PlatformHelper.setPixel(firstFrame, x, y, PlatformHelper.getPixel(nativeImage, x, y));
+                        }
+                    }
+                    nativeImage.close();
+                    nativeImage = firstFrame;
+                }
+            }
 
             // Create dynamic texture
             DynamicTexture dynamicTexture = new DynamicTexture(nativeImage);
@@ -762,6 +826,15 @@ public class LocalAssetManager {
 
     @Nullable
     public BufferedImage getSourceImage(String hash) {
+        // F8: SoftReference cache — GC reclaims under memory pressure.
+        SoftReference<BufferedImage> ref = sourceImageCache.get(hash);
+        if (ref != null) {
+            BufferedImage cached = ref.get();
+            if (cached != null) {
+                return cached;
+            }
+            sourceImageCache.remove(hash, ref);
+        }
         Path sourcePath = getSourcePath(hash);
         if (sourcePath == null) {
             // Also check cache for animated capes converted from GIFs
@@ -773,7 +846,11 @@ public class LocalAssetManager {
             }
         }
         try {
-            return ImageIO.read(sourcePath.toFile());
+            BufferedImage decoded = ImageIO.read(sourcePath.toFile());
+            if (decoded != null) {
+                sourceImageCache.put(hash, new SoftReference<>(decoded));
+            }
+            return decoded;
         } catch (IOException e) {
             return null;
         }
@@ -855,6 +932,63 @@ public class LocalAssetManager {
     private void savePreferences() {
         if (skinPreferences != null && preferencesFile != null) {
             skinPreferences.save(preferencesFile);
+        }
+    }
+
+    /**
+     * Check if the elytra area of a cape atlas is transparent, and if so,
+     * composite the vanilla elytra texture onto the cached atlas.
+     * This keeps the source GIF untouched while ensuring elytra renders correctly.
+     */
+    private void compositeElytraOnAtlasIfNeeded(Path atlasPath, int frameCount) {
+        try {
+            BufferedImage atlas = ImageIO.read(atlasPath.toFile());
+            if (atlas == null) return;
+
+            int capeW = atlas.getWidth();
+            int frameH = (frameCount > 0) ? atlas.getHeight() / frameCount : atlas.getHeight();
+
+            double scale = capeW / 64.0;
+            int elytraX = (int) (22 * scale);
+            int elytraW = (int) (32 * scale);
+            int elytraH = (int) (16 * scale);
+            boolean allTransparent = true;
+            int samplePoints = 5;
+            for (int i = 0; i < samplePoints && allTransparent; i++) {
+                for (int j = 0; j < samplePoints && allTransparent; j++) {
+                    int x = Math.min(elytraX + (i * elytraW / (samplePoints - 1)), capeW - 1);
+                    int y = Math.min(j * elytraH / (samplePoints - 1), frameH - 1);
+                    int alpha = (atlas.getRGB(x, y) >> 24) & 0xFF;
+                    if (alpha > 10) allTransparent = false;
+                }
+            }
+
+            if (!allTransparent) return;
+
+            var resourceOpt = Minecraft.getInstance().getResourceManager()
+                    .getResource(ResourceLocation.fromNamespaceAndPath("minecraft", "textures/entity/elytra.png"));
+            if (resourceOpt.isEmpty()) return;
+            BufferedImage elytra;
+            try (var stream = resourceOpt.get().open()) {
+                elytra = ImageIO.read(stream);
+            }
+            if (elytra == null) return;
+
+            BufferedImage composited = new BufferedImage(capeW, atlas.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            java.awt.Graphics2D g = composited.createGraphics();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                    java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            for (int i = 0; i < frameCount; i++) {
+                int yOff = i * frameH;
+                g.drawImage(elytra, 0, yOff, capeW, yOff + frameH,
+                        0, 0, elytra.getWidth(), elytra.getHeight(), null);
+                g.drawImage(atlas.getSubimage(0, yOff, capeW, frameH), 0, yOff, null);
+            }
+            g.dispose();
+
+            ImageIO.write(composited, "PNG", atlasPath.toFile());
+        } catch (Exception e) {
+            // Non-critical — elytra just won't have the vanilla fallback
         }
     }
 }

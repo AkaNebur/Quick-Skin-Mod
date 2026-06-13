@@ -96,8 +96,20 @@ public class StbGifLoader {
                     throw new IOException("GIF has no frames");
                 }
 
-                // Validate dimensions for cape
-                
+                // Hard input caps — reject oversized GIFs before any pixel work
+                if (width > 2048) {
+                    throw new IOException("Animated cape too large: width " + width + " exceeds maximum 2048 pixels.");
+                }
+                if (frameCount > 256) {
+                    throw new IOException("Animated cape too large: " + frameCount + " frames exceeds maximum 256.");
+                }
+                long decodedBytes = (long) frameCount * width * height * 4;
+                long maxBytes = 64L * 1024 * 1024;
+                if (decodedBytes > maxBytes) {
+                    long decodedMb = decodedBytes / (1024 * 1024);
+                    throw new IOException("Animated cape too large. Maximum 64 MB when decoded (frames x width x height x 4). Yours is " + decodedMb + " MB. Try reducing resolution or frame count.");
+                }
+
 
                 // Get the delays IntBuffer from the pointer
                 long delaysPtr = delaysBuffer.get(0);

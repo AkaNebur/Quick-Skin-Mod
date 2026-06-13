@@ -264,14 +264,13 @@ public class CapeAdjustScreen extends Screen {
                 }
             }
             if (skinLocation == null && player != null) {
-                skinLocation = player.getSkinTextureLocation();
+                skinLocation = player.getSkin().texture();
                 if ("auto".equals(modelType)) {
-                    String vanillaModel = player.getModelName(); // "default" or "slim"
-                    modelType = "slim".equals(vanillaModel) ? "slim" : "classic";
+                    modelType = "slim".equals(player.getSkin().model().id()) ? "slim" : "classic";
                 }
             }
             if (skinLocation == null) {
-                skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
+                skinLocation = ResourceLocation.fromNamespaceAndPath("minecraft", "textures/entity/player/wide/steve.png");
                 modelType = "classic";
             }
 
@@ -904,12 +903,12 @@ public class CapeAdjustScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
         if (mouseX >= gridX && mouseX <= gridX + gridW
                 && mouseY >= gridY && mouseY <= gridY + gridH) {
             // Zoom centered on mouse position
             double oldScale = imgScale;
-            double zoomFactor = delta > 0 ? 1.15 : 1.0 / 1.15;
+            double zoomFactor = deltaY > 0 ? 1.15 : 1.0 / 1.15;
             imgScale *= zoomFactor;
 
             // Clamp scale (using first frame dimensions)
@@ -930,7 +929,7 @@ public class CapeAdjustScreen extends Screen {
             previewDirty = true;
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+        return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
     }
 
     private void applyAndClose() {
@@ -961,6 +960,16 @@ public class CapeAdjustScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void renderBlurredBackground(float partialTick) {
+        // Disable the default blur effect - we have our own custom background
+    }
+
+    @Override
+    public void renderBackground(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Disable the default dark background overlay - we render our own custom background
     }
 
     /**

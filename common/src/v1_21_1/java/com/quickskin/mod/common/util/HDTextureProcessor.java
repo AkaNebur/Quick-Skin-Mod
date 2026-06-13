@@ -43,15 +43,13 @@ public class HDTextureProcessor {
                 return null;
             }
 
-            // Ensure image has alpha channel (TYPE_INT_ARGB = 2)
+            // Ensure image has alpha channel (TYPE_INT_ARGB = 2). Use hardware-accelerated
+            // blit via Graphics2D instead of per-pixel loop.
             if (image.getType() != BufferedImage.TYPE_INT_ARGB) {
                 BufferedImage argbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
-                // Copy pixels manually to preserve alpha
-                for (int y = 0; y < image.getHeight(); y++) {
-                    for (int x = 0; x < image.getWidth(); x++) {
-                        argbImage.setRGB(x, y, image.getRGB(x, y));
-                    }
-                }
+                Graphics2D g = argbImage.createGraphics();
+                g.drawImage(image, 0, 0, null);
+                g.dispose();
                 image = argbImage;
             }
 
