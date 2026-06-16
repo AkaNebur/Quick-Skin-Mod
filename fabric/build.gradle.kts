@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     id("com.gradleup.shadow")
     id("com.modrinth.minotaur")
@@ -17,10 +19,25 @@ architectury {
 val minecraftVersion = project.findProperty("minecraft_version") as String
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
 
+// Minecraft 26.1+ is unobfuscated and built with the non-remapping Loom plugin: mod deps are plain
+// `implementation`, there is no `remapJar`, and `shadowJar` becomes the primary published artifact.
+val isNoRemap = minecraftVersion.startsWith("26.")
+val modImpl = if (isNoRemap) "implementation" else "modImplementation"
+val primaryJarTask = if (isNoRemap) "shadowJar" else "remapJar"
+
 sourceSets {
     main {
         java.srcDir("src/$versionDir/java")
         resources.srcDir("src/$versionDir/resources")
+    }
+}
+
+// Apply the project access widener for no-remap (26.1+) dev runs, since Architectury's own
+// bundled access widener is not applied in the Loom 1.17 no-remap dev runtime.
+if (isNoRemap) {
+    loom {
+        val awFile = file("src/main/resources/quick-skin.accesswidener")
+        if (awFile.exists()) accessWidenerPath.set(awFile)
     }
 }
 
@@ -32,15 +49,23 @@ configurations {
     create("shadowBundle")
     compileClasspath.get().extendsFrom(configurations["common"])
     runtimeClasspath.get().extendsFrom(configurations["common"])
-    getByName("developmentFabric").extendsFrom(configurations["common"])
+    // Wire common into the dev-runtime configuration so the Architectury transformer applies
+    // @ExpectPlatform to common classes when launching via runClient. findByName tolerates the
+    // no-remap plugin not creating it.
+    findByName("developmentFabric")?.extendsFrom(configurations["common"])
 }
 
 dependencies {
-    modImplementation("net.fabricmc:fabric-loader:${project.versionProp("fabric_loader_version")}")
-    modImplementation("net.fabricmc.fabric-api:fabric-api:${project.versionProp("fabric_api_version")}")
-    modImplementation("dev.architectury:architectury-fabric:${project.versionProp("architectury_api_version")}")
+    modImpl("net.fabricmc:fabric-loader:${project.versionProp("fabric_loader_version")}")
+    modImpl("net.fabricmc.fabric-api:fabric-api:${project.versionProp("fabric_api_version")}")
+    modImpl("dev.architectury:architectury-fabric:${project.versionProp("architectury_api_version")}")
 
-    "common"(project(path = ":common", configuration = "namedElements")) { isTransitive = false }
+    // No-remap projects expose the common classes directly (no `namedElements` configuration).
+    if (isNoRemap) {
+        "common"(project(path = ":common")) { isTransitive = false }
+    } else {
+        "common"(project(path = ":common", configuration = "namedElements")) { isTransitive = false }
+    }
     "shadowBundle"(project(path = ":common", configuration = "transformProductionFabric"))
 
     if (minecraftVersion != "1.20.1") {
@@ -56,16 +81,52 @@ tasks.processResources {
     }
 }
 
-tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
-    configurations = listOf(project.configurations["shadowBundle"])
-    archiveClassifier.set("dev-shadow")
-}
+if (isNoRemap) {
+    // Non-remapping build: `jar` carries the Loom-finalized mod (fabric.mod.json, JiJ); `shadowJar`
+    // repackages it together with the bundled common classes and becomes the primary artifact.
+    tasks.named<Jar>("jar") {
+        archiveClassifier.set("raw")
+    }
 
-tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
-    dependsOn("shadowJar")
-    val shadowJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar")
-    mustRunAfter(shadowJar)
-    inputFile.set(shadowJar.get().archiveFile)
+    tasks.named<ShadowJar>("shadowJar") {
+        dependsOn(tasks.named("jar"))
+        // Clear shadow's default source-set content so only the Loom-finalized `jar` is packaged
+        // (mirrors shedaniel's official Architectury 26.1 migration, which calls mainSpec.sourcePaths.clear()).
+        val mainSpec = generateSequence<Class<*>>(this.javaClass) { it.superclass }
+            .first { it.name == "org.gradle.api.tasks.AbstractCopyTask" }
+            .getDeclaredMethod("getMainSpec").also { it.isAccessible = true }
+            .invoke(this)
+        @Suppress("UNCHECKED_CAST")
+        (mainSpec.javaClass.getMethod("getSourcePaths").invoke(mainSpec) as MutableCollection<Any?>).clear()
+
+        from(zipTree(tasks.named<Jar>("jar").flatMap { it.archiveFile }))
+        configurations = listOf(project.configurations["shadowBundle"])
+        archiveClassifier.set("")
+    }
+
+    // Publish the shadowJar as the module's primary artifact.
+    configurations {
+        named("apiElements") {
+            outgoing.artifacts.clear()
+            outgoing.artifact(tasks.named("shadowJar"))
+        }
+        named("runtimeElements") {
+            outgoing.artifacts.clear()
+            outgoing.artifact(tasks.named("shadowJar"))
+        }
+    }
+} else {
+    tasks.named<ShadowJar>("shadowJar") {
+        configurations = listOf(project.configurations["shadowBundle"])
+        archiveClassifier.set("dev-shadow")
+    }
+
+    tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
+        dependsOn("shadowJar")
+        val shadowJar = tasks.named<ShadowJar>("shadowJar")
+        mustRunAfter(shadowJar)
+        inputFile.set(shadowJar.get().archiveFile)
+    }
 }
 
 // ===== PUBLISHING CONFIGURATION =====
@@ -87,16 +148,16 @@ modrinth {
     versionNumber.set("${project.version}")
     versionName.set("Quick Skin ${project.version} [Fabric] [MC $mcVersion]")
     versionType.set("release")
-    uploadFile.set(tasks.named("remapJar"))
+    uploadFile.set(tasks.named(primaryJarTask))
     gameVersions.addAll(supportedGameVersions)
     loaders.addAll(modLoaders)
     changelog.set(changelogText)
 }
 
 tasks.register<net.darkhax.curseforgegradle.TaskPublishCurseForge>("publishCurseForge") {
-    dependsOn(tasks.named("remapJar"))
+    dependsOn(tasks.named(primaryJarTask))
     apiToken = curseforgeToken ?: ""
-    val mainFile = upload(rootProject.property("curseforge_id") as String, tasks.named("remapJar").get().outputs.files.singleFile)
+    val mainFile = upload(rootProject.property("curseforge_id") as String, tasks.named(primaryJarTask).get().outputs.files.singleFile)
     mainFile.changelogType = "markdown"
     mainFile.changelog = changelogText
     mainFile.releaseType = "release"

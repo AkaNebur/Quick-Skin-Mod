@@ -21,6 +21,7 @@ include("fabric")
 // Conditionally include platform-specific modules
 when (minecraftVersion) {
     "1.20.1" -> include("forge")
-    "1.21.1", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11" -> include("neoforge")
+    "1.21.1", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11",
+    "26.1", "26.1.1", "26.1.2" -> include("neoforge")
     else -> throw GradleException("Unknown minecraft_version: $minecraftVersion")
 }
