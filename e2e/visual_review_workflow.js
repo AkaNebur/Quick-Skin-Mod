@@ -1,0 +1,95 @@
+// Reusable AI visual-review workflow for Quick Skin E2E screenshots.
+//
+// Run with:  Workflow({ scriptPath: "<repo>/e2e/visual_review_workflow.js", args: <manifest> })
+// where <manifest> is the JSON array produced by `python3 e2e/visual_review.py [--all]`
+// (items: {path, label, kind, expectation}). The expectations live in visual_review.py (single
+// source of truth) and are passed through per item — this script does not duplicate them.
+//
+// One vision agent per screenshot opens the image (Read tool) and checks it against its expectation;
+// any frame it flags (mismatch or anomaly) is re-examined by an independent skeptic before it is
+// reported, to suppress false positives. Returns { reviewed, cleanCount, flaggedCount, flagged, clean }.
+
+export const meta = {
+  name: 'e2e-visual-review',
+  description: 'AI vision pass over E2E screenshots: verify each rendered frame matches what it should show; adversarially re-check anomalies',
+  phases: [
+    { title: 'Review', detail: 'one vision agent per screenshot vs its expectation' },
+    { title: 'Verify', detail: 'skeptical re-check of any flagged frame' },
+  ],
+}
+
+const REVIEW_SCHEMA = {
+  type: 'object',
+  properties: {
+    visible: { type: 'string', description: 'What you actually see in the image, 1-2 sentences.' },
+    matches: { type: 'boolean', description: 'Does the image match the expectation?' },
+    anomalies: { type: 'array', items: { type: 'string' }, description: 'Real visual problems (wrong/garbled texture, cape clipping through elytra, transparency artifacts, missing element, black/empty frame). Empty if none.' },
+    confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+  },
+  required: ['visible', 'matches', 'anomalies', 'confidence'],
+}
+
+const VERIFY_SCHEMA = {
+  type: 'object',
+  properties: {
+    realProblem: { type: 'boolean', description: 'Is this a genuine rendering bug (true) or acceptable/benign (false)?' },
+    note: { type: 'string' },
+  },
+  required: ['realProblem', 'note'],
+}
+
+let items = args
+if (typeof items === 'string') items = JSON.parse(items)
+if (!Array.isArray(items)) throw new Error('args is not an array (got ' + typeof items + ')')
+log(`reviewing ${items.length} screenshots`)
+
+const results = await pipeline(
+  items,
+  (it) => agent(
+    `You are visually QA-reviewing one Minecraft E2E screenshot.\n` +
+    `Use the Read tool to OPEN and LOOK AT the image at this exact path:\n${it.path}\n\n` +
+    `It SHOULD show: ${it.expectation || '(describe what is shown)'}\n\n` +
+    `Report what you actually see, whether it matches, and any visual anomalies (garbled/wrong textures, ` +
+    `a cape clipping through an elytra, transparency artifacts, missing elements, or a black/empty/crashed frame). ` +
+    `Minor framing/lighting differences are fine — only flag real rendering problems. Note the camera is usually ` +
+    `behind the player (3rd-person back), so a front-only feature (e.g. a face patch) not being visible is NOT a defect.`,
+    { label: `review:${it.label}`, phase: 'Review', schema: REVIEW_SCHEMA }
+  ).then(v => ({ it, v })),
+  (r) => {
+    if (!r || !r.v) return r
+    const flagged = r.v.matches === false || (r.v.anomalies && r.v.anomalies.length > 0)
+    if (!flagged) return r
+    return agent(
+      `Independently re-examine a Minecraft screenshot a first reviewer flagged.\n` +
+      `Use the Read tool to open: ${r.it.path}\n\n` +
+      `It SHOULD show: ${r.it.expectation || ''}\n` +
+      `First reviewer said: matches=${r.v.matches}; anomalies=${JSON.stringify(r.v.anomalies)}.\n\n` +
+      `Decide if this is a GENUINE rendering bug or acceptable. Default to NOT a real problem unless the ` +
+      `rendering is clearly wrong against the expectation. If useful, inspect the full-res pixels or the source ` +
+      `texture/asset before deciding.`,
+      { label: `verify:${r.it.label}`, phase: 'Verify', schema: VERIFY_SCHEMA }
+    ).then(vr => ({ ...r, verify: vr }))
+  }
+)
+
+const clean = []
+const flagged = []
+for (const r of results) {
+  if (!r || !r.v) { flagged.push({ label: r && r.it ? r.it.label : '?', error: 'no review returned' }); continue }
+  const isFlagged = r.v.matches === false || (r.v.anomalies && r.v.anomalies.length > 0)
+  if (!isFlagged) {
+    clean.push({ label: r.it.label, visible: r.v.visible })
+  } else {
+    flagged.push({
+      label: r.it.label,
+      visible: r.v.visible,
+      matches: r.v.matches,
+      anomalies: r.v.anomalies,
+      confidence: r.v.confidence,
+      verify: r.verify || null,
+    })
+  }
+}
+
+log(`clean: ${clean.length} | flagged: ${flagged.length}`)
+return { reviewed: results.length, cleanCount: clean.length, flaggedCount: flagged.length, flagged, clean }

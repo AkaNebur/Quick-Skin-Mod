@@ -70,6 +70,12 @@ subprojects {
     }
 
     extensions.configure<JavaPluginExtension>("java") {
+        // Auto-provision (via foojay, configured in settings.gradle.kts) the JDK this MC version needs,
+        // so `runClient`/`runServer` launch on the right JVM (e.g. 1.20.1 -> JDK 17). Resolved by Gradle
+        // regardless of the JVM running Gradle itself.
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(versionProp("java_version").toInt()))
+        }
         withSourcesJar()
         sourceCompatibility = javaVersion
         targetCompatibility = javaVersion

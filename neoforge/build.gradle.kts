@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import net.fabricmc.loom.api.LoomGradleExtensionAPI
 
 plugins {
     id("com.gradleup.shadow")
@@ -33,6 +34,75 @@ sourceSets {
 
 repositories {
     maven("https://maven.neoforged.net/releases")
+}
+
+// ===== E2E dev-only harness (never enters the published jar) =====
+// Shared core compiled from ../common/src/e2e into this module's `e2e` source set; added only to the
+// E2E client run configs below (never to shadowBundle/remapJar/shadowJar), so it is absent from
+// build/libs/*.jar. The shared source set must COMPILE against every enabled version, so the set is
+// the NeoForge versions actually validated by the orchestrator (NeoForge is 1.21.x/26.x only).
+val e2eEnabledVersions = setOf("1.21.1", "26.2")
+if (minecraftVersion in e2eEnabledVersions) {
+    val mainSs = sourceSets["main"]
+    val e2eSs = sourceSets.create("e2e") {
+        // setSrcDirs (not srcDir) so we don't re-add the default src/e2e dirs and duplicate the manifest.
+        java.setSrcDirs(listOf("src/e2e/java", "../common/src/e2e/java"))
+        resources.setSrcDirs(listOf("src/e2e/resources", "../common/src/e2e/resources"))
+        compileClasspath += mainSs.output + mainSs.compileClasspath
+        runtimeClasspath += mainSs.output + mainSs.runtimeClasspath
+    }
+
+    extensions.configure<LoomGradleExtensionAPI>("loom") {
+        // NeoForge dev only scans the exploded dirs in fml.modFolders, which Loom populates from this
+        // block. Declaring any mod disables auto-detection, so the main mod is declared too. (common
+        // loads as a classpath jar, so it needs no entry.)
+        mods.create("quickskin") { sourceSet(mainSs) }
+        mods.create("quick_skin_e2e") { sourceSet(e2eSs) }
+
+        runs {
+            create("serverE2E") {
+                server()
+                name("Quick Skin E2E Server (NeoForge)")
+                runDir("run/server-e2e")
+                property("quickskin.e2e.role", "server")
+            }
+            // Scenario selected by the orchestrator via -Pe2e_scenario; same configs serve every scenario.
+            create("clientAE2E") {
+                client()
+                name("Quick Skin E2E Client A (NeoForge)")
+                runDir("run/clientA")
+                source(e2eSs)
+                property("quickskin.e2e.enabled", "true")
+                property("quickskin.e2e.role", "client_a")
+                property("quickskin.e2e.scenario", (project.findProperty("e2e_scenario") ?: "phase0-smoke").toString())
+                property("quickskin.e2e.version", versionDir)
+                // Skip FML's early-display GLFW window (intermittent macOS/headless primary-monitor flake
+                // when a second client window opens right after the first; the real game window still opens).
+                property("fml.earlyprogresswindow", "false")
+                programArgs(
+                    "--username", "Alice",
+                    "--quickPlayMultiplayer", "localhost:25565",
+                    "--width", "1280", "--height", "720"
+                )
+            }
+            create("clientBE2E") {
+                client()
+                name("Quick Skin E2E Client B (NeoForge)")
+                runDir("run/clientB")
+                source(e2eSs)
+                property("quickskin.e2e.enabled", "true")
+                property("quickskin.e2e.role", "client_b")
+                property("quickskin.e2e.scenario", (project.findProperty("e2e_scenario") ?: "propagation").toString())
+                property("quickskin.e2e.version", versionDir)
+                property("fml.earlyprogresswindow", "false")
+                programArgs(
+                    "--username", "Bob",
+                    "--quickPlayMultiplayer", "localhost:25565",
+                    "--width", "1280", "--height", "720"
+                )
+            }
+        }
+    }
 }
 
 configurations {

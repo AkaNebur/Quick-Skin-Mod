@@ -1,0 +1,24 @@
+# Dev-only Forge manifest for the Quick Skin E2E harness. Never shipped in the release jar.
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "MIT"
+
+[[mods]]
+modId = "quick_skin_e2e"
+version = "0.0.0"
+displayName = "Quick Skin E2E (dev-only)"
+description = "Dev-only end-to-end test harness for Quick Skin."
+
+[[dependencies.quick_skin_e2e]]
+modId = "quickskin"
+mandatory = true
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.quick_skin_e2e]]
+modId = "forge"
+mandatory = true
+versionRange = "[47,)"
+ordering = "NONE"
+side = "BOTH"

@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import net.fabricmc.loom.api.LoomGradleExtensionAPI
 
 plugins {
     id("com.gradleup.shadow")
@@ -29,6 +30,71 @@ sourceSets {
     main {
         java.srcDir("src/$versionDir/java")
         resources.srcDir("src/$versionDir/resources")
+    }
+}
+
+// ===== E2E dev-only harness (never enters the published jar) =====
+// The shared, loader-agnostic harness lives in ../common/src/e2e and is compiled directly into this
+// module's `e2e` source set (no fragile cross-module classpath wiring). The source set is added ONLY
+// to the E2E run configs below — never to shadowBundle / remapJar / shadowJar — so harness classes
+// are physically absent from build/libs/*.jar (verified by unzip+grep). The shared source set must
+// COMPILE against every enabled version (each MC version has its own copy of the mod classes the
+// harness drives), so the enabled set is the versions actually validated by the orchestrator.
+val e2eEnabledVersions = setOf("1.20.1", "1.21.1", "26.2")
+if (minecraftVersion in e2eEnabledVersions) {
+    val mainSs = sourceSets["main"]
+    val e2eSs = sourceSets.create("e2e") {
+        // setSrcDirs (not srcDir) so we don't re-add the default src/e2e dirs and duplicate fabric.mod.json.
+        java.setSrcDirs(listOf("src/e2e/java", "../common/src/e2e/java"))
+        resources.setSrcDirs(listOf("src/e2e/resources", "../common/src/e2e/resources"))
+        // Inherit everything main has: Minecraft, fabric-loader/api, architectury, and the common
+        // project's classes (services the harness drives) + fabric main classes.
+        compileClasspath += mainSs.output + mainSs.compileClasspath
+        runtimeClasspath += mainSs.output + mainSs.runtimeClasspath
+    }
+
+    extensions.configure<LoomGradleExtensionAPI>("loom") {
+        runs {
+            create("serverE2E") {
+                server()
+                name("Quick Skin E2E Server")
+                runDir("run/server-e2e")
+                // tag for orchestrator teardown targeting; harness stays inert (no e2e source here)
+                property("quickskin.e2e.role", "server")
+            }
+            // Scenario is selected by the orchestrator via -Pe2e_scenario (default phase0-smoke for A,
+            // propagation for B), so the same run configs serve Phase 0 (1 client) and Phase 1 (A+B).
+            create("clientAE2E") {
+                client()
+                name("Quick Skin E2E Client A")
+                runDir("run/clientA")
+                source(e2eSs)
+                property("quickskin.e2e.enabled", "true")
+                property("quickskin.e2e.role", "client_a")
+                property("quickskin.e2e.scenario", (project.findProperty("e2e_scenario") ?: "phase0-smoke").toString())
+                property("quickskin.e2e.version", versionDir)
+                programArgs(
+                    "--username", "Alice",
+                    "--quickPlayMultiplayer", "localhost:25565",
+                    "--width", "1280", "--height", "720"
+                )
+            }
+            create("clientBE2E") {
+                client()
+                name("Quick Skin E2E Client B")
+                runDir("run/clientB")
+                source(e2eSs)
+                property("quickskin.e2e.enabled", "true")
+                property("quickskin.e2e.role", "client_b")
+                property("quickskin.e2e.scenario", (project.findProperty("e2e_scenario") ?: "propagation").toString())
+                property("quickskin.e2e.version", versionDir)
+                programArgs(
+                    "--username", "Bob",
+                    "--quickPlayMultiplayer", "localhost:25565",
+                    "--width", "1280", "--height", "720"
+                )
+            }
+        }
     }
 }
 

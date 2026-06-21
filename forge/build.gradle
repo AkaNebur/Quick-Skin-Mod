@@ -41,6 +41,67 @@ sourceSets {
     }
 }
 
+// ===== E2E dev-only harness (Forge 1.20.1; never enters the published jar) =====
+// Shared core compiled from ../common/src/e2e into this module's `e2e` source set; added only to the
+// E2E run configs below (never to shadowBundle/remapJar), so it is absent from build/libs/*.jar.
+def e2eSs = sourceSets.create('e2e') {
+    java.setSrcDirs(['src/e2e/java', '../common/src/e2e/java'])
+    resources.setSrcDirs(['src/e2e/resources', '../common/src/e2e/resources'])
+    compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+    runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+}
+
+loom {
+    // Forge dev only scans exploded dirs listed in fml.modFolders, which Loom populates from this
+    // block. Declaring any mod disables auto-detection, so the main mod is declared too. (common loads
+    // as a classpath jar, so it needs no entry.)
+    mods {
+        quickskin {
+            sourceSet sourceSets.main
+        }
+        quick_skin_e2e {
+            sourceSet e2eSs
+        }
+    }
+    runs {
+        serverE2E {
+            server()
+            name 'Quick Skin E2E Server (Forge)'
+            runDir 'run/server-e2e'
+            property 'quickskin.e2e.role', 'server'
+        }
+        // Scenario is selected by the orchestrator via -Pe2e_scenario (default phase0-smoke for A,
+        // propagation for B), so the same run configs serve Phase 0 (1 client) and Phase 1 (A+B).
+        clientAE2E {
+            client()
+            name 'Quick Skin E2E Client A (Forge)'
+            runDir 'run/clientA'
+            source e2eSs
+            property 'quickskin.e2e.enabled', 'true'
+            property 'quickskin.e2e.role', 'client_a'
+            property 'quickskin.e2e.scenario', (project.findProperty('e2e_scenario') ?: 'phase0-smoke').toString()
+            property 'quickskin.e2e.version', 'v1_20_1'
+            // Skip Forge's early-display GLFW window: it intermittently fails to grab a primary monitor
+            // when a second client window opens right after the first (macOS/headless). The real game
+            // window still opens; only the pretty loading screen is skipped.
+            property 'fml.earlyprogresswindow', 'false'
+            programArgs '--username', 'Alice', '--quickPlayMultiplayer', 'localhost:25565', '--width', '1280', '--height', '720'
+        }
+        clientBE2E {
+            client()
+            name 'Quick Skin E2E Client B (Forge)'
+            runDir 'run/clientB'
+            source e2eSs
+            property 'quickskin.e2e.enabled', 'true'
+            property 'quickskin.e2e.role', 'client_b'
+            property 'quickskin.e2e.scenario', (project.findProperty('e2e_scenario') ?: 'propagation').toString()
+            property 'quickskin.e2e.version', 'v1_20_1'
+            property 'fml.earlyprogresswindow', 'false'
+            programArgs '--username', 'Bob', '--quickPlayMultiplayer', 'localhost:25565', '--width', '1280', '--height', '720'
+        }
+    }
+}
+
 dependencies {
     forge "net.minecraftforge:forge:${project.findProperty('forge_version_1_20_1')}"
 

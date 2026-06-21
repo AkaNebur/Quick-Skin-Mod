@@ -43,3 +43,6 @@ usernamecache.json
 # Local environment
 .env
 local.properties
+
+# E2E test harness output (screenshots + reports collected by the orchestrator)
+e2e-out/
