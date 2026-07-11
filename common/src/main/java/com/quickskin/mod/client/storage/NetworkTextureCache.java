@@ -170,7 +170,11 @@ public class NetworkTextureCache {
 
             // Register with texture manager
             //? if <1.21.11 {
+                //? if <1.21 {
             ResourceLocation location = new ResourceLocation(
+                //?} else {
+            ResourceLocation location = ResourceLocation.fromNamespaceAndPath(
+                //?}
             //?} else {
             Identifier location = Identifier.fromNamespaceAndPath(
             //?}

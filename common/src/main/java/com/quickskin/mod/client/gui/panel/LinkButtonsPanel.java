@@ -27,10 +27,17 @@ public class LinkButtonsPanel extends AbstractWidget {
 
     // Icon textures
     //? if <1.21.11 {
+        //? if <1.21 {
     private static final ResourceLocation DISCORD_ICON = new ResourceLocation("quickskin", "textures/gui/discord_icon.png");
     private static final ResourceLocation CURSEFORGE_ICON = new ResourceLocation("quickskin", "textures/gui/curseforge_icon.png");
     private static final ResourceLocation MODRINTH_ICON = new ResourceLocation("quickskin", "textures/gui/modrinth_icon.png");
     private static final ResourceLocation SETTINGS_ICON = new ResourceLocation("quickskin", "textures/gui/settings_icon.png");
+        //?} else {
+    private static final ResourceLocation DISCORD_ICON = ResourceLocation.fromNamespaceAndPath("quickskin", "textures/gui/discord_icon.png");
+    private static final ResourceLocation CURSEFORGE_ICON = ResourceLocation.fromNamespaceAndPath("quickskin", "textures/gui/curseforge_icon.png");
+    private static final ResourceLocation MODRINTH_ICON = ResourceLocation.fromNamespaceAndPath("quickskin", "textures/gui/modrinth_icon.png");
+    private static final ResourceLocation SETTINGS_ICON = ResourceLocation.fromNamespaceAndPath("quickskin", "textures/gui/settings_icon.png");
+        //?}
     //?} else {
     private static final Identifier DISCORD_ICON = Identifier.fromNamespaceAndPath("quickskin", "textures/gui/discord_icon.png");
     private static final Identifier CURSEFORGE_ICON = Identifier.fromNamespaceAndPath("quickskin", "textures/gui/curseforge_icon.png");

@@ -247,9 +247,16 @@ public class EarsCompatIntegration {
             return null;
         }
         try {
-            //? if <1.21.11 {
+            //? if <1.21 {
             Method getSkinTexture = player.getClass().getMethod("getSkinTexture");
             return (ResourceLocation) getSkinTexture.invoke(player);
+            //?} else if <1.21.11 {
+            Method getSkin = player.getClass().getMethod("getSkin");
+            Object playerSkin = getSkin.invoke(player);
+            if (playerSkin != null) {
+                Method texture = playerSkin.getClass().getMethod("texture");
+                return (ResourceLocation) texture.invoke(playerSkin);
+            }
             //?} else {
             // 1.21.1 API: getSkin() returns PlayerSkin, then .texture() returns Identifier
             Method getSkin = player.getClass().getMethod("getSkin");
@@ -263,9 +270,12 @@ public class EarsCompatIntegration {
             // Ignore
         }
         try {
-            //? if <1.21.11 {
+            //? if <1.21 {
             Method getSkinTextureLocation = player.getClass().getMethod("getSkinTextureLocation");
             return (ResourceLocation) getSkinTextureLocation.invoke(player);
+            //?} else if <1.21.11 {
+            Method getSkinTexture = player.getClass().getMethod("getSkinTexture");
+            return (ResourceLocation) getSkinTexture.invoke(player);
             //?} else {
             // Fallback: try Fabric/Yarn mapped name
             Method getSkinTexture = player.getClass().getMethod("getSkinTexture");

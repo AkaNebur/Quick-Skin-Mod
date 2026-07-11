@@ -1,6 +1,6 @@
 package com.quickskin.mod.client.gui.widget;
 
-//? if <1.21 {
+//? if <1.21.11 {
 import com.mojang.blaze3d.systems.RenderSystem;
 //?} else {
 import com.quickskin.mod.client.services.LocalAssetManager;
@@ -137,7 +137,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             RenderSystem.enableBlend();
             //?}
 
-            //? if <1.21 {
+            //? if <1.21.4 {
             if (metadata.isCpmModel()) {
                 GuiCompat.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
                     0, 0, 64, 64, 64, 64);
@@ -165,7 +165,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             GuiCompat.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
                 40.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
                 textureWidth, textureHeight);
-            //? if <1.21 {
+            //? if <1.21.4 {
             }
             //?}
 

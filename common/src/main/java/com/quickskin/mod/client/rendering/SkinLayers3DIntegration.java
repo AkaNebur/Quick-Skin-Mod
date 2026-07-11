@@ -279,7 +279,7 @@ public class SkinLayers3DIntegration {
                         File file = (File) fileField.get(texture);
                     //?}
 
-                    //? if <1.21 {
+                    //? if <1.21.11 {
                     if (file != null && file.isFile()) {
                         return NativeImage.read(new FileInputStream(file));
                     //?} else {

@@ -95,12 +95,17 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 // Trigger async transparency analysis for the skin texture
                 com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(skinLocation);
 
-                //? if >=1.21.11 {
+                //? if >=1.21 {
                 // Notify CustomNPCs integration (if available) to handle any skin cache invalidation
                 CustomNPCsIntegration.onSkinApplied(playerId, skinLocation);
 
+                    //? if <1.21.4 {
+                // Force CPM to switch to skin mode and re-read skin data.
+                CPMCompatIntegration.forceReRegisterSkins(playerId);
+                    //?} else {
                 // Invalidate CPM's model cache so it re-reads the new skin's embedded data
                 CPMCompatIntegration.invalidatePlayerCache();
+                    //?}
 
                 //?}
                 // Associate Ears features with this player (if Ears is available)

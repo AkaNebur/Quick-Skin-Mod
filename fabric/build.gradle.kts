@@ -10,7 +10,7 @@ plugins {
 
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
-val canonicalVersions = setOf("1.20.1", "1.21.11", "26.2")
+val canonicalVersions = setOf("1.20.1", "1.21.1", "1.21.11", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
 val legacyJavaRoot = rootProject.file("fabric/src/legacy1_20_1/java")
 val generatedStonecutterJava = layout.buildDirectory.dir("generated/stonecutter/main/java")
@@ -77,7 +77,7 @@ if (minecraftVersion == "1.20.1") {
             include("icon.png", "quick-skin.accesswidener")
         }
     }
-} else if (minecraftVersion == "1.21.11") {
+} else if (minecraftVersion == "1.21.1" || minecraftVersion == "1.21.11") {
     val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
         dependsOn("stonecutterGenerate")
         from(generatedStonecutterJava)
@@ -87,7 +87,7 @@ if (minecraftVersion == "1.20.1") {
     sourceSets {
         main {
             java.setSrcDirs(listOf(consolidatedLegacyJava))
-            resources.setSrcDirs(listOf(rootProject.file("fabric/src/v1_21_11/resources")))
+            resources.setSrcDirs(listOf(rootProject.file("fabric/src/$versionDir/resources")))
         }
     }
 
@@ -184,6 +184,15 @@ tasks.processResources {
     inputs.property("version", project.version)
     filesMatching("fabric.mod.json") {
         expand("version" to project.version)
+    }
+    if (minecraftVersion == "1.21.1") {
+        doLast {
+            val accessWidener = destinationDir.resolve("quick-skin.accesswidener")
+            val normalized = accessWidener.readText()
+                .replace("\r\n", "\n")
+                .replace("\n", "\r\n")
+            accessWidener.writeText(normalized)
+        }
     }
 }
 

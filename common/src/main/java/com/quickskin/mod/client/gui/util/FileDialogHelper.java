@@ -30,7 +30,7 @@ public class FileDialogHelper {
     public static void openSkinFileDialog(String title, Consumer<Path> onFileSelected) {
         CompletableFuture.runAsync(() -> {
             try (MemoryStack stack = stackPush()) {
-                //? if <1.21 {
+                //? if <1.21.4 {
                 PointerBuffer filters = stack.mallocPointer(2);
                 filters.put(stack.UTF8("*.png"));
                 filters.put(stack.UTF8("*.cpmmodel"));
@@ -44,7 +44,7 @@ public class FileDialogHelper {
                     title,
                     "",
                     filters,
-                    //? if <1.21 {
+                    //? if <1.21.4 {
                     "Skin Files (PNG, CPM Model)",
                     //?} else {
                     "PNG Images",

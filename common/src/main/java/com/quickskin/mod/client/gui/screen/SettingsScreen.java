@@ -502,8 +502,12 @@ public class SettingsScreen extends Screen {
 
     private void createModpackSettings() {
         ClientConfig config = ClientConfig.getInstance();
-        //? if <26.2 {
+        //? if <1.21 {
         int checkboxSize = 20;
+        //?} else if >=1.21.4 {
+            //? if <26.2 {
+        int checkboxSize = 20;
+            //?}
         //?}
         // Settings content area starts below tabs
         int startY = dialogY + TAB_HEIGHT + 20;

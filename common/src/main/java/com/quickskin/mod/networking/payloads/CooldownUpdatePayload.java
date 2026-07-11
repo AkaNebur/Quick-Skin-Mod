@@ -4,7 +4,11 @@ import com.quickskin.mod.QuickSkin;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 /**
  * Payload for cooldown update to client (S2C)
@@ -13,7 +17,11 @@ import net.minecraft.resources.Identifier;
 public record CooldownUpdatePayload(long cooldownEndTime) implements CustomPacketPayload {
 
     public static final Type<CooldownUpdatePayload> TYPE = new Type<>(
+        //? if <1.21.11 {
+        ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "cooldown_update")
+        //?} else {
         Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "cooldown_update")
+        //?}
     );
 
     public static final StreamCodec<ByteBuf, CooldownUpdatePayload> CODEC = StreamCodec.of(

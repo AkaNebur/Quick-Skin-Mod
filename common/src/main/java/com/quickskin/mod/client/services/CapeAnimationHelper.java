@@ -1,6 +1,10 @@
 package com.quickskin.mod.client.services;
 
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -47,7 +51,11 @@ public final class CapeAnimationHelper {
      * @param capeId        The cape ID string
      * @return The current frame Identifier if animated, otherwise {@code atlasLocation}
      */
+    //? if <1.21.11 {
+    public static ResourceLocation resolveCurrentFrame(ResourceLocation atlasLocation, @Nullable String capeId) {
+    //?} else {
     public static Identifier resolveCurrentFrame(Identifier atlasLocation, @Nullable String capeId) {
+    //?}
         if (atlasLocation == null) {
             return null;
         }
@@ -62,7 +70,11 @@ public final class CapeAnimationHelper {
             return atlasLocation;
         }
 
+        //? if <1.21.11 {
+        ResourceLocation currentFrame = atm.getCurrentFrameTexture(animationId);
+        //?} else {
         Identifier currentFrame = atm.getCurrentFrameTexture(animationId);
+        //?}
         return currentFrame != null ? currentFrame : atlasLocation;
     }
 }

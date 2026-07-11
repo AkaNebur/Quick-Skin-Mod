@@ -247,6 +247,14 @@ public class DeletionConfirmScreen extends Screen {
         // Return to parent screen without confirming
         this.callback.accept(false);
     }
+    //? if >=1.21 {
+        //? if <1.21.6 {
+    @Override
+    public void renderBlurredBackground(float partialTick) {
+        // Disable the default Minecraft blur effect - we handle blur with BlurHandler
+    }
+        //?}
+    //?}
     //? if >=26.1 {
 
     private void hidePlayerWidgets(boolean hide) {

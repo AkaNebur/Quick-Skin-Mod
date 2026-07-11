@@ -10,9 +10,10 @@ plugins {
 
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
-val canonicalVersions = setOf("1.21.11", "26.2")
+val canonicalVersions = setOf("1.21.1", "1.21.11", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
 val legacy12111JavaRoot = rootProject.file("neoforge/src/legacy1_21_11/java")
+val legacy1211JavaRoot = rootProject.file("neoforge/src/legacy1_21_1/java")
 val generatedStonecutterJava = layout.buildDirectory.dir("generated/stonecutter/main/java")
 val consolidatedLegacyJava = layout.buildDirectory.dir("generated/consolidated/main/java")
 val commonProjectPath = requireNotNull(stonecutter.node.sibling("common")).hierarchy.toString()
@@ -44,25 +45,31 @@ repositories {
     maven("https://maven.neoforged.net/releases")
 }
 
-if (minecraftVersion == "1.21.11") {
-    val legacyOverrides = fileTree(legacy12111JavaRoot) {
+if (minecraftVersion == "1.21.1" || minecraftVersion == "1.21.11") {
+    val legacyJavaRoot = if (minecraftVersion == "1.21.1") legacy1211JavaRoot else legacy12111JavaRoot
+    val canonicalOnlyAfter1211 = if (minecraftVersion == "1.21.1") {
+        setOf("com/quickskin/mod/neoforge/mixin/GuiSkinRendererMixin.java")
+    } else {
+        emptySet()
+    }
+    val legacyOverrides = fileTree(legacyJavaRoot) {
         include("**/*.java")
     }.files.mapTo(linkedSetOf()) {
-        it.relativeTo(legacy12111JavaRoot).invariantSeparatorsPath
+        it.relativeTo(legacyJavaRoot).invariantSeparatorsPath
     }
     val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
         dependsOn("stonecutterGenerate")
         from(generatedStonecutterJava) {
-            exclude(legacyOverrides)
+            exclude(legacyOverrides + canonicalOnlyAfter1211)
         }
-        from(legacy12111JavaRoot)
+        from(legacyJavaRoot)
         into(consolidatedLegacyJava)
     }
 
     sourceSets {
         main {
             java.setSrcDirs(listOf(consolidatedLegacyJava))
-            resources.setSrcDirs(listOf(rootProject.file("neoforge/src/v1_21_11/resources")))
+            resources.setSrcDirs(listOf(rootProject.file("neoforge/src/$versionDir/resources")))
         }
     }
 

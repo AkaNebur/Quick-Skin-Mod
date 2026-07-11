@@ -23,7 +23,11 @@ import net.minecraft.resources.ResourceLocation;
 public class BlurHandler {
     //? if <1.21.11 {
     private static PostChain blurShader = null;
+        //? if <1.21 {
     private static final ResourceLocation BLUR_SHADER = new ResourceLocation("minecraft", "shaders/post/blur.json");
+        //?} else {
+    private static final ResourceLocation BLUR_SHADER = ResourceLocation.fromNamespaceAndPath("minecraft", "shaders/post/blur.json");
+        //?}
     //?} else {
 
     private static boolean warned = false;
@@ -49,11 +53,15 @@ public class BlurHandler {
             warned = true;
         //?}
         }
-        //? if <1.21 {
+        //? if <1.21.4 {
         RenderSystem.disableBlend();
         RenderSystem.disableDepthTest();
         blurShader.process(0.0f);
+            //? if <1.21 {
         mc.getMainRenderTarget().bindWrite(false);
+            //?} else {
+        mc.getMainRenderTarget().bindWrite(true);
+            //?}
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         //?}

@@ -122,7 +122,11 @@ public enum KnownCapes {
         // Textures should be placed in: assets/quickskin/textures/capes/
         this.textureLocation = id.equals("__NONE__") ? null :
                 //? if <1.21.11 {
+                    //? if <1.21 {
                 new ResourceLocation(QuickSkin.MOD_ID, "textures/capes/" + id + ".png");
+                    //?} else {
+                ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/capes/" + id + ".png");
+                    //?}
                 //?} else {
                 Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/capes/" + id + ".png");
                 //?}

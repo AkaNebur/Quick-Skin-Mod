@@ -13,7 +13,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
  */
 @Environment(EnvType.CLIENT)
 public interface PreviewRenderBackend {
-    //? if <1.21 {
+    //? if <1.21.6 {
     PreviewRenderBackend INSTANCE = new ImmediatePreviewRenderBackend();
     //?} else {
         //? if <26.2 {

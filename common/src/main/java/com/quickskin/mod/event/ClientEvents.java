@@ -368,7 +368,11 @@ public class ClientEvents {
                 changeSkinButton = new com.quickskin.mod.client.gui.widget.IconActionButton(
                         buttonX, buttonY, buttonWidth, buttonHeight,
                         //? if <1.21.11 {
+                            //? if <1.21 {
                         new ResourceLocation("quickskin", "textures/gui/quickskin_icon.png"),
+                            //?} else {
+                        ResourceLocation.fromNamespaceAndPath("quickskin", "textures/gui/quickskin_icon.png"),
+                            //?}
                         //?} else {
                         Identifier.fromNamespaceAndPath("quickskin", "textures/gui/quickskin_icon.png"),
                         //?}
@@ -437,7 +441,11 @@ public class ClientEvents {
                 // Second priority: Use current player skin (when in-game)
                 if (skinLocation == null && player != null) {
                     //? if <1.21.11 {
+                        //? if <1.21 {
                     skinLocation = player.getSkinTextureLocation();
+                        //?} else {
+                    skinLocation = player.getSkin().texture();
+                        //?}
                     //?} else {
                     skinLocation = player.getSkin().body().texturePath();
                     //?}
@@ -455,7 +463,11 @@ public class ClientEvents {
                         } else {
                             // Fallback: detect from the vanilla player's model
                             //? if <1.21.11 {
+                                //? if <1.21 {
                             modelType = player.getModelName(); // "default" or "slim"
+                                //?} else {
+                            modelType = player.getSkin().model().id(); // "default" or "slim"
+                                //?}
                             if ("default".equals(modelType)) {
                                 modelType = "classic";
                             }
@@ -466,7 +478,11 @@ public class ClientEvents {
                     } else if ("auto".equals(modelType)) {
                         // No custom skin active, use vanilla player's model
                         //? if <1.21.11 {
+                            //? if <1.21 {
                         modelType = player.getModelName(); // "default" or "slim"
+                            //?} else {
+                        modelType = player.getSkin().model().id(); // "default" or "slim"
+                            //?}
                         if ("default".equals(modelType)) {
                             modelType = "classic";
                         }
@@ -479,7 +495,11 @@ public class ClientEvents {
                 // Fallback: Use default Steve skin
                 if (skinLocation == null) {
                     //? if <1.21.11 {
+                        //? if <1.21 {
                     skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
+                        //?} else {
+                    skinLocation = ResourceLocation.fromNamespaceAndPath("minecraft", "textures/entity/player/wide/steve.png");
+                        //?}
                     //?} else {
                     skinLocation = Identifier.fromNamespaceAndPath("minecraft", "textures/entity/player/wide/steve.png");
                     //?}
@@ -617,20 +637,24 @@ public class ClientEvents {
             return EventResult.pass();
         });
 
-        //? if <1.21.11 {
+        //? if <1.21 {
         ClientScreenInputEvent.MOUSE_RELEASED_PRE.register((client, screen, mouseX, mouseY, button) -> {
             com.quickskin.mod.client.gui.widget.PlayerWidget activeWidget =
                 com.quickskin.mod.client.gui.widget.PlayerWidget.getActiveInteractionWidget();
         //?} else {
         // Debug screen toggle (F3)
+            //? if <1.21.11 {
+        ClientScreenInputEvent.KEY_PRESSED_PRE.register((client, screen, keyCode, scanCode, modifiers) -> {
+            //?} else {
         ClientScreenInputEvent.KEY_PRESSED_PRE.register((client, screen, keyEvent) -> {
+            //?}
             // This event is for screen key presses
             // Keybinds are handled separately in KeybindRegistry
             return EventResult.pass();
         });
         //?}
 
-            //? if <1.21.11 {
+            //? if <1.21 {
             if (activeWidget != null && activeWidget.isInteracting()) {
                 boolean handled = activeWidget.mouseReleased(mouseX, mouseY, button);
                 if (handled) {
@@ -639,7 +663,11 @@ public class ClientEvents {
             }
             //?} else {
         // Raw input (for global keybinds outside of screens)
+            //? if <1.21.11 {
+        ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
+            //?} else {
         ClientRawInputEvent.KEY_PRESSED.register((client, action, keyEvent) -> {
+            //?}
             // Keybinds will be registered separately
             // This is for raw key detection if needed
             //?}

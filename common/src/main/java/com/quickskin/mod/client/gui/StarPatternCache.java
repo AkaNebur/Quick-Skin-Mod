@@ -21,7 +21,11 @@ import java.io.InputStream;
  */
 public class StarPatternCache {
     //? if <1.21.11 {
+        //? if <1.21 {
     private static final ResourceLocation STAR_PATTERN_CACHE = new ResourceLocation(QuickSkin.MOD_ID, "textures/gui/background/star_pattern_cache_generated.png");
+        //?} else {
+    private static final ResourceLocation STAR_PATTERN_CACHE = ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/gui/background/star_pattern_cache_generated.png");
+        //?}
     //?} else {
     private static final Identifier STAR_PATTERN_CACHE = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/gui/background/star_pattern_cache_generated.png");
     //?}
@@ -130,7 +134,7 @@ public class StarPatternCache {
         return TILE_SIZE;
     }
 
-    //? if >=1.21.11 {
+    //? if >=1.21 {
     /**
      * Create a simple fallback texture when the cached version is not available
      */
@@ -145,20 +149,30 @@ public class StarPatternCache {
             // Fill with transparent pixels
             for (int y = 0; y < size; y++) {
                 for (int x = 0; x < size; x++) {
+                    //? if <1.21.11 {
+                    fallbackImage.setPixelRGBA(x, y, 0x00000000); // Fully transparent
+                    //?} else {
                     fallbackImage.setPixel(x, y, 0x00000000); // Fully transparent
+                    //?}
                 }
             }
 
             cachedTextureWidth = size;
             cachedTextureHeight = size;
+            //? if <1.21.11 {
+            cachedTexture = new DynamicTexture(fallbackImage);
+            cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache_fallback", cachedTexture);
+            //?} else {
             cachedTexture = new DynamicTexture(() -> "quickskin_star_cache_fallback", fallbackImage);
             cachedTextureLocation = Identifier.withDefaultNamespace("quickskin_star_cache_fallback");
             mc.getTextureManager().register(cachedTextureLocation, cachedTexture);
+            //?}
 
         } catch (Exception e) {
         }
     }
 
+    //? if >=1.21.11 {
     /**
      * Re-apply linear filtering before rendering.
      * RenderType may reset texture parameters, so this ensures smooth sub-pixel scrolling.
@@ -166,6 +180,7 @@ public class StarPatternCache {
     public static void ensureLinearFiltering() {
         // 1.21.11: setFilter() removed, filtering handled at GpuSampler level
     }
+    //?}
 
     //?}
     /**

@@ -54,9 +54,13 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <1.21.6 {
+    //? if <1.21 {
     public static void renderPanorama(PanoramaRenderer panorama, float partialTick) {
         panorama.render(partialTick, 1.0F);
+    //?} else if <1.21.6 {
+    public static void renderPanorama(
+            PanoramaRenderer panorama, GuiGraphics graphics, int width, int height, float partialTick) {
+        panorama.render(graphics, width, height, 1.0F, partialTick);
     //?} else {
         //? if <26.1 {
     public static void renderPanorama(

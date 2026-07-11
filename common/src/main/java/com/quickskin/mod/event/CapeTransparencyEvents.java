@@ -23,7 +23,11 @@ import java.util.concurrent.Executor;
 public class CapeTransparencyEvents implements PreparableReloadListener {
 
     //? if <1.21.11 {
+        //? if <1.21 {
     public static final ResourceLocation LISTENER_ID = new ResourceLocation("quickskin", "cape_transparency_cache_clearer");
+        //?} else {
+    public static final ResourceLocation LISTENER_ID = ResourceLocation.fromNamespaceAndPath("quickskin", "cape_transparency_cache_clearer");
+        //?}
     //?} else {
     public static final Identifier LISTENER_ID = Identifier.fromNamespaceAndPath("quickskin", "cape_transparency_cache_clearer");
     //?}

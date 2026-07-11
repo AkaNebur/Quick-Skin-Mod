@@ -2,7 +2,11 @@ package com.quickskin.mod.mixin.compat;
 
 import com.quickskin.mod.client.compat.EarsCompatIntegration;
 import net.minecraft.client.player.AbstractClientPlayer;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -21,7 +25,11 @@ public class EarsLayerRendererMixin {
     @Inject(method = "getEarsFeatures", at = @At("RETURN"), cancellable = true, remap = false)
     private static void quickskin$getEarsFeatures(AbstractClientPlayer peer, CallbackInfoReturnable<Object> cir) {
         if (EarsCompatIntegration.isDisabledResult(cir.getReturnValue())) {
+            //? if <1.21.11 {
+            ResourceLocation skin = peer.getSkin().texture();
+            //?} else {
             Identifier skin = peer.getSkin().body().texturePath();
+            //?}
             Object features = EarsCompatIntegration.getFeatures(skin);
             if (features != null) {
                 cir.setReturnValue(features);

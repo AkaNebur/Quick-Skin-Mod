@@ -184,7 +184,11 @@ public class ServerNetworkHandler {
             }
 
             // Check if player has admin permissions (operator level 2+)
+            //? if <1.21.11 {
+            if (!player.hasPermissions(2)) {
+            //?} else {
             if (!player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER)) {
+            //?}
                 return;
             }
 

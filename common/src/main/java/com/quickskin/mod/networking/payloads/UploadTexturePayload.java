@@ -4,7 +4,11 @@ import com.quickskin.mod.QuickSkin;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 import java.util.UUID;
 
@@ -15,7 +19,11 @@ import java.util.UUID;
 public record UploadTexturePayload(UUID playerId, String textureType, byte[] imageData) implements CustomPacketPayload {
 
     public static final Type<UploadTexturePayload> TYPE = new Type<>(
+        //? if <1.21.11 {
+        ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "upload_texture")
+        //?} else {
         Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "upload_texture")
+        //?}
     );
 
     public static final StreamCodec<ByteBuf, UploadTexturePayload> CODEC = StreamCodec.of(

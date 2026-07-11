@@ -299,14 +299,22 @@ public class CapeAdjustScreen extends Screen {
             }
             if (skinLocation == null && player != null) {
                 //? if <1.21.11 {
+                    //? if <1.21 {
                 skinLocation = player.getSkinTextureLocation();
+                    //?} else {
+                skinLocation = player.getSkin().texture();
+                    //?}
                 //?} else {
                 skinLocation = player.getSkin().body().texturePath();
                 //?}
                 if ("auto".equals(modelType)) {
                     //? if <1.21.11 {
+                        //? if <1.21 {
                     String vanillaModel = player.getModelName(); // "default" or "slim"
                     modelType = "slim".equals(vanillaModel) ? "slim" : "classic";
+                        //?} else {
+                    modelType = "slim".equals(player.getSkin().model().id()) ? "slim" : "classic";
+                        //?}
                     //?} else {
                     modelType = player.getSkin().model()
                             == net.minecraft.world.entity.player.PlayerModelType.SLIM ? "slim" : "classic";
@@ -315,7 +323,11 @@ public class CapeAdjustScreen extends Screen {
             }
             if (skinLocation == null) {
                 //? if <1.21.11 {
+                    //? if <1.21 {
                 skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
+                    //?} else {
+                skinLocation = ResourceLocation.fromNamespaceAndPath("minecraft", "textures/entity/player/wide/steve.png");
+                    //?}
                 //?} else {
                 skinLocation = Identifier.fromNamespaceAndPath("minecraft", "textures/entity/player/wide/steve.png");
                 //?}
