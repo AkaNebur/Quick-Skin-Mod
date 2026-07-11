@@ -21,6 +21,7 @@ plugins {
 
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
+val canonicalVersions = setOf("1.20.1", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
 val legacyCommonJar = rootProject.file(
     "common/build/${if (isNoRemap) "libs" else "devlibs"}/" +
@@ -61,7 +62,20 @@ repositories {
     mavenCentral()
 }
 
-if (minecraftVersion != "26.2") {
+if (minecraftVersion == "1.20.1") {
+    sourceSets {
+        main {
+            java.setSrcDirs(listOf(rootProject.file("common/src/legacy1_20_1/java")))
+            resources.setSrcDirs(listOf(rootProject.file("common/src/legacy1_20_1/resources")))
+        }
+    }
+
+    tasks.processResources {
+        from(rootProject.file("common/src/main/resources")) {
+            include("assets/quickskin/lang/**")
+        }
+    }
+} else if (minecraftVersion !in canonicalVersions) {
     sourceSets {
         main {
             java.setSrcDirs(listOf(rootProject.file("common/src/$versionDir/java")))

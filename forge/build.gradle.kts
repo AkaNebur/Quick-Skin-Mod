@@ -8,7 +8,6 @@ plugins {
 }
 
 val minecraftVersion = "1.20.1"
-val versionDir = "v1_20_1"
 val commonProjectPath = requireNotNull(stonecutter.node.sibling("common")).hierarchy.toString()
 val commonProject = project(commonProjectPath)
 evaluationDependsOn(commonProjectPath)
@@ -36,18 +35,8 @@ repositories {
 
 sourceSets {
     main {
-        java.setSrcDirs(
-            listOf(
-                rootProject.file("forge/src/main/java"),
-                rootProject.file("forge/src/$versionDir/java"),
-            )
-        )
-        resources.setSrcDirs(
-            listOf(
-                rootProject.file("forge/src/main/resources"),
-                rootProject.file("forge/src/$versionDir/resources"),
-            )
-        )
+        java.setSrcDirs(listOf(rootProject.file("forge/src/main/java")))
+        resources.setSrcDirs(listOf(rootProject.file("forge/src/main/resources")))
     }
 }
 

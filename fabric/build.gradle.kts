@@ -9,6 +9,7 @@ plugins {
 
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
+val canonicalVersions = setOf("1.20.1", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
 val commonProjectPath = requireNotNull(stonecutter.node.sibling("common")).hierarchy.toString()
 val commonProject = project(commonProjectPath)
@@ -38,7 +39,25 @@ repositories {
     mavenCentral()
 }
 
-if (minecraftVersion != "26.2") {
+if (minecraftVersion == "1.20.1") {
+    sourceSets {
+        main {
+            java.setSrcDirs(
+                listOf(
+                    rootProject.file("fabric/src/main/java/com/quickskin/mod/fabric"),
+                    rootProject.file("fabric/src/legacy1_20_1/java"),
+                )
+            )
+            resources.setSrcDirs(listOf(rootProject.file("fabric/src/legacy1_20_1/resources")))
+        }
+    }
+
+    tasks.processResources {
+        from(rootProject.file("fabric/src/main/resources")) {
+            include("icon.png", "quick-skin.accesswidener")
+        }
+    }
+} else if (minecraftVersion !in canonicalVersions) {
     sourceSets {
         main {
             java.setSrcDirs(
