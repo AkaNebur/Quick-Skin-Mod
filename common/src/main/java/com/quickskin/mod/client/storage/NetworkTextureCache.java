@@ -2,18 +2,31 @@ package com.quickskin.mod.client.storage;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.quickskin.mod.QuickSkin;
+//? if >=1.21 {
 import com.quickskin.mod.platform.PlatformHelper;
+//?}
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import org.jetbrains.annotations.Nullable;
+//? if <26.2 {
+import com.quickskin.mod.platform.PlatformHelper;
+//?}
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+//? if <1.21.11 {
+import java.nio.file.Files;
+import java.nio.file.Path;
+//?}
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -32,10 +45,17 @@ public class NetworkTextureCache {
     private final Map<String, byte[]> textureDataCache = new ConcurrentHashMap<>();
 
     // Store registered ResourceLocations
+    //? if <1.21.11 {
+    private final Map<String, ResourceLocation> textureRegistry = new ConcurrentHashMap<>();
+    //?} else {
     private final Map<String, Identifier> textureRegistry = new ConcurrentHashMap<>();
+    //?}
 
     // Track texture types (skin/cape) for selective clearing
     private final Map<String, String> textureTypeMap = new ConcurrentHashMap<>();
+    //? if <1.21.11 {
+    private final Map<String, Path> tempFileCache = new ConcurrentHashMap<>();
+    //?}
 
     private NetworkTextureCache() {}
 
@@ -46,6 +66,7 @@ public class NetworkTextureCache {
         return instance;
     }
 
+    //? if >=1.21 {
     /**
      * Store texture data received from the network (without type info)
      * @param hash The texture hash
@@ -55,6 +76,7 @@ public class NetworkTextureCache {
         storeTexture(hash, null, textureData);
     }
 
+    //?}
     /**
      * Store texture data received from the network
      * @param hash The texture hash
@@ -118,7 +140,11 @@ public class NetworkTextureCache {
      * @return The Identifier, or null if texture not found
      */
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation getTextureLocation(String hash) {
+    //?} else {
     public Identifier getTextureLocation(String hash) {
+    //?}
         // Check if already registered
         if (textureRegistry.containsKey(hash)) {
             return textureRegistry.get(hash);
@@ -136,10 +162,18 @@ public class NetworkTextureCache {
             NativeImage nativeImage = NativeImage.read(new ByteArrayInputStream(textureData));
 
             // Create dynamic texture
+            //? if <1.21.11 {
+            DynamicTexture dynamicTexture = new DynamicTexture(nativeImage);
+            //?} else {
             DynamicTexture dynamicTexture = new DynamicTexture(() -> "quickskin_network_" + hash, nativeImage);
+            //?}
 
             // Register with texture manager
+            //? if <1.21.11 {
+            ResourceLocation location = new ResourceLocation(
+            //?} else {
             Identifier location = Identifier.fromNamespaceAndPath(
+            //?}
                     QuickSkin.MOD_ID,
                     "network/" + hash
             );
@@ -180,17 +214,52 @@ public class NetworkTextureCache {
         return textureDataCache.containsKey(hash);
     }
 
+    //? if <1.21.11 {
+    @Nullable
+    public Path getOrCreateTempFile(String hash) {
+        if (hash == null) return null;
+        Path existing = tempFileCache.get(hash);
+        if (existing != null && Files.exists(existing)) {
+            return existing;
+        }
+        byte[] original = originalTextureData.get(hash);
+        if (original == null) return null;
+        try {
+            Path cpmCacheDir = PlatformHelper.getGameDirectory().resolve("quickskin").resolve("cpm-cache");
+            Files.createDirectories(cpmCacheDir);
+            Path tempFile = cpmCacheDir.resolve(hash + ".png");
+            Files.write(tempFile, original);
+            tempFileCache.put(hash, tempFile);
+            return tempFile;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+    //?}
     /**
      * Clear all cached network textures
      */
     public void clear() {
         // Release all registered textures
+        //? if <1.21.11 {
+        for (ResourceLocation location : textureRegistry.values()) {
+        //?} else {
         for (Identifier location : textureRegistry.values()) {
+        //?}
             try {
                 Minecraft.getInstance().getTextureManager().release(location);
             } catch (Exception e) {
             }
         }
+        //? if <1.21.11 {
+        for (Path tempFile : tempFileCache.values()) {
+            try {
+                Files.deleteIfExists(tempFile);
+            } catch (IOException e) {
+            }
+        }
+        tempFileCache.clear();
+        //?}
 
         originalTextureData.clear();
         textureDataCache.clear();
@@ -216,7 +285,11 @@ public class NetworkTextureCache {
         // Release and remove ONLY the registered ResourceLocations for skins
         // Keep the raw texture data so we can re-process it with new settings
         for (String hash : hashesToClear) {
+            //? if <1.21.11 {
+            ResourceLocation location = textureRegistry.remove(hash);
+            //?} else {
             Identifier location = textureRegistry.remove(hash);
+            //?}
             if (location != null) {
                 try {
                     Minecraft.getInstance().getTextureManager().release(location);
@@ -246,7 +319,11 @@ public class NetworkTextureCache {
             if (originalData != null) {
                 // Remove old processed data and registration
                 textureDataCache.remove(hash);
+                //? if <1.21.11 {
+                ResourceLocation oldLocation = textureRegistry.remove(hash);
+                //?} else {
                 Identifier oldLocation = textureRegistry.remove(hash);
+                //?}
                 if (oldLocation != null) {
                     try {
                         Minecraft.getInstance().getTextureManager().release(oldLocation);

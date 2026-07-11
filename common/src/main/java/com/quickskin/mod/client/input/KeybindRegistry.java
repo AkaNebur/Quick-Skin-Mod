@@ -8,7 +8,9 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+//? if >=1.21.11 {
 import net.minecraft.resources.Identifier;
+//?}
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -19,8 +21,12 @@ import org.lwjgl.glfw.GLFW;
 public class KeybindRegistry {
 
     // Keybind category
+    //? if <1.21.11 {
+    private static final String CATEGORY = "key.categories." + QuickSkin.MOD_ID;
+    //?} else {
     private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
             Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "keybinds"));
+    //?}
 
     // Keybind definitions
     public static KeyMapping OPEN_SKIN_MENU;
@@ -56,7 +62,11 @@ public class KeybindRegistry {
         while (OPEN_SKIN_MENU.consumeClick()) {
             // Phase 8: Open skin selection screen
             if (client.player != null) {
+                //? if <26.2 {
+                client.setScreen(new com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen(client.screen));
+                //?} else {
                 client.gui.setScreen(new com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen(client.gui.screen()));
+                //?}
             }
         }
     }

@@ -5,7 +5,11 @@ import com.quickskin.mod.client.gui.widget.SkinListWidget;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
 import net.minecraft.client.Minecraft;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
@@ -42,9 +46,16 @@ public class SkinListPanel extends AbstractWidget {
             width,
             height,
             getY(),
+            //? if >=1.21 {
             getX(), // X position
+            //?}
             40 // Entry height - matches original
         );
+        //? if <1.21 {
+        skinListWidget.setLeftPos(getX());
+        skinListWidget.setRenderBackground(false);
+        skinListWidget.setRenderTopAndBottom(false);
+        //?}
         screen.registerWidget(skinListWidget);
 
         // Load skins from LocalAssetManager
@@ -133,7 +144,11 @@ public class SkinListPanel extends AbstractWidget {
     }
 
     @Override
+    //? if <26.1 {
+    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    //?} else {
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    //?}
         // This panel doesn't render anything itself - child widgets handle rendering
     }
 

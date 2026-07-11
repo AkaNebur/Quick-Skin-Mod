@@ -2,7 +2,11 @@ package com.quickskin.mod.client.gui.screen;
 
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.KnownCapes;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
@@ -72,7 +76,11 @@ public class CapeEntry {
     }
 
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation getTextureLocation() {
+    //?} else {
     public Identifier getTextureLocation() {
+    //?}
         if (isLocal) {
             return localCape != null ?
                     com.quickskin.mod.client.services.LocalAssetManager.getInstance()

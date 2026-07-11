@@ -4,7 +4,11 @@ import com.quickskin.mod.client.gui.util.ButtonFactory;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.gui.widget.RotateButton;
 import com.quickskin.mod.common.data.AssetMetadata;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -38,6 +42,12 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
     @Nullable
     private AssetMetadata currentMetadata;
+    //? if <1.21.11 {
+    @Nullable
+    private net.minecraft.resources.ResourceLocation cpmIconLocation = null;
+    private boolean isCpmModel = false;
+    private long skinChangedAt = 0;
+    //?}
 
     public PlayerPreviewPanel(int x, int y, int width, int height) {
         super(x, y, width, height, Component.empty());
@@ -130,6 +140,12 @@ public class PlayerPreviewPanel extends AbstractWidget {
         // Set button references for player widget positioning
         if (playerWidget != null) {
             playerWidget.setModelButtons(autoModelButton, classicModelButton, slimModelButton);
+            //? if <1.21 {
+            playerWidget.clearPriorityWidgets();
+            playerWidget.addPriorityWidget(autoModelButton);
+            playerWidget.addPriorityWidget(classicModelButton);
+            playerWidget.addPriorityWidget(slimModelButton);
+            //?}
         }
 
         // Update button states to lock the currently selected model button
@@ -152,6 +168,11 @@ public class PlayerPreviewPanel extends AbstractWidget {
         rotateButton.setTooltip(Tooltip.create(Component.translatable("quickskin.preview.rotate")));
         screen.registerWidget(rotateButton);
 
+        //? if <1.21 {
+        if (playerWidget != null) {
+            playerWidget.addPriorityWidget(rotateButton);
+        }
+        //?}
         // Clear animation buttons from previous init
         animationButtons.clear();
         isAnimationDropdownOpen = false;
@@ -171,6 +192,11 @@ public class PlayerPreviewPanel extends AbstractWidget {
                     button -> toggleAnimationDropdown()
             );
             screen.registerWidget(animationToggleButton);
+            //? if <1.21 {
+            if (playerWidget != null) {
+                playerWidget.addPriorityWidget(animationToggleButton);
+            }
+            //?}
 
             // Create numbered animation buttons (dropdown)
             java.util.List<String> availableAnimations = getAvailableAnimations();
@@ -196,6 +222,11 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 animButton.active = false;
                 animationButtons.add(animButton);
                 screen.registerWidget(animButton);
+                //? if <1.21 {
+                if (playerWidget != null) {
+                    playerWidget.addPriorityWidget(animButton);
+                }
+                //?}
             }
         }
     }
@@ -236,9 +267,27 @@ public class PlayerPreviewPanel extends AbstractWidget {
     /**
      * Update the skin displayed in the player preview
      */
+    //? if <1.21.11 {
+    public void updateSkin(AssetMetadata metadata, net.minecraft.resources.ResourceLocation skinLocation) {
+    //?} else {
     public void updateSkin(AssetMetadata metadata, net.minecraft.resources.Identifier skinLocation) {
+    //?}
         if (playerWidget != null && metadata != null) {
             this.currentMetadata = metadata;
+            //? if <1.21.11 {
+            this.isCpmModel = metadata.isCpmModel();
+            this.skinChangedAt = System.currentTimeMillis();
+            this.lastCpmWearing = false;
+            boolean isInGame = net.minecraft.client.Minecraft.getInstance().player != null;
+            if (isCpmModel && !isInGame) {
+                cpmIconLocation = skinLocation;
+                playerWidget.visible = false;
+                updateModelButtonStates();
+                return;
+            }
+            cpmIconLocation = null;
+            playerWidget.visible = true;
+            //?}
             playerWidget.setSkin(skinLocation);
 
             // Update model type based on current mode
@@ -249,13 +298,20 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 // Use explicitly selected model
                 playerWidget.setModelType(currentModelType);
             }
+            //? if <26.2 {
+            updateModelButtonStates();
+            //?}
         }
     }
 
     /**
      * Update the cape displayed in the player preview
      */
+    //? if <1.21.11 {
+    public void updateCape(@Nullable net.minecraft.resources.ResourceLocation capeLocation, @Nullable String capeId) {
+    //?} else {
     public void updateCape(@Nullable net.minecraft.resources.Identifier capeLocation, @Nullable String capeId) {
+    //?}
         if (playerWidget != null) {
             playerWidget.setCape(capeLocation, capeId);
         }
@@ -269,6 +325,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
         return playerWidget;
     }
 
+    //? if >=1.21 {
     /**
      * Detect model type from texture data
      */
@@ -288,6 +345,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
         return metadata.skinModel() != null ? metadata.skinModel() : "classic";
     }
 
+    //?}
     /**
      * Set the model type for the player preview
      */
@@ -324,6 +382,15 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     private void updateModelButtonStates() {
         if (autoModelButton != null && classicModelButton != null && slimModelButton != null) {
+            //? if <1.21.11 {
+            boolean cpmActive = isCpmModel || lastCpmWearing;
+            if (cpmActive) {
+                autoModelButton.active = false;
+                classicModelButton.active = false;
+                slimModelButton.active = false;
+                return;
+            }
+            //?}
             boolean isAuto = "auto".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
             boolean isSlim = "slim".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
             boolean isClassic = "classic".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
@@ -335,9 +402,37 @@ public class PlayerPreviewPanel extends AbstractWidget {
         }
     }
 
+    //? if <1.21.11 {
+    private boolean lastCpmWearing = false;
+    //?}
     @Override
+    //? if <26.1 {
+    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        long elapsed = System.currentTimeMillis() - skinChangedAt;
+        boolean cpmWearing;
+        if (elapsed < 2000) {
+            cpmWearing = isCpmModel;
+        } else {
+            cpmWearing = com.quickskin.mod.client.compat.CPMCompatIntegration.isLocalPlayerWearingCpmModel();
+        }
+        if (cpmWearing != lastCpmWearing) {
+            lastCpmWearing = cpmWearing;
+            updateModelButtonStates();
+        }
+        if (cpmIconLocation != null) {
+            int iconSize = Math.min(width, height) - 16;
+            int iconX = getX() + (width - iconSize) / 2;
+            int iconY = getY() + (height - iconSize) / 2;
+            com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+            graphics.blit(cpmIconLocation,
+                    iconX, iconY, iconSize, iconSize,
+                    0, 0, 64, 64, 64, 64);
+            com.mojang.blaze3d.systems.RenderSystem.disableBlend();
+        }
+    //?} else {
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         // This panel doesn't render anything itself - child widgets handle rendering
+    //?}
     }
 
     @Override

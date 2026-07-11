@@ -2,7 +2,11 @@ package com.quickskin.mod.client.services;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 import org.jetbrains.annotations.Nullable;
 import java.util.UUID;
@@ -20,7 +24,11 @@ public interface ICapeService {
      * @return The Identifier for the cape, or null if not available
      */
     @Nullable
+    //? if <1.21.11 {
+    ResourceLocation getCapeLocation(UUID playerId, String capeId);
+    //?} else {
     Identifier getCapeLocation(UUID playerId, String capeId);
+    //?}
 
     /**
      * Loads a cape from the Mojang API
@@ -28,7 +36,11 @@ public interface ICapeService {
      * @return The Identifier for the cape, or null if failed
      */
     @Nullable
+    //? if <1.21.11 {
+    ResourceLocation loadMojangCape(String username);
+    //?} else {
     Identifier loadMojangCape(String username);
+    //?}
 
     /**
      * Loads a local cape from storage
@@ -36,7 +48,11 @@ public interface ICapeService {
      * @return The Identifier for the cape, or null if not found
      */
     @Nullable
+    //? if <1.21.11 {
+    ResourceLocation loadLocalCape(String hash);
+    //?} else {
     Identifier loadLocalCape(String hash);
+    //?}
 
     /**
      * Loads a known cape (e.g., Minecon capes)
@@ -44,7 +60,11 @@ public interface ICapeService {
      * @return The Identifier for the cape, or null if not found
      */
     @Nullable
+    //? if <1.21.11 {
+    ResourceLocation loadKnownCape(String capeId);
+    //?} else {
     Identifier loadKnownCape(String capeId);
+    //?}
 
     /**
      * Checks if a cape is animated

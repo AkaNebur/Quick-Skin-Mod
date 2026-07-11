@@ -1,22 +1,33 @@
 package com.quickskin.mod.client.gui.screen;
 
+//? if >=26.2 {
 import com.quickskin.mod.client.gui.GuiCompat;
+//?}
 import com.mojang.blaze3d.platform.InputConstants;
 import com.quickskin.mod.client.gui.effect.BlurHandler;
+//? if <1.21 {
+import com.quickskin.mod.client.gui.GuiCompat;
+//?}
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import com.quickskin.mod.client.gui.widget.TabButton;
 import com.quickskin.mod.client.input.KeybindRegistry;
 import com.quickskin.mod.common.data.BackgroundStyle;
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.config.ServerConfig;
+//? if >=1.21 {
 import com.quickskin.mod.networking.payloads.UpdateServerConfigPayload;
+//?}
 import com.quickskin.mod.networking.NetworkTransport;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
@@ -194,54 +205,115 @@ public class SettingsScreen extends Screen {
         int currentY = startY;
 
         // Show HUD Overlay
+        //? if <1.21 {
+        showOverlayCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+        //?} else {
         showOverlayCheckbox = Checkbox.builder(
+        //?}
                 Component.translatable("quickskin.settings.enable_preview"),
+        //? if <1.21 {
+                config.showSkinPreviewOverlay
+        );
+        //?} else {
                 this.font)
                 .pos(leftColumnX, currentY)
                 .selected(config.showSkinPreviewOverlay)
                 .build();
+        //?}
         guiEditSettingWidgets.add(showOverlayCheckbox);
         currentY += spacing;
 
         // Enable Styled Buttons
+        //? if <1.21 {
+        enableStyledButtonsCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+        //?} else {
         enableStyledButtonsCheckbox = Checkbox.builder(
+        //?}
                 Component.translatable("quickskin.settings.enable_styled_buttons"),
+        //? if <1.21 {
+                config.enableStyledButtons
+        );
+        //?} else {
                 this.font)
                 .pos(leftColumnX, currentY)
                 .selected(config.enableStyledButtons)
                 .build();
+        //?}
         guiEditSettingWidgets.add(enableStyledButtonsCheckbox);
         currentY += spacing;
 
         // Enable Preview Customization
+        //? if <1.21 {
+        enablePlayerPreviewCustomizationCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+        //?} else {
         enablePlayerPreviewCustomizationCheckbox = Checkbox.builder(
+        //?}
                 Component.translatable("quickskin.settings.enable_preview_custom"),
+        //? if <1.21 {
+                config.enablePlayerPreviewCustomization
+        );
+        //?} else {
                 this.font)
                 .pos(leftColumnX, currentY)
                 .selected(config.enablePlayerPreviewCustomization)
                 .build();
+        //?}
         guiEditSettingWidgets.add(enablePlayerPreviewCustomizationCheckbox);
         currentY += spacing;
 
         // Hide Built-in Capes
+        //? if <1.21 {
+        hideBuiltInCapesCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+        //?} else {
         hideBuiltInCapesCheckbox = Checkbox.builder(
+        //?}
                 Component.translatable("quickskin.settings.hide_builtin_capes"),
+        //? if <1.21 {
+                config.hideBuiltInCapes
+        );
+        hideBuiltInCapesCheckbox.setTooltip(Tooltip.create(
+                Component.translatable("quickskin.settings.hide_builtin_capes.tooltip")
+        ));
+        //?} else {
                 this.font)
                 .pos(leftColumnX, currentY)
                 .selected(config.hideBuiltInCapes)
                 .tooltip(Tooltip.create(Component.translatable("quickskin.settings.hide_builtin_capes.tooltip")))
                 .build();
+        //?}
         guiEditSettingWidgets.add(hideBuiltInCapesCheckbox);
         currentY += spacing;
 
         // Menu Background Style
+        //? if <1.21 {
+        menuBackgroundCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+        //?} else {
         menuBackgroundCheckbox = Checkbox.builder(
+        //?}
                 Component.translatable("quickskin.settings.menu_background"),
+        //? if <1.21 {
+                config.getMenuBackgroundStyle() == BackgroundStyle.VANILLA_BLUR
+        );
+        menuBackgroundCheckbox.setTooltip(Tooltip.create(
+                Component.translatable("quickskin.settings.menu_background.tooltip")
+        ));
+        //?} else {
                 this.font)
                 .pos(leftColumnX, currentY)
                 .selected(config.getMenuBackgroundStyle() == BackgroundStyle.VANILLA_BLUR)
                 .tooltip(Tooltip.create(Component.translatable("quickskin.settings.menu_background.tooltip")))
                 .build();
+        //?}
         guiEditSettingWidgets.add(menuBackgroundCheckbox);
     }
 
@@ -270,14 +342,26 @@ public class SettingsScreen extends Screen {
 
         clientSettingWidgets.add(new AbstractWidget(leftColumnX + keybindButtonWidth + keybindButtonSpacing, currentLeftY, 100, 20, Component.translatable("quickskin.settings.keybind_label")) {
             @Override
+            //? if <26.1 {
+            public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+            //?} else {
             public void extractWidgetRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
+            //?}
                 // Draw the string vertically centered with the standard UI text color.
+                //? if <26.1 {
+                guiGraphics.drawString(
+                //?} else {
                 guiGraphics.text(
+                //?}
                         Minecraft.getInstance().font,
                         this.getMessage(),
                         this.getX(),
                         this.getY() + (this.height - 8) / 2,
+                        //? if <1.21.11 {
+                        0xE0E0E0 // Standard light gray text color
+                        //?} else {
                         0xFFE0E0E0 // Standard light gray text color
+                        //?}
                 );
             }
 
@@ -287,19 +371,34 @@ public class SettingsScreen extends Screen {
             }
 
             @Override
+            //? if <1.21.11 {
+            public boolean mouseClicked(double pMouseX, double pMouseY, int pButton) {
+            //?} else {
             public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
+            //?}
                 return false; // Make the label non-interactive
             }
         });
 
         // Right Column
         // Skin Transparency Settings
+        //? if <1.21 {
+        disableSkinTransparencyCheckbox = new Checkbox(
+                rightColumnX, currentRightY,
+                checkboxSize, checkboxSize,
+        //?} else {
         disableSkinTransparencyCheckbox = Checkbox.builder(
+        //?}
                 Component.translatable("quickskin.settings.disable_transparency"),
+        //? if <1.21 {
+                config.disableSkinTransparency
+        );
+        //?} else {
                 this.font)
                 .pos(rightColumnX, currentRightY)
                 .selected(config.disableSkinTransparency)
                 .build();
+        //?}
         clientSettingWidgets.add(disableSkinTransparencyCheckbox);
     }
 
@@ -313,7 +412,11 @@ public class SettingsScreen extends Screen {
         int currentY = startY;
 
         // Check if player has admin permissions
+        //? if <1.21.11 {
+        boolean isAdmin = minecraft != null && minecraft.player != null && minecraft.player.hasPermissions(2);
+        //?} else {
         boolean isAdmin = minecraft != null && minecraft.player != null && minecraft.player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
+        //?}
 
         // Get current server transparency setting from server override
         // This is synced from the server on join (both singleplayer and multiplayer)
@@ -321,12 +424,23 @@ public class SettingsScreen extends Screen {
         boolean currentTransparencySetting = serverOverride != null ? serverOverride.disableSkinTransparency : false;
 
         // Transparency Settings
+        //? if <1.21 {
+        serverDisableSkinTransparencyCheckbox = new Checkbox(
+                leftColumnX, currentY,
+                checkboxSize, checkboxSize,
+        //?} else {
         serverDisableSkinTransparencyCheckbox = Checkbox.builder(
+        //?}
                 Component.translatable("quickskin.settings.disable_transparency_server"),
+        //? if <1.21 {
+                currentTransparencySetting
+        );
+        //?} else {
                 this.font)
                 .pos(leftColumnX, currentY)
                 .selected(currentTransparencySetting)
                 .build();
+        //?}
         // Only allow admins to change this setting
         serverDisableSkinTransparencyCheckbox.active = isAdmin;
         serverSettingWidgets.add(serverDisableSkinTransparencyCheckbox);
@@ -344,21 +458,31 @@ public class SettingsScreen extends Screen {
         );
         skinChangeCooldownEditBox.setValue(String.valueOf(config.skinChangeCooldownSeconds));
         skinChangeCooldownEditBox.setMaxLength(5);
-        // NOTE (26.1): EditBox#setFilter(Predicate) was removed; digit-only input must be reimplemented
-        // via setResponder/validation. Field still functions; values are parsed defensively on read.
+        //? if <26.1 {
+        skinChangeCooldownEditBox.setFilter(text -> text.isEmpty() || text.matches("\\d+"));
+        //?}
         skinChangeCooldownEditBox.active = isAdmin;
         serverSettingWidgets.add(skinChangeCooldownEditBox);
 
         // Label for cooldown EditBox
         serverSettingWidgets.add(new AbstractWidget(leftColumnX + editBoxWidth + editBoxSpacing, currentY, 200, 20, Component.translatable("quickskin.settings.cooldown_seconds")) {
             @Override
+            //? if <26.1 {
+            public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+                guiGraphics.drawString(
+            //?} else {
             public void extractWidgetRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
                 guiGraphics.text(
+            //?}
                         Minecraft.getInstance().font,
                         this.getMessage(),
                         this.getX(),
                         this.getY() + (this.height - 8) / 2,
+                        //? if <1.21.11 {
+                        0xE0E0E0
+                        //?} else {
                         0xFFE0E0E0
+                        //?}
                 );
             }
 
@@ -368,7 +492,11 @@ public class SettingsScreen extends Screen {
             }
 
             @Override
+            //? if <1.21.11 {
+            public boolean mouseClicked(double pMouseX, double pMouseY, int pButton) {
+            //?} else {
             public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
+            //?}
                 return false;
             }
         });
@@ -376,12 +504,28 @@ public class SettingsScreen extends Screen {
 
     private void createModpackSettings() {
         ClientConfig config = ClientConfig.getInstance();
+        //? if <26.2 {
+        int checkboxSize = 20;
+        //?}
         // Settings content area starts below tabs
         int startY = dialogY + TAB_HEIGHT + 20;
         int leftColumnX = dialogX + 20;
 
+        //? if <1.21 {
+        enablePlayerOwnSkinSystemCheckbox = new Checkbox(
+                leftColumnX, startY,
+                checkboxSize, checkboxSize,
+        //?} else {
         enablePlayerOwnSkinSystemCheckbox = Checkbox.builder(
+        //?}
                 Component.translatable("quickskin.settings.enable_own_skin"),
+        //? if <1.21 {
+                config.enablePlayerOwnSkinSystem
+        );
+        enablePlayerOwnSkinSystemCheckbox.setTooltip(Tooltip.create(
+                Component.translatable("quickskin.settings.own_skin_tooltip")
+        ));
+        //?} else {
                 this.font)
                 .pos(leftColumnX, startY)
                 .selected(config.enablePlayerOwnSkinSystem)
@@ -389,6 +533,7 @@ public class SettingsScreen extends Screen {
                         Component.translatable("quickskin.settings.own_skin_tooltip")
                 ))
                 .build();
+        //?}
         modpackSettingWidgets.add(enablePlayerOwnSkinSystemCheckbox);
     }
 
@@ -428,14 +573,26 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
+    //? if <26.1 {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    //?} else {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         // Render parent screen in background
+    //?}
         if (this.parent != null) {
+            //? if <26.2 {
+            GuiCompat.renderParent(this.parent, graphics, partialTick);
+            //?} else {
             GuiCompat.extractParent(this.parent, graphics, partialTick);
+            //?}
         }
 
+        //? if <1.21.11 {
+        graphics.flush();
+        //?} else {
         // Disable depth test so the blur/overlay/modal panels render on top of the 3D player widget
         org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+        //?}
         BlurHandler.renderBlur();
 
         // Update keybind button text before rendering
@@ -444,6 +601,10 @@ public class SettingsScreen extends Screen {
         } else {
             this.keybindButton.setMessage(KeybindRegistry.OPEN_SKIN_MENU.getTranslatedKeyMessage());
         }
+        //? if <1.21 {
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 100); // Move modal forward in Z
+        //?}
 
         // Draw darker overlay over entire screen
         graphics.fill(0, 0, this.width, this.height, 0x60000000);
@@ -462,27 +623,47 @@ public class SettingsScreen extends Screen {
         drawPanelOutline(graphics, dialogX, contentPanelY, dialogWidth, contentPanelHeight, PANEL_OUTLINE);
 
         // Render widgets (buttons, tabs, etc.) - this ensures they render AFTER everything above
+        //? if <26.1 {
+        super.render(graphics, mouseX, mouseY, partialTick);
+        //?} else {
         super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        //?}
 
         // Render "Admin-Only" notice for Server tab if not admin (render last to ensure it's on top)
         if (activeTab == Tab.SERVER && minecraft != null) {
+            //? if <1.21.11 {
+            boolean isAdmin = minecraft.player != null && minecraft.player.hasPermissions(2);
+            //?} else {
             boolean isAdmin = minecraft.player != null && minecraft.player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
+            //?}
 
             if (!isAdmin) {
                 int noticeY = dialogY + dialogHeight - 55;
                 Component notice = Component.translatable("quickskin.settings.server_notice");
                 int noticeWidth = this.font.width(notice);
+                //? if <26.1 {
+                graphics.drawString(this.font, notice, dialogX + (dialogWidth - noticeWidth) / 2, noticeY, 0xFFCC00, false);
+                //?} else {
                 graphics.text(this.font, notice, dialogX + (dialogWidth - noticeWidth) / 2, noticeY, 0xFFFFCC00, false);
+                //?}
             }
         }
 
+        //? if <1.21.11 {
+        graphics.pose().popPose();
+        //?} else {
         org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+        //?}
     }
 
     /**
      * Draws outline around the specified rectangular area
      */
+    //? if <26.1 {
+    private void drawPanelOutline(GuiGraphics graphics, int x, int y, int width, int height, int color) {
+    //?} else {
     private void drawPanelOutline(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int color) {
+    //?}
         // Top
         graphics.fill(x, y, x + width, y + 1, color);
         // Bottom
@@ -507,10 +688,14 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
+    //? if <26.2 {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
         double mouseX = GuiCompat.mouseX(event);
         double mouseY = GuiCompat.mouseY(event);
         int button = GuiCompat.mouseButton(event);
+    //?}
         // Handle setting a keybind with a mouse click
         if (this.selectedKey != null) {
             this.selectedKey.setKey(InputConstants.Type.MOUSE.getOrCreate(button));
@@ -525,36 +710,60 @@ public class SettingsScreen extends Screen {
             this.onClose();
             return true;
         }
+        //? if <1.21.11 {
+        return super.mouseClicked(mouseX, mouseY, button);
+        //?} else {
         return super.mouseClicked(event, focused);
+        //?}
     }
 
     @Override
+    //? if <1.21.11 {
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    //?} else {
     public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double dragX, double dragY) {
+    //?}
         // Prevent parent screen interactions
         return false;
     }
 
     @Override
+    //? if <1.21 {
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    //?} else {
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
+    //?}
         // Allow scrolling only within modal
         if (mouseX >= dialogX && mouseX <= dialogX + dialogWidth &&
                 mouseY >= dialogY && mouseY <= dialogY + dialogHeight) {
+            //? if <1.21 {
+            return super.mouseScrolled(mouseX, mouseY, delta);
+            //?} else {
             return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
+            //?}
         }
         return false;
     }
 
     @Override
+    //? if <26.2 {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    //?} else {
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
         int keyCode = GuiCompat.keyCode(event);
         int scanCode = event.scancode();
         int modifiers = event.modifiers();
+    //?}
         // Handle setting a keybind with a keyboard press
         if (this.selectedKey != null) {
             if (keyCode == InputConstants.KEY_ESCAPE) {
                 this.selectedKey.setKey(InputConstants.UNKNOWN);
             } else {
+                //? if <1.21.11 {
+                this.selectedKey.setKey(InputConstants.getKey(keyCode, scanCode));
+                //?} else {
                 this.selectedKey.setKey(InputConstants.getKey(event));
+                //?}
             }
             KeyMapping.resetMapping();
             this.selectedKey = null;
@@ -566,12 +775,17 @@ public class SettingsScreen extends Screen {
             this.onClose();
             return true;
         }
+        //? if <1.21.11 {
+        return super.keyPressed(keyCode, scanCode, modifiers);
+        //?} else {
         return super.keyPressed(event);
+        //?}
     }
 
     @Override
     public boolean isPauseScreen() {
         return false; // Don't pause game
+    //? if >=26.1 {
     }
 
     @Override
@@ -591,6 +805,7 @@ public class SettingsScreen extends Screen {
     @Override
     protected void extractBlurredBackground(net.minecraft.client.gui.GuiGraphicsExtractor guiGraphics) {
         // Disable the default Minecraft blur effect - we handle blur manually
+    //?}
     }
 
     @Override
@@ -649,14 +864,22 @@ public class SettingsScreen extends Screen {
             if (oldStyledButtonsSetting != config.enableStyledButtons && parent != null && minecraft != null) {
                 // Recreate parent screen to apply new button style
                 Screen newParent = recreateScreen(parent);
+                //? if <26.2 {
+                minecraft.setScreen(newParent);
+                //?} else {
                 minecraft.gui.setScreen(newParent);
+                //?}
                 return; // Don't set screen to parent again below
             }
         }
 
         // Save server settings (only if player is admin)
         if (serverDisableSkinTransparencyCheckbox != null) {
+            //? if <1.21.11 {
+            boolean isAdmin = minecraft != null && minecraft.player != null && minecraft.player.hasPermissions(2);
+            //?} else {
             boolean isAdmin = minecraft != null && minecraft.player != null && minecraft.player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
+            //?}
 
             if (isAdmin) {
                 boolean newValue = serverDisableSkinTransparencyCheckbox.selected();
@@ -667,8 +890,13 @@ public class SettingsScreen extends Screen {
 
                 if (newValue != oldValue) {
                     // Send packet to server to update the server-side config
+                    //? if <26.2 {
+                    NetworkTransport.INSTANCE.sendServerConfigUpdateToServer(
+                            "disableSkinTransparency", newValue);
+                    //?} else {
                     UpdateServerConfigPayload payload = new UpdateServerConfigPayload("disableSkinTransparency", newValue);
                     NetworkTransport.INSTANCE.sendToServer(payload);
+                    //?}
 
                     // The server will broadcast the change to all clients, including this one
                     // No need to save locally or reload textures here - it will happen when we receive the broadcast
@@ -691,7 +919,11 @@ public class SettingsScreen extends Screen {
         }
 
         if (minecraft != null) {
+            //? if <26.2 {
+            minecraft.setScreen(parent);
+            //?} else {
             minecraft.gui.setScreen(parent);
+            //?}
         }
     }
 }

@@ -1,11 +1,17 @@
 package com.quickskin.mod.client.gui.screen;
 
+//? if >=26.2 {
 import com.quickskin.mod.client.gui.GuiCompat;
+//?}
 import com.quickskin.mod.client.gui.effect.BlurHandler;
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -32,8 +38,13 @@ public class RenameScreen extends Screen {
     // Panel styling (same as DeletionConfirmScreen)
     private static final int PANEL_BG = 0xB0000000;           // Darker semi-transparent background for frosted glass effect
     private static final int PANEL_OUTLINE = 0x60FFFFFF;      // Subtle white outline
+    //? if <1.21.11 {
+    private static final int TITLE_COLOR = 0xFFFFFF;          // White title
+    private static final int MESSAGE_COLOR = 0xFFFFFF;        // White message
+    //?} else {
     private static final int TITLE_COLOR = 0xFFFFFFFF;          // White title
     private static final int MESSAGE_COLOR = 0xFFFFFFFF;        // White message
+    //?}
 
     // Panel dimensions
     private final int panelWidth = 340;
@@ -107,26 +118,50 @@ public class RenameScreen extends Screen {
     }
 
     @Override
+    //? if <26.2 {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    //?} else {
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
         int keyCode = GuiCompat.keyCode(event);
+    //?}
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
             if (this.confirmButton.active) {
+                //? if <1.21.11 {
+                this.confirmButton.onPress();
+                //?} else {
                 this.confirmButton.onPress(event);
+                //?}
                 return true;
             }
         }
+        //? if <1.21.11 {
+        return super.keyPressed(keyCode, scanCode, modifiers);
+        //?} else {
         return super.keyPressed(event);
+        //?}
     }
 
     @Override
+    //? if <26.1 {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+    //?} else {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+    //?}
         // Render parent screen in background
         if (this.parent != null) {
+            //? if <26.2 {
+            this.parent.render(graphics, -1, -1, partialTicks);
+            //?} else {
             GuiCompat.extractParent(this.parent, graphics, partialTicks);
+            //?}
         }
 
+        //? if <1.21.11 {
+        graphics.flush();
+        //?} else {
         // Disable depth test so the blur/overlay/modal panels render on top of the 3D player widget
         org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+        //?}
         BlurHandler.renderBlur();
 
         // Draw lighter overlay over entire screen (so blur is more visible)
@@ -158,22 +193,34 @@ public class RenameScreen extends Screen {
 
         // Draw title (centered)
         int titleY = this.panelY + 20;
+        //? if <26.1 {
+        graphics.drawCenteredString(this.font, this.title,
+        //?} else {
         graphics.centeredText(this.font, this.title,
+        //?}
                                    this.width / 2, titleY,
                                    TITLE_COLOR);
 
         // Draw message if it exists
         if (!this.message.getString().isEmpty()) {
             int messageY = this.panelY + 45;
+            //? if <26.1 {
+            graphics.drawCenteredString(this.font, this.message,
+            //?} else {
             graphics.centeredText(this.font, this.message,
+            //?}
                                        this.width / 2, messageY,
                                        MESSAGE_COLOR);
         }
 
         // Render text box and buttons
+        //? if <26.1 {
+        super.render(graphics, mouseX, mouseY, partialTicks);
+        //?} else {
         super.extractRenderState(graphics, mouseX, mouseY, partialTicks);
 
         org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+        //?}
     }
 
     @Override
@@ -184,9 +231,13 @@ public class RenameScreen extends Screen {
     }
 
     @Override
+    //? if <26.2 {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
         double mouseX = GuiCompat.mouseX(event);
         double mouseY = GuiCompat.mouseY(event);
+    //?}
         // Check if click is outside the panel
         if (mouseX < this.panelX || mouseX > this.panelX + this.panelWidth ||
             mouseY < this.panelY || mouseY > this.panelY + this.panelHeight) {
@@ -195,15 +246,24 @@ public class RenameScreen extends Screen {
             return true;
         }
         // Click inside panel - handle normally
+        //? if <1.21.11 {
+        return super.mouseClicked(mouseX, mouseY, button);
+        //?} else {
         return super.mouseClicked(event, focused);
+        //?}
     }
 
     @Override
     public void onClose() {
         if (this.minecraft != null) {
+            //? if <26.2 {
+            this.minecraft.setScreen(this.parent);
+            //?} else {
             this.minecraft.gui.setScreen(this.parent);
+            //?}
         }
     }
+    //? if >=26.1 {
 
     private void hidePlayerWidgets(boolean hide) {
         if (this.parent == null) return;
@@ -223,4 +283,5 @@ public class RenameScreen extends Screen {
     protected void extractBlurredBackground(net.minecraft.client.gui.GuiGraphicsExtractor guiGraphics) {
         // Disable the default Minecraft blur effect - we handle blur with BlurHandler
     }
+    //?}
 }

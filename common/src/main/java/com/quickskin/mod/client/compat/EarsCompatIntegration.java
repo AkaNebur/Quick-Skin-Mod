@@ -1,7 +1,11 @@
 package com.quickskin.mod.client.compat;
 
 import com.quickskin.mod.QuickSkin;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Constructor;
@@ -22,7 +26,11 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class EarsCompatIntegration {
     private static boolean MOD_AVAILABLE;
+    //? if <1.21.11 {
+    private static final ConcurrentHashMap<ResourceLocation, Object> featuresCache = new ConcurrentHashMap<>();
+    //?} else {
     private static final ConcurrentHashMap<Identifier, Object> featuresCache = new ConcurrentHashMap<>();
+    //?}
 
     // Cached reflection handles
     private static Constructor<?> rawEarsImageCtor;
@@ -92,7 +100,11 @@ public class EarsCompatIntegration {
      * @param skinLocation The Identifier where the skin texture is registered
      * @param originalImage The original unprocessed skin image
      */
+    //? if <1.21.11 {
+    public static void parseAndStoreFeatures(ResourceLocation skinLocation, BufferedImage originalImage) {
+    //?} else {
     public static void parseAndStoreFeatures(Identifier skinLocation, BufferedImage originalImage) {
+    //?}
         if (!MOD_AVAILABLE || skinLocation == null || originalImage == null) {
             return;
         }
@@ -155,7 +167,11 @@ public class EarsCompatIntegration {
      * @param skinLocation The Identifier of the skin texture
      * @return The EarsFeatures object, or null if none stored
      */
+    //? if <1.21.11 {
+    public static Object getFeatures(ResourceLocation skinLocation) {
+    //?} else {
     public static Object getFeatures(Identifier skinLocation) {
+    //?}
         if (!MOD_AVAILABLE || skinLocation == null) {
             return null;
         }
@@ -176,7 +192,11 @@ public class EarsCompatIntegration {
      * Associate stored features with a player in Ears' feature storage.
      * This populates Ears' public API so other mods can query features.
      */
+    //? if <1.21.11 {
+    public static void associateWithPlayer(ResourceLocation skinLocation, UUID playerId, String username) {
+    //?} else {
     public static void associateWithPlayer(Identifier skinLocation, UUID playerId, String username) {
+    //?}
         if (!MOD_AVAILABLE || earsFeaturesStorageInstance == null || storagePutMethod == null) {
             return;
         }
@@ -196,7 +216,11 @@ public class EarsCompatIntegration {
     /**
      * Clear features for a specific skin location.
      */
+    //? if <1.21.11 {
+    public static void clearFeatures(ResourceLocation skinLocation) {
+    //?} else {
     public static void clearFeatures(Identifier skinLocation) {
+    //?}
         if (skinLocation != null) {
             featuresCache.remove(skinLocation);
         }
@@ -214,11 +238,19 @@ public class EarsCompatIntegration {
      * Used by the mixin to handle different mapping schemes.
      * In 1.21.1, uses peer.getSkin().texture().
      */
+    //? if <1.21.11 {
+    public static ResourceLocation getSkinLocationFromPlayer(Object player) {
+    //?} else {
     public static Identifier getSkinLocationFromPlayer(Object player) {
+    //?}
         if (player == null) {
             return null;
         }
         try {
+            //? if <1.21.11 {
+            Method getSkinTexture = player.getClass().getMethod("getSkinTexture");
+            return (ResourceLocation) getSkinTexture.invoke(player);
+            //?} else {
             // 1.21.1 API: getSkin() returns PlayerSkin, then .texture() returns Identifier
             Method getSkin = player.getClass().getMethod("getSkin");
             Object playerSkin = getSkin.invoke(player);
@@ -226,13 +258,19 @@ public class EarsCompatIntegration {
                 Method texture = playerSkin.getClass().getMethod("texture");
                 return (Identifier) texture.invoke(playerSkin);
             }
+            //?}
         } catch (Exception e) {
             // Ignore
         }
         try {
+            //? if <1.21.11 {
+            Method getSkinTextureLocation = player.getClass().getMethod("getSkinTextureLocation");
+            return (ResourceLocation) getSkinTextureLocation.invoke(player);
+            //?} else {
             // Fallback: try Fabric/Yarn mapped name
             Method getSkinTexture = player.getClass().getMethod("getSkinTexture");
             return (Identifier) getSkinTexture.invoke(player);
+            //?}
         } catch (Exception e) {
             // Ignore
         }

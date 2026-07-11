@@ -1,11 +1,17 @@
 package com.quickskin.mod.client.gui.screen;
 
+//? if >=26.2 {
 import com.quickskin.mod.client.gui.GuiCompat;
+//?}
 import com.quickskin.mod.client.gui.effect.BlurHandler;
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -21,9 +27,15 @@ public class DeletionConfirmScreen extends Screen {
     // Panel styling
     private static final int PANEL_BG = 0xB0000000;           // Darker semi-transparent background for frosted glass effect
     private static final int PANEL_OUTLINE = 0x60FFFFFF;      // Subtle white outline
+    //? if <1.21.11 {
+    private static final int TITLE_COLOR = 0xFFFFFF;          // White title
+    private static final int MESSAGE_COLOR = 0xFFFFFF;        // White message
+    private static final int WARNING_COLOR = 0xFFCC00;        // Orange warning text
+    //?} else {
     private static final int TITLE_COLOR = 0xFFFFFFFF;          // White title
     private static final int MESSAGE_COLOR = 0xFFFFFFFF;        // White message
     private static final int WARNING_COLOR = 0xFFFFCC00;        // Orange warning text
+    //?}
 
     // Panel dimensions
     private final int panelWidth = 340;
@@ -74,14 +86,26 @@ public class DeletionConfirmScreen extends Screen {
     }
 
     @Override
+    //? if <26.1 {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+    //?} else {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+    //?}
         // Render parent screen in background
         if (this.parent != null) {
+            //? if <26.2 {
+            this.parent.render(graphics, -1, -1, partialTicks);
+            //?} else {
             GuiCompat.extractParent(this.parent, graphics, partialTicks);
+            //?}
         }
 
+        //? if <1.21.11 {
+        graphics.flush();
+        //?} else {
         // Disable depth test so the blur/overlay/modal panels render on top of the 3D player widget
         org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+        //?}
         BlurHandler.renderBlur();
 
         // Draw lighter overlay over entire screen (so blur is more visible)
@@ -113,14 +137,22 @@ public class DeletionConfirmScreen extends Screen {
 
         // Draw title (centered)
         int titleY = this.panelY + 20;
+        //? if <26.1 {
+        graphics.drawCenteredString(this.font, this.title,
+        //?} else {
         graphics.centeredText(this.font, this.title,
+        //?}
                                    this.width / 2, titleY,
                                    TITLE_COLOR);
 
         // Draw warning icon (simple exclamation mark)
         int iconY = this.panelY + 45;
         String warningIcon = "!";
+        //? if <26.1 {
+        graphics.drawCenteredString(this.font, warningIcon,
+        //?} else {
         graphics.centeredText(this.font, warningIcon,
+        //?}
                                    this.width / 2, iconY,
                                    WARNING_COLOR);
 
@@ -135,16 +167,24 @@ public class DeletionConfirmScreen extends Screen {
         int lineHeight = 10;
         int currentY = messageY;
         for (String line : wrappedLines) {
+            //? if <26.1 {
+            graphics.drawCenteredString(this.font, line,
+            //?} else {
             graphics.centeredText(this.font, line,
+            //?}
                                        this.width / 2, currentY,
                                        MESSAGE_COLOR);
             currentY += lineHeight;
         }
 
         // Render buttons
+        //? if <26.1 {
+        super.render(graphics, mouseX, mouseY, partialTicks);
+        //?} else {
         super.extractRenderState(graphics, mouseX, mouseY, partialTicks);
 
         org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+        //?}
     }
 
     private java.util.List<String> wrapText(String text, int maxWidth) {
@@ -182,9 +222,13 @@ public class DeletionConfirmScreen extends Screen {
     }
 
     @Override
+    //? if <26.2 {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
         double mouseX = GuiCompat.mouseX(event);
         double mouseY = GuiCompat.mouseY(event);
+    //?}
         // Check if click is outside the panel
         if (mouseX < this.panelX || mouseX > this.panelX + this.panelWidth ||
             mouseY < this.panelY || mouseY > this.panelY + this.panelHeight) {
@@ -193,7 +237,11 @@ public class DeletionConfirmScreen extends Screen {
             return true;
         }
         // Click inside panel - handle normally
+        //? if <1.21.11 {
+        return super.mouseClicked(mouseX, mouseY, button);
+        //?} else {
         return super.mouseClicked(event, focused);
+        //?}
     }
 
     @Override
@@ -201,6 +249,7 @@ public class DeletionConfirmScreen extends Screen {
         // Return to parent screen without confirming
         this.callback.accept(false);
     }
+    //? if >=26.1 {
 
     private void hidePlayerWidgets(boolean hide) {
         if (this.parent == null) return;
@@ -220,4 +269,5 @@ public class DeletionConfirmScreen extends Screen {
     protected void extractBlurredBackground(net.minecraft.client.gui.GuiGraphicsExtractor guiGraphics) {
         // Disable the default Minecraft blur effect - we handle blur with BlurHandler
     }
+    //?}
 }

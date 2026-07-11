@@ -46,7 +46,11 @@ public class TextureChunkReceiver {
             if (completeData != null) {
                 // Store in network texture cache (must be on main thread)
                 Minecraft.getInstance().execute(() -> {
+                    //? if <1.21 {
+                    NetworkTextureCache.getInstance().storeTexture(hash, null, completeData);
+                    //?} else {
                     NetworkTextureCache.getInstance().storeTexture(hash, completeData);
+                    //?}
                 });
             }
             incompleteTextures.remove(hash);

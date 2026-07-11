@@ -2,11 +2,19 @@ package com.quickskin.mod.client.gui.panel;
 
 import com.quickskin.mod.client.gui.widget.LinkButton;
 import net.minecraft.client.Minecraft;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 /**
  * Panel that manages the link buttons in the top-right corner
@@ -18,10 +26,17 @@ public class LinkButtonsPanel extends AbstractWidget {
     private static final int BUTTON_SIZE = 20;
 
     // Icon textures
+    //? if <1.21.11 {
+    private static final ResourceLocation DISCORD_ICON = new ResourceLocation("quickskin", "textures/gui/discord_icon.png");
+    private static final ResourceLocation CURSEFORGE_ICON = new ResourceLocation("quickskin", "textures/gui/curseforge_icon.png");
+    private static final ResourceLocation MODRINTH_ICON = new ResourceLocation("quickskin", "textures/gui/modrinth_icon.png");
+    private static final ResourceLocation SETTINGS_ICON = new ResourceLocation("quickskin", "textures/gui/settings_icon.png");
+    //?} else {
     private static final Identifier DISCORD_ICON = Identifier.fromNamespaceAndPath("quickskin", "textures/gui/discord_icon.png");
     private static final Identifier CURSEFORGE_ICON = Identifier.fromNamespaceAndPath("quickskin", "textures/gui/curseforge_icon.png");
     private static final Identifier MODRINTH_ICON = Identifier.fromNamespaceAndPath("quickskin", "textures/gui/modrinth_icon.png");
     private static final Identifier SETTINGS_ICON = Identifier.fromNamespaceAndPath("quickskin", "textures/gui/settings_icon.png");
+    //?}
 
     // URLs
     private static final String DISCORD_URL = "https://discord.gg/yGxdvA7qej";
@@ -50,10 +65,18 @@ public class LinkButtonsPanel extends AbstractWidget {
             Component.translatable("quickskin.button.settings")
         ) {
             @Override
+            //? if <1.21.11 {
+            public void onPress() {
+            //?} else {
             public void onPress(net.minecraft.client.input.InputWithModifiers input) {
+            //?}
                 // Open settings screen
                 screen.setOpeningSubScreen(true);
+                //? if <26.2 {
+                Minecraft.getInstance().setScreen(
+                //?} else {
                 Minecraft.getInstance().gui.setScreen(
+                //?}
                     new com.quickskin.mod.client.gui.screen.SettingsScreen(screen)
                 );
             }
@@ -97,7 +120,11 @@ public class LinkButtonsPanel extends AbstractWidget {
     }
 
     @Override
+    //? if <26.1 {
+    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    //?} else {
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    //?}
         // This panel doesn't render anything itself - child widgets handle rendering
     }
 

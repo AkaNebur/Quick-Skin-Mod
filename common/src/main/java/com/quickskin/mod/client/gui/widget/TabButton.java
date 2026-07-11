@@ -2,7 +2,11 @@ package com.quickskin.mod.client.gui.widget;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
@@ -15,8 +19,13 @@ public class TabButton extends Button {
     private static final int UNSELECTED_BG = 0x60000000;    // Lighter semi-transparent background
     private static final int SELECTED_OUTLINE = 0xFFFFFFFF; // White outline for selected
     private static final int UNSELECTED_OUTLINE = 0x40FFFFFF; // Faint outline for unselected
+    //? if <1.21.11 {
+    private static final int SELECTED_TEXT = 0xFFFFFF;      // White text
+    private static final int UNSELECTED_TEXT = 0x999999;    // Gray text
+    //?} else {
     private static final int SELECTED_TEXT = 0xFFFFFFFF;      // White text
     private static final int UNSELECTED_TEXT = 0xFF999999;    // Gray text
+    //?}
 
     public TabButton(int x, int y, int width, int height, Component label, boolean selected, OnPress onPress) {
         super(x, y, width, height, label, onPress, DEFAULT_NARRATION);
@@ -32,7 +41,11 @@ public class TabButton extends Button {
     }
 
     @Override
+    //? if <26.1 {
+    public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+    //?} else {
     protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+    //?}
         // Determine colors based on selected state
         int bgColor = this.selected ? SELECTED_BG : UNSELECTED_BG;
         int outlineColor = this.selected ? SELECTED_OUTLINE : UNSELECTED_OUTLINE;
@@ -41,7 +54,11 @@ public class TabButton extends Button {
         // Add hover effect for unselected tabs
         if (!this.selected && this.isHovered()) {
             bgColor = 0x80000000; // Slightly darker on hover
+            //? if <1.21.11 {
+            textColor = 0xCCCCCC;  // Slightly brighter text on hover
+            //?} else {
             textColor = 0xFFCCCCCC;  // Slightly brighter text on hover
+            //?}
         }
 
         // Draw tab background
@@ -72,7 +89,11 @@ public class TabButton extends Button {
         }
 
         // Draw centered text
+        //? if <26.1 {
+        graphics.drawCenteredString(
+        //?} else {
         graphics.centeredText(
+        //?}
             net.minecraft.client.Minecraft.getInstance().font,
             this.getMessage(),
             this.getX() + this.width / 2,
@@ -82,8 +103,16 @@ public class TabButton extends Button {
     }
 
     @Override
+    //? if <1.21.11 {
+    protected boolean isValidClickButton(int button) {
+    //?} else {
     protected boolean isValidClickButton(net.minecraft.client.input.MouseButtonInfo buttonInfo) {
+    //?}
         // Only allow left-click
+        //? if <1.21.11 {
+        return button == 0;
+        //?} else {
         return buttonInfo.button() == 0;
+        //?}
     }
 }

@@ -3,7 +3,11 @@ package com.quickskin.mod.client.rendering;
 import com.quickskin.mod.common.data.SkinResolution;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 /**
  * Data holder for player preview rendering
@@ -12,8 +16,13 @@ import net.minecraft.resources.Identifier;
 @Environment(EnvType.CLIENT)
 public class PreviewPlayerData {
 
+    //? if <1.21.11 {
+    private ResourceLocation skinLocation;
+    private ResourceLocation capeLocation;
+    //?} else {
     private Identifier skinLocation;
     private Identifier capeLocation;
+    //?}
     private String modelType; // "classic" or "slim"
     private String capeId;
     private SkinResolution resolution;
@@ -58,11 +67,19 @@ public class PreviewPlayerData {
 
     // Getters and setters
 
+    //? if <1.21.11 {
+    public ResourceLocation getSkinLocation() {
+    //?} else {
     public Identifier getSkinLocation() {
+    //?}
         return skinLocation;
     }
 
+    //? if <1.21.11 {
+    public void setSkinLocation(ResourceLocation skinLocation) {
+    //?} else {
     public void setSkinLocation(Identifier skinLocation) {
+    //?}
         // Clear 3D mesh cache if skin is changing
         if (this.skinLocation != null && !this.skinLocation.equals(skinLocation)) {
             SkinLayers3DIntegration.clearCache();
@@ -70,11 +87,19 @@ public class PreviewPlayerData {
         this.skinLocation = skinLocation;
     }
 
+    //? if <1.21.11 {
+    public ResourceLocation getCapeLocation() {
+    //?} else {
     public Identifier getCapeLocation() {
+    //?}
         return capeLocation;
     }
 
+    //? if <1.21.11 {
+    public void setCapeLocation(ResourceLocation capeLocation) {
+    //?} else {
     public void setCapeLocation(Identifier capeLocation) {
+    //?}
         this.capeLocation = capeLocation;
     }
 

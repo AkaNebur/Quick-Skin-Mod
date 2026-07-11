@@ -109,27 +109,39 @@ public class EssentialCompatIntegration {
         LocalAssetManager assetManager = LocalAssetManager.getInstance();
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
 
+        //? if >=1.21 {
         String skinId = null;
         String modelType = null;
         String capeId = null;
 
         // Prepare saved skin
+        //?}
         if (!config.activeSkinHash.isEmpty()) {
             AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
             if (metadata != null) {
+                //? if <1.21 {
+                String skinId = "local_skin:" + config.activeSkinHash;
+                String modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+                service.applySkin(playerUuid, skinId, modelType);
+                //?} else {
                 skinId = "local_skin:" + config.activeSkinHash;
                 modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+                //?}
             }
         }
 
         // Prepare saved cape
         if (!config.activeCapeHash.isEmpty()) {
+            //? if <1.21 {
+            service.applyCape(playerUuid, config.activeCapeHash);
+            //?} else {
             capeId = config.activeCapeHash;
         }
 
         // Apply both together using applyLook
         if (skinId != null || capeId != null) {
             service.applyLook(playerUuid, skinId, capeId, modelType);
+            //?}
         }
     }
 }

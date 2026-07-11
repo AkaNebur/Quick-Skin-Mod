@@ -29,9 +29,11 @@ public record AnimationMetadata(
      * Get total animation duration in milliseconds
      */
     public int getTotalDuration() {
+        //? if >=1.21 {
         if (frames == null || frames.isEmpty()) {
             return 0;
         }
+        //?}
         return frames.stream()
                 .mapToInt(FrameData::delay)
                 .sum();

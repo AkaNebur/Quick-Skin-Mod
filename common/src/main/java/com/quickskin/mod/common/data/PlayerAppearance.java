@@ -1,6 +1,10 @@
 package com.quickskin.mod.common.data;
 
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 import org.jetbrains.annotations.Nullable;
 import java.util.UUID;
@@ -16,8 +20,13 @@ public class PlayerAppearance {
     private String model;               // "classic", "slim", or "auto"
 
     // Resolved ResourceLocations (cached)
+    //? if <1.21.11 {
+    private ResourceLocation skinLocation;
+    private ResourceLocation capeLocation;
+    //?} else {
     private Identifier skinLocation;
     private Identifier capeLocation;
+    //?}
 
     public PlayerAppearance(UUID playerId, String skinId, String capeId, String model) {
         this.playerId = playerId;
@@ -57,20 +66,36 @@ public class PlayerAppearance {
     }
 
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation getSkinLocation() {
+    //?} else {
     public Identifier getSkinLocation() {
+    //?}
         return skinLocation;
     }
 
+    //? if <1.21.11 {
+    public void setSkinLocation(ResourceLocation skinLocation) {
+    //?} else {
     public void setSkinLocation(Identifier skinLocation) {
+    //?}
         this.skinLocation = skinLocation;
     }
 
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation getCapeLocation() {
+    //?} else {
     public Identifier getCapeLocation() {
+    //?}
         return capeLocation;
     }
 
+    //? if <1.21.11 {
+    public void setCapeLocation(ResourceLocation capeLocation) {
+    //?} else {
     public void setCapeLocation(Identifier capeLocation) {
+    //?}
         this.capeLocation = capeLocation;
     }
 

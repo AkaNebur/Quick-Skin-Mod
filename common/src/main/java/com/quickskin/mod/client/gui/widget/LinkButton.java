@@ -1,21 +1,41 @@
 package com.quickskin.mod.client.gui.widget;
 
+//? if <1.21.11 {
+import com.mojang.blaze3d.systems.RenderSystem;
+//?}
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.GuiCompat;
+//? if <26.1 {
+import net.minecraft.Util;
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 public class LinkButton extends Button {
 
+    //? if <1.21.11 {
+    private final ResourceLocation texture;
+    //?} else {
     private final Identifier texture;
+    //?}
     private final int textureWidth;
     private final int textureHeight;
 
+    //? if <1.21.11 {
+    public LinkButton(int x, int y, int width, int height, ResourceLocation texture, String url, Component tooltip) {
+    //?} else {
     public LinkButton(int x, int y, int width, int height, Identifier texture, String url, Component tooltip) {
+    //?}
         super(x, y, width, height, Component.empty(), button -> {
             if (url != null) {
                 openLink(url);
@@ -32,10 +52,19 @@ public class LinkButton extends Button {
     }
 
     @Override
+    //? if <26.1 {
+    public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+        graphics.blitNineSliced(WIDGETS_LOCATION, this.getX(), this.getY(), this.getWidth(), this.getHeight(), 20, 4, 200, 20, 0, 46 + 20);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enableDepthTest();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, this.alpha);
+    //?} else {
     protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
         // 1.21.11: renderContents is responsible for everything including background
         extractDefaultSprite(graphics);
         // RenderSystem.setShaderColor() removed in 1.21.6
+    //?}
 
         // Draw the logo texture on top, inset slightly to fit within the rounded border.
         int padding = 2;
@@ -54,8 +83,16 @@ public class LinkButton extends Button {
     }
 
     @Override
+    //? if <1.21.11 {
+    protected boolean isValidClickButton(int button) {
+    //?} else {
     protected boolean isValidClickButton(net.minecraft.client.input.MouseButtonInfo buttonInfo) {
+    //?}
         // Only allow left-click
+        //? if <1.21.11 {
+        return button == 0;
+        //?} else {
         return buttonInfo.button() == 0;
+        //?}
     }
 }

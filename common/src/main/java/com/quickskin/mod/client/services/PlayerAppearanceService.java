@@ -1,8 +1,10 @@
 package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
+//? if >=1.21 {
 import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.compat.CustomNPCsIntegration;
+//?}
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
@@ -11,7 +13,11 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.core.BlockPos;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import net.minecraft.world.level.block.state.BlockState;
 
 import org.jetbrains.annotations.Nullable;
@@ -77,25 +83,34 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             // This allows "auto" to re-detect each time instead of locking to the first detection
             modelService.setModelOverride(playerId, requestedModel);
 
+            //? if <1.21.11 {
+            ResourceLocation skinLocation = skinService.getSkinLocation(playerId, skinId);
+            //?} else {
             // Load skin Identifier
             Identifier skinLocation = skinService.getSkinLocation(playerId, skinId);
+            //?}
             if (skinLocation != null) {
                 appearance.setSkinLocation(skinLocation);
 
                 // Trigger async transparency analysis for the skin texture
                 com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(skinLocation);
 
+                //? if >=1.21.11 {
                 // Notify CustomNPCs integration (if available) to handle any skin cache invalidation
                 CustomNPCsIntegration.onSkinApplied(playerId, skinLocation);
 
                 // Invalidate CPM's model cache so it re-reads the new skin's embedded data
                 CPMCompatIntegration.invalidatePlayerCache();
 
+                //?}
                 // Associate Ears features with this player (if Ears is available)
                 if (com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {
                     String username = getPlayerUsername(playerId);
                     com.quickskin.mod.client.compat.EarsCompatIntegration.associateWithPlayer(skinLocation, playerId, username);
                 }
+                //? if <1.21 {
+                com.quickskin.mod.client.compat.CPMCompatIntegration.forceReRegisterSkins(playerId);
+                //?}
             }
         }
 
@@ -111,7 +126,11 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
             appearance.setCapeLocation(null);
 
             // Load the cape texture (static or atlas)
+            //? if <1.21.11 {
+            ResourceLocation capeLocation = capeService.getCapeLocation(playerId, capeId);
+            //?} else {
             Identifier capeLocation = capeService.getCapeLocation(playerId, capeId);
+            //?}
             if (capeLocation != null) {
                 appearance.setCapeLocation(capeLocation);
 
@@ -195,9 +214,11 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         if (mc.level != null && mc.levelRenderer != null) {
             AbstractClientPlayer player = (AbstractClientPlayer) mc.level.getPlayerByUUID(playerId);
             if (player != null) {
-                // 26.2: LevelRenderer.setBlockDirty was removed in the block-render overhaul. It was only
-                // used here as a hack to nudge a re-render; player entities are redrawn every frame and the
-                // skin/cape caches invalidate on the next getSkin(), so no explicit dirtying is required.
+                //? if <26.2 {
+                BlockPos pos = player.blockPosition();
+                BlockState state = mc.level.getBlockState(pos);
+                mc.levelRenderer.setBlockDirty(pos, state, state);
+                //?}
 
                 // Always refresh SkinLayers3D compatibility
                 refreshSkinLayers3D(player);
@@ -228,6 +249,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         return appearance != null && appearance.getCapeId() != null && !appearance.getCapeId().isEmpty();
     }
 
+    //? if >=1.21 {
     /**
      * Get the cape ID for a player (e.g., "local_cape:hash" or "known:rickroll")
      * @param playerId The player's UUID
@@ -243,12 +265,17 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         return (capeId != null && !capeId.isEmpty()) ? capeId : null;
     }
 
+    //?}
     public boolean hasModelOverride(UUID playerId) {
         return modelService.hasModelOverride(playerId);
     }
 
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation getSkinLocation(UUID playerId) {
+    //?} else {
     public Identifier getSkinLocation(UUID playerId) {
+    //?}
         PlayerAppearance appearance = repository.getAppearance(playerId);
         if (appearance == null) {
             return null;
@@ -264,7 +291,11 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         // If not cached, try to resolve it now.
         // This handles the race condition where SYNC_APPEARANCE arrives before SEND_TEXTURE
         if (appearance.getSkinId() != null && !appearance.getSkinId().isEmpty()) {
+            //? if <1.21.11 {
+            ResourceLocation location = skinService.getSkinLocation(playerId, appearance.getSkinId());
+            //?} else {
             Identifier location = skinService.getSkinLocation(playerId, appearance.getSkinId());
+            //?}
             if (location != null) {
                 appearance.setSkinLocation(location); // Cache it for next time
 
@@ -279,7 +310,11 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     }
 
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation getCapeLocation(UUID playerId) {
+    //?} else {
     public Identifier getCapeLocation(UUID playerId) {
+    //?}
         PlayerAppearance appearance = repository.getAppearance(playerId);
         if (appearance == null) {
             return null;
@@ -287,22 +322,34 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
         // If the location is already cached, return it.
         if (appearance.getCapeLocation() != null) {
+            //? if <1.21 {
+            return appearance.getCapeLocation();
+            //?} else {
             // Resolve animation frame at source level so any mod reading
             // capeTexture (e.g. WaveyCapes) gets the current frame, not the atlas.
             return CapeAnimationHelper.resolveCurrentFrame(
                     appearance.getCapeLocation(), appearance.getCapeId());
+            //?}
         }
 
         // If not cached, try to resolve it now.
         if (appearance.getCapeId() != null && !appearance.getCapeId().isEmpty()) {
+            //? if <1.21.11 {
+            ResourceLocation location = capeService.getCapeLocation(playerId, appearance.getCapeId());
+            //?} else {
             Identifier location = capeService.getCapeLocation(playerId, appearance.getCapeId());
+            //?}
             if (location != null) {
                 appearance.setCapeLocation(location); // Cache it for next time
 
                 // Trigger async transparency analysis for the cape texture
                 com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(location);
 
+                //? if <1.21 {
+                return location;
+                //?} else {
                 return CapeAnimationHelper.resolveCurrentFrame(location, appearance.getCapeId());
+                //?}
             }
         }
 
@@ -333,7 +380,11 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         if (mc.level != null) {
             net.minecraft.world.entity.player.Player player = mc.level.getPlayerByUUID(playerId);
             if (player != null) {
+                //? if <1.21.11 {
+                return player.getGameProfile().getName();
+                //?} else {
                 return player.getGameProfile().name();
+                //?}
             }
         }
         return null;
@@ -357,7 +408,11 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().reprocessSkins();
 
         // Refresh the skin list UI if we're in the skin menu
+        //? if <26.2 {
+        if (mc.screen instanceof com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen skinMenu) {
+        //?} else {
         if (mc.gui.screen() instanceof com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen skinMenu) {
+        //?}
             skinMenu.refreshSkinList();
         }
 

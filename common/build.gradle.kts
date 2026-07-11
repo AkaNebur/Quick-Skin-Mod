@@ -10,6 +10,7 @@ import net.fabricmc.loom.build.mixin.AnnotationProcessorInvoker
 import net.fabricmc.loom.util.gradle.SourceSetHelper
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.tasks.Sync
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -23,6 +24,9 @@ val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
 val canonicalVersions = setOf("1.20.1", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
+val legacyJavaRoot = rootProject.file("common/src/legacy1_20_1/java")
+val generatedStonecutterJava = layout.buildDirectory.dir("generated/stonecutter/main/java")
+val consolidatedLegacyJava = layout.buildDirectory.dir("generated/consolidated/main/java")
 val legacyCommonJar = rootProject.file(
     "common/build/${if (isNoRemap) "libs" else "devlibs"}/" +
         "Quick Skin - common - $minecraftVersion-${rootProject.property("mod_version")}-dev.jar"
@@ -63,11 +67,54 @@ repositories {
 }
 
 if (minecraftVersion == "1.20.1") {
+    val canonicalOnlyAfterLegacy = setOf(
+        "com/quickskin/mod/client/compat/CustomNPCsIntegration.java",
+        "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
+        "com/quickskin/mod/client/services/CapeAnimationHelper.java",
+        "com/quickskin/mod/mixin/GuiSkinRendererMixin.java",
+        "com/quickskin/mod/mixin/PlayerRendererMixin.java",
+        "com/quickskin/mod/mixin/SkinManagerMixin.java",
+        "com/quickskin/mod/networking/payloads/CooldownUpdatePayload.java",
+        "com/quickskin/mod/networking/payloads/PayloadCodecs.java",
+        "com/quickskin/mod/networking/payloads/RequestTexturePayload.java",
+        "com/quickskin/mod/networking/payloads/SendAnimationMetadataPayload.java",
+        "com/quickskin/mod/networking/payloads/SendTextureChunkPayload.java",
+        "com/quickskin/mod/networking/payloads/SendTexturePayload.java",
+        "com/quickskin/mod/networking/payloads/SyncAppearancePayload.java",
+        "com/quickskin/mod/networking/payloads/SyncServerConfigPayload.java",
+        "com/quickskin/mod/networking/payloads/TextureChunkPayload.java",
+        "com/quickskin/mod/networking/payloads/UpdateAppearancePayload.java",
+        "com/quickskin/mod/networking/payloads/UpdateServerConfigPayload.java",
+        "com/quickskin/mod/networking/payloads/UploadAnimationMetadataPayload.java",
+        "com/quickskin/mod/networking/payloads/UploadTexturePayload.java",
+        "com/quickskin/mod/platform/MinecraftCompat26_2.java",
+    )
+    val legacyOverrides = fileTree(legacyJavaRoot) {
+        include("**/*.java")
+    }.files.mapTo(linkedSetOf()) {
+        it.relativeTo(legacyJavaRoot).invariantSeparatorsPath
+    }
+    val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
+        dependsOn("stonecutterGenerate")
+        from(generatedStonecutterJava) {
+            exclude(legacyOverrides + canonicalOnlyAfterLegacy)
+        }
+        from(legacyJavaRoot)
+        into(consolidatedLegacyJava)
+    }
+
     sourceSets {
         main {
-            java.setSrcDirs(listOf(rootProject.file("common/src/legacy1_20_1/java")))
+            java.setSrcDirs(listOf(consolidatedLegacyJava))
             resources.setSrcDirs(listOf(rootProject.file("common/src/legacy1_20_1/resources")))
         }
+    }
+
+    tasks.named("compileJava") {
+        dependsOn(prepareConsolidatedJava)
+    }
+    tasks.matching { it.name == "sourcesJar" }.configureEach {
+        dependsOn(prepareConsolidatedJava)
     }
 
     tasks.processResources {

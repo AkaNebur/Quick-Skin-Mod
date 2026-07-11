@@ -27,6 +27,9 @@ public class HDTextureProcessor {
      */
     public static byte[] processHDSkin(InputStream input, boolean allowTransparency) {
         try {
+            //? if <1.21 {
+            BufferedImage image = ImageIO.read(input);
+            //?} else {
             // Read all bytes first to allow multiple read attempts
             byte[] imageBytes = input.readAllBytes();
 
@@ -39,8 +42,10 @@ public class HDTextureProcessor {
 
             // Read image using ImageIO (TwelveMonkeys adds WebP, JPEG, and other format support)
             BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
+            //?}
             if (image == null) {
                 return null;
+            //? if >=1.21 {
             }
 
             // Ensure image has alpha channel (TYPE_INT_ARGB = 2). Use hardware-accelerated
@@ -51,6 +56,7 @@ public class HDTextureProcessor {
                 g.drawImage(image, 0, 0, null);
                 g.dispose();
                 image = argbImage;
+            //?}
             }
 
             int width = image.getWidth();
@@ -521,6 +527,7 @@ public class HDTextureProcessor {
 
         return normalized;
     }
+    //? if >=1.21 {
 
     /**
      * Detect image format from file header bytes
@@ -569,4 +576,5 @@ public class HDTextureProcessor {
         return String.format("unknown (header: %02X %02X %02X %02X)",
             bytes[0] & 0xFF, bytes[1] & 0xFF, bytes[2] & 0xFF, bytes[3] & 0xFF);
     }
+    //?}
 }

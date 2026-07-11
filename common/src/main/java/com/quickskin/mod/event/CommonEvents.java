@@ -1,16 +1,25 @@
 package com.quickskin.mod.event;
 
 import com.quickskin.mod.QuickSkin;
+//? if >=1.21 {
 import com.quickskin.mod.networking.ServerNetworkHandler;
+//?}
 import com.quickskin.mod.networking.NetworkTransport;
+//? if <1.21 {
+import com.quickskin.mod.networking.ServerNetworkHandler;
+import com.quickskin.mod.server.data.QuickSkinPlayerTracker;
+//?} else {
 import com.quickskin.mod.networking.payloads.CooldownUpdatePayload;
+//?}
 import com.quickskin.mod.server.data.ServerCooldownManager;
 import com.quickskin.mod.server.storage.ServerAnimationCache;
 import com.quickskin.mod.server.storage.ServerAppearanceStorage;
 import com.quickskin.mod.server.storage.ServerTextureCache;
 import dev.architectury.event.events.common.LifecycleEvent;
 import dev.architectury.event.events.common.PlayerEvent;
+//? if >=1.21 {
 import com.quickskin.mod.networking.payloads.SyncAppearancePayload;
+//?}
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -39,7 +48,12 @@ public class CommonEvents {
 
             // Send QuickSkin data only to players that have the mod installed
             ServerPlayer serverPlayer = (ServerPlayer) player;
+            //? if <26.2 {
+            boolean hasQuickSkin = NetworkTransport.INSTANCE.canPlayerReceiveQuickSkin(serverPlayer)
+                    || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID());
+            //?} else {
             boolean hasQuickSkin = NetworkTransport.INSTANCE.canPlayerReceive(serverPlayer, SyncAppearancePayload.TYPE);
+            //?}
 
             if (hasQuickSkin) {
                 // Phase 3: Send all other players' appearances to the joining player
@@ -52,8 +66,12 @@ public class CommonEvents {
                 int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
                 if (cooldownSeconds > 0 && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())) {
                     long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID());
+                    //? if <26.2 {
+                    NetworkTransport.INSTANCE.sendCooldownToPlayer(serverPlayer, cooldownEndTime);
+                    //?} else {
                     CooldownUpdatePayload payload = new CooldownUpdatePayload(cooldownEndTime);
                     NetworkTransport.INSTANCE.sendToPlayer(serverPlayer, payload);
+                    //?}
                 }
             }
 
@@ -68,6 +86,9 @@ public class CommonEvents {
             // Phase 5: Save player's appearance to server storage
             ServerAppearanceStorage.getInstance().savePlayerAppearance(player.getUUID());
 
+            //? if <1.21 {
+            QuickSkinPlayerTracker.getInstance().removePlayer(player.getUUID());
+            //?}
             // Cleanup cooldown data (only if cooldown feature is enabled)
             int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
             if (cooldownSeconds > 0) {
@@ -79,24 +100,29 @@ public class CommonEvents {
         });
 
         // Player respawns (after death)
-        // TODO: Fix PLAYER_RESPAWN event handler - Architectury API changed in 1.21.1
-        // The event signature has changed and needs to be investigated
-        /*
-        PlayerEvent.PLAYER_RESPAWN.register((player) -> {
+        //? if <1.21 {
+        PlayerEvent.PLAYER_RESPAWN.register((player, conqueredEnd) -> {
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
-                // Phase 3: Re-send all appearances to the respawned player
-                ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
+                if (NetworkTransport.INSTANCE.canPlayerReceiveQuickSkin(serverPlayer)
+                        || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID())) {
+                    ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
+                }
             }
         });
-        */
+        //?}
 
         // Player changes dimension
         PlayerEvent.CHANGE_DIMENSION.register((player, oldLevel, newLevel) -> {
             // Re-sync appearance if needed (sometimes skins don't transfer across dimensions)
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
+                //? if <26.2 {
+                if (NetworkTransport.INSTANCE.canPlayerReceiveQuickSkin(serverPlayer)
+                        || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID())) {
+                //?} else {
                 if (NetworkTransport.INSTANCE.canPlayerReceive(serverPlayer, SyncAppearancePayload.TYPE)) {
+                //?}
                     // Phase 3: Re-send all appearances to this player
                     ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
                 }
@@ -132,6 +158,9 @@ public class CommonEvents {
             // Phase 5: Clear caches
             ServerTextureCache.getInstance().clear();
             ServerAnimationCache.getInstance().clear();
+            //? if <1.21 {
+            QuickSkinPlayerTracker.getInstance().clear();
+            //?}
         });
 
     }

@@ -2,8 +2,10 @@ package com.quickskin.mod.networking.packets;
 
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
+//? if >=1.21 {
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.core.RegistryAccess;
+//?}
 
 import java.util.UUID;
 
@@ -16,8 +18,13 @@ public class PacketHelper {
      * Creates a packet for uploading skin/cape texture
      * Format: UUID (player) + String (textureType) + byte[] (imageData)
      */
+    //? if <1.21 {
+    public static FriendlyByteBuf createUploadTexturePacket(UUID playerId, String textureType, byte[] imageData) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+    //?} else {
     public static RegistryFriendlyByteBuf createUploadTexturePacket(UUID playerId, String textureType, byte[] imageData) {
         RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+    //?}
         buf.writeUUID(playerId);
         buf.writeUtf(textureType); // "skin" or "cape"
         buf.writeByteArray(imageData);
@@ -28,8 +35,13 @@ public class PacketHelper {
      * Creates a packet for updating player appearance
      * Format: UUID (player) + String (skinId) + String (capeId) + String (model)
      */
+    //? if <1.21 {
+    public static FriendlyByteBuf createUpdateAppearancePacket(UUID playerId, String skinId, String capeId, String model) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+    //?} else {
     public static RegistryFriendlyByteBuf createUpdateAppearancePacket(UUID playerId, String skinId, String capeId, String model) {
         RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+    //?}
         buf.writeUUID(playerId);
         buf.writeUtf(skinId != null ? skinId : "");
         buf.writeUtf(capeId != null ? capeId : "");
@@ -41,8 +53,13 @@ public class PacketHelper {
      * Creates a packet for syncing appearance to clients
      * Format: UUID (player) + String (skinId) + String (capeId) + String (model)
      */
+    //? if <1.21 {
+    public static FriendlyByteBuf createSyncAppearancePacket(UUID playerId, String skinId, String capeId, String model) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+    //?} else {
     public static RegistryFriendlyByteBuf createSyncAppearancePacket(UUID playerId, String skinId, String capeId, String model) {
         RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+    //?}
         buf.writeUUID(playerId);
         buf.writeUtf(skinId != null ? skinId : "");
         buf.writeUtf(capeId != null ? capeId : "");
@@ -54,8 +71,13 @@ public class PacketHelper {
      * Creates a packet for requesting a texture from server
      * Format: UUID (player) + String (textureType) + String (hash)
      */
+    //? if <1.21 {
+    public static FriendlyByteBuf createRequestTexturePacket(UUID playerId, String textureType, String hash) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+    //?} else {
     public static RegistryFriendlyByteBuf createRequestTexturePacket(UUID playerId, String textureType, String hash) {
         RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+    //?}
         buf.writeUUID(playerId);
         buf.writeUtf(textureType); // "skin" or "cape"
         buf.writeUtf(hash);
@@ -66,8 +88,13 @@ public class PacketHelper {
      * Creates a packet for sending texture data to client
      * Format: String (textureType) + String (hash) + byte[] (imageData)
      */
+    //? if <1.21 {
+    public static FriendlyByteBuf createSendTexturePacket(String textureType, String hash, byte[] imageData) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+    //?} else {
     public static RegistryFriendlyByteBuf createSendTexturePacket(String textureType, String hash, byte[] imageData) {
         RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+    //?}
         buf.writeUtf(textureType);
         buf.writeUtf(hash);
         buf.writeByteArray(imageData);
@@ -82,8 +109,13 @@ public class PacketHelper {
      * Create server config sync packet (Phase 9)
      * Sends full server config as JSON to client
      */
+    //? if <1.21 {
+    public static FriendlyByteBuf createSyncServerConfigPacket(String configJson) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+    //?} else {
     public static RegistryFriendlyByteBuf createSyncServerConfigPacket(String configJson) {
         RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+    //?}
         buf.writeUtf(configJson);
         return buf;
     }
@@ -92,8 +124,13 @@ public class PacketHelper {
      * Creates a packet for sending animation metadata to client
      * Format: String (hash) + String (metadataJson)
      */
+    //? if <1.21 {
+    public static FriendlyByteBuf createSendAnimationMetadataPacket(String hash, String metadataJson) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+    //?} else {
     public static RegistryFriendlyByteBuf createSendAnimationMetadataPacket(String hash, String metadataJson) {
         RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+    //?}
         buf.writeUtf(hash);
         buf.writeUtf(metadataJson);
         return buf;

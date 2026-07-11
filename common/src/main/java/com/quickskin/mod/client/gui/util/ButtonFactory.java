@@ -1,5 +1,8 @@
 package com.quickskin.mod.client.gui.util;
 
+//? if <1.21.11 {
+import com.mojang.blaze3d.vertex.PoseStack;
+//?}
 import com.quickskin.mod.client.gui.widget.DangerButton;
 import com.quickskin.mod.client.gui.widget.PrimaryButton;
 import com.quickskin.mod.client.gui.widget.RotateButton;
@@ -9,7 +12,11 @@ import com.quickskin.mod.config.ClientConfig;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.Font;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
@@ -66,8 +73,25 @@ public class ButtonFactory {
         } else {
             // Create vanilla button with custom large rotation symbol rendering
             Component buttonText = Component.literal("↺");
+            //? if <1.21 {
+            return new Button(x, y, size, size, buttonText, onPress, Supplier::get) {
+                @Override
+                public void renderString(GuiGraphics pGuiGraphics, Font pFont, int pColor) {
+                    Component message = this.getMessage();
+                    PoseStack poseStack = pGuiGraphics.pose();
+                    poseStack.pushPose();
+                    float scale = 2.8F;
+                    float textWidth = pFont.width(message);
+                    poseStack.translate(this.getX() + this.getWidth() / 1.8F, this.getY() + this.getHeight() / 4F, 0);
+                    poseStack.scale(scale, scale, 1.0F);
+                    pGuiGraphics.drawString(pFont, message, (int)(-textWidth / 2), (int)(-pFont.lineHeight / 2.0F + 1), pColor);
+                    poseStack.popPose();
+                }
+            };
+            //?} else {
             // In 1.21.11: renderString removed, use RotateButton which overrides renderContents
             return new RotateButton(x, y, size, onPress);
+            //?}
         }
     }
 

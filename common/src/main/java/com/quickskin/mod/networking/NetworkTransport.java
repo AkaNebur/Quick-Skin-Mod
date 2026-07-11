@@ -1,23 +1,47 @@
 package com.quickskin.mod.networking;
 
+//? if >=26.2 {
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+//?}
 import net.minecraft.server.level.ServerPlayer;
 
-/**
- * Transport seam for Quick Skin packet registration, capability checks, and delivery.
- */
+//? if <26.2 {
+import java.util.UUID;
+//?}
 public interface NetworkTransport {
     NetworkTransport INSTANCE = new ModNetworking();
 
     void init();
 
     void initClient();
+    //? if <26.2 {
+    boolean canServerReceiveAppearance();
+    boolean canPlayerReceiveQuickSkin(ServerPlayer player);
+    //?}
 
+    //? if <26.2 {
+    void sendAppearanceToServer(UUID playerId, String skinId, String capeId, String model);
+    void sendTextureChunkToServer(
+            String hash, String textureType, int chunkIndex, int totalChunks, byte[] chunkData);
+    void sendAnimationMetadataToServer(String hash, String metadataJson);
+    void requestTextureFromServer(UUID playerId, String textureType, String hash);
+    void sendServerConfigUpdateToServer(String key, boolean value);
+    //?} else {
     boolean canServerReceive(CustomPacketPayload.Type<?> type);
+    //?}
 
+    //? if <26.2 {
+    void sendCooldownToPlayer(ServerPlayer player, long cooldownEndTime);
+    void sendTextureToPlayer(ServerPlayer player, String textureType, String hash, byte[] imageData);
+    void sendAppearanceToPlayer(
+            ServerPlayer player, UUID playerId, String skinId, String capeId, String model);
+    void sendAnimationMetadataToPlayer(ServerPlayer player, String hash, String metadataJson);
+    void sendServerConfigToPlayer(ServerPlayer player, String configJson);
+    //?} else {
     boolean canPlayerReceive(ServerPlayer player, CustomPacketPayload.Type<?> type);
 
     void sendToServer(CustomPacketPayload payload);
 
     void sendToPlayer(ServerPlayer player, CustomPacketPayload payload);
+    //?}
 }

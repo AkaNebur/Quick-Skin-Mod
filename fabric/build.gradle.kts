@@ -1,6 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import dev.architectury.plugin.ArchitectPluginExtension
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
+import org.gradle.api.tasks.Sync
 
 plugins {
     java
@@ -11,6 +12,9 @@ val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
 val canonicalVersions = setOf("1.20.1", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
+val legacyJavaRoot = rootProject.file("fabric/src/legacy1_20_1/java")
+val generatedStonecutterJava = layout.buildDirectory.dir("generated/stonecutter/main/java")
+val consolidatedLegacyJava = layout.buildDirectory.dir("generated/consolidated/main/java")
 val commonProjectPath = requireNotNull(stonecutter.node.sibling("common")).hierarchy.toString()
 val commonProject = project(commonProjectPath)
 evaluationDependsOn(commonProjectPath)
@@ -40,16 +44,32 @@ repositories {
 }
 
 if (minecraftVersion == "1.20.1") {
+    val legacyOverrides = fileTree(legacyJavaRoot) {
+        include("**/*.java")
+    }.files.mapTo(linkedSetOf()) {
+        it.relativeTo(legacyJavaRoot).invariantSeparatorsPath
+    }
+    val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
+        dependsOn("stonecutterGenerate")
+        from(generatedStonecutterJava) {
+            exclude(legacyOverrides)
+        }
+        from(legacyJavaRoot)
+        into(consolidatedLegacyJava)
+    }
+
     sourceSets {
         main {
-            java.setSrcDirs(
-                listOf(
-                    rootProject.file("fabric/src/main/java/com/quickskin/mod/fabric"),
-                    rootProject.file("fabric/src/legacy1_20_1/java"),
-                )
-            )
+            java.setSrcDirs(listOf(consolidatedLegacyJava))
             resources.setSrcDirs(listOf(rootProject.file("fabric/src/legacy1_20_1/resources")))
         }
+    }
+
+    tasks.named("compileJava") {
+        dependsOn(prepareConsolidatedJava)
+    }
+    tasks.matching { it.name == "sourcesJar" }.configureEach {
+        dependsOn(prepareConsolidatedJava)
     }
 
     tasks.processResources {

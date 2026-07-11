@@ -8,7 +8,11 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.image.BufferedImage;
@@ -42,8 +46,13 @@ public class AnimatedTextureManager {
      * Uses ONE GPU texture that is updated in-place when the frame changes.
      */
     private static class AnimationState {
+        //? if <1.21.11 {
+        final ResourceLocation originalAtlasLocation; // Atlas location from LocalAssetManager (for reverse lookup)
+        final ResourceLocation frameTextureLocation;   // Single GPU texture location for this animation
+        //?} else {
         final Identifier originalAtlasLocation; // Atlas location from LocalAssetManager (for reverse lookup)
         final Identifier frameTextureLocation;   // Single GPU texture location for this animation
+        //?}
         final AnimationMetadata metadata;
         final long startTime;
 
@@ -54,7 +63,11 @@ public class AnimatedTextureManager {
         private int currentFrame = 0;
         private float speedMultiplier;
 
+        //? if <1.21.11 {
+        AnimationState(String animationId, ResourceLocation atlasLocation,
+        //?} else {
         AnimationState(String animationId, Identifier atlasLocation,
+        //?}
                        NativeImage atlasPixels, int frameWidth, int frameHeight,
                        AnimationMetadata metadata, float speedMultiplier) {
             this.originalAtlasLocation = atlasLocation;
@@ -68,12 +81,21 @@ public class AnimatedTextureManager {
             // Create frame-sized NativeImage for the GPU texture
             NativeImage framePixels = new NativeImage(frameWidth, frameHeight, false);
             copyFrameTo(framePixels, 0);
+            //? if <1.21.11 {
+            this.frameTexture = new DynamicTexture(framePixels);
+            //?} else {
             this.frameTexture = new DynamicTexture(() -> "quickskin_anim_" + animationId, framePixels);
+            //?}
 
             // Register single texture with a unique name
             String texId = "quickskin/animated/" + animationId.replaceAll("[^a-zA-Z0-9/._-]", "_");
+            //? if <1.21.11 {
+            this.frameTextureLocation = Minecraft.getInstance().getTextureManager()
+                    .register(texId, frameTexture);
+            //?} else {
             this.frameTextureLocation = Identifier.parse(texId);
             Minecraft.getInstance().getTextureManager().register(frameTextureLocation, frameTexture);
+            //?}
         }
 
         /**
@@ -83,7 +105,12 @@ public class AnimatedTextureManager {
             int srcY = frameIndex * frameHeight;
             for (int y = 0; y < frameHeight; y++) {
                 for (int x = 0; x < frameWidth; x++) {
+                    //? if <26.2 {
+                    MinecraftCompat.INSTANCE.setPixel(
+                            target, x, y, MinecraftCompat.INSTANCE.getPixel(atlasPixels, x, srcY + y));
+                    //?} else {
                     MinecraftCompat.INSTANCE.setPixel(target, x, y, MinecraftCompat.INSTANCE.getPixel(atlasPixels, x, srcY + y));
+                    //?}
                 }
             }
         }
@@ -116,7 +143,11 @@ public class AnimatedTextureManager {
             this.speedMultiplier = speed;
         }
 
+        //? if <1.21.11 {
+        ResourceLocation getCurrentFrameTexture() {
+        //?} else {
         Identifier getCurrentFrameTexture() {
+        //?}
             return frameTextureLocation;
         }
 
@@ -131,7 +162,11 @@ public class AnimatedTextureManager {
     // Map of animation ID -> animation state
     private final Map<String, AnimationState> animations = new ConcurrentHashMap<>();
     // Reverse lookup: atlas texture location -> animation ID for O(1) getAnimationFrame()
+    //? if <1.21.11 {
+    private final Map<ResourceLocation, String> atlasToAnimId = new ConcurrentHashMap<>();
+    //?} else {
     private final Map<Identifier, String> atlasToAnimId = new ConcurrentHashMap<>();
+    //?}
     // Track animations currently being loaded asynchronously
     private final Set<String> pendingRegistrations = ConcurrentHashMap.newKeySet();
 
@@ -150,7 +185,11 @@ public class AnimatedTextureManager {
      * Register an animated texture synchronously.
      * Used by CapeService, PlayerAppearanceService, etc. when data is already loaded.
      */
+    //? if <1.21.11 {
+    public void registerAnimation(String animationId, String capeId, ResourceLocation textureLocation,
+    //?} else {
     public void registerAnimation(String animationId, String capeId, Identifier textureLocation,
+    //?}
                                   BufferedImage atlasImage, AnimationMetadata metadata) {
         if (metadata == null || metadata.frameCount() <= 1) {
             return;
@@ -205,7 +244,11 @@ public class AnimatedTextureManager {
      * @param hash            Asset hash for loading from LocalAssetManager
      */
     public void registerAnimationAsync(String animationId, String capeId,
+                                       //? if <1.21.11 {
+                                       ResourceLocation textureLocation, String hash) {
+                                       //?} else {
                                        Identifier textureLocation, String hash) {
+                                       //?}
         if (animations.containsKey(animationId) || pendingRegistrations.contains(animationId)) {
             return;
         }
@@ -312,7 +355,11 @@ public class AnimatedTextureManager {
      * Commit a prepared animation to the maps and create GL resources.
      * Must be called on the main/render thread.
      */
+    //? if <1.21.11 {
+    private void commitAnimation(String animationId, ResourceLocation textureLocation,
+    //?} else {
     private void commitAnimation(String animationId, Identifier textureLocation,
+    //?}
                                  NativeImage atlasPixels, int frameWidth, int frameHeight,
                                  AnimationMetadata metadata, float speedMultiplier) {
         AnimationState state = new AnimationState(
@@ -370,7 +417,11 @@ public class AnimatedTextureManager {
      * (the texture is updated in-place via upload()).
      */
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation getCurrentFrameTexture(String animationId) {
+    //?} else {
     public Identifier getCurrentFrameTexture(String animationId) {
+    //?}
         AnimationState state = animations.get(animationId);
         if (state != null) {
             return state.getCurrentFrameTexture();
@@ -381,7 +432,11 @@ public class AnimatedTextureManager {
     /**
      * Get the original atlas texture location for an animation
      */
+    //? if <1.21.11 {
+    public ResourceLocation getTextureLocation(String animationId) {
+    //?} else {
     public Identifier getTextureLocation(String animationId) {
+    //?}
         AnimationState state = animations.get(animationId);
         if (state == null) {
             return null;
@@ -405,7 +460,11 @@ public class AnimatedTextureManager {
      * returns the Identifier of the current animation frame.
      * Uses O(1) reverse lookup instead of iterating all animations.
      */
+    //? if <1.21.11 {
+    public Optional<ResourceLocation> getAnimationFrame(ResourceLocation atlasLocation) {
+    //?} else {
     public Optional<Identifier> getAnimationFrame(Identifier atlasLocation) {
+    //?}
         if (atlasLocation == null) {
             return Optional.empty();
         }

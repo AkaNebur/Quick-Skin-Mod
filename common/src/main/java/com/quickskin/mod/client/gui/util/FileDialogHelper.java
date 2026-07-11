@@ -30,14 +30,25 @@ public class FileDialogHelper {
     public static void openSkinFileDialog(String title, Consumer<Path> onFileSelected) {
         CompletableFuture.runAsync(() -> {
             try (MemoryStack stack = stackPush()) {
+                //? if <1.21 {
+                PointerBuffer filters = stack.mallocPointer(2);
+                filters.put(stack.UTF8("*.png"));
+                filters.put(stack.UTF8("*.cpmmodel"));
+                filters.flip();
+                //?} else {
                 PointerBuffer filters = stack.mallocPointer(1);
                 filters.put(stack.UTF8("*.png")).flip();
+                //?}
 
                 String file = TinyFileDialogs.tinyfd_openFileDialog(
                     title,
                     "",
                     filters,
+                    //? if <1.21 {
+                    "Skin Files (PNG, CPM Model)",
+                    //?} else {
                     "PNG Images",
+                    //?}
                     false
                 );
 

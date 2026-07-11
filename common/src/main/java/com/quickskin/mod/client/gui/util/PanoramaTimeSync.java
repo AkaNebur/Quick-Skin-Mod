@@ -1,7 +1,12 @@
 package com.quickskin.mod.client.gui.util;
 
+//? if <26.1 {
+import net.minecraft.Util;
+import net.minecraft.client.renderer.PanoramaRenderer;
+//?} else {
 import net.minecraft.util.Util;
 import net.minecraft.client.renderer.Panorama;
+//?}
 
 import java.lang.reflect.Field;
 
@@ -33,8 +38,12 @@ public class PanoramaTimeSync {
         initialized = true;
 
         try {
+            //? if <26.1 {
+            for (Field field : PanoramaRenderer.class.getDeclaredFields()) {
+            //?} else {
             // Find the time field in Panorama (first non-static float)
             for (Field field : Panorama.class.getDeclaredFields()) {
+            //?}
                 if (field.getType() == float.class && !java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
                     field.setAccessible(true);
                     panoramaTimeField = field;
@@ -49,7 +58,11 @@ public class PanoramaTimeSync {
     /**
      * Sets the time on a Panorama instance to the global time.
      */
+    //? if <26.1 {
+    public static void syncPanoramaRenderer(PanoramaRenderer renderer) {
+    //?} else {
     public static void syncPanoramaRenderer(Panorama renderer) {
+    //?}
         initFields();
 
         if (panoramaTimeField == null || renderer == null) return;

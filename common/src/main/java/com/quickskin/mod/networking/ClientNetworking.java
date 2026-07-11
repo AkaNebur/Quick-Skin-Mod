@@ -1,7 +1,9 @@
 package com.quickskin.mod.networking;
 
 import com.quickskin.mod.QuickSkin;
+//? if >=1.21 {
 import com.quickskin.mod.networking.payloads.*;
+//?}
 import dev.architectury.networking.NetworkManager;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -21,43 +23,67 @@ public class ClientNetworking {
         // Register S2C (Server to Client) payload receivers
         NetworkManager.registerReceiver(
             NetworkManager.s2c(),
+            //? if <1.21 {
+            ModNetworking.SYNC_APPEARANCE,
+            //?} else {
             SyncAppearancePayload.TYPE,
             SyncAppearancePayload.CODEC,
+            //?}
             ClientNetworkHandler::handleSyncAppearance
         );
 
         NetworkManager.registerReceiver(
             NetworkManager.s2c(),
+            //? if <1.21 {
+            ModNetworking.SEND_TEXTURE,
+            //?} else {
             SendTexturePayload.TYPE,
             SendTexturePayload.CODEC,
+            //?}
             ClientNetworkHandler::handleSendTexture
         );
 
         NetworkManager.registerReceiver(
             NetworkManager.s2c(),
+            //? if <1.21 {
+            ModNetworking.SEND_TEXTURE_CHUNK,
+            //?} else {
             SendTextureChunkPayload.TYPE,
             SendTextureChunkPayload.CODEC,
+            //?}
             ClientNetworkHandler::handleSendTextureChunk
         );
 
         NetworkManager.registerReceiver(
             NetworkManager.s2c(),
+            //? if <1.21 {
+            ModNetworking.SEND_ANIMATION_METADATA,
+            //?} else {
             SendAnimationMetadataPayload.TYPE,
             SendAnimationMetadataPayload.CODEC,
+            //?}
             ClientNetworkHandler::handleSendAnimationMetadata
         );
 
         NetworkManager.registerReceiver(
             NetworkManager.s2c(),
+            //? if <1.21 {
+            ModNetworking.SYNC_SERVER_CONFIG,
+            //?} else {
             SyncServerConfigPayload.TYPE,
             SyncServerConfigPayload.CODEC,
+            //?}
             ClientNetworkHandler::handleSyncServerConfig
         );
 
         NetworkManager.registerReceiver(
             NetworkManager.s2c(),
+            //? if <1.21 {
+            ModNetworking.COOLDOWN_UPDATE,
+            //?} else {
             CooldownUpdatePayload.TYPE,
             CooldownUpdatePayload.CODEC,
+            //?}
             ClientNetworkHandler::handleCooldownUpdate
         );
 

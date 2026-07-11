@@ -1,13 +1,19 @@
 package com.quickskin.mod.client.gui.screen;
 
+//? if >=26.2 {
 import com.quickskin.mod.client.gui.GuiCompat;
+//?}
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.client.gui.effect.BlurHandler;
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import com.quickskin.mod.client.util.MojangSkinUploader;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -24,11 +30,19 @@ public class UploadToMojangScreen extends Screen {
     // Panel styling
     private static final int PANEL_BG = 0xB0000000;           // Darker semi-transparent background for frosted glass effect
     private static final int PANEL_OUTLINE = 0x60FFFFFF;      // Subtle white outline
+    //? if <1.21.11 {
+    private static final int TITLE_COLOR = 0xFFFFFF;          // White title
+    private static final int MESSAGE_COLOR = 0xFFFFFF;        // White message
+    private static final int INFO_COLOR = 0x40A040;           // Green info text
+    private static final int ERROR_COLOR = 0xFF4040;          // Red error text
+    private static final int SUCCESS_COLOR = 0x40FF40;        // Bright green success text
+    //?} else {
     private static final int TITLE_COLOR = 0xFFFFFFFF;          // White title
     private static final int MESSAGE_COLOR = 0xFFFFFFFF;        // White message
     private static final int INFO_COLOR = 0xFF40A040;           // Green info text
     private static final int ERROR_COLOR = 0xFFFF4040;          // Red error text
     private static final int SUCCESS_COLOR = 0xFF40FF40;        // Bright green success text
+    //?}
 
     // Panel dimensions
     private final int panelWidth = 380;
@@ -127,13 +141,23 @@ public class UploadToMojangScreen extends Screen {
     }
 
     @Override
+    //? if <26.1 {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+    //?} else {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+    //?}
         // Render parent screen in background
         if (this.parent != null) {
+            //? if <26.2 {
+            this.parent.render(graphics, -1, -1, partialTicks);
+            //?} else {
             GuiCompat.extractParent(this.parent, graphics, partialTicks);
+            //?}
         }
 
-        // Apply blur to background (graphics.flush() removed in 1.21.6)
+        //? if <1.21.11 {
+        graphics.flush();
+        //?}
         BlurHandler.renderBlur();
 
         // Draw lighter overlay over entire screen (so blur is more visible)
@@ -165,7 +189,11 @@ public class UploadToMojangScreen extends Screen {
 
         // Draw title (centered)
         int titleY = this.panelY + 20;
+        //? if <26.1 {
+        graphics.drawCenteredString(this.font, this.title,
+        //?} else {
         graphics.centeredText(this.font, this.title,
+        //?}
                                    this.width / 2, titleY,
                                    TITLE_COLOR);
 
@@ -178,16 +206,28 @@ public class UploadToMojangScreen extends Screen {
         if (isUploading) {
             // Show uploading state
             String uploadIcon = "\u2191";  // ↑
+            //? if <26.1 {
+            graphics.drawCenteredString(this.font, uploadIcon,
+            //?} else {
             graphics.centeredText(this.font, uploadIcon,
+            //?}
                                        this.width / 2, iconY,
                                        INFO_COLOR);
 
+            //? if <26.1 {
+            graphics.drawCenteredString(this.font, Component.translatable("quickskin.upload.uploading").getString(),
+            //?} else {
             graphics.centeredText(this.font, Component.translatable("quickskin.upload.uploading").getString(),
+            //?}
                                        this.width / 2, currentY,
                                        INFO_COLOR);
             currentY += lineHeight * 2;
 
+            //? if <26.1 {
+            graphics.drawCenteredString(this.font, Component.translatable("quickskin.upload.please_wait").getString(),
+            //?} else {
             graphics.centeredText(this.font, Component.translatable("quickskin.upload.please_wait").getString(),
+            //?}
                                        this.width / 2, currentY,
                                        MESSAGE_COLOR);
         } else if (uploadComplete) {
@@ -195,7 +235,11 @@ public class UploadToMojangScreen extends Screen {
             String icon = uploadSuccess ? "\u2713" : "\u2717";  // ✓ or ✗
             int iconColor = uploadSuccess ? SUCCESS_COLOR : ERROR_COLOR;
 
+            //? if <26.1 {
+            graphics.drawCenteredString(this.font, icon,
+            //?} else {
             graphics.centeredText(this.font, icon,
+            //?}
                                        this.width / 2, iconY,
                                        iconColor);
 
@@ -203,7 +247,11 @@ public class UploadToMojangScreen extends Screen {
             if (resultMessage != null) {
                 java.util.List<String> wrappedLines = wrapText(resultMessage, this.panelWidth - 40);
                 for (String line : wrappedLines) {
+                    //? if <26.1 {
+                    graphics.drawCenteredString(this.font, line,
+                    //?} else {
                     graphics.centeredText(this.font, line,
+                    //?}
                                                this.width / 2, currentY,
                                                iconColor);
                     currentY += lineHeight;
@@ -212,14 +260,22 @@ public class UploadToMojangScreen extends Screen {
 
             if (uploadSuccess) {
                 currentY += lineHeight;
+                //? if <26.1 {
+                graphics.drawCenteredString(this.font, Component.translatable("quickskin.upload.success").getString(),
+                //?} else {
                 graphics.centeredText(this.font, Component.translatable("quickskin.upload.success").getString(),
+                //?}
                                            this.width / 2, currentY,
                                            MESSAGE_COLOR);
             }
         } else {
             // Show initial instructions
             String uploadIcon = "\u2191";  // ↑
+            //? if <26.1 {
+            graphics.drawCenteredString(this.font, uploadIcon,
+            //?} else {
             graphics.centeredText(this.font, uploadIcon,
+            //?}
                                        this.width / 2, iconY,
                                        INFO_COLOR);
 
@@ -238,7 +294,11 @@ public class UploadToMojangScreen extends Screen {
             };
 
             for (String line : instructions) {
+                //? if <26.1 {
+                graphics.drawCenteredString(this.font, line,
+                //?} else {
                 graphics.centeredText(this.font, line,
+                //?}
                                            this.width / 2, currentY,
                                            MESSAGE_COLOR);
                 currentY += lineHeight;
@@ -246,7 +306,11 @@ public class UploadToMojangScreen extends Screen {
         }
 
         // Render buttons
+        //? if <26.1 {
+        super.render(graphics, mouseX, mouseY, partialTicks);
+        //?} else {
         super.extractRenderState(graphics, mouseX, mouseY, partialTicks);
+        //?}
     }
 
     private String truncatePath(String path, int maxLength) {
@@ -293,9 +357,13 @@ public class UploadToMojangScreen extends Screen {
     }
 
     @Override
+    //? if <26.2 {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
         double mouseX = GuiCompat.mouseX(event);
         double mouseY = GuiCompat.mouseY(event);
+    //?}
         // Check if click is outside the panel
         if (mouseX < this.panelX || mouseX > this.panelX + this.panelWidth ||
             mouseY < this.panelY || mouseY > this.panelY + this.panelHeight) {
@@ -304,7 +372,11 @@ public class UploadToMojangScreen extends Screen {
             return true;
         }
         // Click inside panel - handle normally
+        //? if <1.21.11 {
+        return super.mouseClicked(mouseX, mouseY, button);
+        //?} else {
         return super.mouseClicked(event, focused);
+        //?}
     }
 
     @Override
@@ -312,9 +384,11 @@ public class UploadToMojangScreen extends Screen {
         // Return to parent screen without confirming
         this.callback.accept(false);
     }
+    //? if >=26.1 {
 
     @Override
     protected void extractBlurredBackground(net.minecraft.client.gui.GuiGraphicsExtractor guiGraphics) {
         // Disable the default Minecraft blur effect - we handle blur with BlurHandler
     }
+    //?}
 }

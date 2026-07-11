@@ -2,13 +2,16 @@ package com.quickskin.mod.client.util;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.User;
+//? if >=1.21.11 {
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.world.entity.player.PlayerSkin;
+//?}
 
 public class PremiumDetector {
     public static boolean isPremiumAccount() {
         Minecraft mc = Minecraft.getInstance();
 
+        //? if >=1.21 {
         // Try to get from player first (if in a world)
         if (mc.player instanceof AbstractClientPlayer clientPlayer) {
             PlayerSkin skin = clientPlayer.getSkin();
@@ -16,6 +19,7 @@ public class PremiumDetector {
         }
 
         // Fallback: Check User object (works in main menu)
+        //?}
         // Premium accounts have valid access tokens
         User user = mc.getUser();
         return user != null &&

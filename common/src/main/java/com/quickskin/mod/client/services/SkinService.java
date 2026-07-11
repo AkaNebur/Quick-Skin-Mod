@@ -5,7 +5,11 @@ import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.resources.DefaultPlayerSkin;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 import org.jetbrains.annotations.Nullable;
 import java.nio.charset.StandardCharsets;
@@ -34,7 +38,11 @@ public class SkinService implements ISkinService {
 
     @Override
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation getSkinLocation(UUID playerId, String skinId) {
+    //?} else {
     public Identifier getSkinLocation(UUID playerId, String skinId) {
+    //?}
         if (skinId == null || skinId.isEmpty()) {
             return null;
         }
@@ -51,7 +59,11 @@ public class SkinService implements ISkinService {
 
     @Override
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation loadMojangSkin(String username) {
+    //?} else {
     public Identifier loadMojangSkin(String username) {
+    //?}
         try {
             // Generate a UUID from the username for offline mode
             UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(StandardCharsets.UTF_8));
@@ -59,7 +71,11 @@ public class SkinService implements ISkinService {
             // Return the default skin based on UUID
             // In a full implementation, this would fetch from Mojang's API
             // using the PlayerInfo or SkinManager to get the actual player skin
+            //? if <1.21.11 {
+            ResourceLocation defaultSkin = DefaultPlayerSkin.getDefaultSkin(uuid);
+            //?} else {
             Identifier defaultSkin = DefaultPlayerSkin.get(uuid).body().texturePath();
+            //?}
             return defaultSkin;
 
         } catch (Exception e) {
@@ -69,10 +85,18 @@ public class SkinService implements ISkinService {
 
     @Override
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation loadLocalSkin(String hash) {
+    //?} else {
     public Identifier loadLocalSkin(String hash) {
+    //?}
         // Check network cache first (for textures received from server)
         if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().hasTexture(hash)) {
+            //? if <1.21.11 {
+            ResourceLocation networkLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+            //?} else {
             Identifier networkLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+            //?}
                     .getTextureLocation(hash);
             if (networkLocation != null) {
                 return networkLocation;
@@ -80,7 +104,11 @@ public class SkinService implements ISkinService {
         }
 
         // Try local assets (for user's own skins)
+        //? if <1.21.11 {
+        ResourceLocation localLocation = LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL);
+        //?} else {
         Identifier localLocation = LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL);
+        //?}
 
         // If not found locally and we're connected to a server, request it
         if (localLocation == null) {

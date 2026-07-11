@@ -3,7 +3,9 @@ package com.quickskin.mod.networking;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AnimationMetadata;
+//? if >=1.21 {
 import com.quickskin.mod.networking.payloads.*;
+//?}
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -42,12 +44,20 @@ public class NetworkSyncService {
      */
     public void syncAppearance(UUID playerId, String skinId, String capeId, String model) {
         Minecraft mc = Minecraft.getInstance();
+        //? if <1.21 {
+        if (mc.player != null && mc.player.getClass().getName().equals("com.replaymod.replay.camera.CameraEntity")) {
+        //?} else {
         if (mc.getConnection() == null) {
+        //?}
             return;
         }
 
+        //? if <26.2 {
+        if (mc.getConnection() == null) {
+        //?} else {
         // Check if server supports QuickSkin packets
         if (!NetworkTransport.INSTANCE.canServerReceive(UpdateAppearancePayload.TYPE)) {
+        //?}
             return;
         }
 
@@ -66,14 +76,24 @@ public class NetworkSyncService {
         }
 
         // Send appearance update packet
+        //? if <1.21 {
+        NetworkTransport.INSTANCE.sendAppearanceToServer(
+            playerId,
+            skinId != null ? skinId : "",
+            capeId != null ? capeId : "",
+            model != null ? model : "classic"
+        //?} else {
         UpdateAppearancePayload payload = new UpdateAppearancePayload(
                 playerId,
                 skinId != null ? skinId : "",
                 capeId != null ? capeId : "",
                 model != null ? model : "classic"
+        //?}
         );
+        //? if >=26.2 {
 
         NetworkTransport.INSTANCE.sendToServer(payload);
+        //?}
     }
 
     /**
@@ -82,11 +102,13 @@ public class NetworkSyncService {
      * @param textureType Type ("skin" or "cape")
      */
     private void uploadLocalTexture(String textureId, String textureType) {
+        //? if >=26.2 {
         // Check if server supports texture chunks
         if (!NetworkTransport.INSTANCE.canServerReceive(TextureChunkPayload.TYPE)) {
             return;
         }
 
+        //?}
         // Extract hash from texture ID
         String prefix = textureType.equals("skin") ? "local_skin:" : "local_cape:";
         if (!textureId.startsWith(prefix)) {
@@ -110,6 +132,10 @@ public class NetworkSyncService {
             byte[] chunk = new byte[length];
             System.arraycopy(textureData, offset, chunk, 0, length);
 
+            //? if <26.2 {
+            NetworkTransport.INSTANCE.sendTextureChunkToServer(
+                    hash, textureType, i, totalChunks, chunk);
+            //?} else {
             // Create chunk payload
             TextureChunkPayload payload = new TextureChunkPayload(
                     hash,
@@ -120,6 +146,7 @@ public class NetworkSyncService {
             );
 
             NetworkTransport.INSTANCE.sendToServer(payload);
+            //?}
         }
     }
 
@@ -128,11 +155,13 @@ public class NetworkSyncService {
      * @param hash Texture hash
      */
     private void uploadAnimationMetadata(String hash) {
+        //? if >=26.2 {
         // Check if server supports animation metadata
         if (!NetworkTransport.INSTANCE.canServerReceive(UploadAnimationMetadataPayload.TYPE)) {
             return;
         }
 
+        //?}
         AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
         if (metadata == null) {
             // Not animated or no metadata
@@ -142,8 +171,12 @@ public class NetworkSyncService {
         // Serialize metadata to JSON
         String metadataJson = serializeMetadata(metadata);
 
+        //? if <26.2 {
+        NetworkTransport.INSTANCE.sendAnimationMetadataToServer(hash, metadataJson);
+        //?} else {
         UploadAnimationMetadataPayload payload = new UploadAnimationMetadataPayload(hash, metadataJson);
         NetworkTransport.INSTANCE.sendToServer(payload);
+        //?}
     }
 
     /**
@@ -163,6 +196,9 @@ public class NetworkSyncService {
             return;
         }
 
+        //? if <26.2 {
+        NetworkTransport.INSTANCE.sendAppearanceToServer(playerId, "", "", "classic");
+        //?} else {
         // Check if server supports QuickSkin packets
         if (!NetworkTransport.INSTANCE.canServerReceive(UpdateAppearancePayload.TYPE)) {
             return;
@@ -170,6 +206,7 @@ public class NetworkSyncService {
 
         UpdateAppearancePayload payload = new UpdateAppearancePayload(playerId, "", "", "classic");
         NetworkTransport.INSTANCE.sendToServer(payload);
+        //?}
     }
 
     /**
@@ -184,6 +221,9 @@ public class NetworkSyncService {
             return;
         }
 
+        //? if <26.2 {
+        NetworkTransport.INSTANCE.requestTextureFromServer(playerId, textureType, hash);
+        //?} else {
         // Check if server supports QuickSkin packets
         if (!NetworkTransport.INSTANCE.canServerReceive(RequestTexturePayload.TYPE)) {
             return;
@@ -191,5 +231,6 @@ public class NetworkSyncService {
 
         RequestTexturePayload payload = new RequestTexturePayload(playerId, textureType, hash);
         NetworkTransport.INSTANCE.sendToServer(payload);
+        //?}
     }
 }

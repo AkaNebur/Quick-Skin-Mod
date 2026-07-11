@@ -1,7 +1,11 @@
 package com.quickskin.mod.common.data;
 
 import com.quickskin.mod.QuickSkin;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 import java.util.Locale;
 
@@ -95,7 +99,11 @@ public enum KnownCapes {
     private final String displayName;
     private final String id;
     private final String description;
+    //? if <1.21.11 {
+    private final ResourceLocation textureLocation;
+    //?} else {
     private final Identifier textureLocation;
+    //?}
     private final boolean isCustom;
     private final boolean isAnimated;
 
@@ -113,7 +121,11 @@ public enum KnownCapes {
         // Generate texture location from ID
         // Textures should be placed in: assets/quickskin/textures/capes/
         this.textureLocation = id.equals("__NONE__") ? null :
+                //? if <1.21.11 {
+                new ResourceLocation(QuickSkin.MOD_ID, "textures/capes/" + id + ".png");
+                //?} else {
                 Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/capes/" + id + ".png");
+                //?}
     }
 
     public String getDisplayName() {
@@ -132,7 +144,11 @@ public enum KnownCapes {
      * Get the resource location for this cape's texture.
      * @return Identifier or null for NONE cape
      */
+    //? if <1.21.11 {
+    public ResourceLocation getTextureLocation() {
+    //?} else {
     public Identifier getTextureLocation() {
+    //?}
         return textureLocation;
     }
 

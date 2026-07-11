@@ -7,9 +7,17 @@ import dev.architectury.event.EventResult;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+//?}
 import net.minecraft.client.player.LocalPlayer;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import net.minecraft.util.Mth;
 
 /**
@@ -19,10 +27,12 @@ import net.minecraft.util.Mth;
 @Environment(EnvType.CLIENT)
 public class SkinPreviewOverlay {
 
+    //? if >=1.21 {
     private static final int PADDING = 10;
 
     // Overlay position (default: bottom-right)
     private static OverlayPosition position = OverlayPosition.BOTTOM_RIGHT;
+    //?}
 
     // Customization state
     private static boolean isDragging = false;
@@ -38,9 +48,14 @@ public class SkinPreviewOverlay {
     private static float cachedScale;
 
     // Cached fields for performance
+    //? if <1.21.11 {
+    private static ResourceLocation cachedSkinLocation = null;
+    //?} else {
     private static Identifier cachedSkinLocation = null;
+    //?}
     private static String cachedModelType = "classic";
     private static String lastCheckedSkinHash = null; // Use null to force initial update
+    //? if >=1.21 {
 
     public enum OverlayPosition {
         TOP_LEFT,
@@ -48,18 +63,31 @@ public class SkinPreviewOverlay {
         BOTTOM_LEFT,
         BOTTOM_RIGHT
     }
+    //?}
 
     /**
      * Render the skin preview overlay
      */
     @SuppressWarnings("unused")
+    //? if <26.1 {
+    public static void render(GuiGraphics guiGraphics, float tickDelta) {
+    //?} else {
     public static void render(GuiGraphicsExtractor guiGraphics, float tickDelta) {
+    //?}
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
 
         if (player == null) {
             return;
         }
+        //? if <1.21 {
+        if (mc.screen != null) {
+            boolean isChatOpen = mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen;
+            if (!isChatOpen) {
+                return;
+            }
+        }
+        //?}
 
         // Update-on-change logic for huge performance gain
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
@@ -91,14 +119,26 @@ public class SkinPreviewOverlay {
                 }
             } else {
                 // Use vanilla skin
+                //? if <1.21.11 {
+                cachedSkinLocation = player.getSkinTextureLocation();
+                cachedModelType = player.getModelName(); // "default" or "slim"
+                if ("default".equals(cachedModelType)) {
+                    cachedModelType = "classic";
+                }
+                //?} else {
                 cachedSkinLocation = player.getSkin().body().texturePath();
                 cachedModelType = player.getSkin().model() == net.minecraft.world.entity.player.PlayerModelType.SLIM ? "slim" : "classic";
+                //?}
             }
         }
 
         // Fallback if cached skin is somehow still null
         if (cachedSkinLocation == null) {
+            //? if <1.21.11 {
+            cachedSkinLocation = player.getSkinTextureLocation();
+            //?} else {
             cachedSkinLocation = player.getSkin().body().texturePath();
+            //?}
             cachedModelType = "classic";
         }
 
@@ -108,16 +148,31 @@ public class SkinPreviewOverlay {
         float percentageAsFloat = (percentage - 1) / 99.0f;
         float scale = 20.0f + percentageAsFloat * (200.0f - 20.0f); // Replicating PlayerWidget's scale logic
 
+        //? if <1.21 {
+        int screenWidth = mc.getWindow().getGuiScaledWidth();
+        int screenHeight = mc.getWindow().getGuiScaledHeight();
+        //?} else {
         // Calculate a dynamic preview size based on scale for positioning
         int PREVIEW_SIZE = (int)(scale * 0.8f);
+        //?}
 
+        //? if <1.21 {
+        int hotbarCenterX = screenWidth / 2;
+        int hotbarCenterY = screenHeight - 22; // Hotbar is typically 22 pixels from bottom
+        //?} else {
         // Calculate base position
         int baseX = calculateX(mc.getWindow().getGuiScaledWidth(), PREVIEW_SIZE);
         int baseY = calculateY(mc.getWindow().getGuiScaledHeight(), PREVIEW_SIZE);
+        //?}
 
+        //? if <1.21 {
+        int modelCenterX = hotbarCenterX + config.positionOffsetXHudOverlay;
+        int modelCenterY = hotbarCenterY + config.positionOffsetYHudOverlay;
+        //?} else {
         // Calculate model center with offsets
         int modelCenterX = baseX + PREVIEW_SIZE / 2 + config.positionOffsetXHudOverlay;
         int modelCenterY = baseY + (int)(PREVIEW_SIZE * 0.85f) + config.positionOffsetYHudOverlay;
+        //?}
 
         // Cache for mouse events
         cachedModelCenterX = modelCenterX;
@@ -144,7 +199,11 @@ public class SkinPreviewOverlay {
         }
     }
 
+    //? if <26.1 {
+    private static void renderModelBorder(GuiGraphics graphics, int centerX, int centerY, float scale) {
+    //?} else {
     private static void renderModelBorder(GuiGraphicsExtractor graphics, int centerX, int centerY, float scale) {
+    //?}
         int modelHeight = (int)(scale * 2.0f);
         int modelWidth = (int)(modelHeight * 0.6f);
         int left = centerX - modelWidth / 2;
@@ -157,7 +216,11 @@ public class SkinPreviewOverlay {
         int textX = centerX - textWidth / 2;
         int textY = top - 12;
         int textColor = 0xFFFFFFFF;
+        //? if <26.1 {
+        graphics.drawString(font, instructionText, textX, textY, textColor, true);
+        //?} else {
         graphics.text(font, instructionText, textX, textY, textColor, true);
+        //?}
 
         int borderColor = 0xFF00FF00;
         graphics.fill(left, top, right, top + 2, borderColor);
@@ -171,6 +234,7 @@ public class SkinPreviewOverlay {
         graphics.fill(centerX - 1, centerY - crosshairSize, centerX + 1, centerY + crosshairSize, crosshairColor);
     }
 
+    //? if >=1.21 {
     /**
      * Calculate X position based on overlay position
      */
@@ -191,15 +255,24 @@ public class SkinPreviewOverlay {
         };
     }
 
+    //?}
     /**
      * Render the player model preview
      */
     private static void renderPlayerPreview(
+            //? if <26.1 {
+            GuiGraphics graphics,
+            //?} else {
             GuiGraphicsExtractor graphics,
+            //?}
             int x,
             int y,
             float scale,
+            //? if <1.21.11 {
+            ResourceLocation skinTexture,
+            //?} else {
             Identifier skinTexture,
+            //?}
             String modelType,
             float rotation
     ) {
@@ -209,8 +282,12 @@ public class SkinPreviewOverlay {
         previewData.setCapeLocation(null); // No cape for HUD preview
         previewData.setModelType(modelType);
 
+        //? if <1.21.11 {
+        PoseStack poseStack = graphics.pose();
+        //?} else {
         // Save graphics state - use new PoseStack since graphics.pose() returns Matrix3x2fStack in 1.21.6
         PoseStack poseStack = new PoseStack();
+        //?}
         poseStack.pushPose();
 
         try {
@@ -328,6 +405,7 @@ public class SkinPreviewOverlay {
         }
         return EventResult.pass();
     }
+    //? if >=1.21 {
 
     /**
      * Set the overlay position
@@ -342,4 +420,5 @@ public class SkinPreviewOverlay {
     public static OverlayPosition getPosition() {
         return position;
     }
+    //?}
 }

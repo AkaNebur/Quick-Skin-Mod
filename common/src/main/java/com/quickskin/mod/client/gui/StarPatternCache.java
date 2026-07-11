@@ -4,7 +4,11 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.quickskin.mod.QuickSkin;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import net.minecraft.server.packs.resources.Resource;
 
 import java.io.IOException;
@@ -16,13 +20,21 @@ import java.io.InputStream;
  * The texture was pre-generated externally to eliminate runtime generation overhead.
  */
 public class StarPatternCache {
+    //? if <1.21.11 {
+    private static final ResourceLocation STAR_PATTERN_CACHE = new ResourceLocation(QuickSkin.MOD_ID, "textures/gui/background/star_pattern_cache_generated.png");
+    //?} else {
     private static final Identifier STAR_PATTERN_CACHE = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/gui/background/star_pattern_cache_generated.png");
+    //?}
     private static final int TILE_SIZE = 55; // Match the original tile size
     private static final int CACHE_TILES_WIDTH = 64; // Pre-generated texture has 64 tiles width
     private static final int CACHE_TILES_HEIGHT = 32; // Pre-generated texture has 32 tiles height
 
     private static DynamicTexture cachedTexture = null;
+    //? if <1.21.11 {
+    private static ResourceLocation cachedTextureLocation = null;
+    //?} else {
     private static Identifier cachedTextureLocation = null;
+    //?}
     private static int cachedTextureWidth = 0;
     private static int cachedTextureHeight = 0;
 
@@ -37,6 +49,9 @@ public class StarPatternCache {
         try {
             Minecraft mc = Minecraft.getInstance();
 
+            //? if <1.21 {
+            Resource resource = mc.getResourceManager().getResource(STAR_PATTERN_CACHE).orElseThrow();
+            //?} else {
             // Try to load the pre-generated star pattern cache texture
             var resourceOptional = mc.getResourceManager().getResource(STAR_PATTERN_CACHE);
             if (resourceOptional.isEmpty()) {
@@ -45,6 +60,7 @@ public class StarPatternCache {
             }
 
             Resource resource = resourceOptional.get();
+            //?}
             NativeImage cachedImage;
             try (InputStream stream = resource.open()) {
                 cachedImage = NativeImage.read(stream);
@@ -55,21 +71,32 @@ public class StarPatternCache {
             cachedTextureHeight = cachedImage.getHeight();
 
             // Upload to GPU
+            //? if <1.21.11 {
+            cachedTexture = new DynamicTexture(cachedImage);
+            cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache", cachedTexture);
+            //?} else {
             cachedTexture = new DynamicTexture(() -> "quickskin_star_cache", cachedImage);
             cachedTextureLocation = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "star_cache");
             mc.getTextureManager().register(cachedTextureLocation, cachedTexture);
 
             // 1.21.11: setFilter() removed from DynamicTexture, filtering handled at GpuSampler level
+            //?}
 
         } catch (IOException e) {
+            //? if >=1.21 {
             createFallbackTexture();
+            //?}
         }
     }
 
     /**
      * Get the cached texture location
      */
+    //? if <1.21.11 {
+    public static ResourceLocation getTextureLocation() {
+    //?} else {
     public static Identifier getTextureLocation() {
+    //?}
         if (cachedTextureLocation == null) {
             initialize();
         }
@@ -103,6 +130,7 @@ public class StarPatternCache {
         return TILE_SIZE;
     }
 
+    //? if >=1.21.11 {
     /**
      * Create a simple fallback texture when the cached version is not available
      */
@@ -139,6 +167,7 @@ public class StarPatternCache {
         // 1.21.11: setFilter() removed, filtering handled at GpuSampler level
     }
 
+    //?}
     /**
      * Clean up resources
      */

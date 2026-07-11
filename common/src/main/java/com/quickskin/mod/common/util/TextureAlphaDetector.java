@@ -2,7 +2,11 @@ package com.quickskin.mod.common.util;
 
 import com.quickskin.mod.QuickSkin;
 import net.minecraft.client.Minecraft;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import net.minecraft.server.packs.resources.Resource;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -23,10 +27,18 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TextureAlphaDetector {
 
     // Cache to avoid repeatedly checking the same textures
+    //? if <1.21.11 {
+    private static final Map<ResourceLocation, Boolean> transparencyCache = new ConcurrentHashMap<>();
+    //?} else {
     private static final Map<Identifier, Boolean> transparencyCache = new ConcurrentHashMap<>();
+    //?}
 
     // Track textures currently being analyzed to avoid duplicate work
+    //? if <1.21.11 {
+    private static final Set<ResourceLocation> pendingAnalysis = ConcurrentHashMap.newKeySet();
+    //?} else {
     private static final Set<Identifier> pendingAnalysis = ConcurrentHashMap.newKeySet();
+    //?}
 
     /**
      * Check if a texture contains any transparent pixels
@@ -35,7 +47,11 @@ public class TextureAlphaDetector {
      * @param textureLocation The resource location of the texture
      * @return true if the texture has any pixels with alpha < 255, OR if the analysis is not yet complete (defaults to TRANSLUCENT for safety)
      */
+    //? if <1.21.11 {
+    public static boolean hasTransparency(ResourceLocation textureLocation) {
+    //?} else {
     public static boolean hasTransparency(Identifier textureLocation) {
+    //?}
         if (textureLocation == null) {
             return false;
         }
@@ -58,7 +74,11 @@ public class TextureAlphaDetector {
      *
      * @param textureLocation The resource location of the texture to analyze
      */
+    //? if <1.21.11 {
+    public static void analyzeTextureAsync(ResourceLocation textureLocation) {
+    //?} else {
     public static void analyzeTextureAsync(Identifier textureLocation) {
+    //?}
         if (textureLocation == null) {
             return;
         }
@@ -97,7 +117,11 @@ public class TextureAlphaDetector {
     /**
      * Actually detect if the texture has transparency by loading and examining it
      */
+    //? if <1.21.11 {
+    private static boolean detectTransparency(ResourceLocation textureLocation) {
+    //?} else {
     private static boolean detectTransparency(Identifier textureLocation) {
+    //?}
         try {
             Minecraft mc = Minecraft.getInstance();
             if (mc.getResourceManager() == null) {
@@ -160,7 +184,11 @@ public class TextureAlphaDetector {
      * Used by LocalAssetManager when registering DynamicTextures that aren't
      * available through the resource manager.
      */
+    //? if <1.21.11 {
+    public static void cacheTransparencyResult(ResourceLocation textureLocation, boolean hasTransparency) {
+    //?} else {
     public static void cacheTransparencyResult(Identifier textureLocation, boolean hasTransparency) {
+    //?}
         if (textureLocation != null) {
             transparencyCache.put(textureLocation, hasTransparency);
         }

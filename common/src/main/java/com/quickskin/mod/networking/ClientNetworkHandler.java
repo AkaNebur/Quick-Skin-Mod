@@ -7,11 +7,18 @@ import com.quickskin.mod.client.storage.ClientAnimationMetadataCache;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.event.InternalEventBus;
 import com.quickskin.mod.common.event.ServerConfigSyncEvent;
+//? if <1.21 {
+import com.quickskin.mod.networking.packets.PacketHelper;
+//?} else {
 import com.quickskin.mod.networking.payloads.*;
+//?}
 import dev.architectury.networking.NetworkManager;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+//? if <1.21 {
+import net.minecraft.network.FriendlyByteBuf;
+//?}
 
 import java.util.UUID;
 
@@ -28,50 +35,112 @@ public class ClientNetworkHandler {
     /**
      * Handles appearance sync from server
      */
+    //? if <1.21 {
+    public static void handleSyncAppearance(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        UUID playerId = PacketHelper.readPlayerId(buf);
+        String skinId = PacketHelper.readString(buf);
+        String capeId = PacketHelper.readString(buf);
+        String model = PacketHelper.readString(buf);
+        org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
+                "handleSyncAppearance: player={} skinId={} model={}", playerId, skinId, model);
+    //?} else {
     public static void handleSyncAppearance(SyncAppearancePayload payload, NetworkManager.PacketContext context) {
+    //?}
         context.queue(() -> {
+            //? if <1.21 {
+            org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
+                    "handleSyncAppearance EXECUTING on main thread for {}", playerId);
+            //?}
             // Apply appearance through service
+            //? if <1.21 {
+            PlayerAppearanceService.getInstance().applyLook(playerId, skinId, capeId, model);
+            //?} else {
             PlayerAppearanceService.getInstance().applyLook(
                 payload.playerId(), payload.skinId(), payload.capeId(), payload.model()
             );
+            //?}
         });
     }
 
     /**
      * Handles texture data from server
      */
+    //? if <1.21 {
+    public static void handleSendTexture(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String textureType = PacketHelper.readString(buf);
+        String hash = PacketHelper.readString(buf);
+        byte[] imageData = PacketHelper.readByteArray(buf);
+        org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
+                "handleSendTexture: type={} hash={} size={}", textureType, hash, imageData.length);
+    //?} else {
     public static void handleSendTexture(SendTexturePayload payload, NetworkManager.PacketContext context) {
+    //?}
         context.queue(() -> {
+            //? if <1.21 {
+            org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
+                    "handleSendTexture EXECUTING on main thread hash={}", hash);
+            //?}
             // Store in network texture cache (not local assets, so it won't appear in skin list)
             com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                    //? if <1.21 {
+                    .storeTexture(hash, textureType, imageData);
+                    //?} else {
                     .storeTexture(payload.hash(), payload.imageData());
+                    //?}
         });
     }
 
     /**
      * Handles animation metadata from server
      */
+    //? if <1.21 {
+    public static void handleSendAnimationMetadata(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String hash = PacketHelper.readString(buf);
+        String metadataJson = PacketHelper.readString(buf);
+    //?} else {
     public static void handleSendAnimationMetadata(SendAnimationMetadataPayload payload, NetworkManager.PacketContext context) {
+    //?}
         context.queue(() -> {
             // Store animation metadata both in memory cache and to disk
             try {
                 // Parse the JSON metadata
+                //? if <1.21 {
+                AnimationMetadata metadata = AnimationMetadata.fromJson(metadataJson);
+                //?} else {
                 AnimationMetadata metadata = AnimationMetadata.fromJson(payload.metadataJson());
+                //?}
 
                 // Store in client-side memory cache
+                //? if <1.21 {
+                ClientAnimationMetadataCache.getInstance().storeMetadata(hash, metadata);
+                //?} else {
                 ClientAnimationMetadataCache.getInstance().storeMetadata(payload.hash(), metadata);
+                //?}
 
                 // Also save to disk so LocalAssetManager can find it
                 java.nio.file.Path cacheDir = com.quickskin.mod.client.services.LocalAssetManager.getInstance()
                         .getCacheDirectory();
+                //? if <1.21 {
+                java.nio.file.Path metadataPath = cacheDir.resolve(hash + ".json");
+                java.nio.file.Files.writeString(metadataPath, metadataJson);
+                //?} else {
                 java.nio.file.Path metadataPath = cacheDir.resolve(payload.hash() + ".json");
                 java.nio.file.Files.writeString(metadataPath, payload.metadataJson());
+                //?}
 
                 // Register animation for this network texture
+                //? if <1.21 {
+                registerNetworkCapeAnimation(hash, metadata);
+                //?} else {
                 registerNetworkCapeAnimation(payload.hash(), metadata);
+                //?}
 
                 // Refresh all players using this cape so they see the animation
+                //? if <1.21 {
+                refreshPlayersUsingTexture(hash);
+                //?} else {
                 refreshPlayersUsingTexture(payload.hash());
+                //?}
 
             } catch (Exception e) {
             }
@@ -84,7 +153,11 @@ public class ClientNetworkHandler {
     private static void registerNetworkCapeAnimation(String hash, AnimationMetadata metadata) {
         try {
             // Get the network texture location
+            //? if <1.21.11 {
+            net.minecraft.resources.ResourceLocation textureLocation =
+            //?} else {
             net.minecraft.resources.Identifier textureLocation =
+            //?}
                 com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().getTextureLocation(hash);
 
             if (textureLocation == null) {
@@ -132,7 +205,12 @@ public class ClientNetworkHandler {
     /**
      * Handles server config sync (server sends full config to client on join)
      */
+    //? if <1.21 {
+    public static void handleSyncServerConfig(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String configJson = PacketHelper.readString(buf);
+    //?} else {
     public static void handleSyncServerConfig(SyncServerConfigPayload payload, NetworkManager.PacketContext context) {
+    //?}
         context.queue(() -> {
             // Get current server override to detect changes
             com.quickskin.mod.config.ClientConfig clientConfig = com.quickskin.mod.config.ClientConfig.getInstance();
@@ -141,7 +219,11 @@ public class ClientNetworkHandler {
 
             // Parse server config from JSON
             com.quickskin.mod.config.ServerConfig serverConfig =
+                //? if <1.21 {
+                com.quickskin.mod.config.ServerConfig.fromJson(configJson);
+                //?} else {
                 com.quickskin.mod.config.ServerConfig.fromJson(payload.configJson());
+                //?}
 
             boolean newTransparencySetting = serverConfig.disableSkinTransparency;
 
@@ -161,9 +243,17 @@ public class ClientNetworkHandler {
 
                 // If no GUI is open OR if we're not in the settings screen, reload immediately
                 // Otherwise, mark pending and reload when the settings GUI closes
+                //? if <26.2 {
+                boolean isInSettingsScreen = mc.screen instanceof com.quickskin.mod.client.gui.screen.SettingsScreen;
+                //?} else {
                 boolean isInSettingsScreen = mc.gui.screen() instanceof com.quickskin.mod.client.gui.screen.SettingsScreen;
+                //?}
 
+                //? if <26.2 {
+                if (mc.screen == null || !isInSettingsScreen) {
+                //?} else {
                 if (mc.gui.screen() == null || !isInSettingsScreen) {
+                //?}
                     PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
                 } else {
                     pendingTransparencyReload = true;
@@ -205,25 +295,50 @@ public class ClientNetworkHandler {
     /**
      * Handles texture chunk from server (for large textures)
      */
+    //? if <1.21 {
+    public static void handleSendTextureChunk(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String hash = buf.readUtf();
+        int chunkIndex = buf.readInt();
+        int totalChunks = buf.readInt();
+        byte[] chunkData = buf.readByteArray();
+    //?} else {
     public static void handleSendTextureChunk(SendTextureChunkPayload payload, NetworkManager.PacketContext context) {
+    //?}
         context.queue(() -> {
             // Validate chunk data
+            //? if <1.21 {
+            if (chunkData.length > 32 * 1024) {
+            //?} else {
             if (payload.chunkData().length > 32 * 1024) {
+            //?}
                 return;
             }
 
             // Use TextureChunkReceiver to assemble chunks
             com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance()
+                //? if <1.21 {
+                .receiveChunk(hash, chunkIndex, totalChunks, chunkData);
+                //?} else {
                 .receiveChunk(payload.hash(), payload.chunkIndex(), payload.totalChunks(), payload.chunkData());
+                //?}
         });
     }
 
     /**
      * Handles cooldown update from server
      */
+    //? if <1.21 {
+    public static void handleCooldownUpdate(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        long cooldownEndTime = buf.readLong();
+    //?} else {
     public static void handleCooldownUpdate(CooldownUpdatePayload payload, NetworkManager.PacketContext context) {
+    //?}
         context.queue(() -> {
+            //? if <1.21 {
+            com.quickskin.mod.client.services.CooldownService.getInstance().setCooldownEndTime(cooldownEndTime);
+            //?} else {
             com.quickskin.mod.client.services.CooldownService.getInstance().setCooldownEndTime(payload.cooldownEndTime());
+            //?}
         });
     }
 }

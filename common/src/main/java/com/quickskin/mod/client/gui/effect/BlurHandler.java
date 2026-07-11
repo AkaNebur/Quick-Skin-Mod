@@ -1,8 +1,16 @@
 package com.quickskin.mod.client.gui.effect;
 
+//? if <1.21.11 {
+import com.mojang.blaze3d.systems.RenderSystem;
+//?}
 import com.quickskin.mod.QuickSkin;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+//? if <1.21.11 {
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.PostChain;
+import net.minecraft.resources.ResourceLocation;
+//?}
 
 /**
  * Handles blur rendering - simplified to be called directly from the screen.
@@ -13,18 +21,42 @@ import net.fabricmc.api.Environment;
  */
 @Environment(EnvType.CLIENT)
 public class BlurHandler {
+    //? if <1.21.11 {
+    private static PostChain blurShader = null;
+    private static final ResourceLocation BLUR_SHADER = new ResourceLocation("minecraft", "shaders/post/blur.json");
+    //?} else {
 
     private static boolean warned = false;
+    //?}
 
     /**
      * Call this after rendering the background but before rendering UI.
      * No-op on 1.21.4+ due to PostChain API changes.
      */
     public static void renderBlur() {
+        //? if <1.21.11 {
+        Minecraft mc = Minecraft.getInstance();
+        if (blurShader == null) {
+            try {
+                blurShader = new PostChain(mc.getTextureManager(), mc.getResourceManager(),
+                    mc.getMainRenderTarget(), BLUR_SHADER);
+                blurShader.resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+            } catch (Exception e) {
+                return;
+            }
+        //?} else {
         if (!warned) {
             warned = true;
+        //?}
         }
-        // No-op: PostChain API is incompatible in 1.21.4+
+        //? if <1.21 {
+        RenderSystem.disableBlend();
+        RenderSystem.disableDepthTest();
+        blurShader.process(0.0f);
+        mc.getMainRenderTarget().bindWrite(false);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        //?}
     }
 
     /**
@@ -32,6 +64,11 @@ public class BlurHandler {
      * No-op on 1.21.4+ since no shader is loaded.
      */
     public static void cleanup() {
-        // No-op: no shader to clean up
+        //? if <1.21.11 {
+        if (blurShader != null) {
+            blurShader.close();
+            blurShader = null;
+        }
+        //?}
     }
 }

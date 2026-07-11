@@ -8,7 +8,11 @@ import com.quickskin.mod.common.data.TextureQuality;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 import org.jetbrains.annotations.Nullable;
 
@@ -42,7 +46,11 @@ public class CapeService implements ICapeService {
 
     @Override
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation getCapeLocation(UUID playerId, String capeId) {
+    //?} else {
     public Identifier getCapeLocation(UUID playerId, String capeId) {
+    //?}
 
         if (capeId == null || capeId.isEmpty()) {
             return null;
@@ -66,16 +74,28 @@ public class CapeService implements ICapeService {
 
     @Override
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation loadMojangCape(String username) {
+    //?} else {
     public Identifier loadMojangCape(String username) {
+    //?}
         // Mojang cape loading requires online API access - not implemented yet
         return null;
     }
 
     @Override
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation loadLocalCape(String hash) {
+    //?} else {
     public Identifier loadLocalCape(String hash) {
+    //?}
         // Check network cache first (for capes received from server)
+        //? if <1.21.11 {
+        ResourceLocation capeLocation;
+        //?} else {
         Identifier capeLocation;
+        //?}
         if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().hasTexture(hash)) {
             capeLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
                     .getTextureLocation(hash);
@@ -147,7 +167,11 @@ public class CapeService implements ICapeService {
 
     @Override
     @Nullable
+    //? if <1.21.11 {
+    public ResourceLocation loadKnownCape(String capeId) {
+    //?} else {
     public Identifier loadKnownCape(String capeId) {
+    //?}
         // Look up the cape in the KnownCapes enum
         KnownCapes cape = KnownCapes.getById(capeId);
 
@@ -159,7 +183,11 @@ public class CapeService implements ICapeService {
                 // Only register the animation if it's not already running
                 if (!animManager.isAnimated(animationId)) {
                     try {
+                        //? if <1.21.11 {
+                        ResourceLocation capeTexture = cape.getTextureLocation();
+                        //?} else {
                         Identifier capeTexture = cape.getTextureLocation();
+                        //?}
 
                         InputStream stream = Minecraft.getInstance().getResourceManager()
                                 .getResource(capeTexture).get().open();
@@ -189,7 +217,11 @@ public class CapeService implements ICapeService {
                 }
             }
 
+            //? if <1.21.11 {
+            ResourceLocation location = cape.getTextureLocation();
+            //?} else {
             Identifier location = cape.getTextureLocation();
+            //?}
             return location;
         }
 

@@ -28,7 +28,11 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import org.lwjgl.glfw.GLFW;
 
 import java.awt.image.BufferedImage;
@@ -89,8 +93,13 @@ public class ClientEvents {
 
             // Handle HUD overlay dragging only when a GUI is open (cursor is visible)
             if (!client.mouseHandler.isMouseGrabbed()) {
+                //? if <1.21.11 {
+                boolean leftMouseDown = GLFW.glfwGetMouseButton(client.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+                boolean rightMouseDown = GLFW.glfwGetMouseButton(client.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
+                //?} else {
                 boolean leftMouseDown = GLFW.glfwGetMouseButton(client.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
                 boolean rightMouseDown = GLFW.glfwGetMouseButton(client.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
+                //?}
                 double mouseX = client.mouseHandler.xpos() * (double)client.getWindow().getGuiScaledWidth() / (double)client.getWindow().getScreenWidth();
                 double mouseY = client.mouseHandler.ypos() * (double)client.getWindow().getGuiScaledHeight() / (double)client.getWindow().getScreenHeight();
 
@@ -144,6 +153,13 @@ public class ClientEvents {
             PlayerAppearanceRepository.getInstance().clear();
             CooldownService.getInstance().clearCooldown();
 
+            //? if <1.21 {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft != null && minecraft.hasSingleplayerServer()) {
+                com.quickskin.mod.config.ServerConfig serverConfig = com.quickskin.mod.config.ServerConfig.getInstance();
+                com.quickskin.mod.config.ClientConfig.getInstance().applyServerOverride(serverConfig);
+            }
+            //?}
             // Restore saved skin and model type from config
             restoreSavedAppearance(player);
         });
@@ -159,11 +175,20 @@ public class ClientEvents {
             ModelService.getInstance().clearAll();
             CooldownService.getInstance().clearCooldown();
 
+            //? if <1.21 {
+            com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance().clear();
+            com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().clear();
+            com.quickskin.mod.config.ClientConfig.getInstance().applyServerOverride(null);
+            //?}
             // Clear texture alpha detection cache since we're leaving the world
             com.quickskin.mod.common.util.TextureAlphaDetector.clearCache();
 
+            //? if <1.21 {
+            com.quickskin.mod.client.services.LocalAssetManager.getInstance().clearTextureCache();
+            //?} else {
             // Clear incomplete texture chunks
             com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance().clear();
+            //?}
 
             // Clear cached player to reset rendering state (fixes invisible buttons)
             com.quickskin.mod.client.rendering.PlayerModelRenderer.clearCachedPlayer();
@@ -238,9 +263,15 @@ public class ClientEvents {
                     for (net.minecraft.client.gui.components.events.GuiEventListener listener : screen.children()) {
                         if (listener instanceof net.minecraft.client.gui.components.ImageButton imgButton) {
                             if (imgButton.getY() == vanillaButtonsY &&
+                                    //? if <1.21 {
+                                    imgButton.getX() > titleScreen.width / 2 &&
+                                    imgButton.getWidth() == 20 &&
+                                    imgButton.getHeight() == 20) {
+                                    //?} else {
                                 imgButton.getX() > titleScreen.width / 2 &&
                                 imgButton.getWidth() == 20 &&
                                 imgButton.getHeight() == 20) {
+                                    //?}
                                 if (accessibilityButton == null || imgButton.getX() > accessibilityButton.getX()) {
                                     accessibilityButton = imgButton;
                                 }
@@ -336,14 +367,23 @@ public class ClientEvents {
                 // Use icon button when Essential is present
                 changeSkinButton = new com.quickskin.mod.client.gui.widget.IconActionButton(
                         buttonX, buttonY, buttonWidth, buttonHeight,
+                        //? if <26.2 {
+                        new ResourceLocation("quickskin", "textures/gui/quickskin_icon.png"),
+                        button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen)),
+                        //?} else {
                         Identifier.fromNamespaceAndPath("quickskin", "textures/gui/quickskin_icon.png"),
                         button -> Minecraft.getInstance().gui.setScreen(new PlayerSkinMenuScreen(screen)),
+                        //?}
                         Component.translatable("quickskin.button.change_skin")
                 );
             } else {
                 changeSkinButton = Button.builder(
                         Component.translatable("quickskin.button.change_skin"),
+                        //? if <26.2 {
+                        button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen))
+                        //?} else {
                         button -> Minecraft.getInstance().gui.setScreen(new PlayerSkinMenuScreen(screen))
+                        //?}
                 ).bounds(buttonX, buttonY, buttonWidth, buttonHeight).build();
             }
 
@@ -361,7 +401,11 @@ public class ClientEvents {
                 int widgetY = buttonY + offsetY;
 
                 // Get player skin and model type from saved config or player
+                //? if <1.21.11 {
+                ResourceLocation skinLocation = null;
+                //?} else {
                 Identifier skinLocation = null;
+                //?}
                 String modelType = "classic";
                 LocalPlayer player = Minecraft.getInstance().player;
 
@@ -389,7 +433,11 @@ public class ClientEvents {
 
                 // Second priority: Use current player skin (when in-game)
                 if (skinLocation == null && player != null) {
+                    //? if <1.21.11 {
+                    skinLocation = player.getSkinTextureLocation();
+                    //?} else {
                     skinLocation = player.getSkin().body().texturePath();
+                    //?}
 
                     // Get model type from the active skin if available
                     if (!config.activeSkinHash.isEmpty()) {
@@ -403,23 +451,45 @@ public class ClientEvents {
                             modelType = metadata.skinModel();
                         } else {
                             // Fallback: detect from the vanilla player's model
+                            //? if <1.21.11 {
+                            modelType = player.getModelName(); // "default" or "slim"
+                            if ("default".equals(modelType)) {
+                                modelType = "classic";
+                            }
+                            //?} else {
                             modelType = player.getSkin().model() == net.minecraft.world.entity.player.PlayerModelType.SLIM ? "slim" : "classic";
+                            //?}
                         }
                     } else if ("auto".equals(modelType)) {
                         // No custom skin active, use vanilla player's model
+                        //? if <1.21.11 {
+                        modelType = player.getModelName(); // "default" or "slim"
+                        if ("default".equals(modelType)) {
+                            modelType = "classic";
+                        }
+                        //?} else {
                         modelType = player.getSkin().model() == net.minecraft.world.entity.player.PlayerModelType.SLIM ? "slim" : "classic";
+                        //?}
                     }
                 }
 
                 // Fallback: Use default Steve skin
                 if (skinLocation == null) {
+                    //? if <1.21.11 {
+                    skinLocation = new ResourceLocation("minecraft", "textures/entity/player/wide/steve.png");
+                    //?} else {
                     skinLocation = Identifier.fromNamespaceAndPath("minecraft", "textures/entity/player/wide/steve.png");
+                    //?}
                     modelType = "classic";
                 }
 
                 // Load saved cape from config
                 String capeId = config.activeCapeHash;
+                //? if <1.21.11 {
+                ResourceLocation capeLocation = null;
+                //?} else {
                 Identifier capeLocation = null;
+                //?}
                 if (capeId != null && !capeId.isEmpty()) {
                     // Use the service to resolve the location. This will also trigger animation registration.
                     // The UUID is not used for local/known capes, so we can pass null.
@@ -466,6 +536,11 @@ public class ClientEvents {
                         );
                 screenAccess.addRenderableWidget(rotateButton);
 
+                //? if <1.21 {
+                playerWidget.clearPriorityWidgets(); // Clear old priorities
+                playerWidget.addPriorityWidget(changeSkinButton); // Change Skin button
+                playerWidget.addPriorityWidget(rotateButton); // Rotate button
+                //?}
                 // Clear animation buttons from previous screen
                 animationButtons.clear();
                 isAnimationDropdownOpen = false;
@@ -482,6 +557,9 @@ public class ClientEvents {
                             button -> toggleAnimationDropdown()
                     ).bounds(animToggleX, animToggleY, animToggleWidth, rotateButtonSize).build();
                     screenAccess.addRenderableWidget(animationToggleButton);
+                    //? if <1.21 {
+                    playerWidget.addPriorityWidget(animationToggleButton);
+                    //?}
 
                     // Create numbered animation buttons (dropdown)
                     java.util.List<String> availableAnimations = getAvailableAnimations();
@@ -506,6 +584,9 @@ public class ClientEvents {
                         animButton.active = false;
                         animationButtons.add(animButton);
                         screenAccess.addRenderableWidget(animButton);
+                        //? if <1.21 {
+                        playerWidget.addPriorityWidget(animButton);
+                        //?}
                     }
                 }
             } else {
@@ -517,25 +598,48 @@ public class ClientEvents {
         });
 
         // Use PRE event for scrolling so we can interrupt it
+        //? if <1.21 {
+        ClientScreenInputEvent.MOUSE_SCROLLED_PRE.register((client, screen, mouseX, mouseY, amount) -> {
+        //?} else {
         ClientScreenInputEvent.MOUSE_SCROLLED_PRE.register((client, screen, mouseX, mouseY, amountX, amountY) -> {
+        //?}
             // Forward scroll events to the HUD overlay if the cursor is visible
             if (!client.mouseHandler.isMouseGrabbed()) {
+                //? if <1.21 {
+                return SkinPreviewOverlay.onMouseScrolled(mouseX, mouseY, amount);
+                //?} else {
                 return SkinPreviewOverlay.onMouseScrolled(mouseX, mouseY, amountY);
+                //?}
             }
             return EventResult.pass();
         });
 
+        //? if <1.21.11 {
+        ClientScreenInputEvent.MOUSE_RELEASED_PRE.register((client, screen, mouseX, mouseY, button) -> {
+            com.quickskin.mod.client.gui.widget.PlayerWidget activeWidget =
+                com.quickskin.mod.client.gui.widget.PlayerWidget.getActiveInteractionWidget();
+        //?} else {
         // Debug screen toggle (F3)
         ClientScreenInputEvent.KEY_PRESSED_PRE.register((client, screen, keyEvent) -> {
             // This event is for screen key presses
             // Keybinds are handled separately in KeybindRegistry
             return EventResult.pass();
         });
+        //?}
 
+            //? if <1.21.11 {
+            if (activeWidget != null && activeWidget.isInteracting()) {
+                boolean handled = activeWidget.mouseReleased(mouseX, mouseY, button);
+                if (handled) {
+                    return EventResult.interruptTrue(); // Consume the event
+                }
+            }
+            //?} else {
         // Raw input (for global keybinds outside of screens)
         ClientRawInputEvent.KEY_PRESSED.register((client, action, keyEvent) -> {
             // Keybinds will be registered separately
             // This is for raw key detection if needed
+            //?}
             return EventResult.pass();
         });
 
@@ -544,7 +648,11 @@ public class ClientEvents {
             // Get the setting from the client configuration
             boolean showOverlay = com.quickskin.mod.config.ClientConfig.getInstance().showSkinPreviewOverlay;
             if (showOverlay) {
+                //? if <1.21 {
+                com.quickskin.mod.client.gui.overlay.SkinPreviewOverlay.render(guiGraphics, tickDelta);
+                //?} else {
                 com.quickskin.mod.client.gui.overlay.SkinPreviewOverlay.render(guiGraphics, tickDelta.getGameTimeDeltaPartialTick(false));
+                //?}
             }
         });
     }
@@ -692,8 +800,12 @@ public class ClientEvents {
             com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
             config.playerOwnSkinHash = finalHash;
 
+            //? if <1.21.11 {
+            if (config.activeSkinHash.isEmpty() && config.activeCpmModelHash.isEmpty()) {
+            //?} else {
             // If no active skin is set, auto-select the player's own skin.
             if (config.activeSkinHash.isEmpty()) {
+            //?}
                 config.activeSkinHash = finalHash;
 
                 // Apply it to the player if they're in a world.
@@ -720,25 +832,48 @@ public class ClientEvents {
      * Restore saved skin and cape from config when player joins world
      */
     private static void restoreSavedAppearance(LocalPlayer player) {
+    //? if <1.21 {
+        boolean isReplay = com.quickskin.mod.client.compat.ReplayModHelper.isInReplay();
+        if (isReplay) {
+            com.quickskin.mod.client.compat.ReplayModHelper.startReplayPlayerWatcher();
+            return;
+        }
+        restoreSavedAppearanceToPlayer(player.getUUID());
+    }
+    private static void restoreSavedAppearanceToPlayer(java.util.UUID targetPlayerId) {
+    //?}
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
         com.quickskin.mod.client.services.LocalAssetManager assetManager =
                 com.quickskin.mod.client.services.LocalAssetManager.getInstance();
+        //? if >=1.21 {
 
         String skinId = null;
         String modelType = null;
         String capeId = null;
+        //?}
 
         // Check if there's a saved skin
         if (!config.activeSkinHash.isEmpty()) {
             com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.activeSkinHash);
 
             if (metadata != null) {
+                //? if <1.21 {
+                String skinId = "local_skin:" + metadata.hash();
+                String modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+                com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                        .applySkin(targetPlayerId, skinId, modelType);
+                //?} else {
                 // Prepare the saved skin with the saved model type preference for this skin
                 skinId = "local_skin:" + metadata.hash();
                 modelType = assetManager.getSkinModelPreference(config.activeSkinHash);
+                //?}
             }
+        //? if <1.21.11 {
+        } else if (!config.playerOwnSkinHash.isEmpty() && config.activeCpmModelHash.isEmpty()) {
+        //?} else {
         } else if (!config.playerOwnSkinHash.isEmpty()) {
             // No skin selected, but player's own skin exists - auto-select it
+        //?}
             com.quickskin.mod.common.data.AssetMetadata metadata = assetManager.getMetadata(config.playerOwnSkinHash);
 
             if (metadata != null) {
@@ -746,25 +881,44 @@ public class ClientEvents {
                 config.activeSkinHash = config.playerOwnSkinHash;
                 config.save();
 
+                //? if <1.21 {
+                String skinId = "local_skin:" + metadata.hash();
+                String modelType = assetManager.getSkinModelPreference(config.playerOwnSkinHash);
+                //?} else {
                 skinId = "local_skin:" + metadata.hash();
                 modelType = assetManager.getSkinModelPreference(config.playerOwnSkinHash);
+                //?}
 
                 // If auto mode, use the detected model from the skin
                 if ("auto".equals(modelType)) {
                     modelType = metadata.skinModel();
                 }
+                //? if <1.21 {
+                com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                        .applySkin(targetPlayerId, skinId, modelType);
+                //?}
             }
         }
 
         // Check if there's a saved cape
         if (!config.activeCapeHash.isEmpty()) {
+            //? if <1.21 {
+            String capeId = config.activeCapeHash;
+            //?} else {
             capeId = config.activeCapeHash;
         }
+            //?}
 
+        //? if >=1.21 {
         // Apply both skin and cape together in a single call to avoid multiple syncs
         if (skinId != null || capeId != null) {
+        //?}
             com.quickskin.mod.client.services.PlayerAppearanceService.getInstance()
+                    //? if <1.21 {
+                    .applyCape(targetPlayerId, capeId);
+                    //?} else {
                     .applyLook(player.getUUID(), skinId, capeId, modelType);
+                    //?}
         }
     }
 
@@ -775,8 +929,12 @@ public class ClientEvents {
     public static void autoSelectPlayerOwnSkin() {
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
 
+        //? if <1.21.11 {
+        if (config.activeSkinHash.isEmpty() && config.activeCpmModelHash.isEmpty() && !config.playerOwnSkinHash.isEmpty()) {
+        //?} else {
         // Check if no skin is selected but player's own skin exists
         if (config.activeSkinHash.isEmpty() && !config.playerOwnSkinHash.isEmpty()) {
+        //?}
             LocalAssetManager assetManager = LocalAssetManager.getInstance();
             AssetMetadata metadata = assetManager.getMetadata(config.playerOwnSkinHash);
 

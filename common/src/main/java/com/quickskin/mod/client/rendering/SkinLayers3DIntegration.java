@@ -5,12 +5,26 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.quickskin.mod.QuickSkin;
 import net.minecraft.client.Minecraft;
+//? if <1.21.11 {
+import net.minecraft.client.model.PlayerModel;
+//?} else {
 import net.minecraft.client.model.player.PlayerModel;
+//?}
 import net.minecraft.client.model.geom.ModelPart;
+//? if <1.21.11 {
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+//?} else {
 import net.minecraft.client.renderer.rendertype.RenderTypes;
+//?}
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+//? if <1.21.11 {
+import net.minecraft.client.renderer.texture.HttpTexture;
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -25,7 +39,11 @@ import java.util.Map;
  * and gracefully handles when the mod is not installed at runtime.
  */
 public class SkinLayers3DIntegration {
+    //? if <1.21.11 {
+    private static final Map<ResourceLocation, PlayerMeshes> meshCache = new HashMap<>();
+    //?} else {
     private static final Map<Identifier, PlayerMeshes> meshCache = new HashMap<>();
+    //?}
     private static boolean MOD_AVAILABLE;
 
     private static Object configInstance;
@@ -125,11 +143,42 @@ public class SkinLayers3DIntegration {
         return MOD_AVAILABLE;
     }
 
-    // NOTE (26.2): render3DLayers(PoseStack, MultiBufferSource, ...) was removed during the port to 26.2.
-    // MultiBufferSource no longer exists (the immediate buffer pipeline was replaced by the deferred
-    // SubmitNodeCollector), and this entry point had no callers in the current codebase — 3D Skin Layers
-    // entity rendering is driven automatically through the mod's entity layers, not this manual path.
-    // The mesh-building helpers below are retained for a future reimplementation against the new API.
+    //? if <1.21.11 {
+    public static void render3DLayers(PoseStack poseStack, MultiBufferSource bufferSource,
+                                      int light, int overlay, PlayerModel<?> model,
+                                      ResourceLocation skinLocation, boolean thinArms) {
+        if (!MOD_AVAILABLE) {
+            return;
+        }
+        try {
+            PlayerMeshes meshes = getOrCreateMeshes(skinLocation, thinArms);
+            if (meshes == null || !meshes.isValid()) {
+                return;
+            }
+            VertexConsumer vertices = bufferSource.getBuffer(
+                    RenderType.entityTranslucent(skinLocation, true));
+            if (getBooleanConfig(enableHatField) && meshes.headMesh != null) {
+                renderHeadLayer(poseStack, vertices, light, overlay, model, meshes.headMesh);
+            }
+            if (getBooleanConfig(enableJacketField) && meshes.torsoMesh != null) {
+                renderBodyLayer(poseStack, vertices, light, overlay, model, meshes.torsoMesh);
+            }
+            if (getBooleanConfig(enableLeftSleeveField) && meshes.leftArmMesh != null) {
+                renderArmLayer(poseStack, vertices, light, overlay, model.leftArm, meshes.leftArmMesh, false, thinArms);
+            }
+            if (getBooleanConfig(enableRightSleeveField) && meshes.rightArmMesh != null) {
+                renderArmLayer(poseStack, vertices, light, overlay, model.rightArm, meshes.rightArmMesh, true, thinArms);
+            }
+            if (getBooleanConfig(enableLeftPantsField) && meshes.leftLegMesh != null) {
+                renderLegLayer(poseStack, vertices, light, overlay, model.leftLeg, meshes.leftLegMesh);
+            }
+            if (getBooleanConfig(enableRightPantsField) && meshes.rightLegMesh != null) {
+                renderLegLayer(poseStack, vertices, light, overlay, model.rightLeg, meshes.rightLegMesh);
+            }
+        } catch (Exception e) {
+        }
+    }
+    //?}
 
     private static class PlayerMeshes {
         Object headMesh;
@@ -145,7 +194,11 @@ public class SkinLayers3DIntegration {
         }
     }
 
+    //? if <1.21.11 {
+    private static PlayerMeshes getOrCreateMeshes(ResourceLocation skinLocation, boolean thinArms) {
+    //?} else {
     private static PlayerMeshes getOrCreateMeshes(Identifier skinLocation, boolean thinArms) {
+    //?}
         PlayerMeshes cached = meshCache.get(skinLocation);
         if (cached != null && cached.isValid()) {
             return cached;
@@ -183,7 +236,11 @@ public class SkinLayers3DIntegration {
         return null;
     }
 
+    //? if <1.21.11 {
+    private static NativeImage getSkinTexture(ResourceLocation skinLocation) {
+    //?} else {
     private static NativeImage getSkinTexture(Identifier skinLocation) {
+    //?}
         try {
             Minecraft mc = Minecraft.getInstance();
 
@@ -203,18 +260,33 @@ public class SkinLayers3DIntegration {
                     return pixels;
                 }
             }
+            //? if <1.21.11 {
+            else if (texture instanceof HttpTexture) {
+            //?} else {
             // Use reflection to access HttpTexture file field (class may not exist in all MC versions)
             else {
+            //?}
                 try {
+                    //? if <1.21.11 {
+                    Field fileField = HttpTexture.class.getDeclaredField("file");
+                    fileField.setAccessible(true);
+                    File file = (File) fileField.get(texture);
+                    //?} else {
                     Class<?> httpTextureClass = Class.forName("net.minecraft.client.renderer.texture.HttpTexture");
                     if (httpTextureClass.isInstance(texture)) {
                         Field fileField = httpTextureClass.getDeclaredField("file");
                         fileField.setAccessible(true);
                         File file = (File) fileField.get(texture);
+                    //?}
 
+                    //? if <1.21 {
+                    if (file != null && file.isFile()) {
+                        return NativeImage.read(new FileInputStream(file));
+                    //?} else {
                         if (file != null && file.isFile()) {
                             return NativeImage.read(new FileInputStream(file));
                         }
+                    //?}
                     }
                 } catch (Exception e) {
                     return null;
@@ -227,7 +299,11 @@ public class SkinLayers3DIntegration {
     }
 
     private static void renderHeadLayer(PoseStack poseStack, VertexConsumer vertices,
+                                        //? if <1.21.11 {
+                                        int light, int overlay, PlayerModel<?> model, Object headMesh) {
+                                        //?} else {
                                         int light, int overlay, PlayerModel model, Object headMesh) {
+                                        //?}
         try {
             float voxelSize = getFloatConfig(headVoxelSizeField);
             poseStack.pushPose();
@@ -244,7 +320,11 @@ public class SkinLayers3DIntegration {
     }
 
     private static void renderBodyLayer(PoseStack poseStack, VertexConsumer vertices,
+                                        //? if <1.21.11 {
+                                        int light, int overlay, PlayerModel<?> model, Object torsoMesh) {
+                                        //?} else {
                                         int light, int overlay, PlayerModel model, Object torsoMesh) {
+                                        //?}
         try {
             float widthScaling = getFloatConfig(bodyVoxelWidthSizeField);
             float heightScaling = 1.035f;

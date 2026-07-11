@@ -38,9 +38,13 @@ public class SkinImporter {
 
         // Validate it's a supported image file (PNG, WebP, or JPG)
         String fileName = sourcePath.getFileName().toString();
+        //? if <1.21 {
+        if (!fileName.toLowerCase(Locale.ROOT).endsWith(".png")) {
+        //?} else {
         String lowerName = fileName.toLowerCase(Locale.ROOT);
         if (!lowerName.endsWith(".png") && !lowerName.endsWith(".webp")
                 && !lowerName.endsWith(".jpg")) {
+        //?}
             return null;
         }
 
@@ -56,11 +60,18 @@ public class SkinImporter {
 
             // Copy file to skins directory (always save as PNG since content is converted to PNG)
             LocalAssetManager assetManager = LocalAssetManager.getInstance();
+            //? if <1.21 {
+            Path targetPath = assetManager.getSkinsDirectory().resolve(fileName);
+            //?} else {
             String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
             Path targetPath = assetManager.getSkinsDirectory().resolve(nameWithoutExt + ".png");
+            //?}
 
             // If file already exists, add a number
             int counter = 1;
+            //? if <26.2 {
+            String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+            //?}
             while (Files.exists(targetPath)) {
                 targetPath = assetManager.getSkinsDirectory().resolve(nameWithoutExt + "_" + counter + ".png");
                 counter++;
@@ -78,6 +89,37 @@ public class SkinImporter {
                 return assetManager.getMetadata(hash);
             }
 
+    //? if <1.21.11 {
+        } catch (IOException e) {
+        }
+        return null;
+    }
+    public static AssetMetadata importCpmModel(Path sourcePath) {
+        if (sourcePath == null || !Files.exists(sourcePath)) {
+            return null;
+        }
+        String fileName = sourcePath.getFileName().toString();
+        if (!fileName.toLowerCase(Locale.ROOT).endsWith(".cpmmodel")) {
+            return null;
+        }
+        try {
+            Path modelsDir = com.quickskin.mod.client.compat.CPMCompatIntegration.getCPMModelsDirectory();
+            Files.createDirectories(modelsDir);
+            Path targetPath = modelsDir.resolve(fileName);
+            int counter = 1;
+            String nameWithoutExt = fileName.substring(0, fileName.length() - 9);
+            while (Files.exists(targetPath)) {
+                targetPath = modelsDir.resolve(nameWithoutExt + "_" + counter + ".cpmmodel");
+                counter++;
+            }
+            Files.copy(sourcePath, targetPath);
+            LocalAssetManager assetManager = LocalAssetManager.getInstance();
+            assetManager.reload();
+            String hash = HashUtil.computeFileHash(targetPath);
+            if (hash != null) {
+                return assetManager.getMetadata(hash);
+            }
+    //?}
         } catch (IOException e) {
         }
 
