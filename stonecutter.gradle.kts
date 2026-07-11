@@ -11,8 +11,9 @@ plugins {
     id("net.darkhax.curseforgegradle") version "1.1.18" apply false
 }
 
-// Phase 0 consumes the existing version trees directly. A detached controller ensures that
-// selecting or building a node never rewrites any tracked source tree.
+// Detached mode preprocesses each branch's canonical src/main tree into every node's generated
+// sources without rewriting tracked files. Phase 1a consumes that output for 26.2; older nodes
+// continue to replace their source sets with the read-only src/v* parity trees.
 stonecutter active null
 
 stonecutter {
@@ -21,7 +22,7 @@ stonecutter {
     }
 }
 
-// Stonecutter normally annotates every Jar manifest with node metadata. Phase 0 requires the
+// Stonecutter normally annotates every Jar manifest with node metadata. The parity gates require the
 // production resources to match the legacy oracle, so remove only those four generated keys after
 // every plugin has finished configuring the manifest.
 allprojects {

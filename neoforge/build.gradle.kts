@@ -39,20 +39,12 @@ repositories {
     maven("https://maven.neoforged.net/releases")
 }
 
-sourceSets {
-    main {
-        java.setSrcDirs(
-            listOf(
-                rootProject.file("neoforge/src/main/java"),
-                rootProject.file("neoforge/src/$versionDir/java"),
-            )
-        )
-        resources.setSrcDirs(
-            listOf(
-                rootProject.file("neoforge/src/main/resources"),
-                rootProject.file("neoforge/src/$versionDir/resources"),
-            )
-        )
+if (minecraftVersion != "26.2") {
+    sourceSets {
+        main {
+            java.setSrcDirs(listOf(rootProject.file("neoforge/src/$versionDir/java")))
+            resources.setSrcDirs(listOf(rootProject.file("neoforge/src/$versionDir/resources")))
+        }
     }
 }
 

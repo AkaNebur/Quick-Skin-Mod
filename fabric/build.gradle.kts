@@ -38,20 +38,23 @@ repositories {
     mavenCentral()
 }
 
-sourceSets {
-    main {
-        java.setSrcDirs(
-            listOf(
-                rootProject.file("fabric/src/main/java"),
-                rootProject.file("fabric/src/$versionDir/java"),
+if (minecraftVersion != "26.2") {
+    sourceSets {
+        main {
+            java.setSrcDirs(
+                listOf(
+                    rootProject.file("fabric/src/main/java/com/quickskin/mod/fabric"),
+                    rootProject.file("fabric/src/$versionDir/java"),
+                )
             )
-        )
-        resources.setSrcDirs(
-            listOf(
-                rootProject.file("fabric/src/main/resources"),
-                rootProject.file("fabric/src/$versionDir/resources"),
-            )
-        )
+            resources.setSrcDirs(listOf(rootProject.file("fabric/src/$versionDir/resources")))
+        }
+    }
+
+    tasks.processResources {
+        from(rootProject.file("fabric/src/main/resources")) {
+            include("icon.png", "quick-skin.accesswidener")
+        }
     }
 }
 
