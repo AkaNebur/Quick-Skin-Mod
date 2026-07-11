@@ -5,13 +5,8 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 //?}
 import com.quickskin.mod.QuickSkin;
-//? if >=26.2 {
 import com.quickskin.mod.client.gui.GuiCompat;
-//?}
 import com.quickskin.mod.client.gui.util.BackgroundRenderer;
-//? if <1.21 {
-import com.quickskin.mod.client.gui.GuiCompat;
-//?}
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AssetMetadata;
@@ -1004,7 +999,7 @@ public class CapeAdjustScreen extends Screen {
     // --- Input handling ---
 
     @Override
-    //? if <26.2 {
+    //? if <1.21.11 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
     //?} else {
@@ -1029,7 +1024,7 @@ public class CapeAdjustScreen extends Screen {
     }
 
     @Override
-    //? if <26.2 {
+    //? if <1.21.11 {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
     //?} else {
     public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent event) {
@@ -1048,7 +1043,7 @@ public class CapeAdjustScreen extends Screen {
     }
 
     @Override
-    //? if <26.2 {
+    //? if <1.21.11 {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
     //?} else {
     public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double dragX, double dragY) {
@@ -1147,9 +1142,20 @@ public class CapeAdjustScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
-    //? if >=26.1 {
     }
 
+    //? if >=1.21.6 {
+        //? if <26.1 {
+    @Override
+    protected void renderBlurredBackground(GuiGraphics guiGraphics) {
+        // Disable the default blur effect - we have our own custom background
+    }
+
+    @Override
+    public void renderBackground(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Disable the default dark background overlay - we render our own custom background
+    }
+        //?} else {
     @Override
     protected void extractBlurredBackground(GuiGraphicsExtractor guiGraphics) {
         // Disable the default blur effect - we have our own custom background
@@ -1159,17 +1165,26 @@ public class CapeAdjustScreen extends Screen {
     public void extractBackground(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Disable the default dark background overlay - we render our own custom background
     }
+        //?}
+    //?}
 
+    //? if >=1.21.11 {
     /**
      * Draws an outline immediately using fill calls.
      */
-    private static void drawOutline(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int color) {
+    private static void drawOutline(
+            //? if <26.1 {
+            GuiGraphics graphics,
+            //?} else {
+            GuiGraphicsExtractor graphics,
+            //?}
+            int x, int y, int width, int height, int color) {
         graphics.fill(x, y, x + width, y + 1, color);
         graphics.fill(x, y + height - 1, x + width, y + height, color);
         graphics.fill(x, y + 1, x + 1, y + height - 1, color);
         graphics.fill(x + width - 1, y + 1, x + width, y + height - 1, color);
-    //?}
     }
+    //?}
 
     /**
      * Convert BufferedImage to NativeImage for texture registration

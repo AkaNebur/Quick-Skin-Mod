@@ -27,10 +27,14 @@ public class StyledButton extends Button {
     }
 
     @Override
-    //? if <26.1 {
+    //? if <1.21.11 {
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
     //?} else {
+        //? if <26.1 {
+    protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+        //?} else {
     protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+        //?}
     //?}
         // Determine background color based on hover and active state
         int bgColor = this.isHovered() && this.active ? HOVER_BG : NORMAL_BG;
@@ -67,11 +71,14 @@ public class StyledButton extends Button {
                      outlineColor);
 
         // Draw centered text
-        //? if <26.1 {
+        //? if <1.21.11 {
         int textColor = this.active ? TEXT_COLOR : 0x666666;
-        graphics.drawCenteredString(
         //?} else {
         int textColor = this.active ? TEXT_COLOR : 0xFF666666;
+        //?}
+        //? if <26.1 {
+        graphics.drawCenteredString(
+        //?} else {
         graphics.centeredText(
         //?}
             net.minecraft.client.Minecraft.getInstance().font,

@@ -10,7 +10,7 @@ plugins {
 
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
-val canonicalVersions = setOf("1.20.1", "26.2")
+val canonicalVersions = setOf("1.20.1", "1.21.11", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
 val legacyJavaRoot = rootProject.file("fabric/src/legacy1_20_1/java")
 val generatedStonecutterJava = layout.buildDirectory.dir("generated/stonecutter/main/java")
@@ -62,6 +62,32 @@ if (minecraftVersion == "1.20.1") {
         main {
             java.setSrcDirs(listOf(consolidatedLegacyJava))
             resources.setSrcDirs(listOf(rootProject.file("fabric/src/legacy1_20_1/resources")))
+        }
+    }
+
+    tasks.named("compileJava") {
+        dependsOn(prepareConsolidatedJava)
+    }
+    tasks.matching { it.name == "sourcesJar" }.configureEach {
+        dependsOn(prepareConsolidatedJava)
+    }
+
+    tasks.processResources {
+        from(rootProject.file("fabric/src/main/resources")) {
+            include("icon.png", "quick-skin.accesswidener")
+        }
+    }
+} else if (minecraftVersion == "1.21.11") {
+    val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
+        dependsOn("stonecutterGenerate")
+        from(generatedStonecutterJava)
+        into(consolidatedLegacyJava)
+    }
+
+    sourceSets {
+        main {
+            java.setSrcDirs(listOf(consolidatedLegacyJava))
+            resources.setSrcDirs(listOf(rootProject.file("fabric/src/v1_21_11/resources")))
         }
     }
 

@@ -19,10 +19,15 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.CubeMap;
 //? if <26.1 {
 import net.minecraft.client.renderer.PanoramaRenderer;
-import net.minecraft.resources.ResourceLocation;
 //?} else {
 import net.minecraft.client.renderer.Panorama;
+//?}
+//? if >=1.21.6 {
 import net.minecraft.client.renderer.RenderPipelines;
+//?}
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
 //?}
 
@@ -38,10 +43,13 @@ public class BackgroundRenderer {
     // Panorama renderer instance (reused across renders)
     //? if <26.1 {
     private static PanoramaRenderer panoramaRenderer = null;
+    //?} else {
+    private static Panorama panoramaRenderer = null;
+    //?}
+    //? if <1.21.11 {
     private static final ResourceLocation PANORAMA_OVERLAY = new ResourceLocation("textures/gui/title/background/panorama_overlay.png");
     private static final CubeMap PANORAMA_CUBE_MAP = new CubeMap(new ResourceLocation("textures/gui/title/background/panorama"));
     //?} else {
-    private static Panorama panoramaRenderer = null;
     private static final Identifier PANORAMA_OVERLAY = Identifier.withDefaultNamespace("textures/gui/title/background/panorama_overlay.png");
     private static final CubeMap PANORAMA_CUBE_MAP = new CubeMap(Identifier.withDefaultNamespace("textures/gui/title/background/panorama"));
     //?}
@@ -203,12 +211,14 @@ public class BackgroundRenderer {
             // Sync panorama time with global time source (same as TitleScreen via mixin)
             PanoramaTimeSync.syncPanoramaRenderer(panoramaRenderer);
 
-            //? if <26.2 {
+            //? if <1.21.6 {
             GuiCompat.renderPanorama(panoramaRenderer, partialTick);
             //?} else {
-            // 26.2: Panorama.extractRenderState dropped its trailing "should spin" boolean; spinning is
-            // now toggled via startSpin()/holdSpin(). Keep the panorama spinning like the title screen.
+                //? if <26.1 {
+            GuiCompat.renderPanorama(panoramaRenderer, graphics, screen.width, screen.height);
+                //?} else {
             GuiCompat.extractPanorama(panoramaRenderer, graphics, screen.width, screen.height);
+                //?}
             //?}
 
             // Render panorama overlay (darkens the panorama like in title screen)

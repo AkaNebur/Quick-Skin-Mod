@@ -1,10 +1,13 @@
 package com.quickskin.mod.client.gui.util;
 
-//? if <26.1 {
+//? if <1.21.11 {
 import net.minecraft.Util;
-import net.minecraft.client.renderer.PanoramaRenderer;
 //?} else {
 import net.minecraft.util.Util;
+//?}
+//? if <26.1 {
+import net.minecraft.client.renderer.PanoramaRenderer;
+//?} else {
 import net.minecraft.client.renderer.Panorama;
 //?}
 

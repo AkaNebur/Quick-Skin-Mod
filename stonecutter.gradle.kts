@@ -37,7 +37,7 @@ allprojects {
 
 tasks.register("buildAllLanes") {
     group = "build"
-    description = "Builds all six production Quick Skin artifacts in one Gradle invocation."
+    description = "Builds every production Quick Skin loader artifact in one Gradle invocation."
     dependsOn(
         ":fabric:1.20.1:remapJar",
         ":forge:1.20.1:remapJar",

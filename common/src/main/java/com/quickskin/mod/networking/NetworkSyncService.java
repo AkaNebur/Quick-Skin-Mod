@@ -52,7 +52,7 @@ public class NetworkSyncService {
             return;
         }
 
-        //? if <26.2 {
+        //? if <1.21 {
         if (mc.getConnection() == null) {
         //?} else {
         // Check if server supports QuickSkin packets
@@ -90,7 +90,7 @@ public class NetworkSyncService {
                 model != null ? model : "classic"
         //?}
         );
-        //? if >=26.2 {
+        //? if >=1.21 {
 
         NetworkTransport.INSTANCE.sendToServer(payload);
         //?}
@@ -102,7 +102,7 @@ public class NetworkSyncService {
      * @param textureType Type ("skin" or "cape")
      */
     private void uploadLocalTexture(String textureId, String textureType) {
-        //? if >=26.2 {
+        //? if >=1.21 {
         // Check if server supports texture chunks
         if (!NetworkTransport.INSTANCE.canServerReceive(TextureChunkPayload.TYPE)) {
             return;
@@ -132,7 +132,7 @@ public class NetworkSyncService {
             byte[] chunk = new byte[length];
             System.arraycopy(textureData, offset, chunk, 0, length);
 
-            //? if <26.2 {
+            //? if <1.21 {
             NetworkTransport.INSTANCE.sendTextureChunkToServer(
                     hash, textureType, i, totalChunks, chunk);
             //?} else {
@@ -155,7 +155,7 @@ public class NetworkSyncService {
      * @param hash Texture hash
      */
     private void uploadAnimationMetadata(String hash) {
-        //? if >=26.2 {
+        //? if >=1.21 {
         // Check if server supports animation metadata
         if (!NetworkTransport.INSTANCE.canServerReceive(UploadAnimationMetadataPayload.TYPE)) {
             return;
@@ -171,7 +171,7 @@ public class NetworkSyncService {
         // Serialize metadata to JSON
         String metadataJson = serializeMetadata(metadata);
 
-        //? if <26.2 {
+        //? if <1.21 {
         NetworkTransport.INSTANCE.sendAnimationMetadataToServer(hash, metadataJson);
         //?} else {
         UploadAnimationMetadataPayload payload = new UploadAnimationMetadataPayload(hash, metadataJson);
@@ -196,7 +196,7 @@ public class NetworkSyncService {
             return;
         }
 
-        //? if <26.2 {
+        //? if <1.21 {
         NetworkTransport.INSTANCE.sendAppearanceToServer(playerId, "", "", "classic");
         //?} else {
         // Check if server supports QuickSkin packets
@@ -221,7 +221,7 @@ public class NetworkSyncService {
             return;
         }
 
-        //? if <26.2 {
+        //? if <1.21 {
         NetworkTransport.INSTANCE.requestTextureFromServer(playerId, textureType, hash);
         //?} else {
         // Check if server supports QuickSkin packets

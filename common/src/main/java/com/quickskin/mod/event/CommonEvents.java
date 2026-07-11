@@ -48,7 +48,7 @@ public class CommonEvents {
 
             // Send QuickSkin data only to players that have the mod installed
             ServerPlayer serverPlayer = (ServerPlayer) player;
-            //? if <26.2 {
+            //? if <1.21 {
             boolean hasQuickSkin = NetworkTransport.INSTANCE.canPlayerReceiveQuickSkin(serverPlayer)
                     || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID());
             //?} else {
@@ -66,7 +66,7 @@ public class CommonEvents {
                 int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
                 if (cooldownSeconds > 0 && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())) {
                     long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID());
-                    //? if <26.2 {
+                    //? if <1.21 {
                     NetworkTransport.INSTANCE.sendCooldownToPlayer(serverPlayer, cooldownEndTime);
                     //?} else {
                     CooldownUpdatePayload payload = new CooldownUpdatePayload(cooldownEndTime);
@@ -117,7 +117,7 @@ public class CommonEvents {
             // Re-sync appearance if needed (sometimes skins don't transfer across dimensions)
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
-                //? if <26.2 {
+                //? if <1.21 {
                 if (NetworkTransport.INSTANCE.canPlayerReceiveQuickSkin(serverPlayer)
                         || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID())) {
                 //?} else {

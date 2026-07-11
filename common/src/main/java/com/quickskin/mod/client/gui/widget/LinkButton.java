@@ -5,11 +5,14 @@ import com.mojang.blaze3d.systems.RenderSystem;
 //?}
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.GuiCompat;
-//? if <26.1 {
+//? if <1.21.11 {
 import net.minecraft.Util;
-import net.minecraft.client.gui.GuiGraphics;
 //?} else {
 import net.minecraft.util.Util;
+//?}
+//? if <26.1 {
+import net.minecraft.client.gui.GuiGraphics;
+//?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 //?}
 import net.minecraft.client.gui.components.Button;
@@ -52,7 +55,7 @@ public class LinkButton extends Button {
     }
 
     @Override
-    //? if <26.1 {
+    //? if <1.21.11 {
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         graphics.blitNineSliced(WIDGETS_LOCATION, this.getX(), this.getY(), this.getWidth(), this.getHeight(), 20, 4, 200, 20, 0, 46 + 20);
         RenderSystem.enableBlend();
@@ -60,10 +63,13 @@ public class LinkButton extends Button {
         RenderSystem.enableDepthTest();
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, this.alpha);
     //?} else {
+        //? if <26.1 {
+    protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+        renderDefaultSprite(graphics);
+        //?} else {
     protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
-        // 1.21.11: renderContents is responsible for everything including background
         extractDefaultSprite(graphics);
-        // RenderSystem.setShaderColor() removed in 1.21.6
+        //?}
     //?}
 
         // Draw the logo texture on top, inset slightly to fit within the rounded border.

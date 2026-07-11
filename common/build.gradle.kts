@@ -22,9 +22,10 @@ plugins {
 
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
-val canonicalVersions = setOf("1.20.1", "26.2")
+val canonicalVersions = setOf("1.20.1", "1.21.11", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
-val legacyJavaRoot = rootProject.file("common/src/legacy1_20_1/java")
+val legacy120JavaRoot = rootProject.file("common/src/legacy1_20_1/java")
+val legacy12111JavaRoot = rootProject.file("common/src/legacy1_21_11/java")
 val generatedStonecutterJava = layout.buildDirectory.dir("generated/stonecutter/main/java")
 val consolidatedLegacyJava = layout.buildDirectory.dir("generated/consolidated/main/java")
 val legacyCommonJar = rootProject.file(
@@ -89,17 +90,17 @@ if (minecraftVersion == "1.20.1") {
         "com/quickskin/mod/networking/payloads/UploadTexturePayload.java",
         "com/quickskin/mod/platform/MinecraftCompat26_2.java",
     )
-    val legacyOverrides = fileTree(legacyJavaRoot) {
+    val legacyOverrides = fileTree(legacy120JavaRoot) {
         include("**/*.java")
     }.files.mapTo(linkedSetOf()) {
-        it.relativeTo(legacyJavaRoot).invariantSeparatorsPath
+        it.relativeTo(legacy120JavaRoot).invariantSeparatorsPath
     }
     val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
         dependsOn("stonecutterGenerate")
         from(generatedStonecutterJava) {
             exclude(legacyOverrides + canonicalOnlyAfterLegacy)
         }
-        from(legacyJavaRoot)
+        from(legacy120JavaRoot)
         into(consolidatedLegacyJava)
     }
 
@@ -107,6 +108,44 @@ if (minecraftVersion == "1.20.1") {
         main {
             java.setSrcDirs(listOf(consolidatedLegacyJava))
             resources.setSrcDirs(listOf(rootProject.file("common/src/legacy1_20_1/resources")))
+        }
+    }
+
+    tasks.named("compileJava") {
+        dependsOn(prepareConsolidatedJava)
+    }
+    tasks.matching { it.name == "sourcesJar" }.configureEach {
+        dependsOn(prepareConsolidatedJava)
+    }
+
+    tasks.processResources {
+        from(rootProject.file("common/src/main/resources")) {
+            include("assets/quickskin/lang/**")
+        }
+    }
+} else if (minecraftVersion == "1.21.11") {
+    val canonicalOnlyAfter12111 = setOf(
+        "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
+        "com/quickskin/mod/platform/MinecraftCompat26_2.java",
+    )
+    val legacyOverrides = fileTree(legacy12111JavaRoot) {
+        include("**/*.java")
+    }.files.mapTo(linkedSetOf()) {
+        it.relativeTo(legacy12111JavaRoot).invariantSeparatorsPath
+    }
+    val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
+        dependsOn("stonecutterGenerate")
+        from(generatedStonecutterJava) {
+            exclude(legacyOverrides + canonicalOnlyAfter12111)
+        }
+        from(legacy12111JavaRoot)
+        into(consolidatedLegacyJava)
+    }
+
+    sourceSets {
+        main {
+            java.setSrcDirs(listOf(consolidatedLegacyJava))
+            resources.setSrcDirs(listOf(rootProject.file("common/src/v1_21_11/resources")))
         }
     }
 

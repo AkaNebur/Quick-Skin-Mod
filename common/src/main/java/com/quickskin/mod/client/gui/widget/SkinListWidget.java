@@ -92,7 +92,7 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
     }
 
     @Override
-    //? if <26.1 {
+    //? if <1.21 {
     protected void renderList(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         super.renderList(graphics, mouseX, mouseY, partialTicks);
     //?} else {
@@ -106,9 +106,14 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
     }
 
     @Override
+        //? if <26.1 {
+    public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+        super.renderWidget(graphics, mouseX, mouseY, partialTicks);
+        //?} else {
     public void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
         // Call parent to render the list entries
         super.extractWidgetRenderState(graphics, mouseX, mouseY, partialTicks);
+        //?}
     //?}
 
         // Show drop zone if list is mostly empty

@@ -22,13 +22,18 @@ public class RotateButton extends Button {
     }
 
     @Override
-    //? if <26.1 {
+    //? if <1.21.11 {
     public void renderString(GuiGraphics pGuiGraphics, Font pFont, int pColor) {
     //?} else {
+        //? if <26.1 {
+    protected void renderContents(GuiGraphics pGuiGraphics, int mouseX, int mouseY, float partialTick) {
+        renderDefaultSprite(pGuiGraphics);
+        Font pFont = net.minecraft.client.Minecraft.getInstance().font;
+        //?} else {
     protected void extractContents(GuiGraphicsExtractor pGuiGraphics, int mouseX, int mouseY, float partialTick) {
-        // 1.21.11: renderContents is responsible for everything including background
         extractDefaultSprite(pGuiGraphics);
         Font pFont = net.minecraft.client.Minecraft.getInstance().font;
+        //?}
     //?}
         Component message = this.getMessage();
         //? if <1.21.11 {
@@ -53,10 +58,14 @@ public class RotateButton extends Button {
         //?}
 
         // Draw the string centered on the new (0, 0) origin
-        //? if <26.1 {
+        //? if <1.21.11 {
         pGuiGraphics.drawString(pFont, message, (int)(-textWidth / 2), (int)(-pFont.lineHeight / 2.0F + 1), pColor);
         //?} else {
+            //? if <26.1 {
+        pGuiGraphics.drawString(pFont, message, (int)(-textWidth / 2), (int)(-pFont.lineHeight / 2.0F + 1), 0xFFFFFFFF);
+            //?} else {
         pGuiGraphics.text(pFont, message, (int)(-textWidth / 2), (int)(-pFont.lineHeight / 2.0F + 1), 0xFFFFFFFF);
+            //?}
         //?}
 
         //? if <1.21.11 {

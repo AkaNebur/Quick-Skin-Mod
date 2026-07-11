@@ -42,7 +42,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
     @Nullable
     private AssetMetadata currentMetadata;
-    //? if <1.21.11 {
+    //? if <1.21.4 {
     @Nullable
     private net.minecraft.resources.ResourceLocation cpmIconLocation = null;
     private boolean isCpmModel = false;
@@ -298,7 +298,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 // Use explicitly selected model
                 playerWidget.setModelType(currentModelType);
             }
-            //? if <26.2 {
+            //? if <1.21.4 {
             updateModelButtonStates();
             //?}
         }
@@ -402,11 +402,11 @@ public class PlayerPreviewPanel extends AbstractWidget {
         }
     }
 
-    //? if <1.21.11 {
+    //? if <1.21.4 {
     private boolean lastCpmWearing = false;
     //?}
     @Override
-    //? if <26.1 {
+    //? if <1.21.4 {
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         long elapsed = System.currentTimeMillis() - skinChangedAt;
         boolean cpmWearing;
@@ -430,8 +430,13 @@ public class PlayerPreviewPanel extends AbstractWidget {
             com.mojang.blaze3d.systems.RenderSystem.disableBlend();
         }
     //?} else {
+        //? if <26.1 {
+    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // This panel doesn't render anything itself - child widgets handle rendering
+        //?} else {
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         // This panel doesn't render anything itself - child widgets handle rendering
+        //?}
     //?}
     }
 

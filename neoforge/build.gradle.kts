@@ -1,6 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import dev.architectury.plugin.ArchitectPluginExtension
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
+import org.gradle.api.tasks.Sync
 
 plugins {
     java
@@ -9,7 +10,11 @@ plugins {
 
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
+val canonicalVersions = setOf("1.21.11", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
+val legacy12111JavaRoot = rootProject.file("neoforge/src/legacy1_21_11/java")
+val generatedStonecutterJava = layout.buildDirectory.dir("generated/stonecutter/main/java")
+val consolidatedLegacyJava = layout.buildDirectory.dir("generated/consolidated/main/java")
 val commonProjectPath = requireNotNull(stonecutter.node.sibling("common")).hierarchy.toString()
 val commonProject = project(commonProjectPath)
 evaluationDependsOn(commonProjectPath)
@@ -39,7 +44,35 @@ repositories {
     maven("https://maven.neoforged.net/releases")
 }
 
-if (minecraftVersion != "26.2") {
+if (minecraftVersion == "1.21.11") {
+    val legacyOverrides = fileTree(legacy12111JavaRoot) {
+        include("**/*.java")
+    }.files.mapTo(linkedSetOf()) {
+        it.relativeTo(legacy12111JavaRoot).invariantSeparatorsPath
+    }
+    val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
+        dependsOn("stonecutterGenerate")
+        from(generatedStonecutterJava) {
+            exclude(legacyOverrides)
+        }
+        from(legacy12111JavaRoot)
+        into(consolidatedLegacyJava)
+    }
+
+    sourceSets {
+        main {
+            java.setSrcDirs(listOf(consolidatedLegacyJava))
+            resources.setSrcDirs(listOf(rootProject.file("neoforge/src/v1_21_11/resources")))
+        }
+    }
+
+    tasks.named("compileJava") {
+        dependsOn(prepareConsolidatedJava)
+    }
+    tasks.matching { it.name == "sourcesJar" }.configureEach {
+        dependsOn(prepareConsolidatedJava)
+    }
+} else if (minecraftVersion !in canonicalVersions) {
     sourceSets {
         main {
             java.setSrcDirs(listOf(rootProject.file("neoforge/src/$versionDir/java")))

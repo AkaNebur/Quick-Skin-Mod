@@ -27,10 +27,14 @@ public class DangerButton extends Button {
     }
 
     @Override
-    //? if <26.1 {
+    //? if <1.21.11 {
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
     //?} else {
+        //? if <26.1 {
+    protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+        //?} else {
     protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+        //?}
     //?}
         // Determine background color based on hover state
         int bgColor = this.isHovered() ? HOVER_BG : NORMAL_BG;

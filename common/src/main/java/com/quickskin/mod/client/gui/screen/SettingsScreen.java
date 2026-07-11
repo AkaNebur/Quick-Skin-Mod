@@ -1,8 +1,6 @@
 package com.quickskin.mod.client.gui.screen;
 
-//? if >=26.2 {
 import com.quickskin.mod.client.gui.GuiCompat;
-//?}
 import com.mojang.blaze3d.platform.InputConstants;
 import com.quickskin.mod.client.gui.effect.BlurHandler;
 //? if <1.21 {
@@ -580,7 +578,7 @@ public class SettingsScreen extends Screen {
         // Render parent screen in background
     //?}
         if (this.parent != null) {
-            //? if <26.2 {
+            //? if <26.1 {
             GuiCompat.renderParent(this.parent, graphics, partialTick);
             //?} else {
             GuiCompat.extractParent(this.parent, graphics, partialTick);
@@ -688,7 +686,7 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
-    //? if <26.2 {
+    //? if <1.21.11 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
     //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
@@ -746,7 +744,7 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
-    //? if <26.2 {
+    //? if <1.21.11 {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
     //?} else {
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
@@ -890,7 +888,7 @@ public class SettingsScreen extends Screen {
 
                 if (newValue != oldValue) {
                     // Send packet to server to update the server-side config
-                    //? if <26.2 {
+                    //? if <1.21 {
                     NetworkTransport.INSTANCE.sendServerConfigUpdateToServer(
                             "disableSkinTransparency", newValue);
                     //?} else {

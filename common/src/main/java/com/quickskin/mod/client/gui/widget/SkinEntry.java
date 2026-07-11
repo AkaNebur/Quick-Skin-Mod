@@ -75,11 +75,15 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     }
 
     @Override
-    //? if <26.1 {
+    //? if <1.21.11 {
     public void render(GuiGraphics graphics, int index, int top, int left, int width, int height,
                       int mouseX, int mouseY, boolean isHovered, float partialTicks) {
     //?} else {
+        //? if <26.1 {
+    public void renderContent(GuiGraphics graphics, int mouseX, int mouseY, boolean isHovered, float partialTicks) {
+        //?} else {
     public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean isHovered, float partialTicks) {
+        //?}
         int top = this.getY();
         int left = this.getX();
         int width = this.getWidth();
@@ -155,22 +159,14 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             float scaleY = textureHeight / 64.0f;
                 //?}
 
-            //? if <26.2 {
-                GuiCompat.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
-                    8.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
-                    textureWidth, textureHeight);
-                GuiCompat.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
-                    40.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
-                    textureWidth, textureHeight);
-            }
-            //?} else {
-            // Render face (front + overlay)
             GuiCompat.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
                 8.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
                 textureWidth, textureHeight);
             GuiCompat.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
                 40.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
                 textureWidth, textureHeight);
+            //? if <1.21 {
+            }
             //?}
 
             //? if <1.21.11 {
@@ -201,14 +197,18 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         if (mc.font.width(displayName) > textMaxWidth) {
             displayName = mc.font.plainSubstrByWidth(displayName, textMaxWidth - mc.font.width("...")) + "...";
         }
-        //? if <26.1 {
+        //? if <1.21.11 {
         graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFF);
         //?} else {
+            //? if <26.1 {
+        graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
+            //?} else {
         graphics.text(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
+            //?}
         //?}
 
         // Model type and resolution
-        //? if <1.21.11 {
+        //? if <1.21.4 {
         String modelText;
         int modelTextColor;
         if (metadata.isCpmModel()) {
@@ -220,17 +220,23 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
                 modelText += " • " + metadata.resolution().name();
             }
             modelTextColor = metadata.resolution().isHD() ? 0x55FF55 : 0xAAAAAA;
+        }
         //?} else {
         String modelText = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null) ? "Slim" : "Classic";
         if (metadata.resolution().isHD()) {
             modelText += " • " + metadata.resolution().name();
-        //?}
         }
-        //? if <26.1 {
+        //?}
+        //? if <1.21.11 {
         graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2, modelTextColor);
         //?} else {
+            //? if <26.1 {
+        graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
+            metadata.resolution().isHD() ? 0xFF55FF55 : 0xFFAAAAAA);
+            //?} else {
         graphics.text(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
             metadata.resolution().isHD() ? 0xFF55FF55 : 0xFFAAAAAA);
+            //?}
         //?}
 
         // Render action buttons on hover (but not for player's own skin)
@@ -300,7 +306,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     }
 
     @Override
-    //? if <26.2 {
+    //? if <1.21.11 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
     //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
@@ -347,13 +353,19 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     public @NotNull List<? extends NarratableEntry> narratables() {
         return List.of();
     }
-    //? if >=26.1 {
+    //? if >=1.21.11 {
 
     /**
      * Draws an outline immediately using fill calls instead of submitOutline,
      * which defers rendering and can cause z-order issues with modals.
      */
-    private static void drawOutline(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int color) {
+    private static void drawOutline(
+            //? if <26.1 {
+            GuiGraphics graphics,
+            //?} else {
+            GuiGraphicsExtractor graphics,
+            //?}
+            int x, int y, int width, int height, int color) {
         graphics.fill(x, y, x + width, y + 1, color);
         graphics.fill(x, y + height - 1, x + width, y + height, color);
         graphics.fill(x, y + 1, x + 1, y + height - 1, color);

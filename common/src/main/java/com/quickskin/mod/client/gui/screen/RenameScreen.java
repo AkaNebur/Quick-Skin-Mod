@@ -1,8 +1,6 @@
 package com.quickskin.mod.client.gui.screen;
 
-//? if >=26.2 {
 import com.quickskin.mod.client.gui.GuiCompat;
-//?}
 import com.quickskin.mod.client.gui.effect.BlurHandler;
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import net.fabricmc.api.EnvType;
@@ -118,7 +116,7 @@ public class RenameScreen extends Screen {
     }
 
     @Override
-    //? if <26.2 {
+    //? if <1.21.11 {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
     //?} else {
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
@@ -149,7 +147,7 @@ public class RenameScreen extends Screen {
     //?}
         // Render parent screen in background
         if (this.parent != null) {
-            //? if <26.2 {
+            //? if <26.1 {
             this.parent.render(graphics, -1, -1, partialTicks);
             //?} else {
             GuiCompat.extractParent(this.parent, graphics, partialTicks);
@@ -231,7 +229,7 @@ public class RenameScreen extends Screen {
     }
 
     @Override
-    //? if <26.2 {
+    //? if <1.21.11 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
     //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {

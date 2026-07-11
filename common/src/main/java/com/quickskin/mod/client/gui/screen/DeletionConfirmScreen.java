@@ -1,8 +1,6 @@
 package com.quickskin.mod.client.gui.screen;
 
-//? if >=26.2 {
 import com.quickskin.mod.client.gui.GuiCompat;
-//?}
 import com.quickskin.mod.client.gui.effect.BlurHandler;
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import net.fabricmc.api.EnvType;
@@ -93,7 +91,7 @@ public class DeletionConfirmScreen extends Screen {
     //?}
         // Render parent screen in background
         if (this.parent != null) {
-            //? if <26.2 {
+            //? if <26.1 {
             this.parent.render(graphics, -1, -1, partialTicks);
             //?} else {
             GuiCompat.extractParent(this.parent, graphics, partialTicks);
@@ -222,7 +220,7 @@ public class DeletionConfirmScreen extends Screen {
     }
 
     @Override
-    //? if <26.2 {
+    //? if <1.21.11 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
     //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {

@@ -4,30 +4,34 @@ import com.quickskin.mod.platform.MinecraftCompat;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.Font;
-//? if <26.2 {
+//? if <26.1 {
 import net.minecraft.client.gui.GuiGraphics;
 //?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 //?}
 import net.minecraft.client.gui.screens.Screen;
-//? if <26.2 {
+//? if <26.1 {
 import net.minecraft.client.renderer.PanoramaRenderer;
 //?} else {
-import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
-import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.Panorama;
 //?}
+//? if >=1.21.6 {
+import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
+import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
+//?}
+//? if >=1.21.11 {
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+//?}
 import net.minecraft.network.chat.Component;
-//? if <26.2 {
+//? if <1.21.11 {
 import net.minecraft.resources.ResourceLocation;
 //?} else {
 import net.minecraft.resources.Identifier;
 //?}
 
 import java.util.List;
-//? if <26.2 {
+//? if <1.21.6 {
 import java.util.Optional;
 //?} else {
 import java.util.stream.Collectors;
@@ -41,7 +45,7 @@ public final class GuiCompat {
     private GuiCompat() {
     }
 
-    //? if <26.2 {
+    //? if <26.1 {
     public static void renderParent(Screen parent, GuiGraphics graphics, float partialTick) {
         parent.render(graphics, -1, -1, partialTick);
     //?} else {
@@ -50,17 +54,27 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <26.2 {
+    //? if <1.21.6 {
     public static void renderPanorama(PanoramaRenderer panorama, float partialTick) {
         panorama.render(partialTick, 1.0F);
     //?} else {
+        //? if <26.1 {
+    public static void renderPanorama(
+            PanoramaRenderer panorama, GuiGraphics graphics, int width, int height) {
+        panorama.render(graphics, width, height, true);
+        //?} else {
     public static void extractPanorama(Panorama panorama, GuiGraphicsExtractor graphics, int width, int height) {
+            //? if <26.2 {
+        panorama.extractRenderState(graphics, width, height, true);
+            //?} else {
         panorama.startSpin();
         panorama.extractRenderState(graphics, width, height);
+            //?}
+        //?}
     //?}
     }
 
-    //? if <26.2 {
+    //? if <1.21.11 {
     public static double mouseX(double mouseX) {
         return mouseX;
     //?} else {
@@ -69,7 +83,7 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <26.2 {
+    //? if <1.21.11 {
     public static double mouseY(double mouseY) {
         return mouseY;
     //?} else {
@@ -78,7 +92,7 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <26.2 {
+    //? if <1.21.11 {
     public static int mouseButton(int button) {
         return button;
     //?} else {
@@ -87,7 +101,7 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <26.2 {
+    //? if <1.21.11 {
     public static int keyCode(int keyCode) {
         return keyCode;
     //?} else {
@@ -96,10 +110,14 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <26.2 {
+    //? if <1.21.11 {
     public static void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, int blitOffset,
                             float u, float v, int width, int height, int textureWidth, int textureHeight) {
     //?} else {
+        //? if <26.1 {
+    public static void blit(GuiGraphics graphics, Identifier texture, int x, int y, int blitOffset,
+                            float u, float v, int width, int height, int textureWidth, int textureHeight) {
+        //?} else {
     public static void blit(
             GuiGraphicsExtractor graphics,
             Identifier texture,
@@ -113,9 +131,10 @@ public final class GuiCompat {
             int textureWidth,
             int textureHeight
     ) {
+        //?}
     //?}
         MinecraftCompat.INSTANCE.blit(
-                //? if <26.2 {
+                //? if <26.1 {
                 graphics, texture, x, y, blitOffset, u, v, width, height, textureWidth, textureHeight);
                 //?} else {
                 graphics, texture, x, y, blitOffset, u, v, width, height, textureWidth, textureHeight
@@ -123,11 +142,16 @@ public final class GuiCompat {
                 //?}
     }
 
-    //? if <26.2 {
+    //? if <1.21.11 {
     public static void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, int width, int height,
                             float u, float v, int regionWidth, int regionHeight,
                             int textureWidth, int textureHeight) {
     //?} else {
+        //? if <26.1 {
+    public static void blit(GuiGraphics graphics, Identifier texture, int x, int y, int width, int height,
+                            float u, float v, int regionWidth, int regionHeight,
+                            int textureWidth, int textureHeight) {
+        //?} else {
     public static void blit(
             GuiGraphicsExtractor graphics,
             Identifier texture,
@@ -142,10 +166,11 @@ public final class GuiCompat {
             int textureWidth,
             int textureHeight
     ) {
+        //?}
     //?}
         MinecraftCompat.INSTANCE.blit(
                 graphics, texture, x, y, width, height, u, v,
-                //? if <26.2 {
+                //? if <26.1 {
                 regionWidth, regionHeight, textureWidth, textureHeight);
                 //?} else {
                 regionWidth, regionHeight, textureWidth, textureHeight
@@ -153,10 +178,17 @@ public final class GuiCompat {
                 //?}
     }
 
-    //? if <26.2 {
+    //? if <1.21.6 {
     public static void tooltip(GuiGraphics graphics, Font font, Component text, int mouseX, int mouseY) {
         graphics.renderTooltip(font, text, mouseX, mouseY);
     //?} else {
+        //? if <26.1 {
+    public static void tooltip(GuiGraphics graphics, Font font, Component text, int mouseX, int mouseY) {
+        List<ClientTooltipComponent> components = List.of(
+                ClientTooltipComponent.create(text.getVisualOrderText())
+        );
+        graphics.renderTooltip(font, components, mouseX, mouseY, DefaultTooltipPositioner.INSTANCE, null);
+        //?} else {
     public static void tooltip(
             GuiGraphicsExtractor graphics,
             Font font,
@@ -168,13 +200,21 @@ public final class GuiCompat {
                 ClientTooltipComponent.create(text.getVisualOrderText())
         );
         graphics.tooltip(font, components, mouseX, mouseY, DefaultTooltipPositioner.INSTANCE, null);
+        //?}
     //?}
     }
 
-    //? if <26.2 {
+    //? if <1.21.6 {
     public static void tooltip(GuiGraphics graphics, Font font, List<Component> lines, int mouseX, int mouseY) {
         graphics.renderTooltip(font, lines, Optional.empty(), mouseX, mouseY);
     //?} else {
+        //? if <26.1 {
+    public static void tooltip(GuiGraphics graphics, Font font, List<Component> lines, int mouseX, int mouseY) {
+        List<ClientTooltipComponent> components = lines.stream()
+                .map(line -> ClientTooltipComponent.create(line.getVisualOrderText()))
+                .collect(Collectors.toList());
+        graphics.renderTooltip(font, components, mouseX, mouseY, DefaultTooltipPositioner.INSTANCE, null);
+        //?} else {
     public static void tooltip(
             GuiGraphicsExtractor graphics,
             Font font,
@@ -186,6 +226,7 @@ public final class GuiCompat {
                 .map(line -> ClientTooltipComponent.create(line.getVisualOrderText()))
                 .collect(Collectors.toList());
         graphics.tooltip(font, components, mouseX, mouseY, DefaultTooltipPositioner.INSTANCE, null);
+        //?}
     //?}
     }
 }

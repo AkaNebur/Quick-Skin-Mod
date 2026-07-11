@@ -12,14 +12,24 @@ import net.minecraft.server.level.ServerPlayer;
  * Central networking registry for QuickSkin
  * Registers all packet payloads used by the mod (Architectury 13.x for MC 1.21.1)
  */
+//? if <26.2 {
+public class ModNetworking {
+//?} else {
 public class ModNetworking implements NetworkTransport {
+//?}
 
     /**
      * Initializes networking (registers payload types and server-side receivers)
      * Called from QuickSkin.init() on both client and server
      */
+    //? if >=26.2 {
     @Override
+    //?}
+    //? if <26.2 {
+    public static void init() {
+    //?} else {
     public void init() {
+    //?}
         // Register C2S (Client to Server) payload receivers
         NetworkManager.registerReceiver(
                 NetworkManager.c2s(),
@@ -78,6 +88,7 @@ public class ModNetworking implements NetworkTransport {
         }
     }
 
+    //? if >=26.2 {
     @Override
     public void initClient() {
         ClientNetworking.init();
@@ -102,4 +113,5 @@ public class ModNetworking implements NetworkTransport {
     public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
         NetworkManager.sendToPlayer(player, payload);
     }
+    //?}
 }

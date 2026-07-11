@@ -132,7 +132,11 @@ public class CPMCompatIntegration {
      */
     private static boolean isCPMScreenOpen() {
         try {
+            //? if <26.2 {
+            net.minecraft.client.gui.screens.Screen screen = Minecraft.getInstance().screen;
+            //?} else {
             net.minecraft.client.gui.screens.Screen screen = Minecraft.getInstance().gui.screen();
+            //?}
             if (screen == null) {
                 return false;
             }

@@ -367,11 +367,14 @@ public class ClientEvents {
                 // Use icon button when Essential is present
                 changeSkinButton = new com.quickskin.mod.client.gui.widget.IconActionButton(
                         buttonX, buttonY, buttonWidth, buttonHeight,
-                        //? if <26.2 {
+                        //? if <1.21.11 {
                         new ResourceLocation("quickskin", "textures/gui/quickskin_icon.png"),
-                        button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen)),
                         //?} else {
                         Identifier.fromNamespaceAndPath("quickskin", "textures/gui/quickskin_icon.png"),
+                        //?}
+                        //? if <26.2 {
+                        button -> Minecraft.getInstance().setScreen(new PlayerSkinMenuScreen(screen)),
+                        //?} else {
                         button -> Minecraft.getInstance().gui.setScreen(new PlayerSkinMenuScreen(screen)),
                         //?}
                         Component.translatable("quickskin.button.change_skin")

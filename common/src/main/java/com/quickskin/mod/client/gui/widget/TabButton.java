@@ -41,10 +41,14 @@ public class TabButton extends Button {
     }
 
     @Override
-    //? if <26.1 {
+    //? if <1.21.11 {
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
     //?} else {
+        //? if <26.1 {
+    protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+        //?} else {
     protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+        //?}
     //?}
         // Determine colors based on selected state
         int bgColor = this.selected ? SELECTED_BG : UNSELECTED_BG;

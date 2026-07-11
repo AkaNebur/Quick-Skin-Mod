@@ -69,7 +69,7 @@ public class SkinImporter {
 
             // If file already exists, add a number
             int counter = 1;
-            //? if <26.2 {
+            //? if <1.21 {
             String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
             //?}
             while (Files.exists(targetPath)) {
