@@ -20,7 +20,7 @@ stonecutter {
     centralScript = "build.gradle.kts"
 
     create(rootProject) {
-        val versions = arrayOf("1.20.1", "1.21.1", "1.21.11", "26.2")
+        val versions = arrayOf("1.20.1", "1.21.1", "1.21.11", "26.1", "26.2")
         versions(*versions)
 
         branch("common") {
@@ -33,7 +33,7 @@ stonecutter {
             version("1.20.1")
         }
         branch("neoforge") {
-            versions("1.21.1", "1.21.11", "26.2")
+            versions("1.21.1", "1.21.11", "26.1", "26.2")
         }
     }
 }

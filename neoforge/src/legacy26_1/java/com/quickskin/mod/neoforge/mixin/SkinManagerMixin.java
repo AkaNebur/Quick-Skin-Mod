@@ -1,15 +1,18 @@
-package com.quickskin.mod.mixin;
+package com.quickskin.mod.neoforge.mixin;
 
 import com.mojang.authlib.GameProfile;
+import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.core.ClientAsset;
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.client.resources.SkinManager;
-import net.minecraft.core.ClientAsset;
 import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -17,12 +20,17 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.io.File;
+import java.nio.file.Path;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Mixin on SkinManager to intercept skin resolution at the canonical level.
+ * NeoForge-specific mixin on SkinManager to intercept skin resolution at the canonical level.
+ * Uses Mojmap names directly since NeoForge uses Mojmap at runtime.
  *
  * This catches ALL skin lookups including those by mods like Essential that bypass
  * AbstractClientPlayer.getSkin() and PlayerRenderer.getTextureLocation() entirely.
@@ -38,16 +46,16 @@ import java.util.concurrent.CompletableFuture;
 @Mixin(SkinManager.class)
 public class SkinManagerMixin {
 
+    // Cache for HttpTexture-backed ResourceLocations (for CPM compat)
+    @Unique
+    private static final Map<String, Identifier> quickskin$httpTextureCache = new ConcurrentHashMap<>();
+
     /**
      * Shared helper that applies QuickSkin overrides to a PlayerSkin.
      * Used by both getInsecureSkin and getOrLoad mixin handlers.
-     *
-     * @param original the original PlayerSkin from Mojang/vanilla
-     * @param uuid     the player's UUID
-     * @return the modified PlayerSkin, or the original if no overrides apply
      */
     @Unique
-    private static PlayerSkin quickskin$applyOverrides(PlayerSkin original, UUID uuid) {
+    private static PlayerSkin quickskin$applyOverrides(PlayerSkin original, UUID uuid, String profileName) {
         if (original == null || uuid == null) return original;
 
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
@@ -65,7 +73,13 @@ public class SkinManagerMixin {
             boolean anyOverride = false;
 
             if (hasCustomSkin) {
-                Identifier customSkin = service.getSkinLocation(uuid);
+                Identifier customSkin;
+                if (CPMCompatIntegration.isAvailable()) {
+                    // When CPM is installed, register skin as HttpTexture so CPM can read pixel data
+                    customSkin = quickskin$getOrRegisterHttpTexture(uuid, service);
+                } else {
+                    customSkin = service.getSkinLocation(uuid);
+                }
                 if (customSkin != null) {
                     skinTexture = customSkin;
                     anyOverride = true;
@@ -159,7 +173,85 @@ public class SkinManagerMixin {
         return original;
     }
 
-    //? if <26.2 {
+    /**
+     * When CPM is installed, registers the QuickSkin skin file as an HttpTexture
+     * so that CPM can extract the file path and read embedded pixel data (3D model).
+     * CPM's skin loading pipeline checks `instanceof HttpTexture` and reads from the file field.
+     *
+     * Uses reflection to access HttpTexture since the class may not exist in all MC versions.
+     */
+    @Unique
+    private static Identifier quickskin$getOrRegisterHttpTexture(UUID uuid, PlayerAppearanceService service) {
+        com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(uuid);
+        if (appearance == null) return null;
+
+        String skinId = appearance.getSkinId();
+        if (skinId == null || skinId.isEmpty()) return null;
+
+        // Extract hash from skinId (format: "local_skin:hash")
+        String hash = null;
+        if (skinId.startsWith("local_skin:")) {
+            hash = skinId.substring("local_skin:".length());
+        }
+
+        if (hash == null || hash.isEmpty()) {
+            // Not a local skin (could be network skin) - fall back to DynamicTexture
+            return service.getSkinLocation(uuid);
+        }
+
+        // Check cache first
+        Identifier cached = quickskin$httpTextureCache.get(hash);
+        if (cached != null) {
+            // Verify it's still registered in TextureManager
+            // Use reflection-safe check: getTexture(Identifier) without default parameter
+            AbstractTexture existing = Minecraft.getInstance().getTextureManager().getTexture(cached);
+            if (existing != null) {
+                return cached;
+            }
+            quickskin$httpTextureCache.remove(hash);
+        }
+
+        // Find the skin file on disk
+        Path sourcePath = LocalAssetManager.getInstance().getSourcePath(hash);
+        if (sourcePath == null || !sourcePath.toFile().exists()) {
+            // File not found, fall back to DynamicTexture
+            return service.getSkinLocation(uuid);
+        }
+
+        // Create an HttpTexture pointing to the local file using reflection
+        // since HttpTexture may not exist in all MC versions
+        File skinFile = sourcePath.toFile();
+        Identifier location = Identifier.fromNamespaceAndPath(
+                QuickSkin.MOD_ID,
+                "cpm_bridge/" + hash
+        );
+
+        try {
+            Class<?> httpTextureClass = Class.forName("net.minecraft.client.renderer.texture.HttpTexture");
+            // HttpTexture constructor: (File file, String urlString, Identifier fallback, boolean processLegacySkin, Runnable onDownloaded)
+            java.lang.reflect.Constructor<?> constructor = httpTextureClass.getConstructor(
+                    File.class, String.class, Identifier.class, boolean.class, Runnable.class
+            );
+            Object httpTexture = constructor.newInstance(
+                    skinFile,
+                    "file:///" + skinFile.getAbsolutePath().replace('\\', '/'),
+                    Identifier.withDefaultNamespace("textures/entity/player/wide/steve.png"),
+                    true,
+                    (Runnable) () -> {}
+            );
+
+            Minecraft.getInstance().getTextureManager().register(location, (AbstractTexture) httpTexture);
+            quickskin$httpTextureCache.put(hash, location);
+
+            return location;
+        } catch (ClassNotFoundException e) {
+            // HttpTexture class doesn't exist in this MC version, fall back to DynamicTexture
+            return service.getSkinLocation(uuid);
+        } catch (Exception e) {
+            return service.getSkinLocation(uuid);
+        }
+    }
+
     /**
      * Intercept getInsecureSkin (synchronous path).
      * Used by vanilla code and any mod that calls SkinManager.getInsecureSkin() directly.
@@ -169,48 +261,20 @@ public class SkinManagerMixin {
         UUID uuid = profile.id();
         if (uuid == null) return;
 
-        PlayerSkin result = quickskin$applyOverrides(cir.getReturnValue(), uuid);
+        PlayerSkin result = quickskin$applyOverrides(cir.getReturnValue(), uuid, profile.name());
         if (result != cir.getReturnValue()) {
             cir.setReturnValue(result);
         }
     }
-    //?} else {
-    /**
-     * Intercept createLookup (26.2 synchronous path; renamed from getInsecureSkin).
-     * In 26.2 SkinManager.createLookup(GameProfile, boolean) returns a Supplier&lt;PlayerSkin&gt; instead of
-     * a resolved PlayerSkin, so we wrap the supplier to apply QuickSkin overrides on resolution.
-     * Used by vanilla code and any mod that resolves a skin synchronously via SkinManager.
-     */
-    @Inject(method = "createLookup", at = @At("RETURN"), cancellable = true)
-    private void quickskin$modifyInsecureSkin(GameProfile profile, boolean secure, CallbackInfoReturnable<java.util.function.Supplier<PlayerSkin>> cir) {
-        UUID uuid = profile.id();
-        if (uuid == null) return;
-
-        java.util.function.Supplier<PlayerSkin> original = cir.getReturnValue();
-        if (original == null) return;
-
-        cir.setReturnValue(() -> quickskin$applyOverrides(original.get(), uuid));
-    }
-    //?}
 
     /**
-     * Intercept getOrLoad (async path returning CompletableFuture<PlayerSkin>).
+     * Intercept getOrLoad (async path returning CompletableFuture).
      *
      * Essential for MC >= 1.20.2 uses FallbackPlayer which calls getOrLoad() directly,
      * bypassing getInsecureSkin(). We wrap the returned future with thenApply to apply
      * QuickSkin overrides when the future resolves.
-     *
-     * Note: thenApply runs synchronously when the source future is already completed
-     * (cache hit), so getInsecureSkin (which calls getOrLoad().getNow(null)) will also
-     * see the modified skin through this mixin.
      */
-    //? if <26.2 {
-    /** In MC 1.21.4+, getOrLoad returns CompletableFuture<Optional<PlayerSkin>>. */
     @Inject(method = "getOrLoad", at = @At("RETURN"), cancellable = true)
-    //?} else {
-    /** In MC 26.2, the async loader was renamed to get. */
-    @Inject(method = "get", at = @At("RETURN"), cancellable = true)
-    //?}
     private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
         UUID uuid = profile.id();
         if (uuid == null) return;
@@ -234,10 +298,11 @@ public class SkinManagerMixin {
         // Only wrap the future if we actually have overrides to apply
         if (!hasServiceOverrides && !hasTitleScreenFallback) return;
 
+        String profileName = profile.name();
         CompletableFuture<Optional<PlayerSkin>> original = cir.getReturnValue();
-        CompletableFuture<Optional<PlayerSkin>> modified = original.thenApply(optSkin -> {
-            return optSkin.map(skin -> quickskin$applyOverrides(skin, uuid));
-        });
+        CompletableFuture<Optional<PlayerSkin>> modified = original.thenApply(optSkin ->
+            optSkin.map(skin -> quickskin$applyOverrides(skin, uuid, profileName))
+        );
         cir.setReturnValue(modified);
     }
 }

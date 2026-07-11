@@ -110,7 +110,11 @@ public class PlayerSkinMenuScreen extends Screen {
         if (doneButton == null) return;
 
         // Cooldown does not apply in singleplayer
+        //? if <26.2 {
+        if (this.minecraft != null && this.minecraft.isSingleplayer()) {
+        //?} else {
         if (this.minecraft != null && this.minecraft.hasSingleplayerServer()) {
+        //?}
             if (!doneButton.active) {
                 doneButton.active = true;
                 doneButton.setMessage(Component.translatable("quickskin.button.done"));
@@ -318,7 +322,11 @@ public class PlayerSkinMenuScreen extends Screen {
                     // Open cape selection screen
                     if (minecraft != null) {
                         openingSubScreen = true;
+                        //? if <26.2 {
+                        minecraft.setScreen(new PlayerCapeMenuScreen(this));
+                        //?} else {
                         minecraft.gui.setScreen(new PlayerCapeMenuScreen(this));
+                        //?}
                     }
                 },
                 this::onClose
@@ -621,7 +629,11 @@ public class PlayerSkinMenuScreen extends Screen {
 
         // Return to parent screen (or null to return to game)
         if (this.minecraft != null) {
+            //? if <26.2 {
+            this.minecraft.setScreen(parent);
+            //?} else {
             this.minecraft.gui.setScreen(parent);
+            //?}
         }
     }
 
@@ -914,7 +926,11 @@ public class PlayerSkinMenuScreen extends Screen {
 
         String displayName = truncateFileName(metadata.friendlyName());
         openingSubScreen = true;
+        //? if <26.2 {
+        minecraft.setScreen(new DeletionConfirmScreen(
+        //?} else {
         minecraft.gui.setScreen(new DeletionConfirmScreen(
+        //?}
                 this,
                 Component.translatable("quickskin.screen.delete.title"),
                 Component.translatable("quickskin.dialog.confirm_delete", displayName),
@@ -925,7 +941,11 @@ public class PlayerSkinMenuScreen extends Screen {
                     }
                     // Return to skin menu screen
                     if (minecraft != null) {
+                        //? if <26.2 {
+                        minecraft.setScreen(this);
+                        //?} else {
                         minecraft.gui.setScreen(this);
+                        //?}
                     }
                 },
                 true
@@ -939,7 +959,11 @@ public class PlayerSkinMenuScreen extends Screen {
         if (minecraft == null) return;
 
         openingSubScreen = true;
+        //? if <26.2 {
+        minecraft.setScreen(new RenameScreen(
+        //?} else {
         minecraft.gui.setScreen(new RenameScreen(
+        //?}
                 this,
                 Component.translatable("quickskin.screen.rename.title"),
                 Component.empty(),
@@ -949,7 +973,11 @@ public class PlayerSkinMenuScreen extends Screen {
                     renameSkin(metadata, newName);
                     // Return to skin menu screen
                     if (minecraft != null) {
+                        //? if <26.2 {
+                        minecraft.setScreen(this);
+                        //?} else {
                         minecraft.gui.setScreen(this);
+                        //?}
                     }
                 }
         ));
@@ -962,12 +990,20 @@ public class PlayerSkinMenuScreen extends Screen {
         if (minecraft == null) return;
 
         openingSubScreen = true;
+        //? if <26.2 {
+        minecraft.setScreen(new UploadToMojangScreen(
+        //?} else {
         minecraft.gui.setScreen(new UploadToMojangScreen(
+        //?}
                 this,
                 metadata,
                 (confirmed) -> {
                     if (minecraft != null) {
+                        //? if <26.2 {
+                        minecraft.setScreen(this);
+                        //?} else {
                         minecraft.gui.setScreen(this);
+                        //?}
                     }
                 }
         ));

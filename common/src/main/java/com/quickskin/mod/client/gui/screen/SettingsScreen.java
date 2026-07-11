@@ -505,7 +505,7 @@ public class SettingsScreen extends Screen {
         //? if <1.21 {
         int checkboxSize = 20;
         //?} else if >=1.21.4 {
-            //? if <26.2 {
+            //? if <26.1 {
         int checkboxSize = 20;
             //?}
         //?}

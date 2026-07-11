@@ -22,11 +22,12 @@ plugins {
 
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
-val canonicalVersions = setOf("1.20.1", "1.21.1", "1.21.11", "26.2")
+val canonicalVersions = setOf("1.20.1", "1.21.1", "1.21.11", "26.1", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
 val legacy120JavaRoot = rootProject.file("common/src/legacy1_20_1/java")
 val legacy1211JavaRoot = rootProject.file("common/src/legacy1_21_1/java")
 val legacy12111JavaRoot = rootProject.file("common/src/legacy1_21_11/java")
+val legacy261JavaRoot = rootProject.file("common/src/legacy26_1/java")
 val generatedStonecutterJava = layout.buildDirectory.dir("generated/stonecutter/main/java")
 val consolidatedLegacyJava = layout.buildDirectory.dir("generated/consolidated/main/java")
 val legacyCommonJar = rootProject.file(
@@ -201,6 +202,43 @@ if (minecraftVersion == "1.20.1") {
             include("assets/quickskin/lang/**")
         }
     }
+} else if (minecraftVersion == "26.1") {
+    val canonicalOnlyAfter261 = setOf(
+        "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
+    )
+    val legacyOverrides = fileTree(legacy261JavaRoot) {
+        include("**/*.java")
+    }.files.mapTo(linkedSetOf()) {
+        it.relativeTo(legacy261JavaRoot).invariantSeparatorsPath
+    }
+    val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
+        dependsOn("stonecutterGenerate")
+        from(generatedStonecutterJava) {
+            exclude(legacyOverrides + canonicalOnlyAfter261)
+        }
+        from(legacy261JavaRoot)
+        into(consolidatedLegacyJava)
+    }
+
+    sourceSets {
+        main {
+            java.setSrcDirs(listOf(consolidatedLegacyJava))
+            resources.setSrcDirs(listOf(rootProject.file("common/src/v26_1/resources")))
+        }
+    }
+
+    tasks.named("compileJava") {
+        dependsOn(prepareConsolidatedJava)
+    }
+    tasks.matching { it.name == "sourcesJar" }.configureEach {
+        dependsOn(prepareConsolidatedJava)
+    }
+
+    tasks.processResources {
+        from(rootProject.file("common/src/main/resources")) {
+            include("assets/quickskin/lang/**")
+        }
+    }
 } else if (minecraftVersion !in canonicalVersions) {
     sourceSets {
         main {
@@ -262,7 +300,7 @@ tasks.withType<Jar>().configureEach {
 }
 
 // Architectury 3.5.167 asks Loom for mixin mappings from every Loom project in the Gradle build.
-// A classic transform therefore reaches 26.2's no-remap extension and fails before transforming.
+// A classic transform therefore reaches a 26.x no-remap extension and fails before transforming.
 // Recreate Architectury's property map while filtering that global mapping scan to classic Loom
 // projects. Projects with another mapping identifier are filtered exactly as Architectury does.
 gradle.projectsEvaluated {

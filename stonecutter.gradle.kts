@@ -19,7 +19,7 @@ plugins {
 }
 
 // Detached mode preprocesses each branch's canonical src/main tree into every node's generated
-// sources without rewriting tracked files. Phase 1a consumes that output for 26.2; older nodes
+// sources without rewriting tracked files. The 26.x nodes consume that output; older nodes
 // continue to replace their source sets with the read-only src/v* parity trees.
 stonecutter active null
 
@@ -43,7 +43,7 @@ allprojects {
 }
 
 // Architectury's dev-run transformer asks classic Loom for mixin mappings from every Loom
-// project in the build. Its global scan reaches the 26.2 no-remap nodes and fails before a
+// project in the build. Its global scan reaches the 26.x no-remap nodes and fails before a
 // run configuration can launch. Wrap only the classic loader projects' Loom interface and
 // filter that one global query with the same mapping-identifier rule used by production
 // transforms. All other Loom operations delegate unchanged.
@@ -112,6 +112,8 @@ tasks.register("buildAllLanes") {
         ":neoforge:1.21.1:remapJar",
         ":fabric:1.21.11:remapJar",
         ":neoforge:1.21.11:remapJar",
+        ":fabric:26.1:shadowJar",
+        ":neoforge:26.1:shadowJar",
         ":fabric:26.2:shadowJar",
         ":neoforge:26.2:shadowJar",
     )

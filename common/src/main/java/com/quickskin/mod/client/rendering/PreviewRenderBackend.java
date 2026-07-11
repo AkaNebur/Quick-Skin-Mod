@@ -16,8 +16,10 @@ public interface PreviewRenderBackend {
     //? if <1.21.6 {
     PreviewRenderBackend INSTANCE = new ImmediatePreviewRenderBackend();
     //?} else {
-        //? if <26.2 {
+        //? if <26.1 {
     PreviewRenderBackend INSTANCE = new RenderStatePreviewRenderBackend();
+        //?} else if <26.2 {
+    PreviewRenderBackend INSTANCE = new ExtractorPreviewRenderBackend();
         //?} else {
     PreviewRenderBackend INSTANCE = new DeferredCollectorPreviewRenderBackend();
         //?}

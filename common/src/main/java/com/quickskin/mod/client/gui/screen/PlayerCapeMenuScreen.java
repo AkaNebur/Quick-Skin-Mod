@@ -575,7 +575,11 @@ public class PlayerCapeMenuScreen extends Screen {
         }
 
         String displayName = truncateFileName(capeEntry.getFriendlyName());
+        //? if <26.2 {
+        minecraft.setScreen(new DeletionConfirmScreen(
+        //?} else {
         minecraft.gui.setScreen(new DeletionConfirmScreen(
+        //?}
                 this,
                 Component.translatable("quickskin.screen.delete_cape.title"),
                 Component.translatable("quickskin.dialog.confirm_delete_cape", displayName),
@@ -584,7 +588,11 @@ public class PlayerCapeMenuScreen extends Screen {
                         deleteCape(capeEntry);
                     }
                     // Return to cape menu screen
+                    //? if <26.2 {
+                    minecraft.setScreen(this);
+                    //?} else {
                     minecraft.gui.setScreen(this);
+                    //?}
                 },
                 true
         ));
@@ -1507,7 +1515,11 @@ public class PlayerCapeMenuScreen extends Screen {
 
                 if (this.minecraft != null) {
                     this.minecraft.execute(() -> {
+                        //? if <26.2 {
+                        this.minecraft.setScreen(new CapeAdjustScreen(this, srcImage, fc, composedCape -> {
+                        //?} else {
                         this.minecraft.gui.setScreen(new CapeAdjustScreen(this, srcImage, fc, composedCape -> {
+                        //?}
                             try {
                                 int composedW = composedCape.getWidth();
                                 int composedFrameH = composedW / 2;
@@ -1677,7 +1689,11 @@ public class PlayerCapeMenuScreen extends Screen {
         // This avoids a micro-freeze from freeing large atlas NativeImages synchronously.
 
         if (minecraft != null) {
+            //? if <26.2 {
+            minecraft.setScreen(parent);
+            //?} else {
             minecraft.gui.setScreen(parent);
+            //?}
         }
     }
 
