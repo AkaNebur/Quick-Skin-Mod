@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Environment(EnvType.CLIENT)
 public class ModelService implements IModelService {
+    private static final int MAX_MODEL_OVERRIDES = 4096;
     private static ModelService instance;
 
     private final Map<UUID, String> modelOverrides = new ConcurrentHashMap<>();
@@ -85,9 +86,15 @@ public class ModelService implements IModelService {
     }
 
     @Override
-    public void setModelOverride(UUID playerId, String model) {
-        if (playerId == null || model == null) {
+    public synchronized void setModelOverride(UUID playerId, String model) {
+        if (playerId == null || !("auto".equals(model)
+                || "classic".equals(model) || "slim".equals(model))) {
             return;
+        }
+        if (!modelOverrides.containsKey(playerId)
+                && modelOverrides.size() >= MAX_MODEL_OVERRIDES) {
+            var eldest = modelOverrides.keySet().iterator();
+            if (eldest.hasNext()) modelOverrides.remove(eldest.next());
         }
         modelOverrides.put(playerId, model);
     }

@@ -2,6 +2,7 @@ package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.TextureQuality;
+import com.quickskin.mod.common.data.AssetMetadata;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.resources.DefaultPlayerSkin;
@@ -93,31 +94,39 @@ public class SkinService implements ISkinService {
     public Identifier loadLocalSkin(String hash) {
     //?}
         // Check network cache first (for textures received from server)
-        if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().hasTexture(hash)) {
+        if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                .hasTexture(hash, "skin")) {
             //? if <1.21.11 {
             ResourceLocation networkLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
             //?} else {
             Identifier networkLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
             //?}
-                    .getTextureLocation(hash);
+                    .getTextureLocation(hash, "skin");
             if (networkLocation != null) {
                 return networkLocation;
             }
         }
 
         // Try local assets (for user's own skins)
+        AssetMetadata localMetadata = LocalAssetManager.getInstance().getMetadata(hash);
         //? if <1.21.11 {
-        ResourceLocation localLocation = LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL);
+        ResourceLocation localLocation = localMetadata != null && localMetadata.isSkin()
+                ? LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL)
+                : null;
         //?} else {
-        Identifier localLocation = LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL);
+        Identifier localLocation = localMetadata != null && localMetadata.isSkin()
+                ? LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL)
+                : null;
         //?}
 
         // If not found locally and we're connected to a server, request it
         if (localLocation == null) {
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc.player != null && mc.getConnection() != null) {
-                com.quickskin.mod.networking.NetworkSyncService.getInstance()
-                    .requestTexture(mc.player.getUUID(), "skin", hash);
+                com.quickskin.mod.networking.TextureRequestCoordinator.getInstance().requestIfNeeded(
+                    "skin", hash,
+                    () -> com.quickskin.mod.networking.NetworkSyncService.getInstance()
+                        .requestTexture(mc.player.getUUID(), "skin", hash));
             }
         }
 

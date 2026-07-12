@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking.payloads;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.TextureTransferLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -26,11 +27,11 @@ public record UpdateServerConfigPayload(String key, boolean value) implements Cu
 
     public static final StreamCodec<ByteBuf, UpdateServerConfigPayload> CODEC = StreamCodec.of(
         (buf, payload) -> {
-            PayloadCodecs.writeString(buf, payload.key);
+            PayloadCodecs.writeString(buf, payload.key, TextureTransferLimits.MAX_CONFIG_KEY_BYTES);
             buf.writeBoolean(payload.value);
         },
         buf -> new UpdateServerConfigPayload(
-            PayloadCodecs.readString(buf),
+            PayloadCodecs.readString(buf, TextureTransferLimits.MAX_CONFIG_KEY_BYTES),
             buf.readBoolean()
         )
     );

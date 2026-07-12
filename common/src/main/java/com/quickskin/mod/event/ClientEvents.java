@@ -6,12 +6,13 @@ import com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen;
 import com.quickskin.mod.client.gui.util.DebugOffsetManager;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
-import com.quickskin.mod.client.services.CooldownService;
 import com.quickskin.mod.client.services.LocalAssetManager;
-import com.quickskin.mod.client.services.ModelService;
 import com.quickskin.mod.common.data.AssetMetadata;
-import com.quickskin.mod.common.data.PlayerAppearanceRepository;
-import com.quickskin.mod.event.CapeTransparencyEvents;
+import com.quickskin.mod.common.event.InternalEventBus;
+import com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent;
+import com.quickskin.mod.common.event.ServerConfigSyncEvent;
+import com.quickskin.mod.common.event.SkinTexturesReloadedEvent;
+import com.quickskin.mod.runtime.ClientRuntime;
 import dev.architectury.event.EventResult;
 import dev.architectury.event.events.client.ClientGuiEvent;
 import dev.architectury.event.events.client.ClientPlayerEvent;
@@ -36,7 +37,6 @@ import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 import java.awt.image.BufferedImage;
-import java.nio.file.Files;
 
 /**
  * Client-side event handlers
@@ -44,6 +44,12 @@ import java.nio.file.Files;
  */
 @Environment(EnvType.CLIENT)
 public class ClientEvents {
+
+    private static final java.util.List<InternalEventBus.Subscription> INTERNAL_SUBSCRIPTIONS =
+            new java.util.ArrayList<>();
+    private static boolean initialized;
+    private static volatile boolean closed;
+    private static java.util.concurrent.CompletableFuture<?> playerOwnSkinTask;
 
     private static int tickCounter = 0;
     private static PlayerWidget playerWidget;
@@ -83,6 +89,21 @@ public class ClientEvents {
      * Called from QuickSkinClient.init()
      */
     public static void init() {
+        init(ClientRuntime.getInstance());
+    }
+
+    /** Registers platform callbacks and binds them to the client-owned session runtime. */
+    public static synchronized void init(ClientRuntime clientRuntime) {
+        if (initialized) {
+            return;
+        }
+        if (clientRuntime == null) {
+            throw new IllegalArgumentException("clientRuntime cannot be null");
+        }
+        closed = false;
+        initialized = true;
+
+        registerInternalListeners();
 
         CapeTransparencyEvents.register();
 
@@ -90,6 +111,8 @@ public class ClientEvents {
         ClientTickEvent.CLIENT_POST.register(client -> {
             // This also ensures the singleton instance is created.
             AnimatedTextureManager.getInstance().tick();
+            com.quickskin.mod.networking.ClientNetworkHandler.tick();
+            com.quickskin.mod.networking.NetworkSyncService.getInstance().tick();
 
             // Handle HUD overlay dragging only when a GUI is open (cursor is visible)
             if (!client.mouseHandler.isMouseGrabbed()) {
@@ -142,16 +165,10 @@ public class ClientEvents {
 
         // Player joins world (client-side)
         ClientPlayerEvent.CLIENT_PLAYER_JOIN.register(player -> {
-
-            // Reset animation to idle when entering world
-            setSharedAnimation("idle");
-
-            // Phase 5: Rescan assets in case files changed while not in-game
-            // LocalAssetManager.getInstance().reload();
-
-            // Clear appearance repository on world join
-            PlayerAppearanceRepository.getInstance().clear();
-            CooldownService.getInstance().clearCooldown();
+            clientRuntime.beginSession(
+                    player != null ? player.getUUID() : null,
+                    player != null ? player.connection : Minecraft.getInstance().getConnection());
+            resetSessionUiState();
 
             //? if <1.21 {
             Minecraft minecraft = Minecraft.getInstance();
@@ -166,38 +183,13 @@ public class ClientEvents {
 
         // Player quits world (client-side)
         ClientPlayerEvent.CLIENT_PLAYER_QUIT.register(player -> {
-
-            // *** THE FIX: Clear all active animations to stop background ticking and render lookups ***
-            AnimatedTextureManager.getInstance().clearAnimations();
-
-            // Clear all appearance data
-            PlayerAppearanceRepository.getInstance().clear();
-            ModelService.getInstance().clearAll();
-            CooldownService.getInstance().clearCooldown();
-
-            //? if <1.21 {
-            com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance().clear();
-            com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().clear();
-            com.quickskin.mod.config.ClientConfig.getInstance().applyServerOverride(null);
-            //?}
-            // Clear texture alpha detection cache since we're leaving the world
-            com.quickskin.mod.common.util.TextureAlphaDetector.clearCache();
-
-            //? if <1.21 {
-            com.quickskin.mod.client.services.LocalAssetManager.getInstance().clearTextureCache();
-            //?} else {
-            // Clear incomplete texture chunks
-            com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance().clear();
-            //?}
-
-            // Clear cached player to reset rendering state (fixes invisible buttons)
-            com.quickskin.mod.client.rendering.PlayerModelRenderer.clearCachedPlayer();
-
-            // Phase 5: Save local preferences
-            if (player != null) {
-                com.quickskin.mod.client.storage.LocalAppearanceStorage.getInstance()
-                        .savePlayerPreferences(player.getUUID());
+            boolean ended = clientRuntime.endSession(
+                    player != null ? player.getUUID() : null,
+                    player != null ? player.connection : null);
+            if (!ended) {
+                return;
             }
+            resetSessionUiState();
 
             // Re-register appearance for Essential's title screen player model
             com.quickskin.mod.client.compat.EssentialCompatIntegration.registerMenuAppearance();
@@ -688,6 +680,91 @@ public class ClientEvents {
         });
     }
 
+    /** Connects service/domain changes to rendering and presentation adapters. */
+    private static void registerInternalListeners() {
+        InternalEventBus eventBus = InternalEventBus.getInstance();
+        INTERNAL_SUBSCRIPTIONS.add(eventBus.register(
+                PlayerAppearanceUpdateEvent.class,
+                ClientEvents::onPlayerAppearanceUpdated));
+        INTERNAL_SUBSCRIPTIONS.add(eventBus.register(
+                SkinTexturesReloadedEvent.class,
+                ClientEvents::onSkinTexturesReloaded));
+        INTERNAL_SUBSCRIPTIONS.add(eventBus.register(
+                ServerConfigSyncEvent.class,
+                ClientEvents::onServerConfigSynced));
+    }
+
+    private static void onPlayerAppearanceUpdated(PlayerAppearanceUpdateEvent event) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft == null || minecraft.player == null
+                || !event.playerId().equals(minecraft.player.getUUID())) {
+            return;
+        }
+
+        // Preview rendering observes domain changes without coupling the service to a concrete UI.
+        com.quickskin.mod.client.rendering.PlayerModelRenderer.clearCachedPlayer();
+    }
+
+    private static void onSkinTexturesReloaded(SkinTexturesReloadedEvent event) {
+        if (event.reason() != SkinTexturesReloadedEvent.Reason.TRANSPARENCY_POLICY) {
+            return;
+        }
+
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft == null) {
+            return;
+        }
+        Screen screen = getCurrentScreen(minecraft);
+        if (screen instanceof PlayerSkinMenuScreen skinMenu) {
+            skinMenu.refreshSkinList();
+        }
+    }
+
+    private static void onServerConfigSynced(ServerConfigSyncEvent event) {
+        // Disallowed transparency invalidates any alpha result captured before the server policy arrived.
+        if (!event.isAllowTransparentSkins()) {
+            com.quickskin.mod.common.util.TextureAlphaDetector.clearCache();
+        }
+        com.quickskin.mod.client.rendering.PlayerModelRenderer.clearCachedPlayer();
+    }
+
+    private static Screen getCurrentScreen(Minecraft minecraft) {
+        //? if <26.2 {
+        return minecraft.screen;
+        //?} else {
+        return minecraft.gui.screen();
+        //?}
+    }
+
+    private static void resetSessionUiState() {
+        tickCounter = 0;
+        playerWidget = null;
+        sharedAnimation = "idle";
+        animationToggleButton = null;
+        animationButtons.clear();
+        isAnimationDropdownOpen = false;
+        isLeftDraggingOverlay = false;
+        isRightDraggingOverlay = false;
+    }
+
+    /** Unregisters internal service listeners during explicit client shutdown. */
+    public static synchronized void close() {
+        closed = true;
+        if (playerOwnSkinTask != null) {
+            playerOwnSkinTask.cancel(true);
+            playerOwnSkinTask = null;
+        }
+        for (InternalEventBus.Subscription subscription : INTERNAL_SUBSCRIPTIONS) {
+            try {
+                subscription.close();
+            } catch (RuntimeException error) {
+                QuickSkin.LOGGER.warn("Failed to unregister a QuickSkin internal event listener", error);
+            }
+        }
+        INTERNAL_SUBSCRIPTIONS.clear();
+        resetSessionUiState();
+    }
+
     /**
      * Determine screen type for the player widget
      * Returns: "title" or "pause", or null if not a supported screen
@@ -760,17 +837,23 @@ public class ClientEvents {
         }
 
         // Download player's own skin (async, won't block startup)
-        com.quickskin.mod.client.services.MojangApiService.getInstance().fetchSkinByUsername(playerName)
+        playerOwnSkinTask = com.quickskin.mod.client.services.MojangApiService.getInstance()
+                .fetchSkinByUsername(playerName)
                 .thenAccept(skinData -> {
-                    if (minecraft != null) {
+                    if (!closed && minecraft != null) {
                         minecraft.execute(() -> {
-                            if (skinData != null) {
+                            if (!closed && skinData != null) {
                                 handlePlayerOwnSkinFetched(skinData);
                             }
                         });
                     }
                 })
                 .exceptionally(throwable -> {
+                    Throwable cause = throwable instanceof java.util.concurrent.CompletionException
+                            && throwable.getCause() != null ? throwable.getCause() : throwable;
+                    if (!(cause instanceof java.util.concurrent.CancellationException)) {
+                        QuickSkin.LOGGER.warn("Could not download the local player's Mojang skin", throwable);
+                    }
                     return null;
                 });
     }
@@ -810,21 +893,16 @@ public class ClientEvents {
             AssetMetadata existingMetadata = assetManager.getMetadata(finalHash);
 
             if (existingMetadata == null) {
-                // The skin does not exist in the local library, so we save it.
-                String fileName = skinData.username + ".png";
-                java.nio.file.Path targetPath = assetManager.getSkinsDirectory().resolve(fileName);
-
-                // Handle filename collisions
-                int counter = 1;
-                while (Files.exists(targetPath)) {
-                    targetPath = assetManager.getSkinsDirectory().resolve(skinData.username + "_" + counter + ".png");
-                    counter++;
-                }
-
-                Files.write(targetPath, processedImageBytes);
+                java.nio.file.Path saved = com.quickskin.mod.client.gui.util.SkinImporter
+                        .saveSkinImage(image, skinData.username);
+                if (saved == null) return;
 
                 // Reload assets to recognize the new file.
                 assetManager.reload();
+                if (assetManager.getMetadata(finalHash) == null) {
+                    QuickSkin.LOGGER.warn("Downloaded Mojang skin was saved with an unexpected content hash");
+                    return;
+                }
             }
 
             // Now that the skin is guaranteed to be in the asset manager, set its hash in the config.
@@ -851,6 +929,7 @@ public class ClientEvents {
             config.save();
 
         } catch (Exception e) {
+            QuickSkin.LOGGER.error("Could not import the local player's Mojang skin", e);
         }
     }
 

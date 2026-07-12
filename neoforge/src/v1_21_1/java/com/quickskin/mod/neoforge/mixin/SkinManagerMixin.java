@@ -211,7 +211,7 @@ public class SkinManagerMixin {
         // Fallback: network-received textures stored in memory -- write to a temp file for CPM
         if (sourcePath == null || !sourcePath.toFile().exists()) {
             sourcePath = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
-                    .getOrCreateTempFile(hash);
+                    .getOrCreateTempFile(hash, "skin");
         }
 
         if (sourcePath == null || !sourcePath.toFile().exists()) {

@@ -1,10 +1,12 @@
 package com.quickskin.mod.networking;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.concurrent.ClientIoExecutor;
 import com.quickskin.mod.client.services.AnimatedTextureManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.client.storage.ClientAnimationMetadataCache;
 import com.quickskin.mod.common.data.AnimationMetadata;
+import com.quickskin.mod.common.util.SafeImageReader;
 import com.quickskin.mod.common.event.InternalEventBus;
 import com.quickskin.mod.common.event.ServerConfigSyncEvent;
 //? if <1.21 {
@@ -16,11 +18,15 @@ import dev.architectury.networking.NetworkManager;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 //? if <1.21 {
 import net.minecraft.network.FriendlyByteBuf;
 //?}
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Client-side network packet handlers (Architectury 13.x for MC 1.21.1)
@@ -28,9 +34,16 @@ import java.util.UUID;
  */
 @Environment(EnvType.CLIENT)
 public class ClientNetworkHandler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ClientNetworkHandler.class);
+    private static final ConcurrentHashMap<String, PendingAnimation> PENDING_NETWORK_ANIMATIONS =
+            new ConcurrentHashMap<>();
 
     // Flag to track if a texture reload is pending when GUI closes
     private static boolean pendingTransparencyReload = false;
+    private static boolean appearanceBootstrapSent;
+    private static long pendingTransparencyReloadAtMillis;
+    private static long lastTransparencyReloadMillis;
+    private static final long TRANSPARENCY_RELOAD_INTERVAL_MILLIS = 30_000L;
 
     /**
      * Handles appearance sync from server
@@ -38,24 +51,66 @@ public class ClientNetworkHandler {
     //? if <1.21 {
     public static void handleSyncAppearance(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
         UUID playerId = PacketHelper.readPlayerId(buf);
-        String skinId = PacketHelper.readString(buf);
-        String capeId = PacketHelper.readString(buf);
-        String model = PacketHelper.readString(buf);
+        String skinId = PacketHelper.readString(buf, TextureTransferLimits.MAX_APPEARANCE_ID_BYTES);
+        String capeId = PacketHelper.readString(buf, TextureTransferLimits.MAX_APPEARANCE_ID_BYTES);
+        String model = PacketHelper.readString(buf, TextureTransferLimits.MAX_MODEL_BYTES);
         org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
                 "handleSyncAppearance: player={} skinId={} model={}", playerId, skinId, model);
     //?} else {
     public static void handleSyncAppearance(SyncAppearancePayload payload, NetworkManager.PacketContext context) {
     //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        //? if <1.21 {
+        if (!NetworkSecurity.isValidLocalAppearanceId(skinId, "skin")
+                || !NetworkSecurity.isValidLocalAppearanceId(capeId, "cape")
+                || !NetworkSecurity.isValidModel(model)
+                || !ClientTextureIngressLimiter.getInstance()
+                        .allowControlBytes(controlBytes(skinId, capeId, model))) return;
+        //?} else {
+        if (!NetworkSecurity.isValidLocalAppearanceId(payload.skinId(), "skin")
+                || !NetworkSecurity.isValidLocalAppearanceId(payload.capeId(), "cape")
+                || !NetworkSecurity.isValidModel(payload.model())
+                || !ClientTextureIngressLimiter.getInstance().allowControlBytes(
+                        controlBytes(payload.skinId(), payload.capeId(), payload.model()))) return;
+        //?}
         context.queue(() -> {
+            if (!isCurrentConnection(sourceConnection)) return;
+            //? if <1.21 {
+            if (!NetworkSecurity.isValidLocalAppearanceId(skinId, "skin")
+                    || !NetworkSecurity.isValidLocalAppearanceId(capeId, "cape")
+                    || !NetworkSecurity.isValidModel(model)) return;
+            //?} else {
+            if (!NetworkSecurity.isValidLocalAppearanceId(payload.skinId(), "skin")
+                    || !NetworkSecurity.isValidLocalAppearanceId(payload.capeId(), "cape")
+                    || !NetworkSecurity.isValidModel(payload.model())) return;
+            //?}
             //? if <1.21 {
             org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
                     "handleSyncAppearance EXECUTING on main thread for {}", playerId);
             //?}
+            Minecraft minecraft = Minecraft.getInstance();
+            //? if <1.21 {
+            boolean ownPlayerUpdate = minecraft.player != null
+                    && playerId.equals(minecraft.player.getUUID());
+            if (ownPlayerUpdate) {
+                NetworkSyncService.getInstance().confirmAppearance(skinId, capeId, model);
+            }
+            //?} else {
+            boolean ownPlayerUpdate = minecraft.player != null
+                    && payload.playerId().equals(minecraft.player.getUUID());
+            if (ownPlayerUpdate) {
+                NetworkSyncService.getInstance().confirmAppearance(
+                        payload.skinId(), payload.capeId(), payload.model());
+            }
+            //?}
+            if (ownPlayerUpdate) return;
             // Apply appearance through service
             //? if <1.21 {
-            PlayerAppearanceService.getInstance().applyLook(playerId, skinId, capeId, model);
+            PlayerAppearanceService.getInstance().applyLookFromNetwork(
+                    playerId, skinId, capeId, model);
             //?} else {
-            PlayerAppearanceService.getInstance().applyLook(
+            PlayerAppearanceService.getInstance().applyLookFromNetwork(
                 payload.playerId(), payload.skinId(), payload.capeId(), payload.model()
             );
             //?}
@@ -67,26 +122,70 @@ public class ClientNetworkHandler {
      */
     //? if <1.21 {
     public static void handleSendTexture(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
-        String textureType = PacketHelper.readString(buf);
-        String hash = PacketHelper.readString(buf);
-        byte[] imageData = PacketHelper.readByteArray(buf);
+        String textureType = PacketHelper.readString(buf, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+        String hash = PacketHelper.readString(buf, TextureTransferLimits.CONTENT_ID_LENGTH);
+        byte[] imageData = PacketHelper.readByteArray(buf, TextureTransferLimits.MAX_DIRECT_TEXTURE_BYTES);
         org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
                 "handleSendTexture: type={} hash={} size={}", textureType, hash, imageData.length);
     //?} else {
     public static void handleSendTexture(SendTexturePayload payload, NetworkManager.PacketContext context) {
     //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        //? if <1.21 {
+        if (!NetworkSecurity.isValidTextureType(textureType)
+                || !NetworkSecurity.isValidContentId(hash)
+                || !ClientTextureIngressLimiter.getInstance().allowWireBytes(imageData.length)) return;
+        String receivedTextureType = textureType;
+        String receivedHash = hash;
+        byte[] receivedImageData = imageData;
+        //?} else {
+        if (!NetworkSecurity.isValidTextureType(payload.textureType())
+                || !NetworkSecurity.isValidContentId(payload.hash())
+                || !ClientTextureIngressLimiter.getInstance()
+                        .allowWireBytes(payload.imageData().length)) return;
+        String receivedTextureType = payload.textureType();
+        String receivedHash = payload.hash();
+        byte[] receivedImageData = payload.imageData();
+        //?}
         context.queue(() -> {
+            if (!isCurrentConnection(sourceConnection)) return;
             //? if <1.21 {
             org.slf4j.LoggerFactory.getLogger("QuickSkin-CPM").info(
                     "handleSendTexture EXECUTING on main thread hash={}", hash);
             //?}
-            // Store in network texture cache (not local assets, so it won't appear in skin list)
-            com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
-                    //? if <1.21 {
-                    .storeTexture(hash, textureType, imageData);
-                    //?} else {
-                    .storeTexture(payload.hash(), payload.imageData());
-                    //?}
+            var cache = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance();
+            if (cache.containsTexture(receivedHash, receivedTextureType)) {
+                onTextureStored(receivedTextureType, receivedHash);
+                return;
+            }
+            if (!ClientTextureIngressLimiter.getInstance()
+                    .allowDecode(receivedImageData, receivedTextureType)) return;
+            long generation = cache.generation();
+            ClientIoExecutor.supplyAsync(() -> cache.prepareTextureIfCurrent(
+                            generation, receivedHash, receivedTextureType, receivedImageData))
+                    .whenComplete((prepared, error) -> {
+                        if (error != null) {
+                            LOGGER.warn("Unable to process network texture {}", receivedHash, error);
+                        } else if (prepared != null) {
+                            Minecraft minecraft = Minecraft.getInstance();
+                            if (minecraft != null) {
+                                minecraft.execute(() -> {
+                                    if (!isCurrentConnection(sourceConnection)) {
+                                        cache.discardPreparedTexture(prepared);
+                                        return;
+                                    }
+                                    if (cache.commitPreparedTextureIfCurrent(
+                                            generation, receivedHash,
+                                            receivedTextureType, prepared)) {
+                                        onTextureStored(receivedTextureType, receivedHash);
+                                    }
+                                });
+                            } else {
+                                cache.discardPreparedTexture(prepared);
+                            }
+                        }
+                    });
         });
     }
 
@@ -95,54 +194,45 @@ public class ClientNetworkHandler {
      */
     //? if <1.21 {
     public static void handleSendAnimationMetadata(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
-        String hash = PacketHelper.readString(buf);
-        String metadataJson = PacketHelper.readString(buf);
+        String hash = PacketHelper.readString(buf, TextureTransferLimits.CONTENT_ID_LENGTH);
+        String metadataJson = PacketHelper.readString(buf, TextureTransferLimits.MAX_JSON_BYTES);
     //?} else {
     public static void handleSendAnimationMetadata(SendAnimationMetadataPayload payload, NetworkManager.PacketContext context) {
     //?}
+        //? if <1.21 {
+        String receivedHash = hash;
+        String receivedMetadataJson = metadataJson;
+        //?} else {
+        String receivedHash = payload.hash();
+        String receivedMetadataJson = payload.metadataJson();
+        //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        ClientAnimationMetadataCache metadataCache = ClientAnimationMetadataCache.getInstance();
+        NetworkSyncService syncService = NetworkSyncService.getInstance();
+        boolean possibleUploadAck = syncService.hasPendingMetadata(
+                receivedHash, receivedMetadataJson);
+        if (!NetworkSecurity.isValidContentId(receivedHash)) return;
+        if (!ClientTextureIngressLimiter.getInstance().allowControlBytes(
+                receivedMetadataJson.getBytes(StandardCharsets.UTF_8).length)) return;
+        AnimationMetadata receivedMetadata =
+                NetworkSecurity.parseAnimationMetadata(receivedMetadataJson);
+        if (receivedMetadata == null) return;
+        boolean exactReplay = metadataCache.matchesMetadata(receivedHash, receivedMetadata);
+        if (exactReplay && !possibleUploadAck) return;
         context.queue(() -> {
-            // Store animation metadata both in memory cache and to disk
+            if (!isCurrentConnection(sourceConnection)) return;
+            syncService.confirmMetadata(receivedHash, receivedMetadataJson);
+            if (metadataCache.matchesMetadata(receivedHash, receivedMetadata)) return;
             try {
-                // Parse the JSON metadata
-                //? if <1.21 {
-                AnimationMetadata metadata = AnimationMetadata.fromJson(metadataJson);
-                //?} else {
-                AnimationMetadata metadata = AnimationMetadata.fromJson(payload.metadataJson());
-                //?}
-
-                // Store in client-side memory cache
-                //? if <1.21 {
-                ClientAnimationMetadataCache.getInstance().storeMetadata(hash, metadata);
-                //?} else {
-                ClientAnimationMetadataCache.getInstance().storeMetadata(payload.hash(), metadata);
-                //?}
-
-                // Also save to disk so LocalAssetManager can find it
-                java.nio.file.Path cacheDir = com.quickskin.mod.client.services.LocalAssetManager.getInstance()
-                        .getCacheDirectory();
-                //? if <1.21 {
-                java.nio.file.Path metadataPath = cacheDir.resolve(hash + ".json");
-                java.nio.file.Files.writeString(metadataPath, metadataJson);
-                //?} else {
-                java.nio.file.Path metadataPath = cacheDir.resolve(payload.hash() + ".json");
-                java.nio.file.Files.writeString(metadataPath, payload.metadataJson());
-                //?}
-
-                // Register animation for this network texture
-                //? if <1.21 {
-                registerNetworkCapeAnimation(hash, metadata);
-                //?} else {
-                registerNetworkCapeAnimation(payload.hash(), metadata);
-                //?}
-
-                // Refresh all players using this cape so they see the animation
-                //? if <1.21 {
-                refreshPlayersUsingTexture(hash);
-                //?} else {
-                refreshPlayersUsingTexture(payload.hash());
-                //?}
-
+                String animationId = "cape_" + receivedHash;
+                PENDING_NETWORK_ANIMATIONS.remove(animationId);
+                AnimatedTextureManager.getInstance().unregisterAnimation(animationId);
+                metadataCache.storeMetadata(receivedHash, receivedMetadata);
+                registerNetworkCapeAnimation(receivedHash, receivedMetadata);
+                refreshPlayersUsingTexture(receivedHash);
             } catch (Exception e) {
+                LOGGER.warn("Unable to store network animation metadata", e);
             }
         });
     }
@@ -151,47 +241,71 @@ public class ClientNetworkHandler {
      * Registers animation for a network-received cape
      */
     private static void registerNetworkCapeAnimation(String hash, AnimationMetadata metadata) {
-        try {
-            // Get the network texture location
-            //? if <1.21.11 {
-            net.minecraft.resources.ResourceLocation textureLocation =
-            //?} else {
-            net.minecraft.resources.Identifier textureLocation =
-            //?}
-                com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().getTextureLocation(hash);
-
-            if (textureLocation == null) {
+        if (metadata == null || !NetworkSecurity.isValidContentId(hash)) return;
+        String animationId = "cape_" + hash;
+        AnimatedTextureManager animManager = AnimatedTextureManager.getInstance();
+        if (animManager.isAnimated(animationId)
+                || PENDING_NETWORK_ANIMATIONS.containsKey(animationId)) return;
+        var cache = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance();
+        if (!cache.containsTexture(hash, "cape")
+                || !NetworkSecurity.isValidAnimationMetadata(metadata.toJson())) return;
+        Object sourceConnection = currentConnectionIdentity();
+        if (sourceConnection == null || PENDING_NETWORK_ANIMATIONS.size() >= 32) return;
+        long generation = cache.generation();
+        PendingAnimation pending = new PendingAnimation(new Object(), sourceConnection, generation);
+        if (PENDING_NETWORK_ANIMATIONS.putIfAbsent(animationId, pending) != null) return;
+        ClientIoExecutor.supplyAsync(() -> {
+            if (!isCurrentConnection(sourceConnection)
+                    || cache.generation() != generation
+                    || PENDING_NETWORK_ANIMATIONS.get(animationId) != pending) return null;
+            byte[] textureData = cache.getTextureData(hash, "cape");
+            if (textureData == null || !isCurrentConnection(sourceConnection)
+                    || cache.generation() != generation
+                    || PENDING_NETWORK_ANIMATIONS.get(animationId) != pending
+                    || !ClientTextureIngressLimiter.getInstance()
+                            .allowDecode(textureData, "cape")) return null;
+            if (!isCurrentConnection(sourceConnection)
+                    || cache.generation() != generation
+                    || PENDING_NETWORK_ANIMATIONS.get(animationId) != pending) return null;
+            try {
+                return SafeImageReader.readPng(textureData);
+            } catch (java.io.IOException error) {
+                throw new IllegalArgumentException("Invalid network animation atlas", error);
+            }
+        }).whenComplete((atlasImage, error) -> {
+            if (error != null) {
+                PENDING_NETWORK_ANIMATIONS.remove(animationId, pending);
+                LOGGER.warn("Unable to decode network animation {}", hash, error);
                 return;
             }
-
-            // Get the texture image from network cache
-            byte[] textureData = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().getTextureData(hash);
-            if (textureData == null) {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft == null) {
+                PENDING_NETWORK_ANIMATIONS.remove(animationId, pending);
                 return;
             }
-
-            // Convert to BufferedImage
-            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(textureData);
-            java.awt.image.BufferedImage atlasImage = javax.imageio.ImageIO.read(bais);
-
-            if (atlasImage == null) {
-                return;
-            }
-
-            // Register the animation
-            // Use same animation ID format as local capes for consistency with renderer
-            String animationId = "cape_" + hash;
-            String capeId = "local_cape:" + hash;
-
-            com.quickskin.mod.client.services.AnimatedTextureManager animManager =
-                com.quickskin.mod.client.services.AnimatedTextureManager.getInstance();
-
-            if (!animManager.isAnimated(animationId)) {
-                animManager.registerAnimation(animationId, capeId, textureLocation, atlasImage, metadata);
-            }
-
-        } catch (Exception e) {
-        }
+            minecraft.execute(() -> {
+                try {
+                    if (atlasImage == null || !isCurrentConnection(sourceConnection)
+                            || PENDING_NETWORK_ANIMATIONS.get(animationId) != pending
+                            || cache.generation() != generation
+                            || !cache.containsTexture(hash, "cape")
+                            || animManager.isAnimated(animationId)) return;
+                    //? if <1.21.11 {
+                    net.minecraft.resources.ResourceLocation textureLocation =
+                    //?} else {
+                    net.minecraft.resources.Identifier textureLocation =
+                    //?}
+                            cache.getTextureLocation(hash, "cape");
+                    if (textureLocation != null) {
+                        animManager.registerAnimationAsync(
+                                animationId, "local_cape:" + hash,
+                                textureLocation, atlasImage, metadata);
+                    }
+                } finally {
+                    PENDING_NETWORK_ANIMATIONS.remove(animationId, pending);
+                }
+            });
+        });
     }
 
     /**
@@ -207,69 +321,64 @@ public class ClientNetworkHandler {
      */
     //? if <1.21 {
     public static void handleSyncServerConfig(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
-        String configJson = PacketHelper.readString(buf);
+        String configJson = PacketHelper.readString(buf, TextureTransferLimits.MAX_JSON_BYTES);
     //?} else {
     public static void handleSyncServerConfig(SyncServerConfigPayload payload, NetworkManager.PacketContext context) {
     //?}
+        //? if <1.21 {
+        String receivedConfigJson = configJson;
+        //?} else {
+        String receivedConfigJson = payload.configJson();
+        //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        if (!ClientTextureIngressLimiter.getInstance().allowConfigPacket()
+                || !ClientTextureIngressLimiter.getInstance().allowControlBytes(
+                receivedConfigJson.getBytes(StandardCharsets.UTF_8).length)) return;
+        com.quickskin.mod.config.ServerConfig receivedServerConfig =
+                com.quickskin.mod.config.ServerConfig.fromJson(receivedConfigJson);
         context.queue(() -> {
+            if (!isCurrentConnection(sourceConnection)) return;
             // Get current server override to detect changes
             com.quickskin.mod.config.ClientConfig clientConfig = com.quickskin.mod.config.ClientConfig.getInstance();
             com.quickskin.mod.config.ServerConfig oldServerConfig = clientConfig.getServerOverride();
             boolean oldTransparencySetting = oldServerConfig != null && oldServerConfig.disableSkinTransparency;
 
             // Parse server config from JSON
-            com.quickskin.mod.config.ServerConfig serverConfig =
-                //? if <1.21 {
-                com.quickskin.mod.config.ServerConfig.fromJson(configJson);
-                //?} else {
-                com.quickskin.mod.config.ServerConfig.fromJson(payload.configJson());
-                //?}
+            com.quickskin.mod.config.ServerConfig serverConfig = receivedServerConfig;
 
             boolean newTransparencySetting = serverConfig.disableSkinTransparency;
 
-            // Phase 9: Apply server config override to client
-            clientConfig.applyServerOverride(serverConfig);
-
-            // Fire event for other systems to react
-            InternalEventBus.getInstance().post(
-                new ServerConfigSyncEvent(
-                    !serverConfig.disableSkinTransparency // allowTransparent
-                )
-            );
-
-            // If transparency setting changed, reload textures
-            if (oldTransparencySetting != newTransparencySetting) {
-                Minecraft mc = Minecraft.getInstance();
-
-                // If no GUI is open OR if we're not in the settings screen, reload immediately
-                // Otherwise, mark pending and reload when the settings GUI closes
-                //? if <26.2 {
-                boolean isInSettingsScreen = mc.screen instanceof com.quickskin.mod.client.gui.screen.SettingsScreen;
-                //?} else {
-                boolean isInSettingsScreen = mc.gui.screen() instanceof com.quickskin.mod.client.gui.screen.SettingsScreen;
-                //?}
-
-                //? if <26.2 {
-                if (mc.screen == null || !isInSettingsScreen) {
-                //?} else {
-                if (mc.gui.screen() == null || !isInSettingsScreen) {
-                //?}
-                    PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
-                } else {
-                    pendingTransparencyReload = true;
-                }
+            boolean firstConfig = oldServerConfig == null;
+            boolean policyChanged = oldTransparencySetting != newTransparencySetting;
+            long now = System.currentTimeMillis();
+            boolean configChanged = firstConfig || policyChanged
+                    || oldServerConfig.skinChangeCooldownSeconds
+                            != serverConfig.skinChangeCooldownSeconds;
+            if (configChanged) {
+                clientConfig.applyServerOverride(serverConfig);
+            }
+            if (firstConfig || policyChanged) {
+                InternalEventBus.getInstance().post(
+                    new ServerConfigSyncEvent(
+                        !serverConfig.disableSkinTransparency // allowTransparent
+                    )
+                );
             }
 
-            // CRITICAL FIX: Sync current appearance to server after receiving config
-            // This ensures that when a player joins, existing players see their CURRENT appearance
-            // rather than the old saved appearance that was loaded from disk
+            if (policyChanged) {
+                requestTransparencyReload(now);
+            }
+
+            // Bootstrap exactly once per connection; config replays must not re-upload assets.
             Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
+            if (!appearanceBootstrapSent && mc.player != null) {
                 UUID playerId = mc.player.getUUID();
                 com.quickskin.mod.common.data.PlayerAppearance currentAppearance =
                     com.quickskin.mod.common.data.PlayerAppearanceRepository.getInstance().getAppearance(playerId);
 
                 if (currentAppearance != null) {
+                    appearanceBootstrapSent = true;
                     NetworkSyncService.getInstance().syncAppearance(
                         playerId,
                         currentAppearance.getSkinId(),
@@ -286,10 +395,21 @@ public class ClientNetworkHandler {
      * Should be called when the settings GUI closes
      */
     public static void executePendingTransparencyReload() {
-        if (pendingTransparencyReload) {
-            PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
-            pendingTransparencyReload = false;
-        }
+        executeDueTransparencyReload(System.currentTimeMillis());
+    }
+
+    /** Called from the client tick to coalesce hostile/replayed policy toggles. */
+    public static void tick() {
+        executeDueTransparencyReload(System.currentTimeMillis());
+    }
+
+    /** Drops UI work deferred by the server connection that is being closed. */
+    public static void clearTransientState() {
+        pendingTransparencyReload = false;
+        pendingTransparencyReloadAtMillis = 0L;
+        lastTransparencyReloadMillis = 0L;
+        appearanceBootstrapSent = false;
+        PENDING_NETWORK_ANIMATIONS.clear();
     }
 
     /**
@@ -297,31 +417,58 @@ public class ClientNetworkHandler {
      */
     //? if <1.21 {
     public static void handleSendTextureChunk(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
-        String hash = buf.readUtf();
+        String hash = buf.readUtf(TextureTransferLimits.CONTENT_ID_LENGTH);
+        String textureType = buf.readUtf(TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
         int chunkIndex = buf.readInt();
         int totalChunks = buf.readInt();
-        byte[] chunkData = buf.readByteArray();
+        byte[] chunkData = buf.readByteArray(TextureTransferLimits.MAX_WIRE_CHUNK_BYTES);
     //?} else {
     public static void handleSendTextureChunk(SendTextureChunkPayload payload, NetworkManager.PacketContext context) {
     //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        //? if <1.21 {
+        if (!NetworkSecurity.isValidTextureType(textureType)
+                || !NetworkSecurity.isValidContentId(hash)
+                || !ClientTextureIngressLimiter.getInstance().allowWireBytes(chunkData.length)) return;
+        //?} else {
+        if (!NetworkSecurity.isValidTextureType(payload.textureType())
+                || !NetworkSecurity.isValidContentId(payload.hash())
+                || !ClientTextureIngressLimiter.getInstance()
+                        .allowWireBytes(payload.chunkData().length)) return;
+        //?}
+        //? if <1.21 {
+        String receivedHash = hash;
+        String receivedTextureType = textureType;
+        int receivedChunkIndex = chunkIndex;
+        int receivedTotalChunks = totalChunks;
+        byte[] receivedChunkData = chunkData;
+        //?} else {
+        String receivedHash = payload.hash();
+        String receivedTextureType = payload.textureType();
+        int receivedChunkIndex = payload.chunkIndex();
+        int receivedTotalChunks = payload.totalChunks();
+        byte[] receivedChunkData = payload.chunkData();
+        //?}
         context.queue(() -> {
-            // Validate chunk data
-            //? if <1.21 {
-            if (chunkData.length > 32 * 1024) {
-            //?} else {
-            if (payload.chunkData().length > 32 * 1024) {
-            //?}
-                return;
-            }
-
+            if (!isCurrentConnection(sourceConnection)) return;
             // Use TextureChunkReceiver to assemble chunks
             com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance()
-                //? if <1.21 {
-                .receiveChunk(hash, chunkIndex, totalChunks, chunkData);
-                //?} else {
-                .receiveChunk(payload.hash(), payload.chunkIndex(), payload.totalChunks(), payload.chunkData());
-                //?}
+                .receiveChunk(receivedHash, receivedTextureType, receivedChunkIndex,
+                        receivedTotalChunks, receivedChunkData, sourceConnection);
         });
+    }
+
+    /** Completes request bookkeeping and retries metadata that arrived before async decode. */
+    public static void onTextureStored(String textureType, String hash) {
+        if (!NetworkSecurity.isValidTextureType(textureType)
+                || !NetworkSecurity.isValidContentId(hash)) return;
+        TextureRequestCoordinator.getInstance().markFulfilled(textureType, hash);
+        if ("cape".equals(textureType)) {
+            AnimationMetadata metadata =
+                    ClientAnimationMetadataCache.getInstance().getMetadata(hash);
+            if (metadata != null) registerNetworkCapeAnimation(hash, metadata);
+        }
     }
 
     /**
@@ -330,15 +477,77 @@ public class ClientNetworkHandler {
     //? if <1.21 {
     public static void handleCooldownUpdate(FriendlyByteBuf buf, NetworkManager.PacketContext context) {
         long cooldownEndTime = buf.readLong();
-    //?} else {
+        //?} else {
     public static void handleCooldownUpdate(CooldownUpdatePayload payload, NetworkManager.PacketContext context) {
     //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        if (!ClientTextureIngressLimiter.getInstance().allowControlBytes(Long.BYTES)) return;
         context.queue(() -> {
+            if (!isCurrentConnection(sourceConnection)) return;
             //? if <1.21 {
             com.quickskin.mod.client.services.CooldownService.getInstance().setCooldownEndTime(cooldownEndTime);
             //?} else {
             com.quickskin.mod.client.services.CooldownService.getInstance().setCooldownEndTime(payload.cooldownEndTime());
             //?}
         });
+    }
+
+    private static int controlBytes(String... values) {
+        int total = 0;
+        for (String value : values) {
+            if (value == null) continue;
+            total = Math.min(TextureTransferLimits.MAX_JSON_BYTES,
+                    total + value.getBytes(StandardCharsets.UTF_8).length);
+        }
+        return total;
+    }
+
+    private static void requestTransparencyReload(long now) {
+        long earliest = lastTransparencyReloadMillis <= 0L
+                ? now
+                : lastTransparencyReloadMillis + TRANSPARENCY_RELOAD_INTERVAL_MILLIS;
+        pendingTransparencyReload = true;
+        pendingTransparencyReloadAtMillis = Math.max(now, earliest);
+        executeDueTransparencyReload(now);
+    }
+
+    private static void executeDueTransparencyReload(long now) {
+        if (!pendingTransparencyReload || now < pendingTransparencyReloadAtMillis
+                || isSettingsScreenOpen()) return;
+        pendingTransparencyReload = false;
+        pendingTransparencyReloadAtMillis = 0L;
+        lastTransparencyReloadMillis = now;
+        PlayerAppearanceService.getInstance().reloadSkinsForTransparencyChange();
+    }
+
+    private static boolean isSettingsScreenOpen() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft == null) return false;
+        //? if <26.2 {
+        return minecraft.screen instanceof com.quickskin.mod.client.gui.screen.SettingsScreen;
+        //?} else {
+        return minecraft.gui.screen() instanceof com.quickskin.mod.client.gui.screen.SettingsScreen;
+        //?}
+    }
+
+    private static Object currentConnectionIdentity() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft == null ? null : minecraft.getConnection();
+    }
+
+    private static Object packetConnectionIdentity(NetworkManager.PacketContext context) {
+        Object player = context != null ? context.getPlayer() : null;
+        if (player instanceof net.minecraft.client.player.LocalPlayer localPlayer) {
+            return localPlayer.connection;
+        }
+        return null;
+    }
+
+    public static boolean isCurrentConnection(Object expectedConnection) {
+        return expectedConnection != null && currentConnectionIdentity() == expectedConnection;
+    }
+
+    private record PendingAnimation(Object token, Object connection, long generation) {
     }
 }

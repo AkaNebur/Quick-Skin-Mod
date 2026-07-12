@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking.payloads;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.TextureTransferLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -25,8 +26,8 @@ public record SyncServerConfigPayload(String configJson) implements CustomPacket
     );
 
     public static final StreamCodec<ByteBuf, SyncServerConfigPayload> CODEC = StreamCodec.of(
-        (buf, payload) -> PayloadCodecs.writeString(buf, payload.configJson),
-        buf -> new SyncServerConfigPayload(PayloadCodecs.readString(buf))
+        (buf, payload) -> PayloadCodecs.writeString(buf, payload.configJson, TextureTransferLimits.MAX_JSON_BYTES),
+        buf -> new SyncServerConfigPayload(PayloadCodecs.readString(buf, TextureTransferLimits.MAX_JSON_BYTES))
     );
 
     @Override

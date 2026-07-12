@@ -211,6 +211,19 @@ public class ModNetworking implements NetworkTransport {
     }
 
     @Override
+    public void sendTextureChunkToPlayer(
+            ServerPlayer player, String hash, String textureType,
+            int chunkIndex, int totalChunks, byte[] chunkData) {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        buffer.writeUtf(hash);
+        buffer.writeUtf(textureType);
+        buffer.writeInt(chunkIndex);
+        buffer.writeInt(totalChunks);
+        buffer.writeByteArray(chunkData);
+        NetworkManager.sendToPlayer(player, SEND_TEXTURE_CHUNK, buffer);
+    }
+
+    @Override
     public void sendAppearanceToPlayer(
             ServerPlayer player, UUID playerId, String skinId, String capeId, String model) {
         NetworkManager.sendToPlayer(

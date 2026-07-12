@@ -1,12 +1,13 @@
 package com.quickskin.mod.client.services;
 
-import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.compat.CustomNPCsIntegration;
 import com.quickskin.mod.client.rendering.SkinLayers3DIntegration;
-import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
+import com.quickskin.mod.common.event.InternalEventBus;
+import com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent;
+import com.quickskin.mod.common.event.SkinTexturesReloadedEvent;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -21,8 +22,8 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import org.jetbrains.annotations.Nullable;
 
-import java.awt.image.BufferedImage;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -31,23 +32,43 @@ import java.util.UUID;
  */
 @Environment(EnvType.CLIENT)
 public class PlayerAppearanceService implements IPlayerAppearanceService {
-    private static PlayerAppearanceService instance;
+    private static volatile PlayerAppearanceService instance;
 
     private final PlayerAppearanceRepository repository;
     private final ISkinService skinService;
     private final ICapeService capeService;
     private final IModelService modelService;
+    private final InternalEventBus eventBus;
+    private boolean reloadingTransparency;
+    private boolean applyingNetworkUpdate;
 
-    private PlayerAppearanceService() {
-        this.repository = PlayerAppearanceRepository.getInstance();
-        this.skinService = SkinService.getInstance();
-        this.capeService = CapeService.getInstance();
-        this.modelService = ModelService.getInstance();
+    public PlayerAppearanceService(
+            PlayerAppearanceRepository repository,
+            ISkinService skinService,
+            ICapeService capeService,
+            IModelService modelService,
+            InternalEventBus eventBus
+    ) {
+        this.repository = Objects.requireNonNull(repository, "repository");
+        this.skinService = Objects.requireNonNull(skinService, "skinService");
+        this.capeService = Objects.requireNonNull(capeService, "capeService");
+        this.modelService = Objects.requireNonNull(modelService, "modelService");
+        this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
     }
 
     public static PlayerAppearanceService getInstance() {
         if (instance == null) {
-            instance = new PlayerAppearanceService();
+            synchronized (PlayerAppearanceService.class) {
+                if (instance == null) {
+                    instance = new PlayerAppearanceService(
+                            PlayerAppearanceRepository.getInstance(),
+                            SkinService.getInstance(),
+                            CapeService.getInstance(),
+                            ModelService.getInstance(),
+                            InternalEventBus.getInstance()
+                    );
+                }
+            }
         }
         return instance;
     }
@@ -105,6 +126,12 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                     com.quickskin.mod.client.compat.EarsCompatIntegration.associateWithPlayer(skinLocation, playerId, username);
                 }
             }
+        } else if (model != null) {
+            // Model-only updates should not require re-selecting the current skin.
+            String resolvedModel = modelService.getModelType(
+                    playerId, appearance.getSkinId(), model);
+            appearance.setModel(resolvedModel);
+            modelService.setModelOverride(playerId, model);
         }
 
         // Update cape
@@ -139,11 +166,8 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                         hash = capeId.substring("local_cape:".length());
                         animationId = "cape_" + hash;
 
-                        AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
-                        BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
-                        if (metadata != null && atlasImage != null) {
-                            AnimatedTextureManager.getInstance().registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
-                        }
+                        AnimatedTextureManager.getInstance().registerAnimationAsync(
+                                animationId, capeId, capeLocation, hash);
                     } else if (capeId.startsWith("known:")) {
                         // Register known cape animation
                         String knownId = capeId.substring("known:".length());
@@ -156,26 +180,25 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         // Refresh player renderer
         refreshPlayerRenderer(playerId);
 
-        com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType updateType;
+        PlayerAppearanceUpdateEvent.UpdateType updateType;
         if (skinId != null && capeId != null) {
-            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.FULL;
+            updateType = PlayerAppearanceUpdateEvent.UpdateType.FULL;
         } else if (skinId != null) {
-            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.SKIN;
+            updateType = PlayerAppearanceUpdateEvent.UpdateType.SKIN;
         } else if (capeId != null) {
-            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.CAPE;
+            updateType = PlayerAppearanceUpdateEvent.UpdateType.CAPE;
         } else if (model != null) {
-            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.MODEL;
+            updateType = PlayerAppearanceUpdateEvent.UpdateType.MODEL;
         } else {
-            updateType = com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent.UpdateType.FULL;
+            updateType = PlayerAppearanceUpdateEvent.UpdateType.FULL;
         }
 
-        com.quickskin.mod.common.event.InternalEventBus.getInstance().post(
-                new com.quickskin.mod.common.event.PlayerAppearanceUpdateEvent(playerId, appearance)
-        );
+        eventBus.post(new PlayerAppearanceUpdateEvent(playerId, appearance, updateType));
 
         // Sync to server if this is the local player
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null && playerId.equals(mc.player.getUUID())) {
+        if (!reloadingTransparency && !applyingNetworkUpdate && mc.player != null
+                && playerId.equals(mc.player.getUUID())) {
             com.quickskin.mod.networking.NetworkSyncService.getInstance().syncAppearance(
                 playerId,
                 appearance.getSkinId(),
@@ -267,6 +290,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
         // If the location is already cached, return it.
         if (appearance.getSkinLocation() != null) {
+            touchNetworkTexture(appearance.getSkinId(), "local_skin:", "skin");
             return appearance.getSkinLocation();
         }
 
@@ -306,6 +330,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
         // If the location is already cached, return it.
         if (appearance.getCapeLocation() != null) {
+            touchNetworkTexture(appearance.getCapeId(), "local_cape:", "cape");
             // Resolve animation frame at source level so any mod reading
             // capeTexture (e.g. WaveyCapes) gets the current frame, not the atlas.
             return CapeAnimationHelper.resolveCurrentFrame(
@@ -330,6 +355,26 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         }
 
         return null;
+    }
+
+    private void touchNetworkTexture(String appearanceId, String prefix, String textureType) {
+        if (appearanceId != null && appearanceId.startsWith(prefix)) {
+            com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                    .containsTexture(appearanceId.substring(prefix.length()), textureType);
+        }
+    }
+
+    /** Applies an authoritative S2C update without reflecting it back to the server. */
+    public void applyLookFromNetwork(
+            UUID playerId, @Nullable String skinId,
+            @Nullable String capeId, @Nullable String model) {
+        boolean previous = applyingNetworkUpdate;
+        applyingNetworkUpdate = true;
+        try {
+            applyLook(playerId, skinId, capeId, model);
+        } finally {
+            applyingNetworkUpdate = previous;
+        }
     }
 
     @Nullable
@@ -383,30 +428,31 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
         // Reprocess network skin textures with new transparency setting (reprocesses from original data)
         com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().reprocessSkins();
 
-        // Refresh the skin list UI if we're in the skin menu
-        //? if <26.2 {
-        if (mc.screen instanceof com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen skinMenu) {
-        //?} else {
-        if (mc.gui.screen() instanceof com.quickskin.mod.client.gui.screen.PlayerSkinMenuScreen skinMenu) {
-        //?}
-            skinMenu.refreshSkinList();
-        }
+        // Presentation adapters observe this event; the service does not depend on a concrete screen.
+        eventBus.post(new SkinTexturesReloadedEvent(
+                SkinTexturesReloadedEvent.Reason.TRANSPARENCY_POLICY));
 
-        // Re-apply ALL players' appearances to force them to fetch new ResourceLocations
-        if (mc.level != null && mc.level.players() != null) {
-            java.util.List<net.minecraft.world.entity.player.Player> players = new java.util.ArrayList<>(mc.level.players());
+        // Re-apply player appearances without echoing uploads back to the server.
+        reloadingTransparency = true;
+        try {
+            if (mc.level != null && mc.level.players() != null) {
+                java.util.List<net.minecraft.world.entity.player.Player> players =
+                        new java.util.ArrayList<>(mc.level.players());
 
-            for (net.minecraft.world.entity.player.Player player : players) {
-                if (player != null) {
-                    com.quickskin.mod.common.data.PlayerAppearance appearance = getAppearance(player.getUUID());
-                    if (appearance != null) {
-                        // Invalidate cached locations to force re-fetch
-                        appearance.setSkinLocation(null);
-                        // Re-apply the look to trigger re-resolution and refresh the renderer
-                        applyLook(player.getUUID(), appearance.getSkinId(), appearance.getCapeId(), appearance.getModel());
+                for (net.minecraft.world.entity.player.Player player : players) {
+                    if (player != null) {
+                        com.quickskin.mod.common.data.PlayerAppearance appearance =
+                                getAppearance(player.getUUID());
+                        if (appearance != null) {
+                            appearance.setSkinLocation(null);
+                            applyLook(player.getUUID(), appearance.getSkinId(),
+                                    appearance.getCapeId(), appearance.getModel());
+                        }
                     }
                 }
             }
+        } finally {
+            reloadingTransparency = false;
         }
     }
 }

@@ -147,7 +147,7 @@ public class MixinSkinManager {
                         CPMLOG.info("Remote: localPath={}", sourcePath);
                         if (sourcePath == null || !sourcePath.toFile().exists()) {
                             sourcePath = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
-                                    .getOrCreateTempFile(hash);
+                                    .getOrCreateTempFile(hash, "skin");
                             CPMLOG.info("Remote: networkTempFile={}", sourcePath);
                         }
                         String textureUrl = "file:///quickskin/" + hash;
@@ -235,7 +235,7 @@ public class MixinSkinManager {
         java.nio.file.Path sourcePath = LocalAssetManager.getInstance().getSourcePath(hash);
         if (sourcePath == null || !sourcePath.toFile().exists()) {
             sourcePath = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
-                    .getOrCreateTempFile(hash);
+                    .getOrCreateTempFile(hash, "skin");
         }
 
         String textureUrl;

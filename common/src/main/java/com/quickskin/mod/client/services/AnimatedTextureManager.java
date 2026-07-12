@@ -1,6 +1,8 @@
 package com.quickskin.mod.client.services;
 
+import com.quickskin.mod.client.concurrent.ClientIoExecutor;
 import com.mojang.blaze3d.platform.NativeImage;
+import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.platform.MinecraftCompat;
@@ -16,11 +18,13 @@ import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.image.BufferedImage;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /**
  * Manages animated textures (capes, future skin animations).
@@ -39,7 +43,11 @@ public class AnimatedTextureManager {
     // Limits to prevent VRAM/RAM exhaustion from HD animated capes
     private static final int MAX_ANIM_FRAME_WIDTH = 512;
     private static final int MAX_ANIM_FRAME_HEIGHT = 256;
-    private static final int MAX_ANIM_FRAMES = 128;
+    private static final int MAX_ANIM_FRAMES = 256;
+    private static final int MAX_ANIMATIONS = 32;
+    private static final long MAX_RETAINED_ATLAS_BYTES = 128L * 1024L * 1024L;
+    private static final long MAX_FRAME_PIXELS_PER_TICK =
+            4L * MAX_ANIM_FRAME_WIDTH * MAX_ANIM_FRAME_HEIGHT;
 
     /**
      * Animation state for a single animated texture.
@@ -78,24 +86,51 @@ public class AnimatedTextureManager {
             this.frameWidth = frameWidth;
             this.frameHeight = frameHeight;
 
-            // Create frame-sized NativeImage for the GPU texture
+            // Build the native/GPU resource transactionally so constructor failure cannot leak it.
             NativeImage framePixels = new NativeImage(frameWidth, frameHeight, false);
-            copyFrameTo(framePixels, 0);
+            DynamicTexture createdTexture = null;
             //? if <1.21.11 {
-            this.frameTexture = new DynamicTexture(framePixels);
+            ResourceLocation createdLocation = null;
             //?} else {
-            this.frameTexture = new DynamicTexture(() -> "quickskin_anim_" + animationId, framePixels);
+            Identifier createdLocation = null;
             //?}
+            boolean registered = false;
+            try {
+                copyFrameTo(framePixels, 0);
+                //? if <1.21.11 {
+                createdTexture = new DynamicTexture(framePixels);
+                //?} else {
+                createdTexture = new DynamicTexture(
+                        () -> "quickskin_anim_" + animationId, framePixels);
+                //?}
 
-            // Register single texture with a unique name
-            String texId = "quickskin/animated/" + animationId.replaceAll("[^a-zA-Z0-9/._-]", "_");
-            //? if <1.21.11 {
-            this.frameTextureLocation = Minecraft.getInstance().getTextureManager()
-                    .register(texId, frameTexture);
-            //?} else {
-            this.frameTextureLocation = Identifier.parse(texId);
-            Minecraft.getInstance().getTextureManager().register(frameTextureLocation, frameTexture);
-            //?}
+                String texId = "quickskin/animated/"
+                        + animationId.replaceAll("[^a-zA-Z0-9/._-]", "_");
+                //? if <1.21.11 {
+                createdLocation = Minecraft.getInstance().getTextureManager()
+                        .register(texId, createdTexture);
+                //?} else {
+                createdLocation = Identifier.parse(texId);
+                Minecraft.getInstance().getTextureManager().register(
+                        createdLocation, createdTexture);
+                //?}
+                registered = true;
+            } catch (RuntimeException | LinkageError error) {
+                if (registered && createdLocation != null) {
+                    try {
+                        Minecraft.getInstance().getTextureManager().release(createdLocation);
+                    } catch (RuntimeException ignored) {
+                        if (createdTexture != null) createdTexture.close();
+                    }
+                } else if (createdTexture != null) {
+                    createdTexture.close();
+                } else {
+                    framePixels.close();
+                }
+                throw error;
+            }
+            this.frameTexture = createdTexture;
+            this.frameTextureLocation = createdLocation;
         }
 
         /**
@@ -119,9 +154,9 @@ public class AnimatedTextureManager {
          * Tick the animation. If the frame changed, copies new frame pixels
          * to the GPU texture and uploads.
          */
-        void tick() {
+        long tick(long availablePixels) {
             if (metadata.frameCount() <= 1) {
-                return;
+                return 0L;
             }
 
             long elapsed = System.currentTimeMillis() - startTime;
@@ -129,14 +164,18 @@ public class AnimatedTextureManager {
             int newFrame = metadata.getFrameAtTime(adjustedElapsed);
 
             if (newFrame != currentFrame) {
+                long updatePixels = (long) frameWidth * frameHeight;
+                if (updatePixels > availablePixels) return 0L;
                 currentFrame = newFrame;
                 // Update the DynamicTexture's backing NativeImage and re-upload to GPU
                 NativeImage pixels = frameTexture.getPixels();
                 if (pixels != null) {
                     copyFrameTo(pixels, currentFrame);
                     frameTexture.upload();
+                    return updatePixels;
                 }
             }
+            return 0L;
         }
 
         void setSpeedMultiplier(float speed) {
@@ -152,10 +191,22 @@ public class AnimatedTextureManager {
         }
 
         void cleanup() {
-            // release() calls close() on the DynamicTexture, which frees framePixels + GL texture
-            Minecraft.getInstance().getTextureManager().release(frameTextureLocation);
-            // Free the atlas RAM
-            atlasPixels.close();
+            try {
+                // release() closes the DynamicTexture, freeing framePixels + its GL texture.
+                try {
+                    Minecraft.getInstance().getTextureManager().release(frameTextureLocation);
+                } catch (RuntimeException | LinkageError releaseError) {
+                    try {
+                        frameTexture.close();
+                    } catch (RuntimeException | LinkageError closeError) {
+                        releaseError.addSuppressed(closeError);
+                    }
+                    throw releaseError;
+                }
+            } finally {
+                // Always free the atlas even when the texture manager rejects the release.
+                atlasPixels.close();
+            }
         }
     }
 
@@ -167,8 +218,12 @@ public class AnimatedTextureManager {
     //?} else {
     private final Map<Identifier, String> atlasToAnimId = new ConcurrentHashMap<>();
     //?}
-    // Track animations currently being loaded asynchronously
-    private final Set<String> pendingRegistrations = ConcurrentHashMap.newKeySet();
+    // Token each async load so cleanup/re-registration cannot let an old session commit later.
+    private final Map<String, Long> pendingRegistrations = new ConcurrentHashMap<>();
+    private final AtomicLong registrationSequence = new AtomicLong();
+    private final AtomicLong retainedPendingSourceBytes = new AtomicLong();
+    private long retainedAtlasBytes;
+    private int tickCursor;
 
     private AnimatedTextureManager() {
         // Private constructor for singleton
@@ -182,8 +237,7 @@ public class AnimatedTextureManager {
     }
 
     /**
-     * Register an animated texture synchronously.
-     * Used by CapeService, PlayerAppearanceService, etc. when data is already loaded.
+     * Compatibility entry point. Conversion is always delegated to the bounded worker.
      */
     //? if <1.21.11 {
     public void registerAnimation(String animationId, String capeId, ResourceLocation textureLocation,
@@ -191,45 +245,8 @@ public class AnimatedTextureManager {
     public void registerAnimation(String animationId, String capeId, Identifier textureLocation,
     //?}
                                   BufferedImage atlasImage, AnimationMetadata metadata) {
-        if (metadata == null || metadata.frameCount() <= 1) {
-            return;
-        }
-
-        // Defensive guard for legacy large capes imported before F1 caps existed
-        {
-            int fc = metadata.frameCount();
-            int fw = atlasImage.getWidth();
-            int fh = fc > 0 ? atlasImage.getHeight() / fc : atlasImage.getHeight();
-            long decodedBytes = (long) fc * fw * fh * 4;
-            if (decodedBytes > 64L * 1024 * 1024) {
-                long mb = decodedBytes / (1024 * 1024);
-                org.slf4j.LoggerFactory.getLogger(AnimatedTextureManager.class).warn(
-                    "[QuickSkin] Animated cape '{}' would require {} MB decoded — skipping frame pre-upload. Re-import to apply size limits. Cape will display as static first frame.", animationId, mb);
-                return;
-            }
-        }
-
-        // If an old animation exists, clean it up first
-        unregisterAnimation(animationId);
-        pendingRegistrations.remove(animationId);
-
-        // Process and commit on the current thread
-        NativeImage atlasPixels = processAtlas(atlasImage, metadata);
-        if (atlasPixels == null) return;
-
-        int effectiveFrameCount = Math.min(metadata.frameCount(), MAX_ANIM_FRAMES);
-        int targetWidth = Math.min(atlasImage.getWidth(), MAX_ANIM_FRAME_WIDTH);
-        int srcFrameHeight = atlasImage.getHeight() / metadata.frameCount();
-        int targetHeight = Math.min(srcFrameHeight, MAX_ANIM_FRAME_HEIGHT);
-
-        AnimationMetadata effectiveMeta = metadata;
-        if (effectiveFrameCount < metadata.frameCount()) {
-            effectiveMeta = new AnimationMetadata(
-                    metadata.frames().subList(0, effectiveFrameCount), effectiveFrameCount);
-        }
-
-        float speedMultiplier = ClientConfig.getInstance().getCapeAnimationSpeed(capeId);
-        commitAnimation(animationId, textureLocation, atlasPixels, targetWidth, targetHeight, effectiveMeta, speedMultiplier);
+        registerAnimationAsync(
+                animationId, capeId, textureLocation, atlasImage, metadata);
     }
 
     /**
@@ -249,26 +266,101 @@ public class AnimatedTextureManager {
                                        //?} else {
                                        Identifier textureLocation, String hash) {
                                        //?}
-        if (animations.containsKey(animationId) || pendingRegistrations.contains(animationId)) {
+        registerAnimationAsyncInternal(animationId, capeId, textureLocation, () ->
+                new AnimationSource(
+                        LocalAssetManager.getInstance().getSourceImage(hash),
+                        LocalAssetManager.getInstance().getAnimationMetadata(hash)), 0L);
+    }
+
+    //? if <1.21.11 {
+    public void registerAnimationAsync(String animationId, String capeId,
+                                       ResourceLocation textureLocation, BufferedImage atlasImage,
+                                       AnimationMetadata metadata) {
+    //?} else {
+    public void registerAnimationAsync(String animationId, String capeId,
+                                       Identifier textureLocation, BufferedImage atlasImage,
+                                       AnimationMetadata metadata) {
+    //?}
+        if (!isValidAnimationAtlas(atlasImage, metadata)) return;
+        AnimationSource source = new AnimationSource(atlasImage, copyMetadata(metadata));
+        registerAnimationAsyncInternal(
+                animationId, capeId, textureLocation, () -> source,
+                decodedBytes(atlasImage));
+    }
+
+    private record AnimationSource(BufferedImage atlasImage, AnimationMetadata metadata) {
+    }
+
+    //? if <1.21.11 {
+    private void registerAnimationAsyncInternal(
+            String animationId, String capeId, ResourceLocation textureLocation,
+            Supplier<AnimationSource> sourceSupplier, long retainedSourceBytes) {
+    //?} else {
+    private void registerAnimationAsyncInternal(
+            String animationId, String capeId, Identifier textureLocation,
+            Supplier<AnimationSource> sourceSupplier, long retainedSourceBytes) {
+    //?}
+        if (retainedSourceBytes < 0 || retainedSourceBytes > 64L * 1024L * 1024L
+                || (retainedSourceBytes > 0 && !reservePendingSourceBytes(retainedSourceBytes))) {
             return;
         }
-        pendingRegistrations.add(animationId);
+        AtomicLong reservedBytes = new AtomicLong(retainedSourceBytes);
+        AtomicBoolean reservationReleased = new AtomicBoolean();
+        AtomicBoolean mainThreadHandoff = new AtomicBoolean();
+        Runnable releaseReservation = () -> {
+            if (reservationReleased.compareAndSet(false, true)) {
+                retainedPendingSourceBytes.addAndGet(-reservedBytes.get());
+            }
+        };
+        long registrationToken;
+        synchronized (this) {
+            if (animations.containsKey(animationId)
+                    || pendingRegistrations.containsKey(animationId)
+                    || animations.size() + pendingRegistrations.size() >= MAX_ANIMATIONS) {
+                releaseReservation.run();
+                return;
+            }
+            registrationToken = registrationSequence.incrementAndGet();
+            pendingRegistrations.put(animationId, registrationToken);
+        }
 
-        CompletableFuture.runAsync(() -> {
+        ClientIoExecutor.runAsync(() -> {
             NativeImage atlasPixels = null;
             try {
+                if (!Long.valueOf(registrationToken).equals(
+                        pendingRegistrations.get(animationId))) return;
                 // Background thread: disk I/O + pixel conversion
-                AnimationMetadata metadata = LocalAssetManager.getInstance().getAnimationMetadata(hash);
-                BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
+                AnimationSource source = sourceSupplier.get();
+                AnimationMetadata metadata = source != null ? source.metadata() : null;
+                BufferedImage atlasImage = source != null ? source.atlasImage() : null;
 
-                if (metadata == null || atlasImage == null || metadata.frameCount() <= 1) {
-                    pendingRegistrations.remove(animationId);
+                if (!isValidAnimationAtlas(atlasImage, metadata)) {
+                    pendingRegistrations.remove(animationId, registrationToken);
+                    return;
+                }
+                if (!Long.valueOf(registrationToken).equals(
+                        pendingRegistrations.get(animationId))) return;
+                if (reservedBytes.get() == 0L) {
+                    long loadedSourceBytes = decodedBytes(atlasImage);
+                    if (!reservePendingSourceBytes(loadedSourceBytes)) {
+                        pendingRegistrations.remove(animationId, registrationToken);
+                        return;
+                    }
+                    reservedBytes.set(loadedSourceBytes);
+                }
+                metadata = copyMetadata(metadata);
+
+                if (!Long.valueOf(registrationToken).equals(
+                        pendingRegistrations.get(animationId))) return;
+                atlasPixels = processAtlas(atlasImage, metadata);
+                if (atlasPixels == null) {
+                    pendingRegistrations.remove(animationId, registrationToken);
                     return;
                 }
 
-                atlasPixels = processAtlas(atlasImage, metadata);
-                if (atlasPixels == null) {
-                    pendingRegistrations.remove(animationId);
+                if (!Long.valueOf(registrationToken).equals(pendingRegistrations.get(animationId))) {
+                    atlasPixels.close();
+                    atlasPixels = null;
                     return;
                 }
 
@@ -284,6 +376,7 @@ public class AnimatedTextureManager {
                 }
 
                 float speedMultiplier = ClientConfig.getInstance().getCapeAnimationSpeed(capeId);
+                if (!Float.isFinite(speedMultiplier)) speedMultiplier = 1.0f;
 
                 // Capture for lambda
                 final NativeImage finalAtlas = atlasPixels;
@@ -295,24 +388,40 @@ public class AnimatedTextureManager {
                 Minecraft.getInstance().execute(() -> {
                     try {
                         // Skip if a sync registration happened while we were loading
-                        if (animations.containsKey(animationId)) {
+                        if (!Long.valueOf(registrationToken).equals(
+                                pendingRegistrations.get(animationId))
+                                || animations.containsKey(animationId)) {
                             finalAtlas.close();
                             return;
                         }
                         commitAnimation(animationId, textureLocation, finalAtlas, fw, fh, fm, sm);
-                    } catch (Exception e) {
+                    } catch (RuntimeException | LinkageError e) {
                         finalAtlas.close();
                     } finally {
-                        pendingRegistrations.remove(animationId);
+                        pendingRegistrations.remove(animationId, registrationToken);
+                        releaseReservation.run();
                     }
                 });
                 atlasPixels = null; // Ownership transferred to execute() callback
+                mainThreadHandoff.set(true);
 
-            } catch (Exception e) {
+            } catch (RuntimeException | LinkageError e) {
                 if (atlasPixels != null) {
                     atlasPixels.close();
+                    atlasPixels = null;
                 }
-                pendingRegistrations.remove(animationId);
+                pendingRegistrations.remove(animationId, registrationToken);
+            } finally {
+                if (!mainThreadHandoff.get() && atlasPixels != null) {
+                    atlasPixels.close();
+                }
+                if (!mainThreadHandoff.get()) releaseReservation.run();
+            }
+        }).whenComplete((ignored, error) -> {
+            if (error != null) {
+                releaseReservation.run();
+                pendingRegistrations.remove(animationId, registrationToken);
+                QuickSkin.LOGGER.warn("Unable to schedule animated texture {}", animationId, error);
             }
         });
     }
@@ -321,6 +430,49 @@ public class AnimatedTextureManager {
      * Process atlas image: apply resolution/frame limits and convert to NativeImage.
      * Safe to call from any thread.
      */
+    private static boolean isValidAnimationAtlas(
+            BufferedImage atlasImage, AnimationMetadata metadata) {
+        if (atlasImage == null || metadata == null || metadata.frames() == null) return false;
+        int frameCount = metadata.frameCount();
+        if (frameCount <= 1 || frameCount > MAX_ANIM_FRAMES
+                || metadata.frames().size() != frameCount
+                || atlasImage.getWidth() < 1 || atlasImage.getHeight() < frameCount
+                || atlasImage.getHeight() % frameCount != 0
+                || (long) atlasImage.getWidth() * atlasImage.getHeight() * 4L
+                        > 64L * 1024L * 1024L) {
+            return false;
+        }
+        boolean[] indexes = new boolean[frameCount];
+        for (AnimationMetadata.FrameData frame : metadata.frames()) {
+            if (frame == null || frame.delay() < 20 || frame.delay() > 60_000
+                    || frame.index() < 0 || frame.index() >= frameCount
+                    || indexes[frame.index()]) {
+                return false;
+            }
+            indexes[frame.index()] = true;
+        }
+        return true;
+    }
+
+    private static long decodedBytes(BufferedImage atlasImage) {
+        return atlasImage == null ? 0L
+                : (long) atlasImage.getWidth() * atlasImage.getHeight() * 4L;
+    }
+
+    private boolean reservePendingSourceBytes(long bytes) {
+        if (bytes <= 0L || bytes > 64L * 1024L * 1024L) return false;
+        long current;
+        do {
+            current = retainedPendingSourceBytes.get();
+            if (current > MAX_RETAINED_ATLAS_BYTES - bytes) return false;
+        } while (!retainedPendingSourceBytes.compareAndSet(current, current + bytes));
+        return true;
+    }
+
+    private static AnimationMetadata copyMetadata(AnimationMetadata metadata) {
+        return new AnimationMetadata(List.copyOf(metadata.frames()), metadata.frameCount());
+    }
+
     private static NativeImage processAtlas(BufferedImage atlasImage, AnimationMetadata metadata) {
         int effectiveFrameCount = Math.min(metadata.frameCount(), MAX_ANIM_FRAMES);
         int srcFrameWidth = atlasImage.getWidth();
@@ -356,40 +508,74 @@ public class AnimatedTextureManager {
      * Must be called on the main/render thread.
      */
     //? if <1.21.11 {
-    private void commitAnimation(String animationId, ResourceLocation textureLocation,
+    private synchronized void commitAnimation(String animationId, ResourceLocation textureLocation,
     //?} else {
-    private void commitAnimation(String animationId, Identifier textureLocation,
+    private synchronized void commitAnimation(String animationId, Identifier textureLocation,
     //?}
                                  NativeImage atlasPixels, int frameWidth, int frameHeight,
                                  AnimationMetadata metadata, float speedMultiplier) {
+        long atlasBytes = (long) atlasPixels.getWidth() * atlasPixels.getHeight() * 4L;
+        if (animations.containsKey(animationId) || atlasToAnimId.containsKey(textureLocation)
+                || animations.size() >= MAX_ANIMATIONS
+                || atlasBytes <= 0 || retainedAtlasBytes + atlasBytes > MAX_RETAINED_ATLAS_BYTES) {
+            atlasPixels.close();
+            return;
+        }
         AnimationState state = new AnimationState(
                 animationId, textureLocation, atlasPixels,
                 frameWidth, frameHeight, metadata, speedMultiplier);
-        animations.put(animationId, state);
-        atlasToAnimId.put(textureLocation, animationId);
+        boolean committed = false;
+        try {
+            animations.put(animationId, state);
+            atlasToAnimId.put(textureLocation, animationId);
+            retainedAtlasBytes += atlasBytes;
+            committed = true;
+        } finally {
+            if (!committed) {
+                animations.remove(animationId, state);
+                atlasToAnimId.remove(textureLocation, animationId);
+                try {
+                    state.cleanup();
+                } catch (RuntimeException | LinkageError cleanupError) {
+                    QuickSkin.LOGGER.warn("Unable to roll back animated texture {}", animationId,
+                            cleanupError);
+                }
+            }
+        }
     }
 
     /**
      * Clear all animations (for texture cache reload)
      */
-    public void clearAnimations() {
+    public synchronized void clearAnimations() {
         pendingRegistrations.clear();
         for (AnimationState state : animations.values()) {
-            state.cleanup();
+            try {
+                state.cleanup();
+            } catch (RuntimeException | LinkageError error) {
+                QuickSkin.LOGGER.warn("Unable to release an animated texture", error);
+            }
         }
         animations.clear();
         atlasToAnimId.clear();
+        retainedAtlasBytes = 0;
     }
 
     /**
      * Unregister an animated texture
      */
-    public void unregisterAnimation(String animationId) {
+    public synchronized void unregisterAnimation(String animationId) {
         pendingRegistrations.remove(animationId);
         AnimationState removed = animations.remove(animationId);
         if (removed != null) {
             atlasToAnimId.remove(removed.originalAtlasLocation);
-            removed.cleanup();
+            retainedAtlasBytes = Math.max(0L, retainedAtlasBytes
+                    - (long) removed.atlasPixels.getWidth() * removed.atlasPixels.getHeight() * 4L);
+            try {
+                removed.cleanup();
+            } catch (RuntimeException | LinkageError error) {
+                QuickSkin.LOGGER.warn("Unable to release animated texture {}", animationId, error);
+            }
         }
     }
 
@@ -408,7 +594,7 @@ public class AnimatedTextureManager {
      * Callers use this to avoid redundant registration attempts.
      */
     public boolean isAnimated(String animationId) {
-        return animations.containsKey(animationId) || pendingRegistrations.contains(animationId);
+        return animations.containsKey(animationId) || pendingRegistrations.containsKey(animationId);
     }
 
     /**
@@ -488,9 +674,20 @@ public class AnimatedTextureManager {
      * Only uploads to GPU when the frame actually changes.
      */
     public void tick() {
-        for (AnimationState state : animations.values()) {
-            state.tick();
+        List<AnimationState> snapshot = List.copyOf(animations.values());
+        if (snapshot.isEmpty()) {
+            tickCursor = 0;
+            return;
         }
+        int start = Math.floorMod(tickCursor, snapshot.size());
+        int visited = 0;
+        long remainingPixels = MAX_FRAME_PIXELS_PER_TICK;
+        while (visited < snapshot.size() && remainingPixels > 0L) {
+            AnimationState state = snapshot.get((start + visited) % snapshot.size());
+            remainingPixels -= state.tick(remainingPixels);
+            visited++;
+        }
+        tickCursor = (start + Math.max(1, visited)) % snapshot.size();
     }
 
     /**
@@ -502,20 +699,23 @@ public class AnimatedTextureManager {
         int width = bufferedImage.getWidth();
         int height = bufferedImage.getHeight();
         NativeImage nativeImage = new NativeImage(width, height, false);
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int argb = bufferedImage.getRGB(x, y);
-                // Convert ARGB to ABGR (NativeImage pixel format)
-                int a = (argb >> 24) & 0xFF;
-                int r = (argb >> 16) & 0xFF;
-                int g = (argb >> 8) & 0xFF;
-                int b = argb & 0xFF;
-                int abgr = (a << 24) | (b << 16) | (g << 8) | r;
-                MinecraftCompat.INSTANCE.setPixel(nativeImage, x, y, abgr);
+        try {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int argb = bufferedImage.getRGB(x, y);
+                    // Convert ARGB to ABGR (NativeImage pixel format)
+                    int a = (argb >> 24) & 0xFF;
+                    int r = (argb >> 16) & 0xFF;
+                    int g = (argb >> 8) & 0xFF;
+                    int b = argb & 0xFF;
+                    int abgr = (a << 24) | (b << 16) | (g << 8) | r;
+                    MinecraftCompat.INSTANCE.setPixel(nativeImage, x, y, abgr);
+                }
             }
+            return nativeImage;
+        } catch (RuntimeException | LinkageError error) {
+            nativeImage.close();
+            throw error;
         }
-
-        return nativeImage;
     }
 }

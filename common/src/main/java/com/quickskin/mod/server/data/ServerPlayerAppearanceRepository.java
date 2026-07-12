@@ -90,4 +90,16 @@ public class ServerPlayerAppearanceRepository {
     public boolean hasAppearance(UUID playerId) {
         return appearances.containsKey(playerId);
     }
+
+    /** Prevents eviction of a blob referenced by a currently connected appearance. */
+    public boolean isTextureReferenced(String hash) {
+        if (hash == null) return false;
+        String skinId = "local_skin:" + hash;
+        String capeId = "local_cape:" + hash;
+        for (PlayerAppearance appearance : appearances.values()) {
+            if (skinId.equals(appearance.getSkinId())
+                    || capeId.equals(appearance.getCapeId())) return true;
+        }
+        return false;
+    }
 }

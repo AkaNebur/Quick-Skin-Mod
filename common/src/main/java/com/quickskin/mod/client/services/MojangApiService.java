@@ -3,38 +3,41 @@ package com.quickskin.mod.client.services;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.concurrent.ClientIoExecutor;
+import com.quickskin.mod.common.util.SafeImageReader;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 
 /**
  * Service for interacting with Mojang's API to fetch player skins
  */
 @Environment(EnvType.CLIENT)
-public class MojangApiService {
-    private static MojangApiService instance;
+public final class MojangApiService {
+    private static final MojangApiService INSTANCE = new MojangApiService();
 
     private static final String MOJANG_API_BASE = "https://api.mojang.com";
     private static final String SESSION_SERVER_BASE = "https://sessionserver.mojang.com";
-
+    private static final int MAX_JSON_BYTES = 64 * 1024;
+    private static final int MAX_SKIN_BYTES = 2 * 1024 * 1024;
+    private static final Pattern USERNAME = Pattern.compile("[A-Za-z0-9_]{1,16}");
+    private static final Pattern TEXTURE_PATH =
+            Pattern.compile("/texture/[0-9a-fA-F]{32,128}");
     private MojangApiService() {}
 
     public static MojangApiService getInstance() {
-        if (instance == null) {
-            instance = new MojangApiService();
-        }
-        return instance;
+        return INSTANCE;
     }
 
     public static void init() {
@@ -47,28 +50,20 @@ public class MojangApiService {
      * @return CompletableFuture containing the UUID, or null if not found
      */
     public CompletableFuture<UUID> getUuidFromUsername(String username) {
-        return CompletableFuture.supplyAsync(() -> {
+        if (username == null || !USERNAME.matcher(username).matches()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return ClientIoExecutor.supplyAsync(() -> {
+            HttpURLConnection connection = null;
             try {
                 String urlString = MOJANG_API_BASE + "/users/profiles/minecraft/" + username;
                 URL url = new URL(urlString);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(5000);
-                connection.setReadTimeout(5000);
+                connection = openConnection(url, 5000);
 
                 int responseCode = connection.getResponseCode();
                 if (responseCode == 200) {
-                    BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)
-                    );
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    reader.close();
-
-                    JsonObject json = JsonParser.parseString(response.toString()).getAsJsonObject();
+                    JsonObject json = JsonParser.parseString(
+                            readUtf8Body(connection, MAX_JSON_BYTES)).getAsJsonObject();
                     String uuidString = json.get("id").getAsString();
 
                     // Add dashes to UUID string
@@ -78,14 +73,13 @@ public class MojangApiService {
                     );
 
                     return UUID.fromString(formattedUuid);
-                } else if (responseCode == 204 || responseCode == 404) {
-                    return null;
-                } else {
-                    return null;
                 }
             } catch (Exception e) {
-                return null;
+                QuickSkin.LOGGER.debug("Unable to resolve Mojang profile for {}", username, e);
+            } finally {
+                if (connection != null) connection.disconnect();
             }
+            return null;
         });
     }
 
@@ -95,40 +89,37 @@ public class MojangApiService {
      * @return CompletableFuture containing the skin texture data
      */
     public CompletableFuture<SkinTextureData> getSkinTextureData(UUID uuid) {
-        return CompletableFuture.supplyAsync(() -> {
+        if (uuid == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return ClientIoExecutor.supplyAsync(() -> {
+            HttpURLConnection connection = null;
             try {
                 String uuidString = uuid.toString().replace("-", "");
                 String urlString = SESSION_SERVER_BASE + "/session/minecraft/profile/" + uuidString;
                 URL url = new URL(urlString);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(5000);
-                connection.setReadTimeout(5000);
+                connection = openConnection(url, 5000);
 
                 int responseCode = connection.getResponseCode();
                 if (responseCode == 200) {
-                    BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)
-                    );
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    reader.close();
-
-                    JsonObject json = JsonParser.parseString(response.toString()).getAsJsonObject();
+                    JsonObject json = JsonParser.parseString(
+                            readUtf8Body(connection, MAX_JSON_BYTES)).getAsJsonObject();
                     JsonObject properties = json.getAsJsonArray("properties").get(0).getAsJsonObject();
                     String texturesBase64 = properties.get("value").getAsString();
+                    if (texturesBase64.length() > MAX_JSON_BYTES) {
+                        return null;
+                    }
 
                     // Decode the base64 textures
-                    String texturesJson = new String(Base64.getDecoder().decode(texturesBase64), StandardCharsets.UTF_8);
+                    byte[] decodedTextures = Base64.getDecoder().decode(texturesBase64);
+                    if (decodedTextures.length > MAX_JSON_BYTES) return null;
+                    String texturesJson = new String(decodedTextures, StandardCharsets.UTF_8);
                     JsonObject texturesObject = JsonParser.parseString(texturesJson).getAsJsonObject();
                     JsonObject textures = texturesObject.getAsJsonObject("textures");
 
                     if (textures.has("SKIN")) {
                         JsonObject skinObject = textures.getAsJsonObject("SKIN");
-                        String skinUrl = skinObject.get("url").getAsString();
+                        URL skinUrl = validateTextureUrl(skinObject.get("url").getAsString());
 
                         // Determine model type (slim/default)
                         String modelType = "default";
@@ -139,16 +130,15 @@ public class MojangApiService {
                             }
                         }
 
-                        return new SkinTextureData(skinUrl, modelType);
-                    } else {
-                        return null;
+                        return new SkinTextureData(skinUrl.toString(), modelType);
                     }
-                } else {
-                    return null;
                 }
             } catch (Exception e) {
-                return null;
+                QuickSkin.LOGGER.debug("Unable to resolve Mojang skin texture for {}", uuid, e);
+            } finally {
+                if (connection != null) connection.disconnect();
             }
+            return null;
         });
     }
 
@@ -158,27 +148,22 @@ public class MojangApiService {
      * @return CompletableFuture containing the BufferedImage
      */
     public CompletableFuture<BufferedImage> downloadSkinImage(String skinUrl) {
-        return CompletableFuture.supplyAsync(() -> {
+        return ClientIoExecutor.supplyAsync(() -> {
+            HttpURLConnection connection = null;
             try {
-                URL url = new URL(skinUrl);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(10000);
-                connection.setReadTimeout(10000);
+                URL url = validateTextureUrl(skinUrl);
+                connection = openConnection(url, 10000);
 
                 int responseCode = connection.getResponseCode();
                 if (responseCode == 200) {
-                    InputStream inputStream = connection.getInputStream();
-                    BufferedImage image = ImageIO.read(inputStream);
-                    inputStream.close();
-
-                    return image;
-                } else {
-                    return null;
+                    return SafeImageReader.readSkin(readBody(connection, MAX_SKIN_BYTES));
                 }
             } catch (Exception e) {
-                return null;
+                QuickSkin.LOGGER.debug("Unable to download Mojang skin texture", e);
+            } finally {
+                if (connection != null) connection.disconnect();
             }
+            return null;
         });
     }
 
@@ -208,6 +193,59 @@ public class MojangApiService {
                             });
                     });
             });
+    }
+
+    private static HttpURLConnection openConnection(URL url, int timeoutMillis)
+            throws IOException {
+        if (!"https".equalsIgnoreCase(url.getProtocol())) {
+            throw new IOException("Mojang request must use HTTPS");
+        }
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setInstanceFollowRedirects(false);
+        connection.setRequestMethod("GET");
+        connection.setConnectTimeout(timeoutMillis);
+        connection.setReadTimeout(timeoutMillis);
+        connection.setRequestProperty("Accept", "application/json,image/png");
+        connection.setRequestProperty("User-Agent", "QuickSkin");
+        return connection;
+    }
+
+    private static byte[] readBody(HttpURLConnection connection, int maxBytes)
+            throws IOException {
+        long advertisedLength = connection.getContentLengthLong();
+        if (advertisedLength > maxBytes) {
+            throw new IOException("Mojang response exceeds " + maxBytes + " bytes");
+        }
+        try (InputStream input = connection.getInputStream()) {
+            byte[] body = input.readNBytes(maxBytes + 1);
+            if (body.length > maxBytes) {
+                throw new IOException("Mojang response grew beyond " + maxBytes + " bytes");
+            }
+            return body;
+        }
+    }
+
+    private static String readUtf8Body(HttpURLConnection connection, int maxBytes)
+            throws IOException {
+        return new String(readBody(connection, maxBytes), StandardCharsets.UTF_8);
+    }
+
+    /** Accept historical HTTP payloads only for Mojang's exact texture host, then upgrade them. */
+    private static URL validateTextureUrl(String value) throws Exception {
+        if (value == null || value.length() > 512) {
+            throw new IOException("Invalid Mojang texture URL");
+        }
+        URI uri = URI.create(value);
+        String scheme = uri.getScheme();
+        if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                || !"textures.minecraft.net".equalsIgnoreCase(uri.getHost())
+                || uri.getUserInfo() != null || uri.getPort() != -1
+                || uri.getQuery() != null || uri.getFragment() != null
+                || !TEXTURE_PATH.matcher(uri.getPath()).matches()) {
+            throw new IOException("Untrusted Mojang texture URL");
+        }
+        return new URI("https", null, "textures.minecraft.net", -1,
+                uri.getPath(), null, null).toURL();
     }
 
     /**

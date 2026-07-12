@@ -6,13 +6,10 @@ import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import com.quickskin.mod.client.rendering.SkinLayers3DIntegration;
 import net.minecraft.client.gui.render.pip.GuiSkinRenderer;
 import net.minecraft.client.renderer.state.gui.pip.GuiSkinRenderState;
-import net.minecraft.client.model.player.PlayerCapeModel;
-import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -49,28 +46,21 @@ public class GuiSkinRendererMixin {
             at = @At("TAIL")
     )
     private void quickskin$renderCapeInPiP(GuiSkinRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CallbackInfo ci) {
-        Identifier capeTexture = PlayerModelRenderer.pendingCapeTexture;
-        PlayerModel bodyModel = PlayerModelRenderer.pendingCapeBodyModel;
-        PlayerCapeModel capeModel = PlayerModelRenderer.pendingCapeModel;
-
-        if (capeTexture == null || bodyModel == null || capeModel == null) {
+        PlayerModelRenderer.PreviewCapeState cape =
+                PlayerModelRenderer.consumePendingCape(state.playerModel());
+        if (cape == null) {
             return;
         }
 
-        RenderType capeRenderType = RenderTypes.entityTranslucent(capeTexture);
+        RenderType capeRenderType = RenderTypes.entityTranslucent(cape.texture());
 
         poseStack.pushPose();
-        bodyModel.body.translateAndRotate(poseStack);
+        cape.bodyModel().body.translateAndRotate(poseStack);
         poseStack.translate(0.0, 0.0, 0.125);
         poseStack.mulPose(Axis.XP.rotationDegrees(6.0F));
         // 26.2: submit the cape part to the deferred collector instead of writing to a VertexConsumer.
-        collector.submitModelPart(capeModel.body.getChild("cape"), poseStack, capeRenderType,
+        collector.submitModelPart(cape.capeModel().body.getChild("cape"), poseStack, capeRenderType,
                 15728880, OverlayTexture.NO_OVERLAY, null);
         poseStack.popPose();
-
-        // Clear the pending data so it doesn't leak to other skin renders
-        PlayerModelRenderer.pendingCapeTexture = null;
-        PlayerModelRenderer.pendingCapeBodyModel = null;
-        PlayerModelRenderer.pendingCapeModel = null;
     }
 }

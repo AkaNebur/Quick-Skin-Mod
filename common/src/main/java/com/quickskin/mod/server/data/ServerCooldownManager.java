@@ -75,4 +75,9 @@ public class ServerCooldownManager {
     public void removePlayer(UUID playerId) {
         lastSkinChangeTimestamps.remove(playerId);
     }
+
+    /** Clears every cooldown owned by the current server session. */
+    public void clear() {
+        lastSkinChangeTimestamps.clear();
+    }
 }

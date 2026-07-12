@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking.payloads;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.TextureTransferLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -26,17 +27,14 @@ public record SendTexturePayload(String textureType, String hash, byte[] imageDa
 
     public static final StreamCodec<ByteBuf, SendTexturePayload> CODEC = StreamCodec.of(
         (buf, payload) -> {
-            PayloadCodecs.writeString(buf, payload.textureType);
-            PayloadCodecs.writeString(buf, payload.hash);
-            buf.writeInt(payload.imageData.length);
-            buf.writeBytes(payload.imageData);
+            PayloadCodecs.writeString(buf, payload.textureType, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+            PayloadCodecs.writeString(buf, payload.hash, TextureTransferLimits.CONTENT_ID_LENGTH);
+            PayloadCodecs.writeByteArray(buf, payload.imageData, TextureTransferLimits.MAX_DIRECT_TEXTURE_BYTES);
         },
         buf -> {
-            String textureType = PayloadCodecs.readString(buf);
-            String hash = PayloadCodecs.readString(buf);
-            int length = buf.readInt();
-            byte[] imageData = new byte[length];
-            buf.readBytes(imageData);
+            String textureType = PayloadCodecs.readString(buf, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+            String hash = PayloadCodecs.readString(buf, TextureTransferLimits.CONTENT_ID_LENGTH);
+            byte[] imageData = PayloadCodecs.readByteArray(buf, TextureTransferLimits.MAX_DIRECT_TEXTURE_BYTES);
             return new SendTexturePayload(textureType, hash, imageData);
         }
     );

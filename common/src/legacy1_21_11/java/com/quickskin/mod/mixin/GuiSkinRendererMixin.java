@@ -8,8 +8,6 @@ import com.quickskin.mod.client.rendering.SkinLayers3DIntegration;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.render.pip.GuiSkinRenderer;
 import net.minecraft.client.gui.render.state.pip.GuiSkinRenderState;
-import net.minecraft.client.model.player.PlayerCapeModel;
-import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -45,27 +43,24 @@ public class GuiSkinRendererMixin {
                     OverlayTexture.NO_OVERLAY, state.playerModel(), state.texture(), thinArms);
         }
 
-        Identifier capeTexture = PlayerModelRenderer.pendingCapeTexture;
-        PlayerModel bodyModel = PlayerModelRenderer.pendingCapeBodyModel;
-        PlayerCapeModel capeModel = PlayerModelRenderer.pendingCapeModel;
-
-        if (capeTexture == null || bodyModel == null || capeModel == null) {
+        PlayerModelRenderer.PreviewCapeState cape =
+                PlayerModelRenderer.consumePendingCape(
+                        state.playerModel(), state.texture(), state.rotationX(), state.rotationY(),
+                        state.pivotY(), state.x0(), state.y0(), state.x1(), state.y1(), state.scale());
+        if (cape == null || cape.texture() == null
+                || cape.bodyModel() == null || cape.capeModel() == null) {
             return;
         }
 
-        RenderType capeRenderType = RenderTypes.entityTranslucent(capeTexture);
+        RenderType capeRenderType = RenderTypes.entityTranslucent(cape.texture());
         VertexConsumer capeConsumer = bufferSource.getBuffer(capeRenderType);
 
         poseStack.pushPose();
-        bodyModel.body.translateAndRotate(poseStack);
+        cape.bodyModel().body.translateAndRotate(poseStack);
         poseStack.translate(0.0, 0.0, 0.125);
         poseStack.mulPose(Axis.XP.rotationDegrees(6.0F));
-        capeModel.body.getChild("cape").render(poseStack, capeConsumer, 15728880, OverlayTexture.NO_OVERLAY);
+        cape.capeModel().body.getChild("cape").render(
+                poseStack, capeConsumer, 15728880, OverlayTexture.NO_OVERLAY);
         poseStack.popPose();
-
-        // Clear the pending data so it doesn't leak to other skin renders
-        PlayerModelRenderer.pendingCapeTexture = null;
-        PlayerModelRenderer.pendingCapeBodyModel = null;
-        PlayerModelRenderer.pendingCapeModel = null;
     }
 }

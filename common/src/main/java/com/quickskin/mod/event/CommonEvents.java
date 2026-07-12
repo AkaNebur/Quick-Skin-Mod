@@ -1,6 +1,5 @@
 package com.quickskin.mod.event;
 
-import com.quickskin.mod.QuickSkin;
 //? if >=1.21 {
 import com.quickskin.mod.networking.ServerNetworkHandler;
 //?}
@@ -12,11 +11,11 @@ import com.quickskin.mod.server.data.QuickSkinPlayerTracker;
 import com.quickskin.mod.networking.payloads.CooldownUpdatePayload;
 //?}
 import com.quickskin.mod.server.data.ServerCooldownManager;
-import com.quickskin.mod.server.storage.ServerAnimationCache;
 import com.quickskin.mod.server.storage.ServerAppearanceStorage;
-import com.quickskin.mod.server.storage.ServerTextureCache;
+import com.quickskin.mod.runtime.ServerRuntime;
 import dev.architectury.event.events.common.LifecycleEvent;
 import dev.architectury.event.events.common.PlayerEvent;
+import dev.architectury.event.events.common.TickEvent;
 //? if >=1.21 {
 import com.quickskin.mod.networking.payloads.SyncAppearancePayload;
 //?}
@@ -27,12 +26,25 @@ import net.minecraft.server.level.ServerPlayer;
  * Uses Architectury's event system for cross-platform compatibility
  */
 public class CommonEvents {
+    private static boolean initialized;
 
     /**
      * Initializes common event listeners
      * Called from QuickSkin.init()
      */
     public static void init() {
+        init(ServerRuntime.getInstance());
+    }
+
+    /** Registers callbacks against the runtime that owns server-scoped state. */
+    public static synchronized void init(ServerRuntime serverRuntime) {
+        if (initialized) {
+            return;
+        }
+        if (serverRuntime == null) {
+            throw new IllegalArgumentException("serverRuntime cannot be null");
+        }
+
         // Player joins server
         PlayerEvent.PLAYER_JOIN.register(player -> {
             // Phase 5: Load player's saved appearance from server storage
@@ -83,20 +95,17 @@ public class CommonEvents {
 
         // Player quits server
         PlayerEvent.PLAYER_QUIT.register(player -> {
-            // Phase 5: Save player's appearance to server storage
-            ServerAppearanceStorage.getInstance().savePlayerAppearance(player.getUUID());
+            ServerPlayer serverPlayer = (ServerPlayer) player;
+            boolean removed = serverRuntime.playerDisconnected(
+                    serverPlayer.level().getServer(),
+                    serverPlayer.getUUID(),
+                    serverPlayer.connection);
 
             //? if <1.21 {
-            QuickSkinPlayerTracker.getInstance().removePlayer(player.getUUID());
-            //?}
-            // Cleanup cooldown data (only if cooldown feature is enabled)
-            int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
-            if (cooldownSeconds > 0) {
-                ServerCooldownManager.getInstance().removePlayer(player.getUUID());
+            if (removed) {
+                QuickSkinPlayerTracker.getInstance().removePlayer(player.getUUID());
             }
-
-            // Cleanup server-side caches (textures stay cached for other players)
-            // Note: We don't clear textures as they may be used by other players
+            //?}
         });
 
         // Player respawns (after death)
@@ -129,39 +138,29 @@ public class CommonEvents {
             }
         });
 
+        TickEvent.SERVER_POST.register(ServerNetworkHandler::tickTextureResponses);
+
         // Server starting
         LifecycleEvent.SERVER_STARTING.register(server -> {
-            // Phase 5: Initialize server-side storage
-            ServerTextureCache.getInstance().init(server);
-            ServerAnimationCache.getInstance().init(server);
-            ServerAppearanceStorage.getInstance().init(server);
-
-            // Phase 9: Reload server config (in case it was modified)
-            com.quickskin.mod.config.ServerConfig.reload();
-        });
-
-        // Server started (ready to accept players)
-        LifecycleEvent.SERVER_STARTED.register(server -> {
+            //? if <1.21 {
+            QuickSkinPlayerTracker.getInstance().clear();
+            //?}
+            serverRuntime.start(server);
         });
 
         // Server stopping
         LifecycleEvent.SERVER_STOPPING.register(server -> {
-            // Phase 5: Save all pending texture data
-            ServerTextureCache.getInstance().saveAll();
-
-            // Phase 9: Save server config
-            com.quickskin.mod.config.ServerConfig.getInstance().save();
+            serverRuntime.prepareStop(server);
         });
 
         // Server stopped
         LifecycleEvent.SERVER_STOPPED.register(server -> {
-            // Phase 5: Clear caches
-            ServerTextureCache.getInstance().clear();
-            ServerAnimationCache.getInstance().clear();
+            serverRuntime.stop(server);
             //? if <1.21 {
             QuickSkinPlayerTracker.getInstance().clear();
             //?}
         });
 
+        initialized = true;
     }
 }

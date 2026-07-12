@@ -19,9 +19,16 @@ public class PayloadCodecs {
      * Write a string to the buffer
      */
     public static void writeString(ByteBuf buf, String string) {
+        writeString(buf, string, MAX_STRING_LENGTH);
+    }
+
+    public static void writeString(ByteBuf buf, String string, int maxBytes) {
+        if (string == null) {
+            throw new EncoderException("String cannot be null");
+        }
         byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
-        if (bytes.length > MAX_STRING_LENGTH) {
-            throw new EncoderException("String too big (was " + bytes.length + " bytes encoded, max " + MAX_STRING_LENGTH + ")");
+        if (maxBytes < 0 || maxBytes > MAX_STRING_LENGTH || bytes.length > maxBytes) {
+            throw new EncoderException("String too big (was " + bytes.length + " bytes encoded, max " + maxBytes + ")");
         }
         writeVarInt(buf, bytes.length);
         buf.writeBytes(bytes);
@@ -31,20 +38,43 @@ public class PayloadCodecs {
      * Read a string from the buffer
      */
     public static String readString(ByteBuf buf) {
-        int length = readVarInt(buf);
-        if (length > MAX_STRING_LENGTH * 4) {
-            throw new DecoderException("The received encoded string buffer length is longer than maximum allowed (" + length + " > " + MAX_STRING_LENGTH * 4 + ")");
+        return readString(buf, MAX_STRING_LENGTH);
+    }
+
+    public static String readString(ByteBuf buf, int maxBytes) {
+        if (maxBytes < 0 || maxBytes > MAX_STRING_LENGTH) {
+            throw new DecoderException("Invalid maximum string length: " + maxBytes);
         }
-        if (length < 0) {
-            throw new DecoderException("The received encoded string buffer length is less than zero! Weird string!");
+        int length = readVarInt(buf);
+        if (length < 0 || length > maxBytes || length > buf.readableBytes()) {
+            throw new DecoderException("Invalid encoded string length " + length + " (max " + maxBytes
+                    + ", readable " + buf.readableBytes() + ")");
         }
         byte[] bytes = new byte[length];
         buf.readBytes(bytes);
         String string = new String(bytes, StandardCharsets.UTF_8);
-        if (string.length() > MAX_STRING_LENGTH) {
-            throw new DecoderException("The received string length is longer than maximum allowed (" + length + " > " + MAX_STRING_LENGTH + ")");
-        }
         return string;
+    }
+
+    public static void writeByteArray(ByteBuf buf, byte[] data, int maxLength) {
+        if (data == null || data.length > maxLength) {
+            throw new EncoderException("Byte array too big (was "
+                    + (data == null ? "null" : data.length) + ", max " + maxLength + ")");
+        }
+        buf.writeInt(data.length);
+        buf.writeBytes(data);
+    }
+
+    /** Validate the wire length before allocating the destination array. */
+    public static byte[] readByteArray(ByteBuf buf, int maxLength) {
+        int length = buf.readInt();
+        if (length < 0 || length > maxLength || length > buf.readableBytes()) {
+            throw new DecoderException("Invalid byte array length " + length + " (max " + maxLength
+                    + ", readable " + buf.readableBytes() + ")");
+        }
+        byte[] data = new byte[length];
+        buf.readBytes(data);
+        return data;
     }
 
     /**
@@ -81,10 +111,13 @@ public class PayloadCodecs {
         int j = 0;
         byte b;
         do {
+            if (!buf.isReadable()) {
+                throw new DecoderException("Truncated VarInt");
+            }
             b = buf.readByte();
             i |= (b & 127) << j++ * 7;
             if (j > 5) {
-                throw new RuntimeException("VarInt too big");
+                throw new DecoderException("VarInt too big");
             }
         } while ((b & 128) == 128);
         return i;

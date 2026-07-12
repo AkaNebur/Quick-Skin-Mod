@@ -24,7 +24,9 @@ import net.minecraft.world.entity.player.Player;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Utility for rendering player models in GUI using vanilla Minecraft rendering
@@ -37,16 +39,49 @@ public class PlayerModelRenderer {
     private static PlayerModel slimModel;
     private static PlayerCapeModel capeModel;
 
-    // Static fields used to communicate cape data to the GuiSkinRendererMixin.
-    // Set before submitSkinRenderState, consumed during renderToTexture.
-    public static Identifier pendingCapeTexture;
-    public static PlayerModel pendingCapeBodyModel;
-    public static PlayerCapeModel pendingCapeModel;
+    // Match cape data to the exact value-state used by the PiP cache.
+    private static final Map<PreviewCapeKey, PreviewCapeState> PENDING_CAPES =
+            new LinkedHashMap<>(16, 0.75f, true);
+    private static final int MAX_PENDING_CAPES = 128;
 
-    // Tracks cape state hash to force PiP cache invalidation when cape changes.
-    // PiP only re-renders when submitted state differs; cape isn't part of the state,
-    // so we add an imperceptible scale nudge that varies with the cape identity.
-    private static int lastCapeStateHash = 0;
+    public record PreviewCapeState(
+            Identifier texture, PlayerModel bodyModel, PlayerCapeModel capeModel) {
+    }
+
+    private record PreviewCapeKey(
+            PlayerModel model, Identifier skin, float rotationX, float rotationY, float pivotY,
+            int x0, int y0, int x1, int y1, float scale) {
+    }
+
+    private static void registerPendingCape(
+            PlayerModel bodyModel, Identifier skin, float rotationX, float rotationY, float pivotY,
+            int x0, int y0, int x1, int y1, float scale,
+            Identifier texture, PlayerCapeModel playerCapeModel) {
+        synchronized (PENDING_CAPES) {
+            PreviewCapeKey key = new PreviewCapeKey(
+                    bodyModel, skin, rotationX, rotationY, pivotY, x0, y0, x1, y1, scale);
+            if (!PENDING_CAPES.containsKey(key) && PENDING_CAPES.size() >= MAX_PENDING_CAPES) {
+                var oldest = PENDING_CAPES.keySet().iterator();
+                if (oldest.hasNext()) PENDING_CAPES.remove(oldest.next());
+            }
+            PENDING_CAPES.put(key, new PreviewCapeState(texture, bodyModel, playerCapeModel));
+        }
+    }
+
+    public static PreviewCapeState consumePendingCape(
+            PlayerModel bodyModel, Identifier skin, float rotationX, float rotationY, float pivotY,
+            int x0, int y0, int x1, int y1, float scale) {
+        synchronized (PENDING_CAPES) {
+            return PENDING_CAPES.remove(new PreviewCapeKey(
+                    bodyModel, skin, rotationX, rotationY, pivotY, x0, y0, x1, y1, scale));
+        }
+    }
+
+    public static void clearPendingCapes() {
+        synchronized (PENDING_CAPES) {
+            PENDING_CAPES.clear();
+        }
+    }
 
     /**
      * Initialize models (lazy initialization)
@@ -84,6 +119,11 @@ public class PlayerModelRenderer {
 
     // Cached player entity for rendering (persists even after leaving world)
     private static Player cachedPlayer;
+
+    public static java.util.UUID getCachedPlayerUUID() {
+        Player player = cachedPlayer;
+        return player != null ? player.getUUID() : null;
+    }
 
     // Previous rotation/position values for smooth lerping in idle animation
     private static float prevHeadRotZ = 0.0f;
@@ -238,11 +278,6 @@ public class PlayerModelRenderer {
                     }
                 }
             }
-            PlayerModel bodyModel = "slim".equals(playerData.getModelType() != null ? playerData.getModelType().toLowerCase(Locale.ROOT) : null) ? slimModel : classicModel;
-            pendingCapeTexture = entityCapeTexture;
-            pendingCapeBodyModel = bodyModel;
-            pendingCapeModel = capeModel;
-
             // 1.21.11: renderEntityInInventory removed. We call submitEntityRenderState directly
             // to preserve our own rotation (renderEntityInInventoryFollowsMouse overrides rotation).
             int halfWidth = (int)(scale * 0.6f);
@@ -349,34 +384,32 @@ public class PlayerModelRenderer {
                 }
             }
         }
-        pendingCapeTexture = capeTexture;
-        pendingCapeBodyModel = model;
-        pendingCapeModel = capeModel;
-
         // Force PiP cache invalidation when cape changes by adding imperceptible scale nudge
         int capeHash = capeTexture != null ? capeTexture.hashCode() : 0;
-        float scaleNudge = 0.0f;
-        if (capeHash != lastCapeStateHash) {
-            lastCapeStateHash = capeHash;
-        }
-        scaleNudge = 0.000001f * (capeHash & 0xFF);
+        float scaleNudge = 0.000004f * (capeHash & 0x3FFF);
+        float rotationXNudge = 0.0000001f * ((capeHash >>> 14) & 0x3FFFF);
 
         // Submit to PiP system - cape rendering injected by GuiSkinRendererMixin
         int boxHeight = (int)(scale * 2.3f);
         int boxHalfWidth = (int)(scale * 1.0f);
 
+        float submittedScale = (float)(int) scale + scaleNudge;
+        float submittedRotationY = -45.0f + yRotation;
         graphics.skin(
                 model,
                 playerData.getSkinLocation(),
-                (float)(int) scale + scaleNudge,
-                0.0f,
-                -45.0f + yRotation,
+                submittedScale,
+                rotationXNudge,
+                submittedRotationY,
                 -1.0625f,
                 x - boxHalfWidth,
                 y - boxHeight,
                 x + boxHalfWidth,
                 y
         );
+        registerPendingCape(model, playerData.getSkinLocation(), rotationXNudge,
+                submittedRotationY, -1.0625f, x - boxHalfWidth, y - boxHeight,
+                x + boxHalfWidth, y, submittedScale, capeTexture, capeModel);
     }
 
     /**
@@ -1107,6 +1140,7 @@ public class PlayerModelRenderer {
      */
     public static void clearCachedPlayer() {
         cachedPlayer = null;
+        clearPendingCapes();
     }
 
     /**

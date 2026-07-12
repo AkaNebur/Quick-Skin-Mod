@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking.payloads;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.TextureTransferLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -29,13 +30,13 @@ public record RequestTexturePayload(UUID playerId, String textureType, String ha
     public static final StreamCodec<ByteBuf, RequestTexturePayload> CODEC = StreamCodec.of(
         (buf, payload) -> {
             PayloadCodecs.writeUUID(buf, payload.playerId);
-            PayloadCodecs.writeString(buf, payload.textureType);
-            PayloadCodecs.writeString(buf, payload.hash);
+            PayloadCodecs.writeString(buf, payload.textureType, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+            PayloadCodecs.writeString(buf, payload.hash, TextureTransferLimits.CONTENT_ID_LENGTH);
         },
         buf -> new RequestTexturePayload(
             PayloadCodecs.readUUID(buf),
-            PayloadCodecs.readString(buf),
-            PayloadCodecs.readString(buf)
+            PayloadCodecs.readString(buf, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES),
+            PayloadCodecs.readString(buf, TextureTransferLimits.CONTENT_ID_LENGTH)
         )
     );
 

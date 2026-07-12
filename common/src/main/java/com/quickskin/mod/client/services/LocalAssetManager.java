@@ -8,9 +8,12 @@ import com.quickskin.mod.common.data.SkinResolution;
 import com.quickskin.mod.common.data.SkinSortMode;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.common.util.HashUtil;
+import com.quickskin.mod.common.util.BoundedFileReader;
 import com.quickskin.mod.common.util.HDTextureProcessor;
 import com.quickskin.mod.common.util.SkinModelDetector;
+import com.quickskin.mod.common.util.SafeImageReader;
 import com.quickskin.mod.config.ClientConfig;
+import com.quickskin.mod.networking.NetworkSecurity;
 import com.quickskin.mod.platform.PlatformHelper;
 import com.quickskin.mod.platform.MinecraftCompat;
 import net.fabricmc.api.EnvType;
@@ -39,11 +42,17 @@ import java.util.stream.Stream;
 @Environment(EnvType.CLIENT)
 public class LocalAssetManager {
 
+    private static final int MAX_ASSET_BYTES = (int) SafeImageReader.MAX_ENCODED_BYTES;
+    private static final int MAX_ANIMATION_FRAMES = 256;
+    private static final int MAX_SCAN_CANDIDATES = 4096;
+    private static final int MAX_SCAN_DEPTH = 32;
+
     private static LocalAssetManager instance;
 
     // Asset discovery
     private final Map<String, AssetMetadata> metadataCache = new ConcurrentHashMap<>();
     private final Map<String, Path> hashToSourcePath = new ConcurrentHashMap<>();
+    private final Map<String, String> legacyCapeHashAliases = new ConcurrentHashMap<>();
 
     // Texture registration
     private final Map<String, Map<TextureQuality, Identifier>> textureRegistry = new ConcurrentHashMap<>();
@@ -85,7 +94,7 @@ public class LocalAssetManager {
     /**
      * Initialize asset manager and discover assets
      */
-    public void init() {
+    public synchronized void init() {
         // Get directories from platform helper
         skinsDirectory = PlatformHelper.getSkinsDirectory();
         capesDirectory = PlatformHelper.getCapesDirectory();
@@ -97,6 +106,7 @@ public class LocalAssetManager {
             Files.createDirectories(capesDirectory);
             Files.createDirectories(cacheDirectory);
         } catch (IOException e) {
+            QuickSkin.LOGGER.error("Unable to create QuickSkin local asset directories", e);
         }
 
         // Load skin preferences
@@ -110,9 +120,10 @@ public class LocalAssetManager {
     /**
      * Scan filesystem for skins and capes, build metadata cache
      */
-    public void discoverLocalAssets() {
+    public synchronized void discoverLocalAssets() {
         metadataCache.clear();
         hashToSourcePath.clear();
+        legacyCapeHashAliases.clear();
 
         // Scan skins directory
         scanDirectory(skinsDirectory, "skin");
@@ -128,6 +139,7 @@ public class LocalAssetManager {
             com.quickskin.mod.client.compat.CpmModelWorkflow.sanitizeUnavailableState();
         }
         com.quickskin.mod.client.compat.CpmModelWorkflow.sanitizeMissingActiveModel();
+        LocalCapeHashMigration.migrate(legacyCapeHashAliases);
     }
 
     /**
@@ -141,8 +153,13 @@ public class LocalAssetManager {
 
         int count = 0;
 
-        try (Stream<Path> paths = Files.walk(directory)) {
-            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+        try (Stream<Path> paths = Files.walk(directory, MAX_SCAN_DEPTH)) {
+            List<Path> candidates = paths.limit(MAX_SCAN_CANDIDATES)
+                    .filter(Files::isRegularFile).toList();
+            if (candidates.size() == MAX_SCAN_CANDIDATES) {
+                QuickSkin.LOGGER.warn("Local asset scan reached the {} file cap in {}", MAX_SCAN_CANDIDATES, directory);
+            }
+            for (Path path : candidates) {
                 String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
 
                 // Process PNG files
@@ -170,6 +187,7 @@ public class LocalAssetManager {
                 }
             }
         } catch (IOException e) {
+            QuickSkin.LOGGER.warn("Unable to scan QuickSkin asset directory {}", directory, e);
         }
 
         return count;
@@ -183,8 +201,13 @@ public class LocalAssetManager {
             return;
         }
 
-        try (Stream<Path> paths = Files.walk(modelsDirectory)) {
-            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+        try (Stream<Path> paths = Files.walk(modelsDirectory, MAX_SCAN_DEPTH)) {
+            List<Path> candidates = paths.limit(MAX_SCAN_CANDIDATES)
+                    .filter(Files::isRegularFile).toList();
+            if (candidates.size() == MAX_SCAN_CANDIDATES) {
+                QuickSkin.LOGGER.warn("CPM model scan reached the {} file cap in {}", MAX_SCAN_CANDIDATES, modelsDirectory);
+            }
+            for (Path path : candidates) {
                 String fileName = path.getFileName().toString();
                 if (!fileName.toLowerCase(Locale.ROOT).endsWith(".cpmmodel")) {
                     continue;
@@ -193,15 +216,18 @@ public class LocalAssetManager {
                     scanCpmModel(path, fileName);
                 } catch (IOException | RuntimeException ignored) {
                     // Skip only the unreadable candidate and continue the recursive scan.
+                    QuickSkin.LOGGER.debug("Skipping invalid CPM model {}", path, ignored);
                 }
             }
         } catch (IOException ignored) {
             // An unreadable optional directory must not affect normal skins/capes.
+            QuickSkin.LOGGER.warn("Unable to scan CPM model directory {}", modelsDirectory, ignored);
         }
     }
 
     private void scanCpmModel(Path path, String fileName) throws IOException {
-        String hash = HashUtil.computeFileHash(path);
+        byte[] modelBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
+        String hash = HashUtil.computeHash(modelBytes);
         if (hash == null) {
             return;
         }
@@ -216,13 +242,14 @@ public class LocalAssetManager {
                 hash,
                 friendlyName,
                 path,
-                Files.size(path),
+                modelBytes.length,
                 Files.getLastModifiedTime(path).toMillis()
         );
         metadataCache.put(hash, metadata);
         hashToSourcePath.put(hash, path);
 
-        if (info != null && info.iconPngBytes != null) {
+        if (info != null && info.iconPngBytes != null && info.iconPngBytes.length <= MAX_ASSET_BYTES
+                && SafeImageReader.readPng(info.iconPngBytes) != null) {
             Path iconPath = getCpmIconPath(hash);
             Files.createDirectories(iconPath.getParent());
             Files.write(iconPath, info.iconPngBytes);
@@ -234,52 +261,42 @@ public class LocalAssetManager {
      */
     private AssetMetadata processPngAsset(Path path, String type) {
         try {
-            // Compute hash
-            String hash = HashUtil.computeFileHash(path);
-            if (hash == null) {
+            byte[] sourceBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
+            String legacyHash = HashUtil.computeHash(sourceBytes);
+            String hash = HashUtil.computeAssetHash(sourceBytes, type);
+            if (hash == null || legacyHash == null) {
                 return null;
             }
+            if ("cape".equals(type)) legacyCapeHashAliases.put(legacyHash, hash);
 
             // F9: read image once upfront, use for both metadata synthesis and dimension check.
-            BufferedImage image = ImageIO.read(path.toFile());
+            BufferedImage image = SafeImageReader.readPng(sourceBytes);
             if (image == null) {
                 return null;
             }
 
-            // For capes, check if it's an old animation strip missing metadata and generate it.
+            AnimationMetadata animMeta = null;
             if ("cape".equals(type)) {
-                Path metadataPathForCheck = cacheDirectory.resolve(hash + ".json");
-                if (!Files.exists(metadataPathForCheck)) {
+                animMeta = readAnimationMetadataFile(hash);
+                if (animMeta == null && !hash.equals(legacyHash)) {
+                    animMeta = readAnimationMetadataFile(legacyHash);
+                }
+                if (animMeta == null) {
                     int width = image.getWidth();
                     int height = image.getHeight();
                     int frameHeight = width / 2; // Cape frames have a 2:1 aspect ratio.
 
                     if (width > 0 && frameHeight > 0 && height > frameHeight && height % frameHeight == 0) {
                         int fc = height / frameHeight;
-                        if (fc > 1) {
+                        if (fc > 1 && fc <= MAX_ANIMATION_FRAMES) {
                             List<AnimationMetadata.FrameData> frames = new ArrayList<>();
                             for (int i = 0; i < fc; i++) {
                                 // Use 50ms per frame (20 FPS) as a sensible default.
                                 frames.add(new AnimationMetadata.FrameData(50, i));
                             }
-                            AnimationMetadata generatedMeta = new AnimationMetadata(frames, fc);
-                            try {
-                                Files.writeString(metadataPathForCheck, generatedMeta.toJson());
-                            } catch (IOException ignored) {
-                            }
+                            animMeta = new AnimationMetadata(frames, fc);
                         }
                     }
-                }
-            }
-
-            // Check for animation metadata
-            Path metadataPath = cacheDirectory.resolve(hash + ".json");
-            AnimationMetadata animMeta = null;
-            if (Files.exists(metadataPath)) {
-                try {
-                    String json = Files.readString(metadataPath);
-                    animMeta = AnimationMetadata.fromJson(json);
-                } catch (IOException e) {
                 }
             }
 
@@ -295,6 +312,8 @@ public class LocalAssetManager {
                 // This is an animated asset (cape) identified by its metadata file.
                 isAnimated = true;
                 frameCount = animMeta.frameCount();
+                if (frameCount < 1 || frameCount > MAX_ANIMATION_FRAMES
+                        || height % frameCount != 0) return null;
                 int frameHeight = (frameCount > 0) ? height / frameCount : height;
                 resolution = SkinResolution.fromDimensions(width, frameHeight);
                 if (resolution == null) {
@@ -302,6 +321,10 @@ public class LocalAssetManager {
                     if (resolution == null) {
                         return null;
                     }
+                    image = HDTextureProcessor.resizeAnimationStrip(image, resolution.getWidth());
+                    if (!ImageIO.write(image, "PNG", path.toFile())) return null;
+                    width = image.getWidth();
+                    height = image.getHeight();
                 }
             } else {
                 // This is a static asset or a PNG animation strip without metadata.
@@ -314,7 +337,7 @@ public class LocalAssetManager {
                         }
                         // Resize the image and overwrite the file so loadTexture works correctly
                         image = HDTextureProcessor.resizeToResolution(image, resolution);
-                        ImageIO.write(image, "PNG", path.toFile());
+                        if (!ImageIO.write(image, "PNG", path.toFile())) return null;
                         width = image.getWidth();
                         height = image.getHeight();
                     }
@@ -323,6 +346,7 @@ public class LocalAssetManager {
                     int frameHeight = width / 2;
                     if (width > 0 && frameHeight > 0 && height % frameHeight == 0) {
                         frameCount = height / frameHeight;
+                        if (frameCount < 1 || frameCount > MAX_ANIMATION_FRAMES) return null;
                         isAnimated = frameCount > 1;
                         resolution = SkinResolution.fromDimensions(width, frameHeight);
                         if (resolution == null) {
@@ -336,7 +360,7 @@ public class LocalAssetManager {
                             } else {
                                 image = HDTextureProcessor.resizeToResolution(image, resolution);
                             }
-                            ImageIO.write(image, "PNG", path.toFile());
+                            if (!ImageIO.write(image, "PNG", path.toFile())) return null;
                             width = image.getWidth();
                             height = image.getHeight();
                         }
@@ -344,6 +368,21 @@ public class LocalAssetManager {
                         return null;
                     }
                 }
+            }
+
+            String originalHash = hash;
+            byte[] finalBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
+            String finalLegacyHash = HashUtil.computeHash(finalBytes);
+            hash = HashUtil.computeAssetHash(finalBytes, type);
+            if (!NetworkSecurity.isValidContentId(hash)
+                    || !NetworkSecurity.isValidContentId(finalLegacyHash)) return null;
+            if ("cape".equals(type)) {
+                legacyCapeHashAliases.put(legacyHash, hash);
+                legacyCapeHashAliases.put(finalLegacyHash, hash);
+            }
+            if (animMeta != null) {
+                writeAnimationMetadataFile(hash, animMeta);
+                if (!originalHash.equals(hash)) deleteAnimationMetadataFile(originalHash);
             }
 
             // Get friendly name (filename without extension)
@@ -354,7 +393,7 @@ public class LocalAssetManager {
             }
 
             // Get file size and modification time
-            long fileSize = Files.size(path);
+            long fileSize = finalBytes.length;
             long lastModifiedTime = Files.getLastModifiedTime(path).toMillis();
 
             // Create metadata
@@ -380,25 +419,46 @@ public class LocalAssetManager {
     private AssetMetadata processGifAsset(Path path) {
         com.quickskin.mod.common.util.StbGifLoader.GifLoadResult result = null;
         try {
-            // Compute hash of original GIF first so we can check the cache before decoding.
-            String hash = HashUtil.computeFileHash(path);
-            if (hash == null) {
+            byte[] sourceBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
+            String legacyHash = HashUtil.computeHash(sourceBytes);
+            String hash = HashUtil.computeAssetHash(sourceBytes, "cape");
+            if (hash == null || legacyHash == null) {
                 return null;
             }
+            legacyCapeHashAliases.put(legacyHash, hash);
 
             // F7: cache-hit fast path. Skip STB decode if cached atlas + metadata
             // exist and are newer than the source GIF.
-            Path cachedAtlasFast = cacheDirectory.resolve("animated_capes").resolve(hash + ".png");
-            Path cachedMetaFast = cacheDirectory.resolve(hash + ".json");
-            if (Files.exists(cachedAtlasFast) && Files.exists(cachedMetaFast)) {
+            Path cachedAtlasFast = NetworkSecurity.resolveContained(
+                    cacheDirectory.resolve("animated_capes"), hash, ".png");
+            AnimationMetadata cachedMeta = readAnimationMetadataFile(hash);
+            if (!hash.equals(legacyHash) && cachedAtlasFast != null) {
+                Path legacyAtlas = NetworkSecurity.resolveContained(
+                        cacheDirectory.resolve("animated_capes"), legacyHash, ".png");
+                AnimationMetadata legacyMeta = readAnimationMetadataFile(legacyHash);
+                if (cachedMeta == null && legacyMeta != null) {
+                    cachedMeta = legacyMeta;
+                    writeAnimationMetadataFile(hash, legacyMeta);
+                }
+                if (!Files.exists(cachedAtlasFast) && legacyAtlas != null
+                        && !Files.isSymbolicLink(legacyAtlas)
+                        && Files.isRegularFile(legacyAtlas)) {
+                    Files.createDirectories(cachedAtlasFast.getParent());
+                    Files.copy(legacyAtlas, cachedAtlasFast, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+            if (cachedAtlasFast != null && !Files.isSymbolicLink(cachedAtlasFast)
+                    && Files.exists(cachedAtlasFast) && cachedMeta != null) {
                 try {
                     long srcMtime = Files.getLastModifiedTime(path).toMillis();
                     long atlasMtime = Files.getLastModifiedTime(cachedAtlasFast).toMillis();
+                    Path cachedMetaFast = NetworkSecurity.resolveContained(cacheDirectory, hash, ".json");
                     long metaMtime = Files.getLastModifiedTime(cachedMetaFast).toMillis();
                     if (atlasMtime >= srcMtime && metaMtime >= srcMtime) {
-                        AnimationMetadata cachedMeta = AnimationMetadata.fromJson(Files.readString(cachedMetaFast));
-                        BufferedImage atlasImg = ImageIO.read(cachedAtlasFast.toFile());
-                        if (cachedMeta != null && atlasImg != null && cachedMeta.frameCount() > 0) {
+                        BufferedImage atlasImg = SafeImageReader.readPng(cachedAtlasFast);
+                        if (atlasImg != null && cachedMeta.frameCount() > 0
+                                && cachedMeta.frameCount() <= MAX_ANIMATION_FRAMES
+                                && atlasImg.getHeight() % cachedMeta.frameCount() == 0) {
                             int cw = atlasImg.getWidth();
                             int ch = atlasImg.getHeight() / cachedMeta.frameCount();
                             SkinResolution res = SkinResolution.fromDimensions(cw, ch);
@@ -408,7 +468,7 @@ public class LocalAssetManager {
                             if (di > 0) fn = fn.substring(0, di);
                             return AssetMetadata.forAnimatedCape(
                                 hash, fn, path, res,
-                                Files.size(path), cachedMeta.frameCount(), srcMtime);
+                                sourceBytes.length, cachedMeta.frameCount(), srcMtime);
                         }
                     }
                 } catch (IOException ignored) {
@@ -417,7 +477,7 @@ public class LocalAssetManager {
             }
 
             // Load GIF using STB Image
-            try (var inputStream = Files.newInputStream(path)) {
+            try (var inputStream = new ByteArrayInputStream(sourceBytes)) {
                 result = com.quickskin.mod.common.util.StbGifLoader.loadGif(inputStream);
             }
 
@@ -428,30 +488,33 @@ public class LocalAssetManager {
             int atlasHeight = height * frameCount;
 
             NativeImage atlas = new NativeImage(width, atlasHeight, false);
-
-            // Copy each frame into the atlas
-            for (int i = 0; i < frameCount; i++) {
-                NativeImage frame = result.frames()[i];
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        MinecraftCompat.INSTANCE.setPixel(atlas, x, i * height + y, MinecraftCompat.INSTANCE.getPixel(frame, x, y));
+            Path atlasPath;
+            try {
+                // Copy each frame into the atlas
+                for (int i = 0; i < frameCount; i++) {
+                    NativeImage frame = result.frames()[i];
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            MinecraftCompat.INSTANCE.setPixel(atlas, x, i * height + y, MinecraftCompat.INSTANCE.getPixel(frame, x, y));
+                        }
                     }
                 }
-            }
 
-            // Save PNG atlas to cache
-            Path cacheDir = cacheDirectory.resolve("animated_capes");
-            Files.createDirectories(cacheDir);
-            Path atlasPath = cacheDir.resolve(hash + ".png");
-            atlas.writeToFile(atlasPath);
-            atlas.close();
+                // Save PNG atlas to cache
+                Path cacheDir = cacheDirectory.resolve("animated_capes");
+                Files.createDirectories(cacheDir);
+                atlasPath = NetworkSecurity.resolveContained(cacheDir, hash, ".png");
+                if (atlasPath == null || Files.isSymbolicLink(atlasPath)) return null;
+                atlas.writeToFile(atlasPath);
+            } finally {
+                atlas.close();
+            }
 
             // Composite vanilla elytra on cache atlas if elytra area is transparent
             compositeElytraOnAtlasIfNeeded(atlasPath, frameCount);
 
             // Save animation metadata to cache
-            Path metadataPath = cacheDirectory.resolve(hash + ".json");
-            Files.writeString(metadataPath, result.metadata().toJson());
+            writeAnimationMetadataFile(hash, result.metadata());
 
             // Get friendly name
             String friendlyName = path.getFileName().toString();
@@ -461,7 +524,7 @@ public class LocalAssetManager {
             }
 
             // Get file size and modification time
-            long fileSize = Files.size(path);
+            long fileSize = sourceBytes.length;
             long lastModifiedTime = Files.getLastModifiedTime(path).toMillis();
 
             // Get resolution from first frame
@@ -497,20 +560,38 @@ public class LocalAssetManager {
      * @return The metadata, or null if not found or not animated
      */
     public AnimationMetadata getAnimationMetadata(String hash) {
+        if (!NetworkSecurity.isValidContentId(hash)) return null;
         AssetMetadata assetMeta = getMetadata(hash);
         if (assetMeta == null || !assetMeta.isAnimated()) {
             return null;
         }
+        return readAnimationMetadataFile(hash);
+    }
 
-        Path metadataPath = cacheDirectory.resolve(hash + ".json");
-        if (Files.exists(metadataPath)) {
-            try {
-                String json = Files.readString(metadataPath);
-                return AnimationMetadata.fromJson(json);
-            } catch (IOException e) {
-            }
+    @Nullable
+    private AnimationMetadata readAnimationMetadataFile(String hash) {
+        Path metadataPath = NetworkSecurity.resolveContained(cacheDirectory, hash, ".json");
+        if (metadataPath == null || Files.isSymbolicLink(metadataPath) || !Files.exists(metadataPath)) return null;
+        try {
+            String json = BoundedFileReader.readUtf8(
+                    metadataPath, com.quickskin.mod.networking.TextureTransferLimits.MAX_JSON_BYTES);
+            return NetworkSecurity.parseAnimationMetadata(json);
+        } catch (IOException | RuntimeException e) {
+            return null;
         }
-        return null;
+    }
+
+    private void writeAnimationMetadataFile(String hash, AnimationMetadata metadata) throws IOException {
+        String json = metadata.toJson();
+        if (!NetworkSecurity.isValidAnimationMetadata(json)) throw new IOException("Invalid animation metadata");
+        Path metadataPath = NetworkSecurity.resolveContained(cacheDirectory, hash, ".json");
+        if (metadataPath == null || Files.isSymbolicLink(metadataPath)) throw new IOException("Unsafe metadata path");
+        Files.writeString(metadataPath, json);
+    }
+
+    private void deleteAnimationMetadataFile(String hash) throws IOException {
+        Path metadataPath = NetworkSecurity.resolveContained(cacheDirectory, hash, ".json");
+        if (metadataPath != null && !Files.isSymbolicLink(metadataPath)) Files.deleteIfExists(metadataPath);
     }
 
     /**
@@ -559,6 +640,7 @@ public class LocalAssetManager {
      * Get metadata by hash
      */
     public AssetMetadata getMetadata(String hash) {
+        if (!NetworkSecurity.isValidContentId(hash)) return null;
         return metadataCache.get(hash);
     }
 
@@ -566,6 +648,7 @@ public class LocalAssetManager {
      * Get source file path by hash
      */
     public Path getSourcePath(String hash) {
+        if (!NetworkSecurity.isValidContentId(hash)) return null;
         return hashToSourcePath.get(hash);
     }
 
@@ -574,22 +657,30 @@ public class LocalAssetManager {
      * Returns raw PNG bytes
      */
     public byte[] loadTexture(String hash, TextureQuality quality) {
+        if (!NetworkSecurity.isValidContentId(hash) || quality == null) return null;
         Path sourcePath = hashToSourcePath.get(hash);
         if (sourcePath == null || !Files.exists(sourcePath)) {
             return null;
         }
 
         try {
-            BufferedImage image = ImageIO.read(sourcePath.toFile());
-            if (image == null) {
-                return null;
-            }
-
-            // Check if this is a skin and transparency should be disabled
+            byte[] sourceBytes = BoundedFileReader.readBytes(sourcePath, MAX_ASSET_BYTES);
             AssetMetadata metadata = getMetadata(hash);
             boolean isSkin = metadata != null && "skin".equals(metadata.type());
             boolean shouldRemoveTransparency = isSkin &&
                     com.quickskin.mod.config.ClientConfig.getInstance().shouldDisableSkinTransparency();
+
+            // Canonical full-quality bytes need no decode/re-encode when presentation policy is off.
+            if (quality == TextureQuality.FULL && !shouldRemoveTransparency
+                    && hash.equals(HashUtil.computeAssetHash(
+                            sourceBytes, metadata != null ? metadata.type() : null))) {
+                return sourceBytes;
+            }
+
+            BufferedImage image = SafeImageReader.readPng(sourceBytes);
+            if (image == null) {
+                return null;
+            }
 
             // Apply transparency removal if needed
             if (shouldRemoveTransparency) {
@@ -604,7 +695,7 @@ public class LocalAssetManager {
                     if (shouldRemoveTransparency) {
                         yield HDTextureProcessor.imageToPng(image);
                     } else {
-                        yield Files.readAllBytes(sourcePath); // Original
+                        yield sourceBytes;
                     }
                 }
                 case PREVIEW -> HDTextureProcessor.createPreview(image);
@@ -613,6 +704,37 @@ public class LocalAssetManager {
             };
 
         } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Loads immutable imported bytes for network transfer. Server presentation policy must never
+     * destructively alter the content-addressed source that other clients receive.
+     */
+    public byte @Nullable [] loadCanonicalTexture(String hash, String textureType) {
+        if (!NetworkSecurity.isValidContentId(hash)
+                || !NetworkSecurity.isValidTextureType(textureType)) return null;
+        AssetMetadata metadata = getMetadata(hash);
+        if (metadata == null || !textureType.equals(metadata.type())) return null;
+        Path sourcePath = hashToSourcePath.get(hash);
+        if (sourcePath == null) return null;
+        try {
+            byte[] sourceBytes = BoundedFileReader.readBytes(sourcePath, MAX_ASSET_BYTES);
+            if ((!metadata.isAnimated() && !hash.equals(
+                    HashUtil.computeAssetHash(sourceBytes, textureType)))
+                    || NetworkSecurity.getTexturePixelCount(sourceBytes, textureType) < 1) return null;
+            // One full bounded decode is the authoritative on-disk tamper/integrity check.
+            SafeImageReader.readPng(sourceBytes);
+            if ("cape".equals(textureType) && metadata.isAnimated()) {
+                AnimationMetadata animation = getAnimationMetadata(hash);
+                if (animation == null) return null;
+                sourceBytes = com.quickskin.mod.common.util.PngAnimationIdentity
+                        .attach(sourceBytes, animation.toJson());
+            }
+            return sourceBytes;
+        } catch (IOException | RuntimeException error) {
+            QuickSkin.LOGGER.warn("Unable to load canonical {} texture {}", textureType, hash, error);
             return null;
         }
     }
@@ -627,7 +749,7 @@ public class LocalAssetManager {
             return null;
         }
         try {
-            return Files.readAllBytes(iconPath);
+            return BoundedFileReader.readBytes(iconPath, MAX_ASSET_BYTES);
         } catch (IOException ignored) {
             return null;
         }
@@ -637,6 +759,7 @@ public class LocalAssetManager {
      * Delete local asset
      */
     public boolean deleteAsset(String hash) {
+        if (!NetworkSecurity.isValidContentId(hash)) return false;
         AssetMetadata metadata = metadataCache.get(hash);
         if (metadata == null) {
             return false;
@@ -665,6 +788,7 @@ public class LocalAssetManager {
                     try {
                         Minecraft.getInstance().getTextureManager().release(location);
                     } catch (RuntimeException ignored) {
+                        QuickSkin.LOGGER.debug("Unable to release deleted local texture {}", location, ignored);
                     }
                 }
             }
@@ -673,6 +797,7 @@ public class LocalAssetManager {
                 try {
                     Files.deleteIfExists(getCpmIconPath(hash));
                 } catch (IOException ignored) {
+                    QuickSkin.LOGGER.warn("Unable to delete CPM icon for {}", hash, ignored);
                 }
             }
 
@@ -694,6 +819,7 @@ public class LocalAssetManager {
      * @return RenameResult indicating success or failure reason
      */
     public RenameResult renameLocalAsset(String hash, String newFriendlyName) {
+        if (!NetworkSecurity.isValidContentId(hash)) return RenameResult.NOT_FOUND;
         // Validate the new name
         if (newFriendlyName == null || newFriendlyName.trim().isEmpty()) {
             return RenameResult.INVALID_NAME;
@@ -797,7 +923,7 @@ public class LocalAssetManager {
     /**
      * Clear all caches and rediscover assets
      */
-    public void reload() {
+    public synchronized void reload() {
         discoverLocalAssets();
     }
 
@@ -864,7 +990,8 @@ public class LocalAssetManager {
      * Get Identifier for a texture
      * Registers texture with Minecraft if not already registered
      */
-    public Identifier getTextureLocation(String hash, TextureQuality quality) {
+    public synchronized Identifier getTextureLocation(String hash, TextureQuality quality) {
+        if (!NetworkSecurity.isValidContentId(hash) || quality == null) return null;
         // Check if already registered
         Map<TextureQuality, Identifier> qualityMap = textureRegistry.get(hash);
         if (qualityMap != null && qualityMap.containsKey(quality)) {
@@ -880,9 +1007,14 @@ public class LocalAssetManager {
             return null;
         }
 
+        NativeImage nativeImage = null;
+        DynamicTexture dynamicTexture = null;
+        Identifier location = null;
+        boolean registered = false;
+        boolean committed = false;
         try {
             // Load directly as NativeImage from PNG bytes (handles pixel format automatically)
-            NativeImage nativeImage = NativeImage.read(new ByteArrayInputStream(textureData));
+            nativeImage = NativeImage.read(new ByteArrayInputStream(textureData));
 
             // For animated capes, only register the FIRST FRAME on GPU instead of the full atlas.
             // The animation system keeps the atlas in RAM and handles frame switching separately.
@@ -893,26 +1025,33 @@ public class LocalAssetManager {
                 int frameHeight = nativeImage.getHeight() / meta.frameCount();
                 if (frameHeight > 0 && frameHeight < nativeImage.getHeight()) {
                     NativeImage firstFrame = new NativeImage(nativeImage.getWidth(), frameHeight, false);
-                    for (int y = 0; y < frameHeight; y++) {
-                        for (int x = 0; x < nativeImage.getWidth(); x++) {
-                            MinecraftCompat.INSTANCE.setPixel(firstFrame, x, y, MinecraftCompat.INSTANCE.getPixel(nativeImage, x, y));
+                    boolean installed = false;
+                    try {
+                        for (int y = 0; y < frameHeight; y++) {
+                            for (int x = 0; x < nativeImage.getWidth(); x++) {
+                                MinecraftCompat.INSTANCE.setPixel(firstFrame, x, y, MinecraftCompat.INSTANCE.getPixel(nativeImage, x, y));
+                            }
                         }
+                        nativeImage.close();
+                        nativeImage = firstFrame;
+                        installed = true;
+                    } finally {
+                        if (!installed) firstFrame.close();
                     }
-                    nativeImage.close();
-                    nativeImage = firstFrame;
                 }
             }
 
             // Create dynamic texture
-            DynamicTexture dynamicTexture = new DynamicTexture(() -> "quickskin_local_" + hash, nativeImage);
+            dynamicTexture = new DynamicTexture(() -> "quickskin_local_" + hash, nativeImage);
 
             // Register with texture manager
-            Identifier location = Identifier.fromNamespaceAndPath(
+            location = Identifier.fromNamespaceAndPath(
                     QuickSkin.MOD_ID,
                     "local/" + hash + "_" + quality.name().toLowerCase(Locale.ROOT)
             );
 
             Minecraft.getInstance().getTextureManager().register(location, dynamicTexture);
+            registered = true;
 
             // Cache transparency info for the first-person arm rendering mixin
             // DynamicTextures aren't accessible via resource manager, so we check here
@@ -924,8 +1063,6 @@ public class LocalAssetManager {
                     if (alpha < 255) hasAlpha = true;
                 }
             }
-            com.quickskin.mod.common.util.TextureAlphaDetector.cacheTransparencyResult(location, hasAlpha);
-
             // Parse Ears features from the original unprocessed image (preserving alpha for Alfalfa data)
             if (metadata != null && "skin".equals(metadata.type())
                     && com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {
@@ -936,18 +1073,39 @@ public class LocalAssetManager {
             }
 
             // Cache in registry
+            com.quickskin.mod.common.util.TextureAlphaDetector.cacheTransparencyResult(location, hasAlpha);
             qualityMap = textureRegistry.computeIfAbsent(hash, k -> new ConcurrentHashMap<>());
             qualityMap.put(quality, location);
 
+            committed = true;
             return location;
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             return null;
+        } finally {
+            if (!committed) {
+                if (registered && location != null) {
+                    try {
+                        Minecraft.getInstance().getTextureManager().release(location);
+                    } catch (RuntimeException ignored) {
+                        QuickSkin.LOGGER.debug("Unable to release failed local texture {}", location, ignored);
+                    }
+                } else if (dynamicTexture != null) {
+                    try {
+                        dynamicTexture.close();
+                    } catch (RuntimeException ignored) {
+                        QuickSkin.LOGGER.debug("Unable to close failed local texture {}", hash, ignored);
+                    }
+                } else if (nativeImage != null) {
+                    nativeImage.close();
+                }
+            }
         }
     }
 
     @Nullable
     public BufferedImage getSourceImage(String hash) {
+        if (!NetworkSecurity.isValidContentId(hash)) return null;
         // F8: SoftReference cache — GC reclaims under memory pressure.
         SoftReference<BufferedImage> ref = sourceImageCache.get(hash);
         if (ref != null) {
@@ -960,15 +1118,16 @@ public class LocalAssetManager {
         Path sourcePath = getSourcePath(hash);
         if (sourcePath == null) {
             // Also check cache for animated capes converted from GIFs
-            Path cachedAtlas = cacheDirectory.resolve("animated_capes").resolve(hash + ".png");
-            if (Files.exists(cachedAtlas)) {
+            Path cachedAtlas = NetworkSecurity.resolveContained(
+                    cacheDirectory.resolve("animated_capes"), hash, ".png");
+            if (cachedAtlas != null && !Files.isSymbolicLink(cachedAtlas) && Files.exists(cachedAtlas)) {
                 sourcePath = cachedAtlas;
             } else {
                 return null;
             }
         }
         try {
-            BufferedImage decoded = ImageIO.read(sourcePath.toFile());
+            BufferedImage decoded = SafeImageReader.readPng(sourcePath);
             if (decoded != null) {
                 sourceImageCache.put(hash, new SoftReference<>(decoded));
             }
@@ -1030,6 +1189,7 @@ public class LocalAssetManager {
      * @return Model type preference ("auto", "classic", or "slim")
      */
     public String getSkinModelPreference(String hash) {
+        if (!NetworkSecurity.isValidContentId(hash)) return "auto";
         if (skinPreferences == null) {
             return "auto";
         }
@@ -1042,6 +1202,7 @@ public class LocalAssetManager {
      * @param modelType Model type ("auto", "classic", or "slim")
      */
     public void setSkinModelPreference(String hash, String modelType) {
+        if (!NetworkSecurity.isValidContentId(hash)) return;
         if (skinPreferences != null) {
             skinPreferences.setModelType(hash, modelType);
             savePreferences();
@@ -1064,7 +1225,7 @@ public class LocalAssetManager {
      */
     private void compositeElytraOnAtlasIfNeeded(Path atlasPath, int frameCount) {
         try {
-            BufferedImage atlas = ImageIO.read(atlasPath.toFile());
+            BufferedImage atlas = SafeImageReader.readPng(atlasPath);
             if (atlas == null) return;
 
             int capeW = atlas.getWidth();
@@ -1092,7 +1253,10 @@ public class LocalAssetManager {
             if (resourceOpt.isEmpty()) return;
             BufferedImage elytra;
             try (var stream = resourceOpt.get().open()) {
-                elytra = ImageIO.read(stream);
+                byte[] encoded = com.quickskin.mod.common.util.BoundedFileReader.readBytes(
+                        stream,
+                        (int) com.quickskin.mod.common.util.SafeImageReader.MAX_ENCODED_BYTES);
+                elytra = com.quickskin.mod.common.util.SafeImageReader.readPng(encoded);
             }
             if (elytra == null) return;
 

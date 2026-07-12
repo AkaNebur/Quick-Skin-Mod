@@ -3,6 +3,7 @@ package com.quickskin.mod.forge;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.QuickSkinClient;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.event.GameShuttingDownEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
@@ -20,5 +21,17 @@ public class QuickSkinForgeClient {
         event.enqueueWork(() -> {
             QuickSkinClient.init();
         });
+    }
+
+    /** Game-bus lifecycle hook; the outer subscriber listens on the mod bus. */
+    @Mod.EventBusSubscriber(modid = QuickSkin.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE,
+            value = Dist.CLIENT)
+    public static final class Shutdown {
+        private Shutdown() {}
+
+        @SubscribeEvent
+        public static void onGameShuttingDown(GameShuttingDownEvent event) {
+            QuickSkinClient.close();
+        }
     }
 }

@@ -351,14 +351,8 @@ public class PlayerWidget extends AbstractWidget {
                     // Animation not registered yet - try to register it now
                     if (capeId.startsWith("local_cape:")) {
                         String hash = capeId.substring("local_cape:".length());
-                        com.quickskin.mod.common.data.AnimationMetadata metadata =
-                            com.quickskin.mod.client.services.LocalAssetManager.getInstance().getAnimationMetadata(hash);
-                        java.awt.image.BufferedImage atlasImage =
-                            com.quickskin.mod.client.services.LocalAssetManager.getInstance().getSourceImage(hash);
-
-                        if (metadata != null && atlasImage != null) {
-                            animManager.registerAnimation(animationId, capeId, previewData.getCapeLocation(), atlasImage, metadata);
-                        }
+                        animManager.registerAnimationAsync(
+                                animationId, capeId, previewData.getCapeLocation(), hash);
                     } else if (capeId.startsWith("known:")) {
                         String knownId = capeId.substring("known:".length());
                         com.quickskin.mod.client.services.CapeService.getInstance().loadKnownCape(knownId);

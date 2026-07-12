@@ -50,6 +50,8 @@ public class CapeAdjustScreen extends Screen {
     private final Screen parent;
     private final BufferedImage sourceImage;
     private final Consumer<BufferedImage> onApply; // Callback with composed cape
+    private final Runnable onCancel;
+    private boolean completed;
     private final int frameCount;
     private final int srcFrameHeight; // Height of one frame in the source strip
 
@@ -114,16 +116,27 @@ public class CapeAdjustScreen extends Screen {
     //?}
 
     public CapeAdjustScreen(Screen parent, BufferedImage sourceImage, Consumer<BufferedImage> onApply) {
-        this(parent, sourceImage, 1, onApply);
+        this(parent, sourceImage, 1, onApply, () -> {});
     }
 
     public CapeAdjustScreen(Screen parent, BufferedImage sourceImage, int frameCount, Consumer<BufferedImage> onApply) {
+        this(parent, sourceImage, frameCount, onApply, () -> {});
+    }
+
+    public CapeAdjustScreen(
+            Screen parent,
+            BufferedImage sourceImage,
+            int frameCount,
+            Consumer<BufferedImage> onApply,
+            Runnable onCancel
+    ) {
         super(Component.translatable("quickskin.cape.adjust_title"));
         this.parent = parent;
         this.sourceImage = sourceImage;
         this.frameCount = Math.max(1, frameCount);
         this.srcFrameHeight = sourceImage.getHeight() / this.frameCount;
         this.onApply = onApply;
+        this.onCancel = onCancel != null ? onCancel : () -> {};
     }
 
     @Override
@@ -1124,6 +1137,7 @@ public class CapeAdjustScreen extends Screen {
 
     private void applyAndClose() {
         BufferedImage composedCape = composeCapeImage();
+        completed = true;
         onApply.accept(composedCape);
         onClose();
     }
@@ -1131,6 +1145,11 @@ public class CapeAdjustScreen extends Screen {
     @Override
     public void onClose() {
         BackgroundRenderer.cleanup();
+
+        if (!completed) {
+            completed = true;
+            onCancel.run();
+        }
 
         // Clean up textures
         if (sourceTextureLocation != null) {

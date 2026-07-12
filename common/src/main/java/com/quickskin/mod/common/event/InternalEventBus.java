@@ -4,10 +4,12 @@ import com.quickskin.mod.QuickSkin;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
@@ -18,9 +20,10 @@ import java.util.function.Consumer;
 public class InternalEventBus {
     private static final InternalEventBus INSTANCE = new InternalEventBus();
 
-    private final Map<Class<?>, List<Consumer<?>>> listeners = new ConcurrentHashMap<>();
+    private final Map<Class<?>, CopyOnWriteArrayList<Consumer<?>>> listeners = new ConcurrentHashMap<>();
 
-    private InternalEventBus() {}
+    /** Creates an isolated bus for tests or an explicitly owned client runtime. */
+    public InternalEventBus() {}
 
     public static InternalEventBus getInstance() {
         return INSTANCE;
@@ -32,8 +35,24 @@ public class InternalEventBus {
      * @param listener The listener to register
      * @param <T> The event type
      */
-    public <T> void register(Class<T> eventType, Consumer<T> listener) {
-        listeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(listener);
+    public <T> Subscription register(Class<T> eventType, Consumer<T> listener) {
+        Objects.requireNonNull(eventType, "eventType");
+        Objects.requireNonNull(listener, "listener");
+
+        CopyOnWriteArrayList<Consumer<?>> eventListeners =
+                listeners.computeIfAbsent(eventType, ignored -> new CopyOnWriteArrayList<>());
+        eventListeners.add(listener);
+
+        AtomicBoolean subscribed = new AtomicBoolean(true);
+        return () -> {
+            if (!subscribed.compareAndSet(true, false)) {
+                return;
+            }
+            eventListeners.remove(listener);
+            if (eventListeners.isEmpty()) {
+                listeners.remove(eventType, eventListeners);
+            }
+        };
     }
 
     /**
@@ -43,6 +62,7 @@ public class InternalEventBus {
      */
     @SuppressWarnings("unchecked")
     public <T> void post(T event) {
+        Objects.requireNonNull(event, "event");
         Class<?> eventType = event.getClass();
         List<Consumer<?>> eventListeners = listeners.get(eventType);
 
@@ -50,10 +70,21 @@ public class InternalEventBus {
             for (Consumer<?> listener : eventListeners) {
                 try {
                     ((Consumer<T>) listener).accept(event);
-                } catch (Exception e) {
+                } catch (RuntimeException | LinkageError error) {
+                    QuickSkin.LOGGER.error("QuickSkin event listener failed for {}", eventType.getName(), error);
                 }
             }
         }
     }
 
+    /** Removes every internal listener, primarily for explicit client shutdown. */
+    public void clear() {
+        listeners.clear();
+    }
+
+    @FunctionalInterface
+    public interface Subscription extends AutoCloseable {
+        @Override
+        void close();
+    }
 }

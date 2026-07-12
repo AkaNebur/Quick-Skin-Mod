@@ -621,7 +621,7 @@ public final class CPMCompatIntegration {
         Path sourcePath = LocalAssetManager.getInstance().getSourcePath(hash);
         if (sourcePath == null || !Files.exists(sourcePath)) {
             sourcePath = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
-                    .getOrCreateTempFile(hash);
+                    .getOrCreateTempFile(hash, "skin");
         }
         if (sourcePath == null || !Files.exists(sourcePath)) {
             return null;
@@ -670,6 +670,20 @@ public final class CPMCompatIntegration {
                 }
             }
         }
+        //?}
+    }
+
+    /** Releases every connection-owned legacy CPM bridge texture. */
+    public static void clearHttpTextureCache() {
+        //? if <1.21.11 {
+        for (ResourceLocation location : httpTextureCache.values()) {
+            try {
+                Minecraft.getInstance().getTextureManager().release(location);
+            } catch (RuntimeException error) {
+                CPMLOG.warn("Failed to release CPM bridge texture {}", location, error);
+            }
+        }
+        httpTextureCache.clear();
         //?}
     }
 

@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking.payloads;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.TextureTransferLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -26,12 +27,12 @@ public record UploadAnimationMetadataPayload(String hash, String metadataJson) i
 
     public static final StreamCodec<ByteBuf, UploadAnimationMetadataPayload> CODEC = StreamCodec.of(
         (buf, payload) -> {
-            PayloadCodecs.writeString(buf, payload.hash);
-            PayloadCodecs.writeString(buf, payload.metadataJson);
+            PayloadCodecs.writeString(buf, payload.hash, TextureTransferLimits.CONTENT_ID_LENGTH);
+            PayloadCodecs.writeString(buf, payload.metadataJson, TextureTransferLimits.MAX_JSON_BYTES);
         },
         buf -> new UploadAnimationMetadataPayload(
-            PayloadCodecs.readString(buf),
-            PayloadCodecs.readString(buf)
+            PayloadCodecs.readString(buf, TextureTransferLimits.CONTENT_ID_LENGTH),
+            PayloadCodecs.readString(buf, TextureTransferLimits.MAX_JSON_BYTES)
         )
     );
 

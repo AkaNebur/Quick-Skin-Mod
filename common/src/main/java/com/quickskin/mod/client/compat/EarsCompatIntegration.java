@@ -134,7 +134,8 @@ public class EarsCompatIntegration {
                     (InvocationHandler) (proxy, method, args) -> {
                         if ("load".equals(method.getName()) && args != null && args.length == 1) {
                             byte[] pngData = (byte[]) args[0];
-                            BufferedImage pngImage = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(pngData));
+                            BufferedImage pngImage = com.quickskin.mod.common.util.SafeImageReader
+                                    .readPng(pngData);
                             if (pngImage == null) {
                                 throw new java.io.IOException("Failed to decode PNG data");
                             }

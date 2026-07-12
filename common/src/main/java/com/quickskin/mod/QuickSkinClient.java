@@ -2,10 +2,10 @@ package com.quickskin.mod;
 
 import com.quickskin.mod.client.input.KeybindRegistry;
 import com.quickskin.mod.client.services.*;
-import com.quickskin.mod.client.storage.LocalAppearanceStorage;
 import com.quickskin.mod.event.ClientEvents;
 import com.quickskin.mod.networking.NetworkTransport;
 import com.quickskin.mod.platform.PlatformHelper;
+import com.quickskin.mod.runtime.ClientRuntime;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
@@ -15,13 +15,22 @@ import net.fabricmc.api.Environment;
  */
 @Environment(EnvType.CLIENT)
 public class QuickSkinClient {
+    private static final ClientRuntime RUNTIME = ClientRuntime.getInstance();
+    private static boolean initialized;
 
     /**
      * Client initialization - only runs on client side
      * Called from platform-specific client entry points
      */
-    public static void init() {
-        // Phase 2: Initialize client services
+    public static synchronized void init() {
+        if (initialized) {
+            return;
+        }
+
+        // Stores and configuration must be ready before event registration starts async work.
+        RUNTIME.initializeStores(PlatformHelper.getConfigDirectory());
+
+        // Initialize client services.
         ModelService.init();
         SkinService.init();
         CapeService.init();
@@ -29,24 +38,21 @@ public class QuickSkinClient {
         MojangApiService.init();
         CooldownService.getInstance();
 
-        // Phase 3: Register client networking (S2C receivers)
+        // Register client networking (S2C receivers).
         NetworkTransport.INSTANCE.initClient();
 
-        // Phase 4: Register client events and keybinds
-        ClientEvents.init();
+        // Register client events and keybinds after all their dependencies are available.
+        ClientEvents.init(RUNTIME);
         KeybindRegistry.init();
 
-        // Phase 5: Initialize asset service and local storage
-        LocalAssetManager.getInstance().init();
-        LocalAppearanceStorage.getInstance().init(PlatformHelper.getConfigDirectory());
-
-        // Phase 6: Auto-select player's own skin if no skin is currently selected
+        // Auto-select player's own skin if no skin is currently selected.
         ClientEvents.autoSelectPlayerOwnSkin();
+        initialized = true;
+    }
 
-        // Phase 7: Animation service (AnimatedTextureManager is lazy-initialized)
-        // Ticking is handled in ClientEvents
-
-        // Phase 9: Load client config
-        com.quickskin.mod.config.ClientConfig.getInstance();
+    /** Explicit cleanup hook for client platforms that expose one. */
+    public static synchronized void close() {
+        ClientEvents.close();
+        RUNTIME.close();
     }
 }

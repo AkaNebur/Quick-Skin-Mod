@@ -1,6 +1,7 @@
 package com.quickskin.mod.common.util;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.concurrent.ClientIoExecutor;
 import net.minecraft.client.Minecraft;
 //? if <1.21.11 {
 import net.minecraft.resources.ResourceLocation;
@@ -11,13 +12,11 @@ import net.minecraft.server.packs.resources.Resource;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -25,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Environment(EnvType.CLIENT)
 public class TextureAlphaDetector {
+    private static final int MAX_CACHE_ENTRIES = 4096;
 
     // Cache to avoid repeatedly checking the same textures
     //? if <1.21.11 {
@@ -89,27 +89,38 @@ public class TextureAlphaDetector {
         }
 
         // Skip if already being analyzed
-        if (!pendingAnalysis.add(textureLocation)) {
+        if (pendingAnalysis.size() >= MAX_CACHE_ENTRIES
+                || !pendingAnalysis.add(textureLocation)) {
             return;
         }
 
         // Perform the analysis on a background thread
-        CompletableFuture.runAsync(() -> {
+        ClientIoExecutor.runAsync(() -> {
             try {
                 boolean hasAlpha = detectTransparency(textureLocation);
 
                 // Update cache on the main thread to ensure thread safety with rendering
                 Minecraft mc = Minecraft.getInstance();
                 mc.execute(() -> {
-                    transparencyCache.put(textureLocation, hasAlpha);
+                    putBounded(textureLocation, hasAlpha);
                 });
             } catch (Exception e) {
                 // On error, cache as transparent (safe default)
                 Minecraft mc = Minecraft.getInstance();
-                mc.execute(() -> transparencyCache.put(textureLocation, true));
+                mc.execute(() -> putBounded(textureLocation, true));
             } finally {
                 // Remove from pending set
                 pendingAnalysis.remove(textureLocation);
+            }
+        }).whenComplete((ignored, error) -> {
+            if (error != null) {
+                pendingAnalysis.remove(textureLocation);
+                Minecraft minecraft = Minecraft.getInstance();
+                if (minecraft != null) {
+                    minecraft.execute(() -> putBounded(textureLocation, true));
+                }
+                QuickSkin.LOGGER.debug("Unable to schedule texture alpha analysis for {}",
+                        textureLocation, error);
             }
         });
     }
@@ -136,12 +147,11 @@ public class TextureAlphaDetector {
 
             // Load the image
             try (InputStream inputStream = resource.open()) {
-                BufferedImage image = ImageIO.read(inputStream);
-                if (image == null) {
-                    return false;
-                }
+                byte[] encoded = inputStream.readNBytes((int) SafeImageReader.MAX_ENCODED_BYTES + 1);
+                if (encoded.length > SafeImageReader.MAX_ENCODED_BYTES) return false;
+                BufferedImage image = SafeImageReader.readPng(encoded);
 
-                return checkImageForTransparency(image);
+                return hasTransparentPixels(image);
 
             }
         } catch (IOException e) {
@@ -154,7 +164,8 @@ public class TextureAlphaDetector {
     /**
      * Check if a BufferedImage contains any transparent pixels
      */
-    private static boolean checkImageForTransparency(BufferedImage image) {
+    public static boolean hasTransparentPixels(BufferedImage image) {
+        if (image == null) return false;
         // If the image doesn't have an alpha channel, it's not transparent
         if (!image.getColorModel().hasAlpha()) {
             return false;
@@ -190,8 +201,23 @@ public class TextureAlphaDetector {
     public static void cacheTransparencyResult(Identifier textureLocation, boolean hasTransparency) {
     //?}
         if (textureLocation != null) {
-            transparencyCache.put(textureLocation, hasTransparency);
+            putBounded(textureLocation, hasTransparency);
         }
+    }
+
+    //? if <1.21.11 {
+    private static synchronized void putBounded(
+            ResourceLocation textureLocation, boolean hasTransparency) {
+    //?} else {
+    private static synchronized void putBounded(
+            Identifier textureLocation, boolean hasTransparency) {
+    //?}
+        if (!transparencyCache.containsKey(textureLocation)
+                && transparencyCache.size() >= MAX_CACHE_ENTRIES) {
+            var eldest = transparencyCache.keySet().iterator();
+            if (eldest.hasNext()) transparencyCache.remove(eldest.next());
+        }
+        transparencyCache.put(textureLocation, hasTransparency);
     }
 
     /**

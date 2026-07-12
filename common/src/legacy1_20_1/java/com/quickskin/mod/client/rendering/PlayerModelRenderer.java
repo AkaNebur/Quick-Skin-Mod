@@ -67,6 +67,11 @@ public class PlayerModelRenderer {
     // Cached player entity for rendering (persists even after leaving world)
     private static Player cachedPlayer;
 
+    public static java.util.UUID getCachedPlayerUUID() {
+        Player player = cachedPlayer;
+        return player != null ? player.getUUID() : null;
+    }
+
     // Previous rotation/position values for smooth lerping in idle animation
     private static float prevHeadRotZ = 0.0f;
     private static float prevRightArmRotX = 0.0f;

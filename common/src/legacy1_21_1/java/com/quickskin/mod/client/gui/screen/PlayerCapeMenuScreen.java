@@ -3,9 +3,10 @@ package com.quickskin.mod.client.gui.screen;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.gui.util.BackgroundRenderer;
+import com.quickskin.mod.client.gui.util.CapeImportProcessor;
+import com.quickskin.mod.client.gui.util.CapeImportWorkflow;
 import com.quickskin.mod.client.gui.util.FileDialogHelper;
 import com.quickskin.mod.client.gui.util.GuiScalingUtils;
-import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
@@ -15,6 +16,7 @@ import com.quickskin.mod.platform.PlatformHelper;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.common.data.KnownCapes;
 import com.quickskin.mod.common.data.TextureQuality;
+import com.quickskin.mod.common.util.SafeImageReader;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -35,9 +37,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -106,6 +106,8 @@ public class PlayerCapeMenuScreen extends Screen {
     private String importMessage = "";
     private int importMessageTimer = 0;
     private int importMessageColor = 0xFFFFFF;
+    private CapeImportWorkflow capeImportWorkflow;
+    private int capeImportGeneration;
 
     public PlayerCapeMenuScreen(@Nullable Screen parent) {
         super(Component.empty());
@@ -505,41 +507,63 @@ public class PlayerCapeMenuScreen extends Screen {
             return;
         }
 
-        // Show processing message
         showImportMessage(Component.translatable("quickskin.cape.processing").getString(), 0x55AAFF, 60);
+        startCapeImports(List.of(filePath));
+    }
 
-        // F5: import on background thread, marshal UI back to render thread.
-        if (this.minecraft != null) {
-            CompletableFuture.runAsync(() -> {
-                Path capesDir = LocalAssetManager.getInstance().getCapesDirectory();
-                try {
-                    Files.createDirectories(capesDir);
-                    boolean ok;
-                    try {
-                        ok = processDroppedFile(filePath, capesDir);
-                    } catch (Exception procEx) {
-                        final String msg = procEx.getMessage() != null ? procEx.getMessage() : procEx.getClass().getSimpleName();
-                        Minecraft.getInstance().execute(() ->
-                            showImportMessage(Component.translatable("quickskin.cape.error", msg).getString(), 0xFF5555, 150));
-                        return;
-                    }
-                    final boolean imported = ok;
-                    Minecraft.getInstance().execute(() -> {
-                        if (imported) {
-                            LocalAssetManager.getInstance().reload();
-                            refreshCapeList();
-                            updateGridDimensions();
-                            showImportMessage(Component.translatable("quickskin.cape.imported").getString(), 0x55FF55, 100);
-                        } else {
-                            showImportMessage(Component.translatable("quickskin.cape.invalid_ratio").getString(), 0xFF5555, 150);
-                        }
-                    });
-                } catch (IOException e) {
-                    Minecraft.getInstance().execute(() ->
-                        showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFF5555, 150));
-                }
-            });
+    private void startCapeImports(List<Path> sources) {
+        Minecraft client = this.minecraft;
+        if (client == null) {
+            return;
         }
+
+        CapeImportWorkflow previous = this.capeImportWorkflow;
+        if (previous != null) {
+            previous.cancel();
+        }
+
+        int generation = ++this.capeImportGeneration;
+        LocalAssetManager assets = LocalAssetManager.getInstance();
+        CapeImportWorkflow workflow = new CapeImportWorkflow(
+                sources,
+                assets.getCapesDirectory(),
+                assets.getCacheDirectory(),
+                getVanillaElytraImage(),
+                client::execute,
+                (prepared, apply, cancel) -> client.setScreen(new CapeAdjustScreen(
+                        this, prepared.atlas(), prepared.frameCount(), apply, cancel)),
+                summary -> completeCapeImports(generation, summary));
+        this.capeImportWorkflow = workflow;
+        workflow.start();
+    }
+
+    private void completeCapeImports(int generation, CapeImportWorkflow.Summary summary) {
+        if (generation != this.capeImportGeneration) {
+            return;
+        }
+        this.capeImportWorkflow = null;
+
+        if (summary.succeeded() > 0) {
+            LocalAssetManager.getInstance().reload();
+            refreshCapeList();
+            updateGridDimensions();
+
+            String message = summary.succeeded() == 1
+                    ? Component.translatable("quickskin.cape.imported").getString()
+                    : String.format("Imported %d capes", summary.succeeded());
+            int notImported = summary.failed() + summary.cancelled();
+            if (notImported > 0) {
+                message += String.format(" (%d not imported)", notImported);
+            }
+            int color = notImported == 0 ? 0x55FF55 : 0xFFAA00;
+            showImportMessage(message, color, 200);
+            return;
+        }
+
+        String message = summary.firstError() != null
+                ? Component.translatable("quickskin.cape.error", summary.firstError()).getString()
+                : Component.translatable("quickskin.cape.no_valid").getString();
+        showImportMessage(message, 0xFF5555, 200);
     }
 
     private void removeCape() {
@@ -1137,16 +1161,7 @@ public class PlayerCapeMenuScreen extends Screen {
      * Get the UUID of the cached player entity used for rendering
      */
     private java.util.UUID getDummyPlayerUUID() {
-        // Access the cached player from PlayerModelRenderer
-        // This is a bit hacky but necessary for title screen rendering
-        try {
-            var cachedPlayerField = PlayerModelRenderer.class.getDeclaredField("cachedPlayer");
-            cachedPlayerField.setAccessible(true);
-            var cachedPlayer = (net.minecraft.world.entity.player.Player) cachedPlayerField.get(null);
-            return cachedPlayer != null ? cachedPlayer.getUUID() : null;
-        } catch (Exception e) {
-            return null;
-        }
+        return PlayerModelRenderer.getCachedPlayerUUID();
     }
 
     private void updateScrollFromMouse(double mouseY) {
@@ -1311,10 +1326,7 @@ public class PlayerCapeMenuScreen extends Screen {
     @Override
     public void onFilesDrop(List<Path> paths) {
         List<Path> validFiles = paths.stream()
-                .filter(p -> {
-                    String name = p.toString().toLowerCase(Locale.ROOT);
-                    return name.endsWith(".png") || name.endsWith(".gif");
-                })
+                .filter(CapeImportProcessor::isSupported)
                 .toList();
 
         if (validFiles.isEmpty()) {
@@ -1323,294 +1335,7 @@ public class PlayerCapeMenuScreen extends Screen {
         }
 
         showImportMessage(Component.translatable("quickskin.cape.processing_count", validFiles.size()).getString(), 0x55AAFF, 60);
-
-        CompletableFuture.runAsync(() -> {
-            int successCount = 0;
-            int invalidCount = 0;
-
-            Path capesDir = LocalAssetManager.getInstance().getCapesDirectory();
-            try {
-                Files.createDirectories(capesDir);
-            } catch (IOException e) {
-                Minecraft.getInstance().execute(() ->
-                        showImportMessage(Component.translatable("quickskin.cape.error_directory").getString(), 0xFF5555, 100));
-                return;
-            }
-
-            String[] firstError = new String[1];
-            for (Path file : validFiles) {
-                try {
-                    if (processDroppedFile(file, capesDir)) {
-                        successCount++;
-                    } else {
-                        invalidCount++;
-                    }
-                } catch (IOException e) {
-                    invalidCount++;
-                    if (firstError[0] == null) firstError[0] = e.getMessage();
-                }
-            }
-
-            int finalSuccessCount = successCount;
-            int finalInvalidCount = invalidCount;
-
-            Minecraft.getInstance().execute(() -> {
-                if (finalSuccessCount > 0) {
-                    // THIS IS THE FIX: Reload assets BEFORE refreshing the list
-                    LocalAssetManager.getInstance().reload();
-
-                    refreshCapeList();
-                    updateGridDimensions();
-
-                    String message = String.format("✓ Imported %d cape%s", finalSuccessCount,
-                            finalSuccessCount == 1 ? "" : "s");
-                    if (finalInvalidCount > 0) {
-                        message += String.format(" (%d invalid)", finalInvalidCount);
-                    }
-                    showImportMessage(message, finalSuccessCount > finalInvalidCount ? 0x55FF55 : 0xFFAA00, 200);
-                } else {
-                    String msg = firstError[0] != null
-                            ? Component.translatable("quickskin.cape.error", firstError[0]).getString()
-                            : Component.translatable("quickskin.cape.no_valid").getString();
-                    showImportMessage(msg, 0xFF5555, 200);
-                }
-            });
-        }).exceptionally(throwable -> {
-            Minecraft.getInstance().execute(() ->
-                    showImportMessage(Component.translatable("quickskin.cape.error_processing", throwable.getMessage()).getString(), 0xFF5555, 200));
-            return null;
-        });
-    }
-
-    private boolean processDroppedFile(Path sourceFile, Path targetDir) throws IOException {
-        try {
-            String lowerCaseName = sourceFile.toString().toLowerCase(Locale.ROOT);
-            boolean isGif = lowerCaseName.endsWith(".gif");
-
-            java.awt.image.BufferedImage sourceAtlas;
-            int frameCount = 1;
-            boolean isStandardFormat;
-            com.quickskin.mod.common.data.AnimationMetadata animationMetadata = null;
-            byte[] finalAtlasBytes;
-
-            // Step 1: Load image into a source atlas and determine its format
-            if (isGif) {
-                try (java.io.InputStream is = Files.newInputStream(sourceFile)) {
-                    com.quickskin.mod.common.util.StbGifLoader.GifLoadResult gifResult = com.quickskin.mod.common.util.StbGifLoader.loadGif(is);
-                    if (gifResult == null || gifResult.frames() == null) return false;
-
-                    try {
-                        // Convert NativeImage frames to BufferedImage atlas
-                        int width = gifResult.frameWidth();
-                        int height = gifResult.frameHeight();
-                        frameCount = gifResult.frames().length;
-                        int atlasHeight = height * frameCount;
-
-                        sourceAtlas = new java.awt.image.BufferedImage(width, atlasHeight, java.awt.image.BufferedImage.TYPE_INT_ARGB);
-                        for (int i = 0; i < frameCount; i++) {
-                            com.mojang.blaze3d.platform.NativeImage frame = gifResult.frames()[i];
-                            int[] argbRow = new int[width];
-                            for (int y = 0; y < height; y++) {
-                                for (int x = 0; x < width; x++) {
-                                    int abgr = PlatformHelper.getPixel(frame, x, y);
-                                    int a = (abgr >> 24) & 0xFF;
-                                    int b = (abgr >> 16) & 0xFF;
-                                    int g = (abgr >> 8) & 0xFF;
-                                    int r = abgr & 0xFF;
-                                    argbRow[x] = (a << 24) | (r << 16) | (g << 8) | b;
-                                }
-                                sourceAtlas.setRGB(0, i * height + y, width, 1, argbRow, 0, width);
-                            }
-                        }
-
-                        animationMetadata = gifResult.metadata();
-                        // Same rule as PNG: only the vanilla 64x32 size saves directly.
-                        // Any other frame size (including valid HD cape resolutions) goes
-                        // through CapeAdjustScreen so the user can preview before saving.
-                        isStandardFormat = (width == 64 && height == 32);
-                    } finally {
-                        // Clean up NativeImage frames
-                        gifResult.close();
-                    }
-                }
-            } else { // Is PNG
-                java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(sourceFile.toFile());
-                if (image == null) return false;
-                sourceAtlas = image;
-
-                int w = image.getWidth();
-                int h = image.getHeight();
-
-                // For PNG imports, only save directly when it's the exact vanilla legacy
-                // cape size (64x32). Any other dimensions — including valid HD cape sizes
-                // like 128x64, 256x128, 512x256, etc. — go through CapeAdjustScreen so the
-                // user can preview the result (including elytra compositing) before saving.
-                isStandardFormat = (w == 64 && h == 32);
-                if (isStandardFormat) {
-                    frameCount = 1;
-                }
-            }
-
-            java.awt.image.BufferedImage finalAtlas;
-
-            // Step 2: Process the source atlas based on its format
-            if (isGif && isStandardFormat) {
-                // Copy GIF directly to preserve compression — processGifAsset handles caching
-                String fileName = sourceFile.getFileName().toString();
-                String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
-                Path targetPath = targetDir.resolve(fileName);
-                int counter = 1;
-                while (Files.exists(targetPath)) {
-                    targetPath = targetDir.resolve(nameWithoutExt + "_" + counter + ".gif");
-                    counter++;
-                }
-                Files.copy(sourceFile, targetPath);
-                return true;
-            } else if (isStandardFormat) {
-
-                // Keep original HD resolution - no downscaling
-                java.awt.image.BufferedImage normalizedAtlas = sourceAtlas;
-                int capeWidth = normalizedAtlas.getWidth();
-                int capeFrameHeight = capeWidth / 2;
-
-                // Check if the elytra area is transparent
-                if (isElytraAreaTransparent(normalizedAtlas)) {
-                    java.awt.image.BufferedImage vanillaElytraBase = getVanillaElytraImage();
-                    if (vanillaElytraBase == null) { // Fallback if vanilla elytra fails to load
-                        finalAtlas = normalizedAtlas;
-                    } else {
-                        java.awt.image.BufferedImage compositeAtlas = new java.awt.image.BufferedImage(normalizedAtlas.getWidth(), normalizedAtlas.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
-                        java.awt.Graphics2D g = compositeAtlas.createGraphics();
-                        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-
-                        g.setComposite(java.awt.AlphaComposite.Clear);
-                        g.fillRect(0, 0, normalizedAtlas.getWidth(), normalizedAtlas.getHeight());
-                        g.setComposite(java.awt.AlphaComposite.SrcOver);
-
-                        for(int i = 0; i < frameCount; i++) {
-                            int yOffset = i * capeFrameHeight;
-                            // Scale vanilla elytra to match HD cape dimensions
-                            g.drawImage(vanillaElytraBase, 0, yOffset, capeWidth, yOffset + capeFrameHeight,
-                                    0, 0, vanillaElytraBase.getWidth(), vanillaElytraBase.getHeight(), null);
-                            g.drawImage(normalizedAtlas.getSubimage(0, yOffset, capeWidth, capeFrameHeight), 0, yOffset, null);
-                        }
-                        g.dispose();
-                        finalAtlas = compositeAtlas;
-                    }
-                } else {
-                    finalAtlas = normalizedAtlas;
-                }
-            } else {
-                // Non-standard image: open the cape adjustment screen
-                // so the user can choose resolution and position the image
-                final java.awt.image.BufferedImage srcImage = sourceAtlas;
-                final Path srcFile = sourceFile;
-                final Path tgtDir = targetDir;
-                final int fc = frameCount;
-                final com.quickskin.mod.common.data.AnimationMetadata animMeta = animationMetadata;
-
-                if (this.minecraft != null) {
-                    this.minecraft.execute(() -> {
-                        this.minecraft.setScreen(new CapeAdjustScreen(this, srcImage, fc, composedCape -> {
-                            // Callback: save the composed cape and reload
-                            try {
-                                int composedW = composedCape.getWidth();
-                                int composedFrameH = composedW / 2;
-                                int composedFrameCount = (composedFrameH > 0) ? composedCape.getHeight() / composedFrameH : 1;
-
-                                // Composite vanilla elytra if the elytra area is transparent
-                                java.awt.image.BufferedImage finalCape = composedCape;
-                                if (isElytraAreaTransparent(composedCape)) {
-                                    java.awt.image.BufferedImage elytra = getVanillaElytraImage();
-                                    if (elytra != null) {
-                                        java.awt.image.BufferedImage composite = new java.awt.image.BufferedImage(
-                                                composedW, composedCape.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
-                                        java.awt.Graphics2D g2 = composite.createGraphics();
-                                        g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
-                                                java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-                                        // Composite elytra per frame
-                                        for (int fi = 0; fi < composedFrameCount; fi++) {
-                                            int yOff = fi * composedFrameH;
-                                            g2.drawImage(elytra, 0, yOff, composedW, yOff + composedFrameH,
-                                                    0, 0, elytra.getWidth(), elytra.getHeight(), null);
-                                            g2.drawImage(composedCape.getSubimage(0, yOff, composedW, composedFrameH),
-                                                    0, yOff, null);
-                                        }
-                                        g2.dispose();
-                                        finalCape = composite;
-                                    }
-                                }
-
-                                Path savePath = resolveTargetPath(srcFile, tgtDir);
-                                saveImageWithAlpha(finalCape, savePath);
-
-                                // Save animation metadata for multi-frame strips
-                                if (animMeta != null && composedFrameCount > 1) {
-                                    String hash = HashUtil.computeFileHash(savePath);
-                                    if (hash != null) {
-                                        Path metadataPath = LocalAssetManager.getInstance().getCacheDirectory()
-                                                .resolve(hash + ".json");
-                                        Files.writeString(metadataPath, animMeta.toJson());
-                                    }
-                                }
-
-                                LocalAssetManager.getInstance().reload();
-                                refreshCapeList();
-                                updateGridDimensions();
-                                showImportMessage(Component.translatable("quickskin.cape.imported").getString(), 0x55FF55, 100);
-                            } catch (IOException e) {
-                                showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFF5555, 150);
-                            }
-                        }));
-                    });
-                }
-                return true; // Signal success (the adjust screen handles saving)
-            }
-
-            try (var baos = new java.io.ByteArrayOutputStream()) {
-                javax.imageio.ImageIO.write(finalAtlas, "png", baos);
-                finalAtlasBytes = baos.toByteArray();
-            }
-
-            if (animationMetadata != null) {
-                String hash = HashUtil.computeHash(finalAtlasBytes);
-                if (hash != null) {
-                    Path metadataPath = LocalAssetManager.getInstance().getCacheDirectory().resolve(hash + ".json");
-                    Files.writeString(metadataPath, animationMetadata.toJson());
-                }
-            }
-
-            Path targetPath = resolveTargetPath(sourceFile, targetDir);
-            saveImageWithAlpha(finalAtlas, targetPath);
-            return true;
-
-        } catch (IOException e) {
-            throw e;
-        }
-    }
-
-    private boolean isElytraAreaTransparent(java.awt.image.BufferedImage image) {
-        double scale = image.getWidth() / 64.0;
-        int elytraX = (int) (22 * scale);
-        int elytraY = 0;
-        int elytraWidth = (int) (32 * scale);
-        int elytraHeight = (int) (16 * scale);
-
-        int samplePoints = 5;
-        for (int i = 0; i < samplePoints; i++) {
-            for (int j = 0; j < samplePoints; j++) {
-                int x = elytraX + (i * elytraWidth / (samplePoints - 1));
-                int y = elytraY + (j * elytraHeight / (samplePoints - 1));
-                x = Math.min(x, image.getWidth() - 1);
-                y = Math.min(y, image.getHeight() - 1);
-                int pixel = image.getRGB(x, y);
-                int alpha = (pixel >> 24) & 0xFF;
-                if (alpha > 10) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        startCapeImports(validFiles);
     }
 
     @Nullable
@@ -1621,42 +1346,12 @@ public class PlayerCapeMenuScreen extends Screen {
             if (resourceOptional.isEmpty()) {
                 return null;
             }
-            java.io.InputStream stream = resourceOptional.get().open();
-            java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(stream);
-            stream.close();
-            return image;
+            try (InputStream stream = resourceOptional.get().open()) {
+                return SafeImageReader.readPng(stream);
+            }
         } catch (IOException e) {
             return null;
         }
-    }
-
-    private Path resolveTargetPath(Path sourceFile, Path targetDir) {
-        String fileName = sourceFile.getFileName().toString();
-        String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
-        String ext = ".png";
-
-        Path targetPath = targetDir.resolve(nameWithoutExt + ext);
-        int counter = 1;
-        while (Files.exists(targetPath)) {
-            targetPath = targetDir.resolve(nameWithoutExt + "_" + counter + ext);
-            counter++;
-        }
-        return targetPath;
-    }
-
-    private void saveImageWithAlpha(java.awt.image.BufferedImage image, Path outputPath) throws IOException {
-        java.awt.image.BufferedImage argbImage;
-        if (image.getType() != java.awt.image.BufferedImage.TYPE_INT_ARGB) {
-            argbImage = new java.awt.image.BufferedImage(image.getWidth(), image.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
-            java.awt.Graphics2D g = argbImage.createGraphics();
-            g.setComposite(java.awt.AlphaComposite.Src);
-            g.drawImage(image, 0, 0, null);
-            g.dispose();
-        } else {
-            argbImage = image;
-        }
-
-        javax.imageio.ImageIO.write(argbImage, "png", outputPath.toFile());
     }
 
     @Override
@@ -1677,6 +1372,12 @@ public class PlayerCapeMenuScreen extends Screen {
 
     @Override
     public void onClose() {
+        this.capeImportGeneration++;
+        CapeImportWorkflow workflow = this.capeImportWorkflow;
+        this.capeImportWorkflow = null;
+        if (workflow != null) {
+            workflow.cancel();
+        }
         BackgroundRenderer.cleanup();
 
         // Animations are kept alive — each uses only one small GPU texture (~512KB).

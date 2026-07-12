@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking.payloads;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.TextureTransferLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -29,16 +30,13 @@ public record UploadTexturePayload(UUID playerId, String textureType, byte[] ima
     public static final StreamCodec<ByteBuf, UploadTexturePayload> CODEC = StreamCodec.of(
         (buf, payload) -> {
             PayloadCodecs.writeUUID(buf, payload.playerId);
-            PayloadCodecs.writeString(buf, payload.textureType);
-            buf.writeInt(payload.imageData.length);
-            buf.writeBytes(payload.imageData);
+            PayloadCodecs.writeString(buf, payload.textureType, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+            PayloadCodecs.writeByteArray(buf, payload.imageData, TextureTransferLimits.MAX_DIRECT_TEXTURE_BYTES);
         },
         buf -> {
             UUID playerId = PayloadCodecs.readUUID(buf);
-            String textureType = PayloadCodecs.readString(buf);
-            int length = buf.readInt();
-            byte[] imageData = new byte[length];
-            buf.readBytes(imageData);
+            String textureType = PayloadCodecs.readString(buf, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+            byte[] imageData = PayloadCodecs.readByteArray(buf, TextureTransferLimits.MAX_DIRECT_TEXTURE_BYTES);
             return new UploadTexturePayload(playerId, textureType, imageData);
         }
     );

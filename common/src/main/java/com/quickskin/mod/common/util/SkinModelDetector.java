@@ -1,11 +1,8 @@
 package com.quickskin.mod.common.util;
 
-import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.SkinResolution;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.InputStream;
 
@@ -112,7 +109,7 @@ public class SkinModelDetector {
      */
     public static String detectSkinModel(File file) {
         try {
-            BufferedImage image = ImageIO.read(file);
+            BufferedImage image = file == null ? null : SafeImageReader.readSkin(file.toPath());
             return detectSkinModel(image);
         } catch (Exception e) {
             return "classic";
@@ -124,7 +121,7 @@ public class SkinModelDetector {
      */
     public static String detectSkinModel(byte[] data) {
         try {
-            BufferedImage image = ImageIO.read(new ByteArrayInputStream(data));
+            BufferedImage image = SafeImageReader.readSkin(data);
             return detectSkinModel(image);
         } catch (Exception e) {
             return "classic";
@@ -136,7 +133,9 @@ public class SkinModelDetector {
      */
     public static String detectSkinModel(InputStream input) {
         try {
-            BufferedImage image = ImageIO.read(input);
+            byte[] encoded = BoundedFileReader.readBytes(
+                    input, (int) SafeImageReader.MAX_ENCODED_BYTES);
+            BufferedImage image = SafeImageReader.readSkin(encoded);
             return detectSkinModel(image);
         } catch (Exception e) {
             return "classic";

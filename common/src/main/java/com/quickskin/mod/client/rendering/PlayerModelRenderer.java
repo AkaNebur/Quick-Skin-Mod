@@ -11,6 +11,7 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.model.Model;
 import net.minecraft.client.model.player.PlayerCapeModel;
 import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.model.geom.ModelLayers;
@@ -23,7 +24,9 @@ import net.minecraft.world.entity.player.Player;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 
+import java.util.IdentityHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Utility for rendering player models in GUI using vanilla Minecraft rendering
@@ -36,16 +39,54 @@ public class PlayerModelRenderer {
     private static PlayerModel slimModel;
     private static PlayerCapeModel capeModel;
 
-    // Static fields used to communicate cape data to the GuiSkinRendererMixin.
-    // Set before submitSkinRenderState, consumed during renderToTexture.
-    public static Identifier pendingCapeTexture;
-    public static PlayerModel pendingCapeBodyModel;
-    public static PlayerCapeModel pendingCapeModel;
+    /**
+     * Deferred PiP rendering happens after GUI extraction. Keep cape data keyed by the exact
+     * {@link Model.Simple} submitted with each render state so concurrent/re-entrant previews
+     * cannot consume one another's cape. Identity semantics are intentional: two submissions may
+     * use the same model root and skin while carrying different preview data.
+     */
+    private static final Map<Model.Simple, PreviewCapeState> PENDING_CAPES = new IdentityHashMap<>();
+    private static final int MAX_PENDING_CAPES = 128;
 
-    // Tracks cape state hash to force PiP cache invalidation when cape changes.
-    // PiP only re-renders when submitted state differs; cape isn't part of the state,
-    // so we add an imperceptible scale nudge that varies with the cape identity.
-    private static int lastCapeStateHash = 0;
+    public record PreviewCapeState(
+            Identifier texture,
+            PlayerModel bodyModel,
+            PlayerCapeModel capeModel
+    ) {
+    }
+
+    private static void registerPendingCape(
+            Model.Simple renderModel,
+            Identifier texture,
+            PlayerModel bodyModel,
+            PlayerCapeModel playerCapeModel
+    ) {
+        if (texture == null || bodyModel == null || playerCapeModel == null) {
+            return;
+        }
+
+        synchronized (PENDING_CAPES) {
+            if (PENDING_CAPES.size() >= MAX_PENDING_CAPES) {
+                var oldest = PENDING_CAPES.keySet().iterator();
+                if (oldest.hasNext()) {
+                    PENDING_CAPES.remove(oldest.next());
+                }
+            }
+            PENDING_CAPES.put(renderModel, new PreviewCapeState(texture, bodyModel, playerCapeModel));
+        }
+    }
+
+    public static PreviewCapeState consumePendingCape(Model.Simple renderModel) {
+        synchronized (PENDING_CAPES) {
+            return PENDING_CAPES.remove(renderModel);
+        }
+    }
+
+    public static void clearPendingCapes() {
+        synchronized (PENDING_CAPES) {
+            PENDING_CAPES.clear();
+        }
+    }
 
     /**
      * Initialize models (lazy initialization)
@@ -83,6 +124,11 @@ public class PlayerModelRenderer {
 
     // Cached player entity for rendering (persists even after leaving world)
     private static Player cachedPlayer;
+
+    public static java.util.UUID getCachedPlayerUUID() {
+        Player player = cachedPlayer;
+        return player != null ? player.getUUID() : null;
+    }
 
     // Previous rotation/position values for smooth lerping in idle animation
     private static float prevHeadRotZ = 0.0f;
@@ -212,34 +258,6 @@ public class PlayerModelRenderer {
                 poseStack.popPose();
             }
 
-            // Set cape data for GuiSkinRendererMixin (PiP bypasses CapeLayer in 1.21.11+)
-            ensureModelsLoaded();
-            Identifier entityCapeTexture = null;
-            if (playerData.getCapeLocation() != null) {
-                entityCapeTexture = playerData.getCapeLocation();
-                String capeId = playerData.getCapeId();
-
-                String animationId = null;
-                if (capeId != null) {
-                    if (capeId.startsWith("local_cape:")) {
-                        animationId = "cape_" + capeId.substring("local_cape:".length());
-                    } else if (capeId.startsWith("known:")) {
-                        animationId = "cape_known_" + capeId.substring("known:".length());
-                    }
-                }
-
-                if (animationId != null) {
-                    Identifier currentFrame = AnimatedTextureManager.getInstance().getCurrentFrameTexture(animationId);
-                    if (currentFrame != null) {
-                        entityCapeTexture = currentFrame;
-                    }
-                }
-            }
-            PlayerModel bodyModel = "slim".equals(playerData.getModelType() != null ? playerData.getModelType().toLowerCase(Locale.ROOT) : null) ? slimModel : classicModel;
-            pendingCapeTexture = entityCapeTexture;
-            pendingCapeBodyModel = bodyModel;
-            pendingCapeModel = capeModel;
-
             // 1.21.11: renderEntityInInventory removed. We call submitEntityRenderState directly
             // to preserve our own rotation (renderEntityInInventoryFollowsMouse overrides rotation).
             int halfWidth = (int)(scale * 0.6f);
@@ -346,24 +364,18 @@ public class PlayerModelRenderer {
                 }
             }
         }
-        pendingCapeTexture = capeTexture;
-        pendingCapeBodyModel = model;
-        pendingCapeModel = capeModel;
-
-        // Force PiP cache invalidation when cape changes by adding imperceptible scale nudge
+        // Include cape identity in the PiP state so changing only the cape invalidates its cache.
         int capeHash = capeTexture != null ? capeTexture.hashCode() : 0;
-        float scaleNudge = 0.0f;
-        if (capeHash != lastCapeStateHash) {
-            lastCapeStateHash = capeHash;
-        }
-        scaleNudge = 0.000001f * (capeHash & 0xFF);
+        float scaleNudge = 0.000001f * (capeHash & 0xFF);
 
         // Submit to PiP system - cape rendering injected by GuiSkinRendererMixin
         int boxHeight = (int)(scale * 2.3f);
         int boxHalfWidth = (int)(scale * 1.0f);
 
+        Model.Simple renderModel = new Model.Simple(
+                model.root(), net.minecraft.client.renderer.rendertype.RenderTypes::entityTranslucent);
         graphics.skin(
-                new net.minecraft.client.model.Model.Simple(model.root(), net.minecraft.client.renderer.rendertype.RenderTypes::entityTranslucent),
+                renderModel,
                 playerData.getSkinLocation(),
                 (float)(int) scale + scaleNudge,
                 0.0f,
@@ -374,6 +386,7 @@ public class PlayerModelRenderer {
                 x + boxHalfWidth,
                 y
         );
+        registerPendingCape(renderModel, capeTexture, model, capeModel);
     }
 
 
@@ -714,7 +727,14 @@ public class PlayerModelRenderer {
      * Call this when leaving a world to reset the player rendering state
      */
     public static void clearCachedPlayer() {
+        if (classicModel != null) {
+            SkinLayers3DIntegration.clearDeferredMeshes(classicModel.root());
+        }
+        if (slimModel != null) {
+            SkinLayers3DIntegration.clearDeferredMeshes(slimModel.root());
+        }
         cachedPlayer = null;
+        clearPendingCapes();
     }
 
     /**

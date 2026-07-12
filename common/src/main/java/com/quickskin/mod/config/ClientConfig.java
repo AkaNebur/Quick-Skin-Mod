@@ -5,11 +5,15 @@ import com.google.gson.GsonBuilder;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.BackgroundStyle;
 import com.quickskin.mod.common.data.SkinSortMode;
+import com.quickskin.mod.common.util.BoundedFileReader;
 import com.quickskin.mod.platform.PlatformHelper;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,7 +22,9 @@ import java.util.Map;
  * Stored in JSON format in config directory
  */
 public class ClientConfig {
-    private static ClientConfig instance;
+    private static final int MAX_CONFIG_BYTES = 1024 * 1024;
+    private static final int MAX_CAPE_SPEED_ENTRIES = 4096;
+    private static volatile ClientConfig instance;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     // GUI Settings
@@ -91,13 +97,13 @@ public class ClientConfig {
     public String playerOwnSkinHash = ""; // Hash of the player's own Mojang skin (protected from deletion)
 
     // Server Config Override (set by server, not saved to file)
-    public transient ServerConfig serverOverride = null;
+    public transient volatile ServerConfig serverOverride = null;
 
     private ClientConfig() {
         // Private constructor for singleton
     }
 
-    public static ClientConfig getInstance() {
+    public static synchronized ClientConfig getInstance() {
         if (instance == null) {
             instance = load();
         }
@@ -112,10 +118,15 @@ public class ClientConfig {
 
         if (Files.exists(configPath)) {
             try {
-                String json = Files.readString(configPath);
+                String json = BoundedFileReader.readUtf8(configPath, MAX_CONFIG_BYTES);
                 ClientConfig config = GSON.fromJson(json, ClientConfig.class);
-                return config;
+                if (config != null) {
+                    config.normalize();
+                    return config;
+                }
+                QuickSkin.LOGGER.warn("Client config {} contained JSON null; using defaults", configPath);
             } catch (Exception e) {
+                QuickSkin.LOGGER.warn("Could not load client config {}; using defaults", configPath, e);
             }
         }
 
@@ -128,16 +139,18 @@ public class ClientConfig {
     /**
      * Save configuration to file
      */
-    public void save() {
+    public synchronized void save() {
         Path configPath = getConfigPath();
 
         try {
             // Ensure config directory exists
             Files.createDirectories(configPath.getParent());
 
+            normalize();
             String json = GSON.toJson(this);
-            Files.writeString(configPath, json);
+            writeAtomically(configPath, json);
         } catch (IOException e) {
+            QuickSkin.LOGGER.error("Could not save client config {}", configPath, e);
         }
     }
 
@@ -151,8 +164,11 @@ public class ClientConfig {
     /**
      * Reload configuration from file
      */
-    public static void reload() {
-        instance = load();
+    public static synchronized void reload() {
+        ServerConfig existingOverride = instance != null ? instance.serverOverride : null;
+        ClientConfig reloaded = load();
+        reloaded.serverOverride = existingOverride;
+        instance = reloaded;
     }
 
     /**
@@ -161,6 +177,11 @@ public class ClientConfig {
      */
     public void applyServerOverride(ServerConfig serverConfig) {
         this.serverOverride = serverConfig;
+    }
+
+    /** Clears all policy inherited from the previous server connection. */
+    public void clearServerOverride() {
+        this.serverOverride = null;
     }
 
     /**
@@ -240,6 +261,10 @@ public class ClientConfig {
 
         // Clamp and store
         float clampedSpeed = Math.max(0.01f, Math.min(speed, 10.0f));
+        if (!capeAnimationSpeeds.containsKey(capeId)
+                && capeAnimationSpeeds.size() >= MAX_CAPE_SPEED_ENTRIES) {
+            capeAnimationSpeeds.remove(capeAnimationSpeeds.keySet().iterator().next());
+        }
         capeAnimationSpeeds.put(capeId, clampedSpeed);
     }
 
@@ -250,7 +275,7 @@ public class ClientConfig {
     public SkinSortMode getSkinSortMode() {
         try {
             return SkinSortMode.valueOf(skinSortMode);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException | NullPointerException e) {
             return SkinSortMode.LATEST_LAST;
         }
     }
@@ -279,5 +304,62 @@ public class ClientConfig {
     public void setMenuBackgroundStyle(BackgroundStyle style) {
         this.menuBackgroundStyle = style.getId();
         save();
+    }
+
+    private void normalize() {
+        if (overlayPosition == null) overlayPosition = "BOTTOM_RIGHT";
+        previewScale = Math.max(1, Math.min(previewScale, 200));
+        guiScale = Math.max(1, Math.min(guiScale, 4));
+        if (!Float.isFinite(hudOverlayRotation)) hudOverlayRotation = 20.0f;
+        if (!Float.isFinite(animationSpeed)) animationSpeed = 1.0f;
+        animationSpeed = Math.max(0.01f, Math.min(animationSpeed, 10.0f));
+        maxCachedTextures = Math.max(1, Math.min(maxCachedTextures, 4096));
+        networkTimeout = Math.max(1_000, Math.min(networkTimeout, 60_000));
+        if (capeAnimationSpeeds == null) capeAnimationSpeeds = new HashMap<>();
+        capeAnimationSpeeds.entrySet().removeIf(entry -> entry.getKey() == null
+                || entry.getKey().length() > 256 || entry.getValue() == null
+                || !Float.isFinite(entry.getValue()));
+        while (capeAnimationSpeeds.size() > MAX_CAPE_SPEED_ENTRIES) {
+            capeAnimationSpeeds.remove(capeAnimationSpeeds.keySet().iterator().next());
+        }
+        if (skinSortMode == null) skinSortMode = "LATEST_LAST";
+        if (menuBackgroundStyle == null) menuBackgroundStyle = "opaque_stars";
+        activeSkinHash = validHashOrEmpty(activeSkinHash);
+        activeCpmModelHash = validHashOrEmpty(activeCpmModelHash);
+        if (!("auto".equals(activeModelType) || "classic".equals(activeModelType)
+                || "slim".equals(activeModelType))) activeModelType = "auto";
+        if (activeCapeHash == null || activeCapeHash.length() > 256
+                || activeCapeHash.chars().anyMatch(Character::isISOControl)) activeCapeHash = "";
+        playerOwnSkinHash = validHashOrEmpty(playerOwnSkinHash);
+    }
+
+    private static void writeAtomically(Path target, String content) throws IOException {
+        Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+        try {
+            byte[] encoded = content.getBytes(StandardCharsets.UTF_8);
+            if (encoded.length > MAX_CONFIG_BYTES) {
+                throw new IOException("Client configuration exceeds the size limit");
+            }
+            Files.write(temporary, encoded);
+            try {
+                Files.move(temporary, target,
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static String validHashOrEmpty(String value) {
+        if (value == null || value.isEmpty()) return "";
+        if (value.length() != 40) return "";
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (!((character >= '0' && character <= '9')
+                    || (character >= 'a' && character <= 'f'))) return "";
+        }
+        return value;
     }
 }

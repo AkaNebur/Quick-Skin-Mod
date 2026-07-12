@@ -7,6 +7,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.event.GameShuttingDownEvent;
 
 /**
  * NeoForge client entry point for QuickSkin
@@ -21,5 +22,11 @@ public class QuickSkinForgeClient {
         event.enqueueWork(() -> {
             QuickSkinClient.init();
         });
+    }
+
+    /** Newer NeoForge versions route each annotated event to its declaring bus automatically. */
+    @SubscribeEvent
+    public static void onGameShuttingDown(GameShuttingDownEvent event) {
+        QuickSkinClient.close();
     }
 }

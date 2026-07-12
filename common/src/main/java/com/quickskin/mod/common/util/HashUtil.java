@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Utility for computing file hashes
@@ -51,6 +52,23 @@ public class HashUtil {
             digest.update(data);
             return bytesToHex(digest.digest());
         } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Produces a stable local asset identity. Cape IDs are domain-separated from raw skin IDs,
+     * because the same valid PNG bytes can legitimately be imported in both rendering roles.
+     * Network content hashes remain hashes of the canonical transmitted PNG itself.
+     */
+    public static String computeAssetHash(byte[] data, String assetType) {
+        if (!"cape".equals(assetType)) return computeHash(data);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-1");
+            digest.update("quickskin:cape\0".getBytes(StandardCharsets.UTF_8));
+            digest.update(data);
+            return bytesToHex(digest.digest());
+        } catch (Exception error) {
             return null;
         }
     }

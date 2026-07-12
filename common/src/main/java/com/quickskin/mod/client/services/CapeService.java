@@ -16,7 +16,6 @@ import net.minecraft.resources.Identifier;
 
 import org.jetbrains.annotations.Nullable;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -96,37 +95,19 @@ public class CapeService implements ICapeService {
         //?} else {
         Identifier capeLocation;
         //?}
-        if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance().hasTexture(hash)) {
+        if (com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
+                .hasTexture(hash, "cape")) {
             capeLocation = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
-                    .getTextureLocation(hash);
+                    .getTextureLocation(hash, "cape");
             if (capeLocation != null) {
                 // Check if this network cape has animation metadata
                 com.quickskin.mod.common.data.AnimationMetadata animMeta =
                     com.quickskin.mod.client.storage.ClientAnimationMetadataCache.getInstance().getMetadata(hash);
 
                 if (animMeta != null) {
-                    // Network cape is animated - register animation
-                    // Use same animation ID format as local capes for consistency with renderer
-                    String animationId = "cape_" + hash;
-                    String capeId = "local_cape:" + hash;
-                    AnimatedTextureManager animManager = AnimatedTextureManager.getInstance();
-
-                    if (!animManager.isAnimated(animationId)) {
-                        try {
-                            // Get texture data and convert to BufferedImage
-                            byte[] textureData = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
-                                .getTextureData(hash);
-                            if (textureData != null) {
-                                java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(textureData);
-                                BufferedImage atlasImage = javax.imageio.ImageIO.read(bais);
-
-                                if (atlasImage != null) {
-                                    animManager.registerAnimation(animationId, capeId, capeLocation, atlasImage, animMeta);
-                                }
-                            }
-                        } catch (Exception e) {
-                        }
-                    }
+                    // Route all untrusted network animation work through the bounded async path.
+                    com.quickskin.mod.networking.ClientNetworkHandler
+                            .onTextureStored("cape", hash);
                 }
 
                 return capeLocation;
@@ -134,31 +115,32 @@ public class CapeService implements ICapeService {
         }
 
         // Fall back to local assets (for user's own capes)
-        capeLocation = LocalAssetManager.getInstance()
-                .getTextureLocation(hash, TextureQuality.FULL);
+        AssetMetadata localMetadata = LocalAssetManager.getInstance().getMetadata(hash);
+        capeLocation = localMetadata != null && localMetadata.isCape()
+                ? LocalAssetManager.getInstance().getTextureLocation(hash, TextureQuality.FULL)
+                : null;
 
         if (capeLocation != null) {
             // Check if this cape is animated and register it if not already running.
-            AssetMetadata assetMeta = LocalAssetManager.getInstance().getMetadata(hash);
+            AssetMetadata assetMeta = localMetadata;
             if (assetMeta != null && assetMeta.isAnimated()) {
                 String animationId = "cape_" + hash;
                 String capeId = "local_cape:" + hash;
                 AnimatedTextureManager animManager = AnimatedTextureManager.getInstance();
 
                 if (!animManager.isAnimated(animationId)) {
-                    AnimationMetadata animMeta = LocalAssetManager.getInstance().getAnimationMetadata(hash);
-                    BufferedImage atlasImage = LocalAssetManager.getInstance().getSourceImage(hash);
-                    if (animMeta != null && atlasImage != null) {
-                        animManager.registerAnimation(animationId, capeId, capeLocation, atlasImage, animMeta);
-                    }
+                    animManager.registerAnimationAsync(
+                            animationId, capeId, capeLocation, hash);
                 }
             }
         } else {
             // If not found locally and we're connected to a server, request it
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc.player != null && mc.getConnection() != null) {
-                com.quickskin.mod.networking.NetworkSyncService.getInstance()
-                    .requestTexture(mc.player.getUUID(), "cape", hash);
+                com.quickskin.mod.networking.TextureRequestCoordinator.getInstance().requestIfNeeded(
+                    "cape", hash,
+                    () -> com.quickskin.mod.networking.NetworkSyncService.getInstance()
+                        .requestTexture(mc.player.getUUID(), "cape", hash));
             }
         }
 
@@ -189,10 +171,14 @@ public class CapeService implements ICapeService {
                         Identifier capeTexture = cape.getTextureLocation();
                         //?}
 
-                        InputStream stream = Minecraft.getInstance().getResourceManager()
-                                .getResource(capeTexture).get().open();
-                        BufferedImage atlasImage = ImageIO.read(stream);
-                        stream.close();
+                        BufferedImage atlasImage;
+                        try (InputStream stream = Minecraft.getInstance().getResourceManager()
+                                .getResource(capeTexture).orElseThrow().open()) {
+                            byte[] encoded = com.quickskin.mod.common.util.BoundedFileReader.readBytes(
+                                    stream,
+                                    (int) com.quickskin.mod.common.util.SafeImageReader.MAX_ENCODED_BYTES);
+                            atlasImage = com.quickskin.mod.common.util.SafeImageReader.readPng(encoded);
+                        }
 
                         if (atlasImage != null) {
                             int width = atlasImage.getWidth();
@@ -209,10 +195,12 @@ public class CapeService implements ICapeService {
                                 AnimationMetadata metadata = new AnimationMetadata(frames, frameCount);
 
                                 String fullCapeId = "known:" + capeId;
-                                animManager.registerAnimation(animationId, fullCapeId, capeTexture, atlasImage, metadata);
+                                animManager.registerAnimationAsync(
+                                        animationId, fullCapeId, capeTexture, atlasImage, metadata);
                             }
                         }
                     } catch (Exception e) {
+                        QuickSkin.LOGGER.warn("Unable to load known animated cape {}", capeId, e);
                     }
                 }
             }

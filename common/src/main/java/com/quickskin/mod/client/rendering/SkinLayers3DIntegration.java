@@ -58,6 +58,7 @@ public final class SkinLayers3DIntegration {
     private static final String MESH_HELPER_CLASS = "dev.tr7zw.skinlayers.api.MeshHelper";
     private static final String MESH_CLASS = "dev.tr7zw.skinlayers.api.Mesh";
     private static final long CPM_MODEL_PROBE_TTL_NANOS = 500_000_000L;
+    private static final int MAX_MESH_CACHE_ENTRIES = 512;
 
     private static final Object MESH_INIT_LOCK = new Object();
     private static final Object REFRESH_INIT_LOCK = new Object();
@@ -658,6 +659,7 @@ public final class SkinLayers3DIntegration {
         if (cached != null && cached.isValid()) {
             return cached;
         }
+        if (cached != null) MESH_CACHE.remove(key, cached);
 
         try {
             NativeImage skin = getSkinTexture(skinLocation);
@@ -676,8 +678,7 @@ public final class SkinLayers3DIntegration {
             if (!created.isValid()) {
                 return null;
             }
-            PlayerMeshes raced = MESH_CACHE.putIfAbsent(key, created);
-            return raced != null ? raced : created;
+            return cacheMeshes(key, created);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             if (meshCreationFailureLogged.compareAndSet(false, true)) {
                 SKIN_LAYERS_LOG.warn(
@@ -687,6 +688,21 @@ public final class SkinLayers3DIntegration {
                 );
             }
             return null;
+        }
+    }
+
+    private static PlayerMeshes cacheMeshes(MeshCacheKey key, PlayerMeshes created) {
+        synchronized (MESH_CACHE) {
+            PlayerMeshes existing = MESH_CACHE.get(key);
+            if (existing != null && existing.isValid()) return existing;
+            if (existing != null) MESH_CACHE.remove(key, existing);
+            while (MESH_CACHE.size() >= MAX_MESH_CACHE_ENTRIES) {
+                var iterator = MESH_CACHE.keySet().iterator();
+                if (!iterator.hasNext()) break;
+                MESH_CACHE.remove(iterator.next());
+            }
+            MESH_CACHE.put(key, created);
+            return created;
         }
     }
 

@@ -147,14 +147,22 @@ public class PacketHelper {
      * Reads a string from buffer.
      */
     public static String readString(FriendlyByteBuf buf) {
-        return buf.readUtf();
+        return readString(buf, 32767);
+    }
+
+    public static String readString(FriendlyByteBuf buf, int maxLength) {
+        return buf.readUtf(maxLength);
     }
 
     /**
      * Reads a byte array from buffer
      */
     public static byte[] readByteArray(FriendlyByteBuf buf) {
-        return buf.readByteArray();
+        return readByteArray(buf, 32 * 1024);
+    }
+
+    public static byte[] readByteArray(FriendlyByteBuf buf, int maxLength) {
+        return buf.readByteArray(maxLength);
     }
 
     /**

@@ -348,6 +348,11 @@ public class CustomNPCsIntegration {
         lastAppliedSkins.remove(playerId);
     }
 
+    /** Drops player identities retained by the connection that just ended. */
+    public static void clearTrackedSkins() {
+        lastAppliedSkins.clear();
+    }
+
     /**
      * Forces a refresh of the player's appearance, which can help resolve conflicts.
      * This is called after CustomNPCs events that might modify player data.

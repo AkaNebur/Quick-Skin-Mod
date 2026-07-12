@@ -338,7 +338,10 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 String detected = com.quickskin.mod.common.util.SkinModelDetector.detectSkinModel(textureData);
                 return detected;
             }
-        } catch (Exception e) { /* ignored */ }
+        } catch (Exception e) {
+            com.quickskin.mod.QuickSkin.LOGGER.debug(
+                    "Unable to detect the preview skin model", e);
+        }
 
         // Fallback to metadata if detection fails
         return metadata.skinModel() != null ? metadata.skinModel() : "classic";

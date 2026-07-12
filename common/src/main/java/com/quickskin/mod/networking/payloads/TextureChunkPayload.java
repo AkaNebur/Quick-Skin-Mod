@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking.payloads;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.TextureTransferLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -26,21 +27,18 @@ public record TextureChunkPayload(String hash, String textureType, int chunkInde
 
     public static final StreamCodec<ByteBuf, TextureChunkPayload> CODEC = StreamCodec.of(
         (buf, payload) -> {
-            PayloadCodecs.writeString(buf, payload.hash);
-            PayloadCodecs.writeString(buf, payload.textureType);
+            PayloadCodecs.writeString(buf, payload.hash, TextureTransferLimits.CONTENT_ID_LENGTH);
+            PayloadCodecs.writeString(buf, payload.textureType, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
             buf.writeInt(payload.chunkIndex);
             buf.writeInt(payload.totalChunks);
-            buf.writeInt(payload.chunkData.length);
-            buf.writeBytes(payload.chunkData);
+            PayloadCodecs.writeByteArray(buf, payload.chunkData, TextureTransferLimits.MAX_WIRE_CHUNK_BYTES);
         },
         buf -> {
-            String hash = PayloadCodecs.readString(buf);
-            String textureType = PayloadCodecs.readString(buf);
+            String hash = PayloadCodecs.readString(buf, TextureTransferLimits.CONTENT_ID_LENGTH);
+            String textureType = PayloadCodecs.readString(buf, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
             int chunkIndex = buf.readInt();
             int totalChunks = buf.readInt();
-            int length = buf.readInt();
-            byte[] chunkData = new byte[length];
-            buf.readBytes(chunkData);
+            byte[] chunkData = PayloadCodecs.readByteArray(buf, TextureTransferLimits.MAX_WIRE_CHUNK_BYTES);
             return new TextureChunkPayload(hash, textureType, chunkIndex, totalChunks, chunkData);
         }
     );

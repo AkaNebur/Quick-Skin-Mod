@@ -226,13 +226,13 @@ public final class PropagationScenario implements Scenario {
         String capeHash = capeId.substring("local_cape:".length());
 
         NetworkTextureCache cache = NetworkTextureCache.getInstance();
-        if (!cache.hasTexture(skinHash)) return Step.Result.fail("skin bytes not cached on B: " + skinHash);
-        if (!cache.hasTexture(capeHash)) return Step.Result.fail("cape bytes not cached on B: " + capeHash);
+        if (!cache.hasTexture(skinHash, "skin")) return Step.Result.fail("skin bytes not cached on B: " + skinHash);
+        if (!cache.hasTexture(capeHash, "cape")) return Step.Result.fail("cape bytes not cached on B: " + capeHash);
 
         String skinLoc = VanillaShim.skinTexture(a);
         String cloakLoc = VanillaShim.cloakTexture(a);
-        String expectedSkin = "quickskin:network/" + skinHash;
-        String expectedCape = "quickskin:network/" + capeHash;
+        String expectedSkin = "quickskin:network/skin/" + skinHash;
+        String expectedCape = "quickskin:network/cape/" + capeHash;
         if (skinLoc == null || !expectedSkin.equals(skinLoc))
             return Step.Result.fail("render skin=" + skinLoc + " expected " + expectedSkin);
         if (cloakLoc == null || !expectedCape.equals(cloakLoc))

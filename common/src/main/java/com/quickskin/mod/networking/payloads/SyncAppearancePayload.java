@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking.payloads;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.TextureTransferLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -29,15 +30,15 @@ public record SyncAppearancePayload(UUID playerId, String skinId, String capeId,
     public static final StreamCodec<ByteBuf, SyncAppearancePayload> CODEC = StreamCodec.of(
         (buf, payload) -> {
             PayloadCodecs.writeUUID(buf, payload.playerId);
-            PayloadCodecs.writeString(buf, payload.skinId != null ? payload.skinId : "");
-            PayloadCodecs.writeString(buf, payload.capeId != null ? payload.capeId : "");
-            PayloadCodecs.writeString(buf, payload.model != null ? payload.model : "classic");
+            PayloadCodecs.writeString(buf, payload.skinId != null ? payload.skinId : "", TextureTransferLimits.MAX_APPEARANCE_ID_BYTES);
+            PayloadCodecs.writeString(buf, payload.capeId != null ? payload.capeId : "", TextureTransferLimits.MAX_APPEARANCE_ID_BYTES);
+            PayloadCodecs.writeString(buf, payload.model != null ? payload.model : "classic", TextureTransferLimits.MAX_MODEL_BYTES);
         },
         buf -> new SyncAppearancePayload(
             PayloadCodecs.readUUID(buf),
-            PayloadCodecs.readString(buf),
-            PayloadCodecs.readString(buf),
-            PayloadCodecs.readString(buf)
+            PayloadCodecs.readString(buf, TextureTransferLimits.MAX_APPEARANCE_ID_BYTES),
+            PayloadCodecs.readString(buf, TextureTransferLimits.MAX_APPEARANCE_ID_BYTES),
+            PayloadCodecs.readString(buf, TextureTransferLimits.MAX_MODEL_BYTES)
         )
     );
 

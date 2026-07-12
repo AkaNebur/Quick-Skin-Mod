@@ -1,130 +1,621 @@
 package com.quickskin.mod.server.storage;
 
-import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.networking.NetworkSecurity;
+import com.quickskin.mod.networking.TextureTransferLimits;
+import com.quickskin.mod.common.util.BoundedFileReader;
+import com.quickskin.mod.common.util.HashUtil;
+import com.quickskin.mod.common.util.PngAnimationIdentity;
 import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.PriorityQueue;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Stream;
 
-/**
- * Server-side cache for player textures (skins and capes)
- * Stores textures in memory and persists to disk
- */
+/** Bounded server-side texture cache with strict content-addressed disk paths. */
 public class ServerTextureCache {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ServerTextureCache.class);
+    private static final int MAX_OWNERS_PER_TEXTURE = 256;
     private static ServerTextureCache instance;
 
-    private final Map<String, byte[]> textureCache = new ConcurrentHashMap<>();
+    private final LinkedHashMap<String, CacheEntry> textureCache =
+            new LinkedHashMap<>(16, 0.75f, true);
+    private long cachedBytes;
     private Path storageDirectory;
+    private long generation;
 
-    private ServerTextureCache() {}
+    private ServerTextureCache() {
+    }
 
-    public static ServerTextureCache getInstance() {
+    public static synchronized ServerTextureCache getInstance() {
         if (instance == null) {
             instance = new ServerTextureCache();
         }
         return instance;
     }
 
-    /**
-     * Initialize the texture cache with server instance
-     */
-    public void init(MinecraftServer server) {
-        // Get server world directory
+    public synchronized void init(MinecraftServer server) {
+        generation++;
+        textureCache.clear();
+        cachedBytes = 0;
         Path worldPath = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
-        storageDirectory = worldPath.resolve("quickskin").resolve("textures");
-
+        storageDirectory = worldPath.resolve("quickskin").resolve("textures").toAbsolutePath().normalize();
         try {
             Files.createDirectories(storageDirectory);
+            deleteStagedFiles(storageDirectory);
         } catch (IOException e) {
+            LOGGER.error("Unable to create QuickSkin texture cache directory {}", storageDirectory, e);
+            storageDirectory = null;
+            return;
         }
-
-        // Load existing textures from disk
         loadCachedTextures();
     }
 
     /**
-     * Store a texture in cache and persist to disk
-     * @param hash The texture hash (unique identifier)
-     * @param textureData The texture image data
+     * Compatibility entry point for non-network callers. Network ingress should prepare on the
+     * bounded worker and invoke {@link #storePreparedTexture(PreparedTexture)} on the server
+     * thread so the image is decoded exactly once.
      */
-    public void storeTexture(String hash, byte[] textureData) {
-        // Store in memory cache
-        textureCache.put(hash, textureData);
-
-        // Persist to disk asynchronously
-        saveTextureToDisk(hash, textureData);
+    public boolean storeTexture(String hash, UUID ownerId, String textureType, byte[] textureData) {
+        try (PreparedTexture prepared = prepareTexture(
+                hash, ownerId, textureType, textureData)) {
+            return prepared != null && storePreparedTexture(prepared);
+        }
     }
 
     /**
-     * Retrieve a texture from cache
-     * @param hash The texture hash
-     * @return The texture data, or null if not found
+     * Fully validates and bulk-stages an upload away from the server thread.
+     *
+     * @param expectedHash a client-provided content ID for chunked uploads, or {@code null} for a
+     *                     direct upload whose ID must be computed by the server
      */
+    public @Nullable PreparedTexture prepareTexture(
+            @Nullable String expectedHash,
+            UUID ownerId,
+            String textureType,
+            byte[] textureData
+    ) {
+        if (ownerId == null || !NetworkSecurity.isValidTextureType(textureType)
+                || textureData == null || textureData.length == 0
+                || textureData.length > TextureTransferLimits.MAX_TEXTURE_BYTES
+                || (expectedHash != null && !NetworkSecurity.isValidContentId(expectedHash))) {
+            return null;
+        }
+
+        final long preparedGeneration;
+        final Path preparedDirectory;
+        synchronized (this) {
+            if (storageDirectory == null) return null;
+            preparedGeneration = generation;
+            preparedDirectory = storageDirectory;
+        }
+
+        // Own a private immutable byte snapshot before hashing or decoding it.
+        byte[] copy = Arrays.copyOf(textureData, textureData.length);
+        String computedHash = HashUtil.computeHash(copy);
+        if (!NetworkSecurity.isValidContentId(computedHash)
+                || (expectedHash != null && !expectedHash.equals(computedHash))
+                || !NetworkSecurity.isValidTextureData(copy, textureType)) {
+            LOGGER.warn("Rejected invalid texture upload (id={}, type={}, bytes={})",
+                    expectedHash, textureType, copy.length);
+            return null;
+        }
+        final String embeddedAnimationMetadata;
+        try {
+            embeddedAnimationMetadata = PngAnimationIdentity.extract(copy);
+        } catch (IOException error) {
+            LOGGER.warn("Rejected malformed animation identity in texture {}", computedHash);
+            return null;
+        }
+        if (embeddedAnimationMetadata != null
+                && NetworkSecurity.parseAnimationMetadata(embeddedAnimationMetadata) == null) {
+            LOGGER.warn("Rejected invalid embedded animation metadata in texture {}", computedHash);
+            return null;
+        }
+
+        Path stagedImage = NetworkSecurity.resolveContained(
+                preparedDirectory,
+                computedHash,
+                ".png." + UUID.randomUUID() + ".ingress.tmp");
+        if (stagedImage == null || Files.isSymbolicLink(stagedImage)) return null;
+
+        synchronized (this) {
+            if (preparedGeneration != generation
+                    || !preparedDirectory.equals(storageDirectory)) return null;
+        }
+        try {
+            Files.write(stagedImage, copy, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        } catch (IOException exception) {
+            LOGGER.warn("Unable to stage QuickSkin texture {}", computedHash, exception);
+            return null;
+        }
+
+        synchronized (this) {
+            if (preparedGeneration == generation
+                    && preparedDirectory.equals(storageDirectory)) {
+                return new PreparedTexture(
+                        preparedGeneration,
+                        preparedDirectory,
+                        stagedImage,
+                        computedHash,
+                        ownerId,
+                        textureType,
+                        embeddedAnimationMetadata,
+                        copy);
+            }
+        }
+        deleteTempFile(stagedImage);
+        return null;
+    }
+
+    /**
+     * Commits ownership and cache state on the server thread after its caller revalidates the
+     * player session. The large image write was already completed by {@link #prepareTexture}.
+     */
+    public synchronized boolean storePreparedTexture(PreparedTexture prepared) {
+        if (prepared == null || !prepared.beginCommit()
+                || prepared.generation != generation
+                || storageDirectory == null
+                || !storageDirectory.equals(prepared.storageDirectory)) return false;
+
+        CacheEntry previous = textureCache.get(prepared.hash);
+        OwnerBinding uploader = new OwnerBinding(prepared.ownerId, prepared.textureType);
+        Set<OwnerBinding> owners = new LinkedHashSet<>();
+        if (previous != null) {
+            owners.addAll(previous.owners);
+            if (!Arrays.equals(previous.data, prepared.data)) {
+                LOGGER.warn("Rejected attempted takeover of texture {} by {}",
+                        prepared.hash, prepared.ownerId);
+                return false;
+            }
+            if (previous.owners.contains(uploader)) return true;
+            if (previous.owners.size() >= MAX_OWNERS_PER_TEXTURE) return false;
+        }
+        owners.add(uploader);
+
+        CacheEntry candidate = new CacheEntry(
+                prepared.data, prepared.embeddedAnimationMetadata, owners);
+        if (!commitPreparedFiles(prepared, candidate, previous)) return false;
+
+        previous = textureCache.put(prepared.hash, candidate);
+        if (previous != null) cachedBytes -= previous.data.length;
+        cachedBytes += candidate.data.length;
+        evictToLimits();
+        return textureCache.containsKey(prepared.hash);
+    }
+
     public byte @Nullable [] getTexture(String hash) {
-        return textureCache.get(hash);
+        if (!NetworkSecurity.isValidContentId(hash)) return null;
+        CacheEntry entry;
+        synchronized (this) {
+            entry = textureCache.get(hash);
+        }
+        // Cache entries are immutable; perform the potentially 16 MiB copy after releasing the
+        // cache monitor so unrelated ownership/size checks are not blocked by bulk memory work.
+        return entry == null ? null : Arrays.copyOf(entry.data, entry.data.length);
+    }
+
+    public synchronized int getTextureSize(String hash) {
+        if (!NetworkSecurity.isValidContentId(hash)) return -1;
+        CacheEntry entry = textureCache.get(hash);
+        return entry == null ? -1 : entry.data.length;
+    }
+
+    public synchronized boolean isOwnedBy(String hash, UUID ownerId, String textureType) {
+        if (!NetworkSecurity.isValidContentId(hash) || ownerId == null
+                || !NetworkSecurity.isValidTextureType(textureType)) {
+            return false;
+        }
+        CacheEntry entry = textureCache.get(hash);
+        return entry != null && entry.owners.contains(new OwnerBinding(ownerId, textureType));
+    }
+
+    /** A request may fetch another player's texture, but only an authenticated stored entry. */
+    public synchronized boolean isRequestable(String hash, String textureType) {
+        if (!NetworkSecurity.isValidContentId(hash) || !NetworkSecurity.isValidTextureType(textureType)) {
+            return false;
+        }
+        CacheEntry entry = textureCache.get(hash);
+        if (entry == null) return false;
+        for (OwnerBinding owner : entry.owners) {
+            if (textureType.equals(owner.textureType)) return true;
+        }
+        return false;
     }
 
     /**
-     * Save all cached textures to disk
+     * Current animated PNGs carry an exact identity. Legacy PNGs are permanently bound to their
+     * first accepted metadata for the lifetime of the backing texture.
      */
-    public void saveAll() {
-        int saved = 0;
+    public boolean isAnimationMetadataCompatible(
+            String hash, String metadataJson) {
+        if (!NetworkSecurity.isValidContentId(hash) || metadataJson == null) return false;
+        String embeddedIdentity;
+        synchronized (this) {
+            CacheEntry entry = textureCache.get(hash);
+            if (entry == null) return false;
+            embeddedIdentity = entry.embeddedAnimationMetadata;
+        }
+        return (embeddedIdentity == null || embeddedIdentity.equals(metadataJson))
+                && ServerAnimationCache.getInstance()
+                        .isMetadataIdentityCompatible(hash, metadataJson);
+    }
 
-        for (Map.Entry<String, byte[]> entry : textureCache.entrySet()) {
-            if (saveTextureToDisk(entry.getKey(), entry.getValue())) {
-                saved++;
+    public void saveAll() {
+        List<Map.Entry<String, CacheEntry>> snapshot;
+        synchronized (this) {
+            snapshot = new ArrayList<>(textureCache.entrySet());
+        }
+        int failed = 0;
+        for (Map.Entry<String, CacheEntry> entry : snapshot) {
+            if (!saveTextureToDisk(entry.getKey(), entry.getValue())) failed++;
+        }
+        if (failed > 0) {
+            LOGGER.warn("Failed to persist {} QuickSkin texture cache entries", failed);
+        }
+    }
+
+    public synchronized void clear() {
+        generation++;
+        textureCache.clear();
+        cachedBytes = 0;
+        deleteStagedFiles(storageDirectory);
+        storageDirectory = null;
+    }
+
+    private boolean commitPreparedFiles(
+            PreparedTexture prepared, CacheEntry candidate, @Nullable CacheEntry previous) {
+        Path imageFile = safeFile(prepared.hash, ".png");
+        Path ownerFile = safeFile(prepared.hash, ".owner");
+        Path ownerTemp = safeFile(
+                prepared.hash, ".owner." + UUID.randomUUID() + ".ingress.tmp");
+        if (imageFile == null || ownerFile == null || ownerTemp == null
+                || Files.isSymbolicLink(imageFile) || Files.isSymbolicLink(ownerFile)
+                || Files.isSymbolicLink(ownerTemp) || Files.isSymbolicLink(prepared.stagedImage)) {
+            LOGGER.warn("Refusing unsafe texture cache path for {}", prepared.hash);
+            return false;
+        }
+        try {
+            Files.write(ownerTemp, ownershipBytes(candidate.owners),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            if (previous == null
+                    || !Files.isRegularFile(imageFile, LinkOption.NOFOLLOW_LINKS)) {
+                atomicReplace(prepared.stagedImage, imageFile);
+            }
+            atomicReplace(ownerTemp, ownerFile);
+            return true;
+        } catch (IOException exception) {
+            LOGGER.error("Unable to commit QuickSkin texture {}", prepared.hash, exception);
+            return false;
+        } finally {
+            deleteTempFile(ownerTemp);
+        }
+    }
+
+    private byte[] ownershipBytes(Set<OwnerBinding> owners) {
+        StringBuilder ownership = new StringBuilder();
+        for (OwnerBinding owner : owners) {
+            ownership.append(owner.ownerId).append(':').append(owner.textureType).append('\n');
+        }
+        return ownership.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private boolean saveTextureToDisk(String hash, CacheEntry entry) {
+        Path imageFile = safeFile(hash, ".png");
+        Path ownerFile = safeFile(hash, ".owner");
+        String nonce = UUID.randomUUID().toString();
+        Path imageTemp = safeFile(hash, ".png." + nonce + ".tmp");
+        Path ownerTemp = safeFile(hash, ".owner." + nonce + ".tmp");
+        if (imageFile == null || ownerFile == null || Files.isSymbolicLink(imageFile)
+                || Files.isSymbolicLink(ownerFile) || imageTemp == null || ownerTemp == null
+                || Files.isSymbolicLink(imageTemp) || Files.isSymbolicLink(ownerTemp)) {
+            LOGGER.warn("Refusing unsafe texture cache path for {}", hash);
+            return false;
+        }
+        try {
+            Files.write(imageTemp, entry.data, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            Files.write(ownerTemp, ownershipBytes(entry.owners),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            atomicReplace(imageTemp, imageFile);
+            atomicReplace(ownerTemp, ownerFile);
+            return true;
+        } catch (IOException e) {
+            LOGGER.error("Unable to persist QuickSkin texture {}", hash, e);
+            return false;
+        } finally {
+            deleteTempFile(imageTemp);
+            deleteTempFile(ownerTemp);
+        }
+    }
+
+    private void atomicReplace(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private void deleteTempFile(Path file) {
+        if (file == null || Files.isSymbolicLink(file)) return;
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            LOGGER.debug("Unable to remove QuickSkin cache temp file {}", file, e);
+        }
+    }
+
+    private void deleteStagedFiles(@Nullable Path directory) {
+        if (directory == null || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) return;
+        try (Stream<Path> paths = Files.list(directory)) {
+            paths.filter(path -> path.getFileName().toString().endsWith(".ingress.tmp"))
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                    .forEach(this::deleteTempFile);
+        } catch (IOException exception) {
+            LOGGER.debug("Unable to clean staged QuickSkin texture files in {}", directory, exception);
+        }
+    }
+
+    private void loadCachedTextures() {
+        if (storageDirectory == null || !Files.isDirectory(storageDirectory, LinkOption.NOFOLLOW_LINKS)) return;
+
+        PriorityQueue<Path> newestFiles = new PriorityQueue<>(
+                Comparator.comparingLong(this::lastModified));
+        try (Stream<Path> paths = Files.list(storageDirectory)) {
+            paths.filter(path -> path.getFileName().toString().endsWith(".png"))
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                    .forEach(path -> {
+                        newestFiles.add(path);
+                        if (newestFiles.size() > TextureTransferLimits.MAX_SERVER_CACHE_ENTRIES) {
+                            Path expired = newestFiles.remove();
+                            String name = expired.getFileName().toString();
+                            deleteEntryFiles(name.substring(0, name.length() - ".png".length()));
+                        }
+                    });
+        } catch (IOException e) {
+            LOGGER.error("Unable to list QuickSkin texture cache {}", storageDirectory, e);
+            return;
+        }
+
+        List<Path> files = new ArrayList<>(newestFiles);
+        files.sort(Comparator.comparingLong(this::lastModified));
+        for (Path path : files) {
+            String fileName = path.getFileName().toString();
+            String hash = fileName.substring(0, fileName.length() - ".png".length());
+            if (!NetworkSecurity.isValidContentId(hash) || safeFile(hash, ".png") == null) continue;
+            try {
+                long size = Files.size(path);
+                if (size <= 0 || size > TextureTransferLimits.MAX_TEXTURE_BYTES) {
+                    deleteEntryFiles(hash);
+                    continue;
+                }
+                Ownership ownership = readOwnership(hash);
+                if (ownership == null) {
+                    LOGGER.warn("Ignoring unowned legacy texture cache entry {}", hash);
+                    deleteEntryFiles(hash);
+                    continue;
+                }
+                byte[] data = BoundedFileReader.readBytes(
+                        path, TextureTransferLimits.MAX_TEXTURE_BYTES);
+                String embeddedAnimationMetadata = PngAnimationIdentity.extract(data);
+                if (!hash.equals(HashUtil.computeHash(data))
+                        || !isValidForOwnedTypes(data, ownership.owners)
+                        || (embeddedAnimationMetadata != null
+                                && NetworkSecurity.parseAnimationMetadata(
+                                        embeddedAnimationMetadata) == null)) {
+                    LOGGER.warn("Ignoring invalid texture cache entry {}", hash);
+                    deleteEntryFiles(hash);
+                    continue;
+                }
+                CacheEntry entry = new CacheEntry(
+                        data, embeddedAnimationMetadata, ownership.owners);
+                textureCache.put(hash, entry);
+                cachedBytes += data.length;
+                evictToLimits();
+            } catch (IOException e) {
+                LOGGER.warn("Unable to load QuickSkin texture cache entry {}", path, e);
             }
         }
     }
 
-    /**
-     * Clear all cached textures from memory
-     */
-    public void clear() {
-        textureCache.clear();
+    @Nullable
+    private Ownership readOwnership(String hash) {
+        Path ownerFile = safeFile(hash, ".owner");
+        if (ownerFile == null || !Files.isRegularFile(ownerFile, LinkOption.NOFOLLOW_LINKS)) return null;
+        try {
+            if (Files.size(ownerFile) > 16 * 1024) return null;
+            List<String> lines = Arrays.asList(
+                    BoundedFileReader.readUtf8(ownerFile, 16 * 1024).split("\\R", -1));
+            Set<OwnerBinding> owners = new LinkedHashSet<>();
+            for (String line : lines) {
+                if (line.isEmpty()) continue;
+                int separator = line.lastIndexOf(':');
+                if (separator <= 0) return null;
+                String type = line.substring(separator + 1);
+                if (!NetworkSecurity.isValidTextureType(type)) return null;
+                owners.add(new OwnerBinding(UUID.fromString(line.substring(0, separator)), type));
+                if (owners.size() > MAX_OWNERS_PER_TEXTURE) return null;
+            }
+            return owners.isEmpty() ? null : new Ownership(owners);
+        } catch (IOException | IllegalArgumentException e) {
+            LOGGER.warn("Unable to read ownership for QuickSkin texture {}", hash, e);
+            return null;
+        }
+    }
+
+    /** A shared content blob must satisfy every typed ownership claim restored from disk. */
+    private boolean isValidForOwnedTypes(byte[] data, Set<OwnerBinding> owners) {
+        Set<String> validatedTypes = new LinkedHashSet<>();
+        for (OwnerBinding owner : owners) {
+            if (validatedTypes.add(owner.textureType)
+                    && !NetworkSecurity.isValidTextureData(data, owner.textureType)) return false;
+        }
+        return !validatedTypes.isEmpty();
+    }
+
+    private synchronized void evictToLimits() {
+        Iterator<Map.Entry<String, CacheEntry>> iterator = textureCache.entrySet().iterator();
+        while ((textureCache.size() > TextureTransferLimits.MAX_SERVER_CACHE_ENTRIES
+                || cachedBytes > TextureTransferLimits.MAX_SERVER_CACHE_BYTES) && iterator.hasNext()) {
+            Map.Entry<String, CacheEntry> eldest = iterator.next();
+            if (com.quickskin.mod.server.data.ServerPlayerAppearanceRepository.getInstance()
+                    .isTextureReferenced(eldest.getKey())) continue;
+            iterator.remove();
+            cachedBytes -= eldest.getValue().data.length;
+            deleteEntryFiles(eldest.getKey());
+        }
+    }
+
+    private void deleteEntryFiles(String hash) {
+        deleteFile(safeFile(hash, ".png"));
+        deleteFile(safeFile(hash, ".owner"));
+        ServerAnimationCache.getInstance().removeMetadata(hash);
+    }
+
+    private void deleteFile(@Nullable Path file) {
+        if (file == null || Files.isSymbolicLink(file)) return;
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            LOGGER.warn("Unable to evict QuickSkin cache file {}", file, e);
+        }
+    }
+
+    @Nullable
+    private Path safeFile(String hash, String suffix) {
+        return NetworkSecurity.resolveContained(storageDirectory, hash, suffix);
+    }
+
+    private long lastModified(Path path) {
+        try {
+            return Files.getLastModifiedTime(path, LinkOption.NOFOLLOW_LINKS).toMillis();
+        } catch (IOException e) {
+            return Long.MIN_VALUE;
+        }
     }
 
     /**
-     * Save a texture to disk
+     * Immutable validation result whose only mutable state is its one-shot commit/cleanup guard.
+     * Callers must close rejected or stale results so their staged file is removed promptly.
      */
-    private boolean saveTextureToDisk(String hash, byte[] data) {
-        if (storageDirectory == null) {
-            return false;
+    public static final class PreparedTexture implements AutoCloseable {
+        private final long generation;
+        private final Path storageDirectory;
+        private final Path stagedImage;
+        private final String hash;
+        private final UUID ownerId;
+        private final String textureType;
+        private final String embeddedAnimationMetadata;
+        private final byte[] data;
+        private boolean commitStarted;
+        private boolean closed;
+
+        private PreparedTexture(
+                long generation,
+                Path storageDirectory,
+                Path stagedImage,
+                String hash,
+                UUID ownerId,
+                String textureType,
+                String embeddedAnimationMetadata,
+                byte[] data
+        ) {
+            this.generation = generation;
+            this.storageDirectory = storageDirectory;
+            this.stagedImage = stagedImage;
+            this.hash = hash;
+            this.ownerId = ownerId;
+            this.textureType = textureType;
+            this.embeddedAnimationMetadata = embeddedAnimationMetadata;
+            this.data = data;
         }
 
-        try {
-            Path file = storageDirectory.resolve(hash + ".png");
-            Files.write(file, data);
+        public String hash() {
+            return hash;
+        }
+
+        private synchronized boolean beginCommit() {
+            if (closed || commitStarted) return false;
+            commitStarted = true;
             return true;
-        } catch (IOException e) {
-            return false;
+        }
+
+        @Override
+        public void close() {
+            synchronized (this) {
+                if (closed) return;
+                closed = true;
+            }
+            if (Files.isSymbolicLink(stagedImage)) return;
+            try {
+                Files.deleteIfExists(stagedImage);
+            } catch (IOException exception) {
+                LOGGER.debug("Unable to remove staged QuickSkin texture {}", stagedImage, exception);
+            }
         }
     }
 
-    /**
-     * Load all textures from disk into memory cache
-     */
-    private void loadCachedTextures() {
-        if (storageDirectory == null || !Files.exists(storageDirectory)) {
-            return;
+    private static final class CacheEntry {
+        private final byte[] data;
+        private final String embeddedAnimationMetadata;
+        private final Set<OwnerBinding> owners;
+
+        private CacheEntry(
+                byte[] data, String embeddedAnimationMetadata,
+                Set<OwnerBinding> owners) {
+            this.data = data;
+            this.embeddedAnimationMetadata = embeddedAnimationMetadata;
+            this.owners = new LinkedHashSet<>(owners);
+        }
+    }
+
+    private static final class Ownership {
+        private final Set<OwnerBinding> owners;
+
+        private Ownership(Set<OwnerBinding> owners) {
+            this.owners = owners;
+        }
+    }
+
+    private static final class OwnerBinding {
+        private final UUID ownerId;
+        private final String textureType;
+
+        private OwnerBinding(UUID ownerId, String textureType) {
+            this.ownerId = ownerId;
+            this.textureType = textureType;
         }
 
-        try {
-            Files.list(storageDirectory)
-                .filter(path -> path.toString().endsWith(".png"))
-                .forEach(path -> {
-                    try {
-                        String hash = path.getFileName().toString().replace(".png", "");
-                        byte[] data = Files.readAllBytes(path);
-                        textureCache.put(hash, data);
-                    } catch (IOException e) {
-                    }
-                });
-        } catch (IOException e) {
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof OwnerBinding)) return false;
+            OwnerBinding binding = (OwnerBinding) other;
+            return ownerId.equals(binding.ownerId) && textureType.equals(binding.textureType);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * ownerId.hashCode() + textureType.hashCode();
         }
     }
 }

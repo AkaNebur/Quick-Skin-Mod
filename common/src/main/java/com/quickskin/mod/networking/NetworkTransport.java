@@ -41,6 +41,9 @@ public interface NetworkTransport {
     //? if <1.21 {
     void sendCooldownToPlayer(ServerPlayer player, long cooldownEndTime);
     void sendTextureToPlayer(ServerPlayer player, String textureType, String hash, byte[] imageData);
+    void sendTextureChunkToPlayer(
+            ServerPlayer player, String hash, String textureType,
+            int chunkIndex, int totalChunks, byte[] chunkData);
     void sendAppearanceToPlayer(
             ServerPlayer player, UUID playerId, String skinId, String capeId, String model);
     void sendAnimationMetadataToPlayer(ServerPlayer player, String hash, String metadataJson);

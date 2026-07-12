@@ -3,18 +3,23 @@ package com.quickskin.mod.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.util.BoundedFileReader;
 import com.quickskin.mod.platform.PlatformHelper;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 /**
  * Server-side configuration for QuickSkin
  * Stored in JSON format in config directory
  */
 public class ServerConfig {
-    private static ServerConfig instance;
+    private static final int MAX_CONFIG_BYTES = 1024 * 1024;
+    private static volatile ServerConfig instance;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     // Skin Settings
@@ -27,7 +32,7 @@ public class ServerConfig {
         // Private constructor for singleton
     }
 
-    public static ServerConfig getInstance() {
+    public static synchronized ServerConfig getInstance() {
         if (instance == null) {
             instance = load();
         }
@@ -42,10 +47,15 @@ public class ServerConfig {
 
         if (Files.exists(configPath)) {
             try {
-                String json = Files.readString(configPath);
+                String json = BoundedFileReader.readUtf8(configPath, MAX_CONFIG_BYTES);
                 ServerConfig config = GSON.fromJson(json, ServerConfig.class);
-                return config;
+                if (config != null) {
+                    config.normalize();
+                    return config;
+                }
+                QuickSkin.LOGGER.warn("Server config {} contained JSON null; using defaults", configPath);
             } catch (Exception e) {
+                QuickSkin.LOGGER.warn("Could not load server config {}; using defaults", configPath, e);
             }
         }
 
@@ -58,16 +68,18 @@ public class ServerConfig {
     /**
      * Save configuration to file
      */
-    public void save() {
+    public synchronized void save() {
         Path configPath = getConfigPath();
 
         try {
             // Ensure config directory exists
             Files.createDirectories(configPath.getParent());
 
+            normalize();
             String json = GSON.toJson(this);
-            Files.writeString(configPath, json);
+            writeAtomically(configPath, json);
         } catch (IOException e) {
+            QuickSkin.LOGGER.error("Could not save server config {}", configPath, e);
         }
     }
 
@@ -81,14 +93,15 @@ public class ServerConfig {
     /**
      * Reload configuration from file
      */
-    public static void reload() {
+    public static synchronized void reload() {
         instance = load();
     }
 
     /**
      * Convert to JSON for network transmission
      */
-    public String toJson() {
+    public synchronized String toJson() {
+        normalize();
         return GSON.toJson(this);
     }
 
@@ -97,9 +110,43 @@ public class ServerConfig {
      */
     public static ServerConfig fromJson(String json) {
         try {
-            return GSON.fromJson(json, ServerConfig.class);
+            if (json == null || json.getBytes(StandardCharsets.UTF_8).length > MAX_CONFIG_BYTES) {
+                QuickSkin.LOGGER.warn("Received an oversized QuickSkin server configuration; using defaults");
+                return new ServerConfig();
+            }
+            ServerConfig config = GSON.fromJson(json, ServerConfig.class);
+            if (config == null) {
+                QuickSkin.LOGGER.warn("Received a null QuickSkin server configuration; using defaults");
+                return new ServerConfig();
+            }
+            config.normalize();
+            return config;
         } catch (Exception e) {
+            QuickSkin.LOGGER.warn("Received an invalid QuickSkin server configuration; using defaults", e);
             return new ServerConfig();
+        }
+    }
+
+    private void normalize() {
+        skinChangeCooldownSeconds = Math.max(0, Math.min(skinChangeCooldownSeconds, 86_400));
+    }
+
+    private static void writeAtomically(Path target, String content) throws IOException {
+        Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+        try {
+            byte[] encoded = content.getBytes(StandardCharsets.UTF_8);
+            if (encoded.length > MAX_CONFIG_BYTES) {
+                throw new IOException("Server configuration exceeds the size limit");
+            }
+            Files.write(temporary, encoded);
+            try {
+                Files.move(temporary, target,
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 }

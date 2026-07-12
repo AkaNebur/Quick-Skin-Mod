@@ -462,21 +462,8 @@ public class PlayerSkinMenuScreen extends Screen {
             String hash = capeId.substring("local_cape:".length());
             String animationId = "cape_" + hash;
 
-            // Check if this local cape has animation metadata
-            com.quickskin.mod.common.data.AnimationMetadata metadata =
-                    LocalAssetManager.getInstance().getAnimationMetadata(hash);
-
-            if (metadata != null && metadata.frameCount() > 1) {
-                // Load atlas image from cache
-                java.awt.image.BufferedImage atlasImage =
-                        LocalAssetManager.getInstance().getSourceImage(hash);
-
-                if (atlasImage != null) {
-                    // Register animation
-                    com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
-                            .registerAnimation(animationId, capeId, capeLocation, atlasImage, metadata);
-                }
-            }
+            com.quickskin.mod.client.services.AnimatedTextureManager.getInstance()
+                    .registerAnimationAsync(animationId, capeId, capeLocation, hash);
         }
         // Known capes might also be animated
         // For now, we'll skip this as known capes use a different system

@@ -7,7 +7,6 @@ import com.quickskin.mod.common.data.TextureQuality;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 
@@ -27,19 +26,25 @@ public class HDTextureProcessor {
      */
     public static byte[] processHDSkin(InputStream input, boolean allowTransparency) {
         try {
-            // Read all bytes first to allow multiple read attempts
-            byte[] imageBytes = input.readAllBytes();
-
-            if (imageBytes.length == 0) {
+            if (input == null) {
                 return null;
             }
+            byte[] imageBytes = input.readNBytes((int) SafeImageReader.MAX_ENCODED_BYTES + 1);
+            if (imageBytes.length == 0 || imageBytes.length > SafeImageReader.MAX_ENCODED_BYTES) {
+                return null;
+            }
+            return processHDSkin(SafeImageReader.readSkin(imageBytes), allowTransparency);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
-            // Detect the image format
-            String detectedFormat = detectImageFormat(imageBytes);
-
-            // Read image using ImageIO (TwelveMonkeys adds WebP, JPEG, and other format support)
-            BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
-            if (image == null) {
+    /** Processes an already bounded and decoded skin image. */
+    public static byte[] processHDSkin(BufferedImage image, boolean allowTransparency) {
+        try {
+            if (image == null || image.getWidth() < 1 || image.getHeight() < 1
+                    || image.getWidth() > 2048 || image.getHeight() > 2048
+                    || (long) image.getWidth() * image.getHeight() > 2048L * 2048L) {
                 return null;
             }
 
@@ -498,7 +503,7 @@ public class HDTextureProcessor {
      */
     public static BufferedImage pngToImage(byte[] data) {
         try {
-            return ImageIO.read(new ByteArrayInputStream(data));
+            return SafeImageReader.readPng(data);
         } catch (Exception e) {
             return null;
         }
