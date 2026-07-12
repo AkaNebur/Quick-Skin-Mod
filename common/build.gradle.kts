@@ -71,9 +71,7 @@ repositories {
 
 if (minecraftVersion == "1.20.1") {
     val canonicalOnlyAfterLegacy = setOf(
-        "com/quickskin/mod/client/compat/CustomNPCsIntegration.java",
         "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
-        "com/quickskin/mod/client/services/CapeAnimationHelper.java",
         "com/quickskin/mod/mixin/GuiSkinRendererMixin.java",
         "com/quickskin/mod/mixin/PlayerRendererMixin.java",
         "com/quickskin/mod/mixin/SkinManagerMixin.java",
@@ -271,9 +269,7 @@ dependencies {
     modImpl("net.fabricmc:fabric-loader:${versionProp("fabric_loader_version")}")
     modImpl("dev.architectury:architectury:${versionProp("architectury_api_version")}")
 
-    if (minecraftVersion != "1.20.1") {
-        "implementation"("org.sejda.imageio:webp-imageio:0.1.6")
-    }
+    "implementation"("org.sejda.imageio:webp-imageio:0.1.6")
 }
 
 val javaVersion = versionProp("java_version").toInt()

@@ -73,6 +73,7 @@ dependencies {
 
     "common"(project.files(commonProject.tasks.named("jar")))
     "shadowBundle"(project.files(commonProject.tasks.named("transformProductionForge")))
+    "shadowBundle"("org.sejda.imageio:webp-imageio:0.1.6")
 }
 
 java {

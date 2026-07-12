@@ -731,7 +731,7 @@ public class PlayerSkinMenuScreen extends Screen {
 
         for (Path path : files) {
             String lower = path.toString().toLowerCase(Locale.ROOT);
-            if (lower.endsWith(".png")) {
+            if (lower.endsWith(".png") || lower.endsWith(".webp") || lower.endsWith(".jpg")) {
                 imageFiles.add(path);
             } else if (lower.endsWith(".cpmmodel")) {
                 cpmModelFiles.add(path);

@@ -60,6 +60,12 @@ public final class CapeAnimationHelper {
             return null;
         }
 
+        //? if <1.21 {
+        // Legacy animation registrations are keyed by their atlas texture location.
+        return AnimatedTextureManager.getInstance()
+                .getAnimationFrame(atlasLocation)
+                .orElse(atlasLocation);
+        //?} else {
         String animationId = deriveAnimationId(capeId);
         if (animationId == null) {
             return atlasLocation;
@@ -76,5 +82,6 @@ public final class CapeAnimationHelper {
         Identifier currentFrame = atm.getCurrentFrameTexture(animationId);
         //?}
         return currentFrame != null ? currentFrame : atlasLocation;
+        //?}
     }
 }

@@ -1,9 +1,9 @@
 package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.compat.CustomNPCsIntegration;
 //? if >=1.21 {
 import com.quickskin.mod.client.compat.CPMCompatIntegration;
-import com.quickskin.mod.client.compat.CustomNPCsIntegration;
 //?}
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.PlayerAppearance;
@@ -95,10 +95,10 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 // Trigger async transparency analysis for the skin texture
                 com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(skinLocation);
 
-                //? if >=1.21 {
                 // Notify CustomNPCs integration (if available) to handle any skin cache invalidation
                 CustomNPCsIntegration.onSkinApplied(playerId, skinLocation);
 
+                //? if >=1.21 {
                     //? if <1.21.4 {
                 // Force CPM to switch to skin mode and re-read skin data.
                 CPMCompatIntegration.forceReRegisterSkins(playerId);
@@ -327,14 +327,10 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
 
         // If the location is already cached, return it.
         if (appearance.getCapeLocation() != null) {
-            //? if <1.21 {
-            return appearance.getCapeLocation();
-            //?} else {
             // Resolve animation frame at source level so any mod reading
             // capeTexture (e.g. WaveyCapes) gets the current frame, not the atlas.
             return CapeAnimationHelper.resolveCurrentFrame(
                     appearance.getCapeLocation(), appearance.getCapeId());
-            //?}
         }
 
         // If not cached, try to resolve it now.
@@ -350,11 +346,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 // Trigger async transparency analysis for the cape texture
                 com.quickskin.mod.common.util.TextureAlphaDetector.analyzeTextureAsync(location);
 
-                //? if <1.21 {
-                return location;
-                //?} else {
                 return CapeAnimationHelper.resolveCurrentFrame(location, appearance.getCapeId());
-                //?}
             }
         }
 

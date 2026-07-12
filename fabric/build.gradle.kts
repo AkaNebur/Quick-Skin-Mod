@@ -152,9 +152,7 @@ dependencies {
     "common"(project.files(commonProject.tasks.named("jar")))
     "shadowBundle"(project.files(commonProject.tasks.named("transformProductionFabric")))
 
-    if (minecraftVersion != "1.20.1") {
-        "shadowBundle"("org.sejda.imageio:webp-imageio:0.1.6")
-    }
+    "shadowBundle"("org.sejda.imageio:webp-imageio:0.1.6")
 }
 
 val javaVersion = versionProp("java_version").toInt()

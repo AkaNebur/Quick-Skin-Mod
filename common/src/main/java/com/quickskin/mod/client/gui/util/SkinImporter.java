@@ -38,13 +38,9 @@ public class SkinImporter {
 
         // Validate it's a supported image file (PNG, WebP, or JPG)
         String fileName = sourcePath.getFileName().toString();
-        //? if <1.21 {
-        if (!fileName.toLowerCase(Locale.ROOT).endsWith(".png")) {
-        //?} else {
         String lowerName = fileName.toLowerCase(Locale.ROOT);
         if (!lowerName.endsWith(".png") && !lowerName.endsWith(".webp")
                 && !lowerName.endsWith(".jpg")) {
-        //?}
             return null;
         }
 
@@ -60,18 +56,11 @@ public class SkinImporter {
 
             // Copy file to skins directory (always save as PNG since content is converted to PNG)
             LocalAssetManager assetManager = LocalAssetManager.getInstance();
-            //? if <1.21 {
-            Path targetPath = assetManager.getSkinsDirectory().resolve(fileName);
-            //?} else {
             String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
             Path targetPath = assetManager.getSkinsDirectory().resolve(nameWithoutExt + ".png");
-            //?}
 
             // If file already exists, add a number
             int counter = 1;
-            //? if <1.21 {
-            String nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
-            //?}
             while (Files.exists(targetPath)) {
                 targetPath = assetManager.getSkinsDirectory().resolve(nameWithoutExt + "_" + counter + ".png");
                 counter++;

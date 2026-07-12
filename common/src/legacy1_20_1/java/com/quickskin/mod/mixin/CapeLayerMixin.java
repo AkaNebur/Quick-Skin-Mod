@@ -2,7 +2,7 @@ package com.quickskin.mod.mixin;
 
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.compat.CPMCompatIntegration;
-import com.quickskin.mod.client.services.AnimatedTextureManager;
+import com.quickskin.mod.client.services.CapeAnimationHelper;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -52,9 +52,7 @@ public class CapeLayerMixin {
         }
 
         // Check if this cape is animated. If so, get the current frame texture.
-        ResourceLocation finalTexture = AnimatedTextureManager.getInstance()
-                .getAnimationFrame(capeTexture)
-                .orElse(capeTexture);
+        ResourceLocation finalTexture = CapeAnimationHelper.resolveCurrentFrame(capeTexture, null);
 
         RenderType renderType;
 

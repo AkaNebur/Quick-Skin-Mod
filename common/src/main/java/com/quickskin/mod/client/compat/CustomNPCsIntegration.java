@@ -7,10 +7,16 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
+//? if >=1.21.11 {
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.core.ClientAsset;
+//?}
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -36,7 +42,11 @@ public class CustomNPCsIntegration {
 
     // Cache for PlayerSkin textures that we've overridden
     // This helps detect when CustomNPCs might be reverting our changes
+    //? if <1.21.11 {
+    private static final Map<UUID, ResourceLocation> lastAppliedSkins = new java.util.concurrent.ConcurrentHashMap<>();
+    //?} else {
     private static final Map<UUID, Identifier> lastAppliedSkins = new java.util.concurrent.ConcurrentHashMap<>();
+    //?}
 
     /**
      * Checks if CustomNPCs-Unofficial is installed.
@@ -107,9 +117,13 @@ public class CustomNPCsIntegration {
      * This notifies the CustomNPCs integration to clear any cached skin data.
      *
      * @param playerId The UUID of the player whose skin was changed
-     * @param skinLocation The new skin Identifier
+     * @param skinLocation The new skin texture location
      */
+    //? if <1.21.11 {
+    public static void onSkinApplied(UUID playerId, ResourceLocation skinLocation) {
+    //?} else {
     public static void onSkinApplied(UUID playerId, Identifier skinLocation) {
+    //?}
         if (!isAvailable()) {
             return;
         }
@@ -171,7 +185,11 @@ public class CustomNPCsIntegration {
      * @param defaultSkin The default skin (from vanilla or CustomNPCs)
      * @return The Quick-Skin-Mod skin if available, otherwise the default
      */
+    //? if <1.21.11 {
+    public static ResourceLocation getOverrideSkin(AbstractClientPlayer player, ResourceLocation defaultSkin) {
+    //?} else {
     public static Identifier getOverrideSkin(AbstractClientPlayer player, Identifier defaultSkin) {
+    //?}
         if (player == null) {
             return defaultSkin;
         }
@@ -181,7 +199,11 @@ public class CustomNPCsIntegration {
 
         // Check if Quick-Skin-Mod has an active skin for this player
         if (service.hasActiveSkin(playerId)) {
+            //? if <1.21.11 {
+            ResourceLocation quickSkin = service.getSkinLocation(playerId);
+            //?} else {
             Identifier quickSkin = service.getSkinLocation(playerId);
+            //?}
             if (quickSkin != null) {
                 return quickSkin;
             }
@@ -197,7 +219,11 @@ public class CustomNPCsIntegration {
      * @param defaultSkin The default skin
      * @return The Quick-Skin-Mod skin if available, otherwise the default
      */
+    //? if <1.21.11 {
+    public static ResourceLocation getOverrideSkinByUUID(UUID playerId, ResourceLocation defaultSkin) {
+    //?} else {
     public static Identifier getOverrideSkinByUUID(UUID playerId, Identifier defaultSkin) {
+    //?}
         if (playerId == null) {
             return defaultSkin;
         }
@@ -205,7 +231,11 @@ public class CustomNPCsIntegration {
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
 
         if (service.hasActiveSkin(playerId)) {
+            //? if <1.21.11 {
+            ResourceLocation quickSkin = service.getSkinLocation(playerId);
+            //?} else {
             Identifier quickSkin = service.getSkinLocation(playerId);
+            //?}
             if (quickSkin != null) {
                 return quickSkin;
             }
@@ -214,6 +244,7 @@ public class CustomNPCsIntegration {
         return defaultSkin;
     }
 
+    //? if >=1.21.11 {
     /**
      * Gets the Quick-Skin-Mod PlayerSkin, ensuring CustomNPCs doesn't override it.
      * This is the 1.21.1 version that works with the PlayerSkin record.
@@ -279,6 +310,7 @@ public class CustomNPCsIntegration {
             originalSkin.secure()
         );
     }
+    //?}
 
     /**
      * Called to check if a skin has been unexpectedly changed (possibly by CustomNPCs).
@@ -288,12 +320,20 @@ public class CustomNPCsIntegration {
      * @param currentSkin The current skin being rendered
      * @return true if the skin appears to have been changed by another mod
      */
+    //? if <1.21.11 {
+    public static boolean detectSkinConflict(UUID playerId, ResourceLocation currentSkin) {
+    //?} else {
     public static boolean detectSkinConflict(UUID playerId, Identifier currentSkin) {
+    //?}
         if (!isAvailable()) {
             return false;
         }
 
+        //? if <1.21.11 {
+        ResourceLocation expectedSkin = lastAppliedSkins.get(playerId);
+        //?} else {
         Identifier expectedSkin = lastAppliedSkins.get(playerId);
+        //?}
         if (expectedSkin != null && !expectedSkin.equals(currentSkin)) {
             return true;
         }
