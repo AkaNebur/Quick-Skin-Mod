@@ -4,6 +4,7 @@ import dev.architectury.plugin.loom.LoomInterface117
 import dev.architectury.transformer.shadowed.impl.com.google.gson.JsonObject
 import dev.architectury.transformer.transformers.RemapInjectables
 import dev.architectury.transformer.transformers.TransformExpectPlatform
+import groovy.json.JsonSlurper
 import net.fabricmc.loom.LoomGradleExtension
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
 import net.fabricmc.loom.build.mixin.AnnotationProcessorInvoker
@@ -20,26 +21,36 @@ plugins {
     `maven-publish`
 }
 
+apply(from = rootProject.file("gradle/archive-conventions.gradle.kts"))
+
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
-val canonicalVersions = setOf("1.20.1", "1.21.1", "1.21.11", "26.1.2", "26.2")
+val releaseMatrixFile = rootProject.file("release/release-matrix.json")
+check(releaseMatrixFile.isFile) { "Missing central release matrix: $releaseMatrixFile" }
+val releaseMatrix = JsonSlurper().parse(releaseMatrixFile) as Map<*, *>
+val releaseArtifacts = (releaseMatrix["artifacts"] as List<*>).map { it as Map<*, *> }
+val canonicalVersions = releaseArtifacts
+    .map { it["artifact_version"].toString() }
+    .toSet()
 val isNoRemap = minecraftVersion.startsWith("26.")
-val legacy120JavaRoot = rootProject.file("common/src/legacy1_20_1/java")
-val legacy1211JavaRoot = rootProject.file("common/src/legacy1_21_1/java")
-val legacy12111JavaRoot = rootProject.file("common/src/legacy1_21_11/java")
-val legacy2612JavaRoot = rootProject.file("common/src/legacy26_1_2/java")
 val generatedStonecutterJava = layout.buildDirectory.dir("generated/stonecutter/main/java")
 val consolidatedLegacyJava = layout.buildDirectory.dir("generated/consolidated/main/java")
 val legacyCommonJar = rootProject.file(
     "common/build/${if (isNoRemap) "libs" else "devlibs"}/" +
         "Quick Skin - common - $minecraftVersion-${rootProject.property("mod_version")}-dev.jar"
 ).toPath()
-val legacyPathHash = MessageDigest.getInstance("SHA-256")
-    .digest(legacyCommonJar.toString().toByteArray(StandardCharsets.UTF_8))
+// Architectury embeds this value in generated class names. Hash the stable, repository-relative
+// artifact identity so identical sources produce the same classes on every checkout and OS.
+val legacyArtifactIdentity = rootProject.projectDir.toPath()
+    .relativize(legacyCommonJar)
+    .toString()
+    .replace(File.separatorChar, '/')
+val legacyArtifactHash = MessageDigest.getInstance("SHA-256")
+    .digest(legacyArtifactIdentity.toByteArray(StandardCharsets.UTF_8))
     .joinToString("") { "%02x".format(it) }
 val legacyArchitecturyPackage = (
     "architectury_inject_quickskin_common_${rootProject.property("architectury_inject_id")}_" +
-        "$legacyPathHash${legacyCommonJar.fileName}"
+        "$legacyArtifactHash${legacyCommonJar.fileName}"
 ).filter { Character.isJavaIdentifierPart(it) }
 
 apply(plugin = if (isNoRemap) "dev.architectury.loom-no-remap" else "dev.architectury.loom")
@@ -58,10 +69,9 @@ extensions.configure<BasePluginExtension>("base") {
 extensions.configure<ArchitectPluginExtension>("architectury") {
     minecraft = minecraftVersion
     common(
-        when (minecraftVersion) {
-            "1.20.1" -> listOf("fabric", "forge")
-            else -> listOf("fabric", "neoforge")
-        }
+        releaseArtifacts
+            .filter { it["artifact_version"].toString() == minecraftVersion }
+            .map { it["loader"].toString() }
     )
 }
 
@@ -69,45 +79,76 @@ repositories {
     mavenCentral()
 }
 
-if (minecraftVersion == "1.20.1") {
-    val canonicalOnlyAfterLegacy = setOf(
-        "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
-        "com/quickskin/mod/mixin/GuiSkinRendererMixin.java",
-        "com/quickskin/mod/mixin/PlayerRendererMixin.java",
-        "com/quickskin/mod/mixin/SkinManagerMixin.java",
-        "com/quickskin/mod/networking/payloads/CooldownUpdatePayload.java",
-        "com/quickskin/mod/networking/payloads/PayloadCodecs.java",
-        "com/quickskin/mod/networking/payloads/RequestTexturePayload.java",
-        "com/quickskin/mod/networking/payloads/SendAnimationMetadataPayload.java",
-        "com/quickskin/mod/networking/payloads/SendTextureChunkPayload.java",
-        "com/quickskin/mod/networking/payloads/SendTexturePayload.java",
-        "com/quickskin/mod/networking/payloads/SyncAppearancePayload.java",
-        "com/quickskin/mod/networking/payloads/SyncServerConfigPayload.java",
-        "com/quickskin/mod/networking/payloads/TextureChunkPayload.java",
-        "com/quickskin/mod/networking/payloads/UpdateAppearancePayload.java",
-        "com/quickskin/mod/networking/payloads/UpdateServerConfigPayload.java",
-        "com/quickskin/mod/networking/payloads/UploadAnimationMetadataPayload.java",
-        "com/quickskin/mod/networking/payloads/UploadTexturePayload.java",
-        "com/quickskin/mod/platform/MinecraftCompat26_2.java",
+val legacyOverlay = when (minecraftVersion) {
+    "1.20.1" -> Triple(
+        rootProject.file("common/src/legacy1_20_1/java"),
+        rootProject.file("common/src/legacy1_20_1/resources"),
+        setOf(
+            "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
+            "com/quickskin/mod/mixin/GuiSkinRendererMixin.java",
+            "com/quickskin/mod/mixin/PlayerRendererMixin.java",
+            "com/quickskin/mod/mixin/SkinManagerMixin.java",
+            "com/quickskin/mod/networking/payloads/CooldownUpdatePayload.java",
+            "com/quickskin/mod/networking/payloads/PayloadCodecs.java",
+            "com/quickskin/mod/networking/payloads/RequestTexturePayload.java",
+            "com/quickskin/mod/networking/payloads/SendAnimationMetadataPayload.java",
+            "com/quickskin/mod/networking/payloads/SendTextureChunkPayload.java",
+            "com/quickskin/mod/networking/payloads/SendTexturePayload.java",
+            "com/quickskin/mod/networking/payloads/SyncAppearancePayload.java",
+            "com/quickskin/mod/networking/payloads/SyncServerConfigPayload.java",
+            "com/quickskin/mod/networking/payloads/TextureChunkPayload.java",
+            "com/quickskin/mod/networking/payloads/UpdateAppearancePayload.java",
+            "com/quickskin/mod/networking/payloads/UpdateServerConfigPayload.java",
+            "com/quickskin/mod/networking/payloads/UploadAnimationMetadataPayload.java",
+            "com/quickskin/mod/networking/payloads/UploadTexturePayload.java",
+            "com/quickskin/mod/platform/MinecraftCompat26_2.java",
+        ),
     )
-    val legacyOverrides = fileTree(legacy120JavaRoot) {
+    "1.21.1" -> Triple(
+        rootProject.file("common/src/legacy1_21_1/java"),
+        rootProject.file("common/src/v1_21_1/resources"),
+        setOf(
+            "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
+            "com/quickskin/mod/mixin/GuiSkinRendererMixin.java",
+            "com/quickskin/mod/platform/MinecraftCompat26_2.java",
+        ),
+    )
+    "1.21.11" -> Triple(
+        rootProject.file("common/src/legacy1_21_11/java"),
+        rootProject.file("common/src/v1_21_11/resources"),
+        setOf(
+            "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
+            "com/quickskin/mod/platform/MinecraftCompat26_2.java",
+        ),
+    )
+    "26.1.2" -> Triple(
+        rootProject.file("common/src/legacy26_1_2/java"),
+        rootProject.file("common/src/v26_1_2/resources"),
+        setOf("com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java"),
+    )
+    else -> null
+}
+
+if (legacyOverlay != null) {
+    val (legacyJavaRoot, legacyResourcesRoot, canonicalOnlyAfterLegacy) = legacyOverlay
+    val legacyOverrides = fileTree(legacyJavaRoot) {
         include("**/*.java")
     }.files.mapTo(linkedSetOf()) {
-        it.relativeTo(legacy120JavaRoot).invariantSeparatorsPath
+        it.relativeTo(legacyJavaRoot).invariantSeparatorsPath
     }
     val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
         dependsOn("stonecutterGenerate")
         from(generatedStonecutterJava) {
             exclude(legacyOverrides + canonicalOnlyAfterLegacy)
         }
-        from(legacy120JavaRoot)
+        from(legacyJavaRoot)
         into(consolidatedLegacyJava)
     }
 
     sourceSets {
         main {
             java.setSrcDirs(listOf(consolidatedLegacyJava))
-            resources.setSrcDirs(listOf(rootProject.file("common/src/legacy1_20_1/resources")))
+            resources.setSrcDirs(listOf(legacyResourcesRoot))
         }
     }
 
@@ -116,126 +157,6 @@ if (minecraftVersion == "1.20.1") {
     }
     tasks.matching { it.name == "sourcesJar" }.configureEach {
         dependsOn(prepareConsolidatedJava)
-    }
-
-    tasks.processResources {
-        from(rootProject.file("common/src/main/resources")) {
-            include("assets/quickskin/lang/**")
-        }
-    }
-} else if (minecraftVersion == "1.21.1") {
-    val canonicalOnlyAfter1211 = setOf(
-        "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
-        "com/quickskin/mod/mixin/GuiSkinRendererMixin.java",
-        "com/quickskin/mod/platform/MinecraftCompat26_2.java",
-    )
-    val legacyOverrides = fileTree(legacy1211JavaRoot) {
-        include("**/*.java")
-    }.files.mapTo(linkedSetOf()) {
-        it.relativeTo(legacy1211JavaRoot).invariantSeparatorsPath
-    }
-    val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
-        dependsOn("stonecutterGenerate")
-        from(generatedStonecutterJava) {
-            exclude(legacyOverrides + canonicalOnlyAfter1211)
-        }
-        from(legacy1211JavaRoot)
-        into(consolidatedLegacyJava)
-    }
-
-    sourceSets {
-        main {
-            java.setSrcDirs(listOf(consolidatedLegacyJava))
-            resources.setSrcDirs(listOf(rootProject.file("common/src/v1_21_1/resources")))
-        }
-    }
-
-    tasks.named("compileJava") {
-        dependsOn(prepareConsolidatedJava)
-    }
-    tasks.matching { it.name == "sourcesJar" }.configureEach {
-        dependsOn(prepareConsolidatedJava)
-    }
-
-    tasks.processResources {
-        from(rootProject.file("common/src/main/resources")) {
-            include("assets/quickskin/lang/**")
-        }
-    }
-} else if (minecraftVersion == "1.21.11") {
-    val canonicalOnlyAfter12111 = setOf(
-        "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
-        "com/quickskin/mod/platform/MinecraftCompat26_2.java",
-    )
-    val legacyOverrides = fileTree(legacy12111JavaRoot) {
-        include("**/*.java")
-    }.files.mapTo(linkedSetOf()) {
-        it.relativeTo(legacy12111JavaRoot).invariantSeparatorsPath
-    }
-    val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
-        dependsOn("stonecutterGenerate")
-        from(generatedStonecutterJava) {
-            exclude(legacyOverrides + canonicalOnlyAfter12111)
-        }
-        from(legacy12111JavaRoot)
-        into(consolidatedLegacyJava)
-    }
-
-    sourceSets {
-        main {
-            java.setSrcDirs(listOf(consolidatedLegacyJava))
-            resources.setSrcDirs(listOf(rootProject.file("common/src/v1_21_11/resources")))
-        }
-    }
-
-    tasks.named("compileJava") {
-        dependsOn(prepareConsolidatedJava)
-    }
-    tasks.matching { it.name == "sourcesJar" }.configureEach {
-        dependsOn(prepareConsolidatedJava)
-    }
-
-    tasks.processResources {
-        from(rootProject.file("common/src/main/resources")) {
-            include("assets/quickskin/lang/**")
-        }
-    }
-} else if (minecraftVersion == "26.1.2") {
-    val canonicalOnlyAfter2612 = setOf(
-        "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
-    )
-    val legacyOverrides = fileTree(legacy2612JavaRoot) {
-        include("**/*.java")
-    }.files.mapTo(linkedSetOf()) {
-        it.relativeTo(legacy2612JavaRoot).invariantSeparatorsPath
-    }
-    val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
-        dependsOn("stonecutterGenerate")
-        from(generatedStonecutterJava) {
-            exclude(legacyOverrides + canonicalOnlyAfter2612)
-        }
-        from(legacy2612JavaRoot)
-        into(consolidatedLegacyJava)
-    }
-
-    sourceSets {
-        main {
-            java.setSrcDirs(listOf(consolidatedLegacyJava))
-            resources.setSrcDirs(listOf(rootProject.file("common/src/v26_1_2/resources")))
-        }
-    }
-
-    tasks.named("compileJava") {
-        dependsOn(prepareConsolidatedJava)
-    }
-    tasks.matching { it.name == "sourcesJar" }.configureEach {
-        dependsOn(prepareConsolidatedJava)
-    }
-
-    tasks.processResources {
-        from(rootProject.file("common/src/main/resources")) {
-            include("assets/quickskin/lang/**")
-        }
     }
 } else if (minecraftVersion !in canonicalVersions) {
     sourceSets {
@@ -244,12 +165,22 @@ if (minecraftVersion == "1.20.1") {
             resources.setSrcDirs(listOf(rootProject.file("common/src/$versionDir/resources")))
         }
     }
+}
 
+if (legacyOverlay != null || minecraftVersion !in canonicalVersions) {
     tasks.processResources {
         from(rootProject.file("common/src/main/resources")) {
             include("assets/quickskin/lang/**")
         }
     }
+}
+
+// Keep every exposed common:<version>:test task valid. CI uses unitTestVersion as its fast stable
+// lane, while release verification may exercise the same loader-independent suite against every
+// generated/legacy overlay to catch source-set drift.
+sourceSets.test {
+    java.setSrcDirs(listOf(rootProject.file("common/src/test/java")))
+    resources.setSrcDirs(listOf(rootProject.file("common/src/test/resources")))
 }
 
 extensions.configure<LoomGradleExtensionAPI>("loom") {
@@ -270,6 +201,9 @@ dependencies {
     modImpl("dev.architectury:architectury:${versionProp("architectury_api_version")}")
 
     "implementation"("org.sejda.imageio:webp-imageio:0.1.6")
+
+    "testImplementation"("org.junit.jupiter:junit-jupiter:5.13.4")
+    "testRuntimeOnly"("org.junit.platform:junit-platform-launcher:1.13.4")
 }
 
 val javaVersion = versionProp("java_version").toInt()
@@ -284,80 +218,79 @@ tasks.withType<JavaCompile>().configureEach {
     options.release.set(javaVersion)
 }
 
-tasks.withType<Jar>().configureEach {
-    manifest.attributes.keys.filter { it.startsWith("Stonecutter-") }.forEach {
-        manifest.attributes.remove(it)
-    }
-    doFirst {
-        manifest.attributes.keys.filter { it.startsWith("Stonecutter-") }.forEach {
-            manifest.attributes.remove(it)
-        }
+tasks.test {
+    useJUnitPlatform()
+    systemProperty("java.awt.headless", "true")
+    testLogging {
+        events("failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
 }
 
-// Architectury 3.5.167 asks Loom for mixin mappings from every Loom project in the Gradle build.
-// A classic transform therefore reaches a 26.x no-remap extension and fails before transforming.
-// Recreate Architectury's property map while filtering that global mapping scan to classic Loom
-// projects. Projects with another mapping identifier are filtered exactly as Architectury does.
+// COMPATIBILITY QUARANTINE (Architectury Plugin 3.5.167): production transforms ask Loom for
+// mixin mappings from every Loom project, including incompatible 26.x no-remap nodes. The pinned
+// plugin exposes no public property-map hook, so keep its internal transformer types confined to
+// this block. Remove it once upstream scopes the scan. Projects with another mapping identifier
+// remain filtered exactly as Architectury does.
 gradle.projectsEvaluated {
     tasks.withType<TransformingTask>().configureEach {
         val targetPlatform = when {
-        name.endsWith("NeoForge") -> "neoforge"
-        name.endsWith("Forge") -> "forge"
-        else -> "fabric"
-    }
+            name.endsWith("NeoForge") -> "neoforge"
+            name.endsWith("Forge") -> "forge"
+            else -> "fabric"
+        }
 
         properties.set(providers.provider {
-        val architecturyExtension = project.extensions.getByType<ArchitectPluginExtension>()
-        val loomInterface = LoomInterface117(project)
-        val transformerClasspath =
-            (project.configurations.findByName("architecturyTransformerClasspath")
-                ?: project.configurations.getByName("compileClasspath"))
+            val architecturyExtension = project.extensions.getByType<ArchitectPluginExtension>()
+            val loomInterface = LoomInterface117(project)
+            val transformerClasspath =
+                (project.configurations.findByName("architecturyTransformerClasspath")
+                    ?: project.configurations.getByName("compileClasspath"))
 
-        val result = linkedMapOf(
-            "architectury.inject.injectables" to architecturyExtension.injectInjectables.toString(),
-            "architectury.unique.identifier" to legacyArchitecturyPackage,
-            "architectury.classpath" to transformerClasspath.files.joinToString(File.pathSeparator),
-            "architectury.platform.name" to targetPlatform,
-            "architectury.mcmeta.version" to "4",
-        )
+            val result = linkedMapOf(
+                "architectury.inject.injectables" to architecturyExtension.injectInjectables.toString(),
+                "architectury.unique.identifier" to legacyArchitecturyPackage,
+                "architectury.classpath" to transformerClasspath.files.joinToString(File.pathSeparator),
+                "architectury.platform.name" to targetPlatform,
+                "architectury.mcmeta.version" to "4",
+            )
 
-        if (targetPlatform != "neoforge") {
-            if (targetPlatform == "forge" && !loomInterface.addRefmapForForge) {
-                result["architectury.forge.fix_mixins"] = "false"
-            } else if (loomInterface.legacyMixinApEnabled) {
-                result["architectury.refmap.name"] = loomInterface.refmapName
+            if (targetPlatform != "neoforge") {
+                if (targetPlatform == "forge" && !loomInterface.addRefmapForForge) {
+                    result["architectury.forge.fix_mixins"] = "false"
+                } else if (loomInterface.legacyMixinApEnabled) {
+                    result["architectury.refmap.name"] = loomInterface.refmapName
+                }
+
+                if (!loomInterface.disableObfuscation) {
+                    result["architectury.srg.mappings"] = loomInterface.tinyMappingsWithSrg.toString()
+                }
             }
 
             if (!loomInterface.disableObfuscation) {
-                result["architectury.srg.mappings"] = loomInterface.tinyMappingsWithSrg.toString()
-            }
-        }
+                val currentMappings = LoomGradleExtension.get(project).mappingConfiguration.mappingsIdentifier
+                val mixinMappings = mutableListOf<File>()
 
-        if (!loomInterface.disableObfuscation) {
-            val currentMappings = LoomGradleExtension.get(project).mappingConfiguration.mappingsIdentifier
-            val mixinMappings = mutableListOf<File>()
-
-            rootProject.allprojects
-                .filter {
-                    it.pluginManager.hasPlugin("dev.architectury.loom") &&
-                        !it.pluginManager.hasPlugin("dev.architectury.loom-no-remap")
-                }
-                .forEach { loomProject ->
-                    val loomExtension = LoomGradleExtension.get(loomProject)
-                    if (loomExtension.mappingConfiguration.mappingsIdentifier == currentMappings) {
-                        SourceSetHelper.getSourceSets(loomProject).forEach { sourceSet ->
-                            val mappingFile = AnnotationProcessorInvoker.getMixinMappingsForSourceSet(
-                                loomProject,
-                                sourceSet,
-                            )
-                            if (mappingFile.exists()) mixinMappings += mappingFile
+                rootProject.allprojects
+                    .filter {
+                        it.pluginManager.hasPlugin("dev.architectury.loom") &&
+                            !it.pluginManager.hasPlugin("dev.architectury.loom-no-remap")
+                    }
+                    .forEach { loomProject ->
+                        val loomExtension = LoomGradleExtension.get(loomProject)
+                        if (loomExtension.mappingConfiguration.mappingsIdentifier == currentMappings) {
+                            SourceSetHelper.getSourceSets(loomProject).forEach { sourceSet ->
+                                val mappingFile = AnnotationProcessorInvoker.getMixinMappingsForSourceSet(
+                                    loomProject,
+                                    sourceSet,
+                                )
+                                if (mappingFile.exists()) mixinMappings += mappingFile
+                            }
                         }
                     }
-                }
 
-            result["architectury.mixin.mappings"] = mixinMappings.joinToString(File.pathSeparator)
-        }
+                result["architectury.mixin.mappings"] = mixinMappings.joinToString(File.pathSeparator)
+            }
 
             result
         })

@@ -15,7 +15,6 @@ import re
 import shutil
 import signal
 import socket
-import struct
 import subprocess
 import sys
 import time
@@ -89,6 +88,25 @@ EXPECTED_SCREENSHOT_STEPS: dict[tuple[str, str], set[str]] = {
     ("propagation-live", "client_a"): {"baseline", "apply_live"},
     ("propagation-live", "client_b"): {"baseline", "observe_before", "await_live_change"},
     ("full", "client_a"): set(EXPECTED_STEPS[("full", "client_a")]),
+}
+
+# These comparisons assert only invariant visual change, never renderer-specific golden pixels.
+# They catch a frozen animation, an ignored apply, or a reused screenshot while tolerating lighting,
+# GPU, UI-scale, and version differences.
+DISTINCT_SCREENSHOT_PAIRS: dict[tuple[str, str], list[tuple[str, str, float]]] = {
+    ("phase0-smoke", "client_a"): [("baseline", "apply_local_skin", 0.00001)],
+    ("propagation", "client_a"): [("baseline", "apply_local_look", 0.00001)],
+    ("propagation", "client_b"): [("baseline", "observe_a", 0.00001)],
+    ("propagation-live", "client_a"): [("baseline", "apply_live", 0.00001)],
+    ("propagation-live", "client_b"): [
+        ("observe_before", "await_live_change", 0.00001)
+    ],
+    ("full", "client_a"): [
+        ("baseline", "local_skin_apply", 0.00001),
+        ("model_slim", "model_classic", 0.00001),
+        ("animated_cape_apply", "animated_cape_advance", 0.00001),
+        ("known_cape_apply", "hd_cape_no_downscale", 0.00001),
+    ],
 }
 
 
@@ -539,15 +557,106 @@ def wait_for_marker(
     raise RuntimeFailure(f"timed out waiting for {role} marker {marker}")
 
 
-def png_width(path: Path) -> int:
+def inspect_screenshot(path: Path) -> dict[str, Any]:
+    """Decode a screenshot and reject corrupt, implausible, or effectively blank evidence."""
+
     try:
-        with path.open("rb") as stream:
-            header = stream.read(24)
-        if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
-            return -1
-        return struct.unpack(">I", header[16:20])[0]
-    except OSError:
-        return -1
+        from PIL import Image, ImageStat, UnidentifiedImageError
+    except ImportError as exc:  # pragma: no cover - CI installs the locked E2E requirements
+        raise RuntimeFailure("Pillow is required for screenshot pixel validation") from exc
+
+    try:
+        Image.MAX_IMAGE_PIXELS = 20_000_000
+        with Image.open(path) as image:
+            if image.format != "PNG":
+                raise RuntimeFailure(f"screenshot is not a PNG: {path}")
+            width, height = image.size
+            if width < 640 or height < 360 or width * height > Image.MAX_IMAGE_PIXELS:
+                raise RuntimeFailure(
+                    f"screenshot dimensions are implausible: {path} ({width}x{height})"
+                )
+            image.load()
+            rgb = image.convert("RGB")
+            sample = rgb.resize((160, 90), Image.Resampling.BILINEAR)
+            luma = sample.convert("L")
+            entropy = float(luma.entropy())
+            channel_stddev = [float(value) for value in ImageStat.Stat(sample).stddev]
+            palette_counts = sample.quantize(colors=32).getcolors() or []
+            sample_pixels = sample.width * sample.height
+            meaningful_colors = sum(
+                count >= max(2, sample_pixels // 1000) for count, _ in palette_counts
+            )
+            luma_histogram = luma.histogram()
+            dark_fraction = sum(luma_histogram[:8]) / sample_pixels
+            light_fraction = sum(luma_histogram[248:]) / sample_pixels
+            if (
+                entropy < 0.75
+                or max(channel_stddev) < 2.0
+                or meaningful_colors < 4
+                or dark_fraction > 0.98
+                or light_fraction > 0.995
+            ):
+                raise RuntimeFailure(
+                    f"screenshot is effectively blank: {path} "
+                    f"(entropy={entropy:.3f}, colors={meaningful_colors}, "
+                    f"dark={dark_fraction:.3f}, light={light_fraction:.3f})"
+                )
+            pixel_sha256 = hashlib.sha256(rgb.tobytes()).hexdigest()
+    except RuntimeFailure:
+        raise
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise RuntimeFailure(f"screenshot cannot be decoded: {path}: {exc}") from exc
+
+    return {
+        "width": width,
+        "height": height,
+        "file_sha256": sha256(path),
+        "pixel_sha256": pixel_sha256,
+        "luma_entropy": round(entropy, 3),
+        "meaningful_colors": meaningful_colors,
+        "dark_fraction": round(dark_fraction, 4),
+        "light_fraction": round(light_fraction, 4),
+    }
+
+
+def compare_screenshots(
+    first: Path, second: Path, minimum_changed_fraction: float
+) -> dict[str, Any]:
+    try:
+        from PIL import Image, ImageChops
+    except ImportError as exc:  # pragma: no cover - CI installs the locked E2E requirements
+        raise RuntimeFailure("Pillow is required for screenshot pixel validation") from exc
+
+    try:
+        with Image.open(first) as first_image, Image.open(second) as second_image:
+            first_rgb = first_image.convert("RGB")
+            second_rgb = second_image.convert("RGB")
+            if first_rgb.size != second_rgb.size:
+                raise RuntimeFailure(
+                    f"screenshots changed dimensions unexpectedly: {first} {first_rgb.size}, "
+                    f"{second} {second_rgb.size}"
+                )
+            difference = ImageChops.difference(first_rgb, second_rgb).convert("L")
+            histogram = difference.histogram()
+            pixels = difference.width * difference.height
+            changed_fraction = sum(histogram[8:]) / pixels
+            rms_difference = (
+                sum(value * value * count for value, count in enumerate(histogram)) / pixels
+            ) ** 0.5
+    except RuntimeFailure:
+        raise
+    except (OSError, ValueError) as exc:
+        raise RuntimeFailure(f"cannot compare screenshots {first} and {second}: {exc}") from exc
+
+    if changed_fraction < minimum_changed_fraction:
+        raise RuntimeFailure(
+            f"screenshots expected to change are visually identical: {first} -> {second} "
+            f"(changed={changed_fraction:.7f}, required={minimum_changed_fraction:.7f})"
+        )
+    return {
+        "changed_fraction": round(changed_fraction, 7),
+        "rms_difference": round(rms_difference, 3),
+    }
 
 
 def validate_report(game_dir: Path, row: dict[str, Any], scenario: str, role: str) -> dict[str, Any]:
@@ -574,17 +683,34 @@ def validate_report(game_dir: Path, row: dict[str, Any], scenario: str, role: st
     if report.get("status") != "pass" or any(step.get("status") != "pass" for step in steps):
         raise RuntimeFailure(f"{role} report contains a failed/timed-out step")
     screenshot_steps = EXPECTED_SCREENSHOT_STEPS[(scenario, role)]
+    screenshot_paths: dict[str, Path] = {}
+    screenshot_validation: dict[str, dict[str, Any]] = {}
     for step in steps:
         screenshot = step.get("screenshot")
         if step["name"] in screenshot_steps and not screenshot:
             raise RuntimeFailure(f"{role}/{step['name']} omitted its required screenshot")
         if screenshot:
-            screenshot_path = game_dir / "screenshots" / screenshot
-            width = png_width(screenshot_path)
-            if width < 640:
-                raise RuntimeFailure(
-                    f"{role}/{step['name']} screenshot missing or undersized: {screenshot_path} ({width}px)"
-                )
+            screenshots_root = (game_dir / "screenshots").resolve()
+            screenshot_path = (screenshots_root / screenshot).resolve()
+            if screenshots_root not in screenshot_path.parents:
+                raise RuntimeFailure(f"{role}/{step['name']} screenshot escapes its profile")
+            screenshot_paths[step["name"]] = screenshot_path
+            screenshot_validation[step["name"]] = inspect_screenshot(screenshot_path)
+    pair_validation: dict[str, dict[str, Any]] = {}
+    for first_step, second_step, minimum_change in DISTINCT_SCREENSHOT_PAIRS.get(
+        (scenario, role), []
+    ):
+        if first_step not in screenshot_paths or second_step not in screenshot_paths:
+            raise RuntimeFailure(
+                f"pixel comparison contract is missing {role}/{first_step} or {role}/{second_step}"
+            )
+        pair_validation[f"{first_step}->{second_step}"] = compare_screenshots(
+            screenshot_paths[first_step], screenshot_paths[second_step], minimum_change
+        )
+    report["pixel_validation"] = {
+        "screenshots": screenshot_validation,
+        "comparisons": pair_validation,
+    }
     return report
 
 

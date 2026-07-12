@@ -28,10 +28,25 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+
+      - name: Verify exact Gradle bootstrap checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd gradle/wrapper && sha256sum --check --strict gradle-wrapper.jar.sha256)
+          distribution_hash="$(tr -d '\r\n' < gradle/wrapper/gradle-9.4.0-bin.zip.sha256)"
+          grep --fixed-strings --line-regexp "distributionSha256Sum=$distribution_hash" \
+            gradle/wrapper/gradle-wrapper.properties
 
       - name: Install all required JDKs
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
         with:
           distribution: temurin
           java-version: |
@@ -40,19 +55,22 @@ jobs:
             25
 
       - name: Install Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.13"
 
       - name: Configure Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
-      - name: Build ten production artifacts and ten E2E harnesses
+      - name: Validate central release matrix
+        run: python scripts/release/matrix.py --matrix release/release-matrix.json > /dev/null
+
+      - name: Build all production artifacts and E2E harnesses
         run: >-
           ./gradlew --no-daemon --no-parallel --stacktrace
           clean buildAllLanes buildAllE2EHarnesses
 
-      - name: Stage and verify the ten production artifacts
+      - name: Stage and verify all production artifacts
         run: >-
           python scripts/release/verify_release.py
           --matrix release/release-matrix.json
@@ -71,7 +89,7 @@ jobs:
           printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
 
       - name: Upload immutable E2E input bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: scheduled-e2e-input
           path: build/release/
@@ -90,11 +108,14 @@ jobs:
       matrix: ${{ fromJSON(needs.build.outputs.anchors) }}
 
     steps:
-      - name: Check out orchestration code
-        uses: actions/checkout@v6
+      - name: Check out exact tested orchestration code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Install all required JDKs
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
         with:
           distribution: temurin
           java-version: |
@@ -103,17 +124,14 @@ jobs:
             25
 
       - name: Install Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.13"
 
-      - name: Install packaged-runtime launcher
-        run: python -m pip install --requirement e2e/requirements.txt
-
-      - name: Configure Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-read-only: true
+      - name: Install locked packaged-runtime launcher
+        run: >-
+          python -m pip install --only-binary=:all:
+          --requirement e2e/requirements.txt
 
       - name: Install software-rendering runtime
         shell: bash
@@ -139,18 +157,19 @@ jobs:
             libxxf86vm1
 
       - name: Download immutable E2E input bundle
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: scheduled-e2e-input
           path: build/release
 
-      - name: Reverify staged bytes and build identity
+      - name: Reverify staged bytes, matrix, and source commit
         run: python scripts/release/verify_release.py --verify-staged
 
       - name: Run four packaged-JAR scenarios
         shell: bash
         env:
           E2E_ROW_JSON: ${{ toJSON(matrix) }}
+          E2E_SCENARIOS: ${{ matrix.scenarios }}
         run: |
           set -euo pipefail
           xvfb-run --auto-servernum \
@@ -160,11 +179,11 @@ jobs:
               --row-json "$E2E_ROW_JSON" \
               --artifacts-manifest build/release/artifacts.json \
               --packaged \
-              --scenarios phase0-smoke,propagation,propagation-live,full
+              --scenarios "$E2E_SCENARIOS"
 
       - name: Upload E2E evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: scheduled-e2e-${{ matrix.id }}
           path: e2e-out/

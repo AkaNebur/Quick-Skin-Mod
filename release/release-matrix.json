@@ -1,5 +1,7 @@
 {
   "schema_version": 1,
+  "lane_count": 10,
+  "unit_test_version": "1.21.1",
   "project": {
     "name": "Quick Skin",
     "mod_id": "quickskin",
@@ -214,7 +216,8 @@
       "installer": "fabric-1.1.0",
       "fabric_api": "0.92.6+1.20.1",
       "architectury": {"kind": "maven", "version": "9.2.14"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": false
     },
     {
       "artifact_node": "forge-1.20.1",
@@ -227,7 +230,8 @@
       "loader_version": "1.20.1-47.4.9",
       "installer": "forge-1.20.1-47.4.9",
       "architectury": {"kind": "maven", "version": "9.2.14"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": true
     },
     {
       "artifact_node": "fabric-1.21.1",
@@ -241,7 +245,8 @@
       "installer": "fabric-1.1.0",
       "fabric_api": "0.110.0+1.21.1",
       "architectury": {"kind": "maven", "version": "13.0.6"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": false
     },
     {
       "artifact_node": "neoforge-1.21.1",
@@ -254,7 +259,8 @@
       "loader_version": "21.1.77",
       "installer": "neoforge-21.1.77",
       "architectury": {"kind": "maven", "version": "13.0.6"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": false
     },
     {
       "artifact_node": "fabric-1.21.11",
@@ -268,7 +274,8 @@
       "installer": "fabric-1.1.0",
       "fabric_api": "0.141.3+1.21.11",
       "architectury": {"kind": "maven", "version": "19.0.1"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": true
     },
     {
       "artifact_node": "neoforge-1.21.11",
@@ -281,7 +288,8 @@
       "loader_version": "21.11.38-beta",
       "installer": "neoforge-21.11.38-beta",
       "architectury": {"kind": "maven", "version": "19.0.1"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": false
     },
     {
       "artifact_node": "fabric-26.1.2",
@@ -295,7 +303,8 @@
       "installer": "fabric-1.1.0",
       "fabric_api": "0.151.0+26.1.2",
       "architectury": {"kind": "maven", "version": "20.0.6"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": false
     },
     {
       "artifact_node": "neoforge-26.1.2",
@@ -308,7 +317,8 @@
       "loader_version": "26.1.2.76",
       "installer": "neoforge-26.1.2.76",
       "architectury": {"kind": "maven", "version": "20.0.6"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": false
     },
     {
       "artifact_node": "fabric-26.2",
@@ -322,7 +332,8 @@
       "installer": "fabric-1.1.0",
       "fabric_api": "0.152.2+26.2",
       "architectury": {"kind": "maven", "version": "21.0.2"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": false
     },
     {
       "artifact_node": "neoforge-26.2",
@@ -335,12 +346,18 @@
       "loader_version": "26.2.0.6-beta",
       "installer": "neoforge-26.2.0.6-beta",
       "architectury": {"kind": "maven", "version": "21.0.2"},
-      "scheduled_anchor": true
+      "scheduled_anchor": true,
+      "pr_anchor": true
     }
   ],
   "scheduled_scenarios": [
     "phase0-smoke",
     "propagation",
+    "propagation-live",
+    "full"
+  ],
+  "pr_scenarios": [
+    "phase0-smoke",
     "propagation-live",
     "full"
   ]

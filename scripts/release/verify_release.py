@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -326,10 +327,16 @@ def build_manifest(
         )
         records.append(verified)
 
-    require(len({record["sha256"] for record in records}) == 10, "production jar hashes are not unique")
+    lane_count = data["lane_count"]
+    require(
+        len({record["sha256"] for record in records}) == lane_count,
+        "production jar hashes are not unique",
+    )
     return {
         "schema_version": 1,
         "matrix": matrix_path.relative_to(repo).as_posix(),
+        "matrix_sha256": sha256(matrix_path),
+        "lane_count": lane_count,
         "mod_version": mod_version,
         "git_commit": git_commit(repo),
         "artifacts": records,
@@ -340,18 +347,24 @@ def verify_staged_manifest(
     stage: Path,
     manifest: dict[str, Any],
     data: dict[str, Any],
+    matrix_path: Path,
     mod_version: str,
     expected_commit: str | None,
 ) -> None:
     require(manifest.get("schema_version") == 1, "unsupported artifact manifest schema")
+    require(manifest.get("lane_count") == data["lane_count"], "artifact manifest lane count mismatch")
+    require(
+        matrix_path.is_file() and manifest.get("matrix_sha256") == sha256(matrix_path),
+        "artifact manifest release-matrix hash mismatch",
+    )
     require(manifest.get("mod_version") == mod_version, "artifact manifest version mismatch")
     require(manifest.get("git_commit") == expected_commit, "artifact manifest commit mismatch")
     records = manifest.get("artifacts", [])
     require(
         isinstance(records, list)
-        and len(records) == 10
+        and len(records) == data["lane_count"]
         and all(isinstance(record, dict) for record in records),
-        "artifact manifest must contain exactly 10 object records",
+        f"artifact manifest must contain lane_count={data['lane_count']} object records",
     )
     artifact_by_node = {artifact["artifact_node"]: artifact for artifact in data["artifacts"]}
     require(
@@ -422,21 +435,31 @@ def main() -> int:
         mod_version = properties.get(data["project"]["mod_version_property"])
         require(bool(mod_version), "mod_version is missing from gradle.properties")
         current_commit = git_commit(repo)
+        github_commit = os.environ.get("GITHUB_SHA")
+        if github_commit:
+            require(
+                current_commit == github_commit,
+                f"checkout commit {current_commit!r} does not equal GITHUB_SHA {github_commit!r}",
+            )
         if args.verify_staged:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            verify_staged_manifest(stage, manifest, data, mod_version, current_commit)
-            print(f"Verified 10 staged production jars and 10 packaged E2E harnesses in {stage}")
+            require(isinstance(manifest, dict), "artifact manifest root must be an object")
+            verify_staged_manifest(stage, manifest, data, matrix_path, mod_version, current_commit)
+            print(
+                f"Verified {data['lane_count']} staged production jars and "
+                f"{data['lane_count']} packaged E2E harnesses in {stage}"
+            )
             return 0
 
         manifest = build_manifest(repo, matrix_path, stage, mod_version, data)
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        verify_staged_manifest(stage, manifest, data, mod_version, current_commit)
+        verify_staged_manifest(stage, manifest, data, matrix_path, mod_version, current_commit)
     except (MatrixError, VerificationError, OSError, json.JSONDecodeError) as exc:
         print(f"release verification failed: {exc}", file=sys.stderr)
         return 1
 
-    print(f"Verified and staged 10 production jars at {stage}")
+    print(f"Verified and staged {data['lane_count']} production jars at {stage}")
     for record in manifest["artifacts"]:
         print(f"  {record['artifact_node']}: {record['sha256']}  {record['filename']}")
     print(f"Wrote {manifest_path}")

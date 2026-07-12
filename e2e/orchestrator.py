@@ -88,13 +88,21 @@ def scenarios_for(data: dict[str, Any], row: dict[str, Any], args: argparse.Name
     return scenarios
 
 
-def read_manifest(path: Path) -> dict[str, Any]:
+def read_manifest(path: Path, expected_lane_count: int) -> dict[str, Any]:
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"cannot read artifact manifest {path}: {exc}") from exc
-    if manifest.get("schema_version") != 1 or len(manifest.get("artifacts", [])) != 10:
-        raise ValueError("artifact manifest must be schema 1 with exactly 10 production records")
+    if not isinstance(manifest, dict):
+        raise ValueError("artifact manifest root must be an object")
+    if (
+        manifest.get("schema_version") != 1
+        or manifest.get("lane_count") != expected_lane_count
+        or len(manifest.get("artifacts", [])) != expected_lane_count
+    ):
+        raise ValueError(
+            "artifact manifest must be schema 1 and match the release-matrix lane count"
+        )
     return manifest
 
 
@@ -135,7 +143,11 @@ def main() -> int:
     try:
         data = load_matrix(matrix_path)
         rows = select_rows(data, args)
-        manifest = read_manifest(manifest_path) if manifest_path.exists() else None
+        manifest = (
+            read_manifest(manifest_path, data["lane_count"])
+            if manifest_path.exists()
+            else None
+        )
         if args.list:
             print_rows(data, rows, args, manifest)
             return 0

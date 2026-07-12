@@ -75,12 +75,51 @@ KEY_KINDS = [
     "live_01_before", "live_02_after", "propagation_observe",
 ]
 
-_PREFIX = re.compile(r"^v[0-9]+(?:_[0-9]+)*_")
+_PREFIX = re.compile(r"^v?[0-9]+(?:[._][0-9]+)*_")
+_ORDINAL = re.compile(r"^[0-9]+[a-z]?_")
 _SUFFIX = re.compile(r"_client_[ab]\.png$")
 
 
 def kind_of(png: Path) -> str:
-    return _SUFFIX.sub("", _PREFIX.sub("", png.name))
+    kind = _SUFFIX.sub("", _PREFIX.sub("", png.name))
+    # Smoke/propagation names begin with a capture ordinal (01_, 02_, 03_, ...), while full_* and
+    # live_* include their ordinal in the expectation key. Normalize only the leading bare ordinal.
+    return _ORDINAL.sub("", kind)
+
+
+def screenshot_rows() -> list[tuple[Path, str, str, str]]:
+    """Return only harness screenshots, excluding texture/cache PNGs inside E2E profiles."""
+
+    matrix_path = REPO / "release" / "release-matrix.json"
+    matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+    runtime_rows = matrix["runtimes"]
+    screenshots: list[tuple[Path, str, str, str]] = []
+    profiles_root = OUT_ROOT / "profiles"
+    if profiles_root.is_dir():
+        for profile in sorted(path for path in profiles_root.iterdir() if path.is_dir()):
+            identity = next(
+                (
+                    row
+                    for row in runtime_rows
+                    if profile.name.startswith(
+                        f"{row['artifact_node']}--{row['runtime_version']}--"
+                    )
+                ),
+                None,
+            )
+            if identity is None:
+                continue
+            for client in sorted(profile.glob("client_[ab]")):
+                for png in sorted((client / "screenshots").glob("*.png")):
+                    screenshots.append(
+                        (
+                            png,
+                            identity["runtime_version"],
+                            identity["loader"],
+                            client.name.removeprefix("client_"),
+                        )
+                    )
+    return screenshots
 
 
 def main() -> int:
@@ -91,12 +130,7 @@ def main() -> int:
 
     combo_filter = set(args.combos.split(",")) if args.combos else None
     manifest = []
-    for png in sorted(OUT_ROOT.rglob("*.png")):
-        rel = png.relative_to(OUT_ROOT)
-        parts = rel.parts  # <version>/<loader>/<client_x>/<file>
-        if len(parts) < 4:
-            continue
-        version, loader = parts[0], parts[1]
+    for png, version, loader, role in screenshot_rows():
         if combo_filter and f"{version}/{loader}" not in combo_filter:
             continue
         kind = kind_of(png)
@@ -105,7 +139,7 @@ def main() -> int:
         expectation = EXPECTATIONS.get(kind, "(no expectation defined — describe what is shown)")
         manifest.append({
             "path": str(png),
-            "label": f"{version}/{loader}/{parts[2].replace('client_', '')}:{kind}",
+            "label": f"{version}/{loader}/{role}:{kind}",
             "kind": kind,
             "expectation": expectation,
         })

@@ -1,10 +1,10 @@
 import dev.kikugie.stonecutter.controller.flag.StonecutterFlag
 import dev.architectury.plugin.ArchitectPluginExtension
 import dev.architectury.plugin.loom.LoomInterface
+import groovy.json.JsonSlurper
 import net.fabricmc.loom.LoomGradleExtension
 import net.fabricmc.loom.build.mixin.AnnotationProcessorInvoker
 import net.fabricmc.loom.util.gradle.SourceSetHelper
-import org.gradle.jvm.tasks.Jar
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 
@@ -28,24 +28,68 @@ stonecutter {
     }
 }
 
-// Stonecutter normally annotates every Jar manifest with node metadata. The parity gates require the
-// production resources to match the legacy oracle, so remove only those four generated keys after
-// every plugin has finished configuring the manifest.
-allprojects {
-    tasks.withType<Jar>().configureEach {
-        doFirst {
-            manifest.attributes.keys
-                .filter { it.startsWith("Stonecutter-") }
-                .forEach { manifest.attributes.remove(it) }
-        }
+val releaseMatrixFile = file("release/release-matrix.json")
+check(releaseMatrixFile.isFile) { "Missing central release matrix: $releaseMatrixFile" }
+val releaseMatrix = JsonSlurper().parse(releaseMatrixFile) as Map<*, *>
+val releaseArtifacts = (releaseMatrix["artifacts"] as? List<*>)
+    ?.map { artifact -> artifact as? Map<*, *> ?: error("Invalid artifact row in $releaseMatrixFile") }
+    ?: error("Missing artifact inventory in $releaseMatrixFile")
+val releaseLaneCount = (releaseMatrix["lane_count"] as? Number)?.toInt()
+    ?: error("Missing lane_count in $releaseMatrixFile")
+val unitTestVersion = releaseMatrix["unit_test_version"]?.toString()
+    ?: error("Missing unit_test_version in $releaseMatrixFile")
+check(releaseArtifacts.size == releaseLaneCount) {
+    "Release artifact inventory has ${releaseArtifacts.size} rows; expected lane_count=$releaseLaneCount"
+}
+val releaseNodeNames = releaseArtifacts.map { artifact ->
+    val loader = artifact["loader"]?.toString() ?: error("Release artifact is missing loader")
+    val version = artifact["artifact_version"]?.toString()
+        ?: error("Release artifact is missing artifact_version")
+    val node = artifact["artifact_node"]?.toString()
+        ?: error("Release artifact is missing artifact_node")
+    check(node == "$loader-$version") { "Release node $node does not match $loader $version" }
+    val propertySuffix = version.replace(".", "_")
+    check(rootProject.property("minecraft_version_$propertySuffix").toString() == version) {
+        "Minecraft Gradle property disagrees with release lane $node"
+    }
+    check(rootProject.property("java_version_$propertySuffix").toString() == artifact["java"].toString()) {
+        "Java Gradle property disagrees with release lane $node"
+    }
+    node
+}
+check(releaseNodeNames.distinct().size == releaseNodeNames.size) {
+    "Duplicate release artifact node in $releaseMatrixFile"
+}
+check(releaseArtifacts.any { it["artifact_version"].toString() == unitTestVersion }) {
+    "Unit-test version $unitTestVersion is not a release lane"
+}
+val releaseArtifactTasks = releaseArtifacts.map { artifact ->
+    artifact["gradle_task"]?.toString() ?: error("Release artifact is missing gradle_task")
+}
+val releaseHarnessTasks = releaseArtifacts.map { artifact ->
+    artifact["harness_task"]?.toString() ?: error("Release artifact is missing harness_task")
+}
+releaseArtifacts.forEachIndexed { index, artifact ->
+    val loader = artifact["loader"].toString()
+    val version = artifact["artifact_version"].toString()
+    val prefix = ":$loader:$version:"
+    val expectedProductionTask = prefix + if (version.startsWith("26.")) "shadowJar" else "remapJar"
+    val expectedHarnessTask =
+        prefix + if (version.startsWith("26.")) "e2eHarnessJar" else "remapE2EHarnessJar"
+    check(releaseArtifactTasks[index] == expectedProductionTask) {
+        "Release production task ${releaseArtifactTasks[index]} must be $expectedProductionTask"
+    }
+    check(releaseHarnessTasks[index] == expectedHarnessTask) {
+        "Release harness task ${releaseHarnessTasks[index]} must be $expectedHarnessTask"
     }
 }
 
-// Architectury's dev-run transformer asks classic Loom for mixin mappings from every Loom
-// project in the build. Its global scan reaches the 26.x no-remap nodes and fails before a
-// run configuration can launch. Wrap only the classic loader projects' Loom interface and
-// filter that one global query with the same mapping-identifier rule used by production
-// transforms. All other Loom operations delegate unchanged.
+// COMPATIBILITY QUARANTINE (Architectury Plugin 3.5.167): its dev-run transformer asks classic
+// Loom for mixin mappings from every Loom project in the build. The global scan reaches 26.x
+// no-remap nodes and fails before a run configuration can launch. There is no public extension
+// point for this query in the pinned plugin, so this is the only block allowed to reflect into
+// Architectury state. Remove it once upstream scopes getAllMixinMappings to compatible Loom
+// projects. All other Loom operations delegate unchanged.
 gradle.projectsEvaluated {
     allprojects
         .filter {
@@ -101,36 +145,37 @@ gradle.projectsEvaluated {
         }
 }
 
+val validateReleaseLaneInventory = tasks.register("validateReleaseLaneInventory") {
+    group = "verification"
+    description = "Checks that every central release-matrix lane resolves to real Gradle tasks."
+    inputs.file(releaseMatrixFile)
+    doLast {
+        (releaseArtifactTasks + releaseHarnessTasks).forEach { taskPath ->
+            tasks.getByPath(taskPath)
+        }
+    }
+}
+
+val testStableLane = tasks.register("testStableLane") {
+    group = "verification"
+    description = "Runs loader-independent JUnit tests on common $unitTestVersion."
+    dependsOn(":common:$unitTestVersion:test")
+}
+
+tasks.register("check") {
+    group = "verification"
+    description = "Runs the central lane and loader-independent verification suite."
+    dependsOn(validateReleaseLaneInventory, testStableLane)
+}
+
 tasks.register("buildAllLanes") {
     group = "build"
-    description = "Builds every production Quick Skin loader artifact in one Gradle invocation."
-    dependsOn(
-        ":fabric:1.20.1:remapJar",
-        ":forge:1.20.1:remapJar",
-        ":fabric:1.21.1:remapJar",
-        ":neoforge:1.21.1:remapJar",
-        ":fabric:1.21.11:remapJar",
-        ":neoforge:1.21.11:remapJar",
-        ":fabric:26.1.2:shadowJar",
-        ":neoforge:26.1.2:shadowJar",
-        ":fabric:26.2:shadowJar",
-        ":neoforge:26.2:shadowJar",
-    )
+    description = "Builds all $releaseLaneCount production artifacts from the release matrix."
+    dependsOn(validateReleaseLaneInventory, testStableLane, releaseArtifactTasks)
 }
 
 tasks.register("buildAllE2EHarnesses") {
     group = "verification"
-    description = "Builds the separate packaged-runtime E2E harness for every release artifact."
-    dependsOn(
-        ":fabric:1.20.1:remapE2EHarnessJar",
-        ":forge:1.20.1:remapE2EHarnessJar",
-        ":fabric:1.21.1:remapE2EHarnessJar",
-        ":neoforge:1.21.1:remapE2EHarnessJar",
-        ":fabric:1.21.11:remapE2EHarnessJar",
-        ":neoforge:1.21.11:remapE2EHarnessJar",
-        ":fabric:26.1.2:e2eHarnessJar",
-        ":neoforge:26.1.2:e2eHarnessJar",
-        ":fabric:26.2:e2eHarnessJar",
-        ":neoforge:26.2:e2eHarnessJar",
-    )
+    description = "Builds all $releaseLaneCount packaged-runtime E2E harnesses from the release matrix."
+    dependsOn(validateReleaseLaneInventory, releaseHarnessTasks)
 }

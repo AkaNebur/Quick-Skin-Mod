@@ -8,7 +8,9 @@ plugins {
     `maven-publish`
 }
 
-val minecraftVersion = "1.20.1"
+apply(from = rootProject.file("gradle/archive-conventions.gradle.kts"))
+
+val minecraftVersion = stonecutter.current.version
 val commonProjectPath = requireNotNull(stonecutter.node.sibling("common")).hierarchy.toString()
 val commonProject = project(commonProjectPath)
 evaluationDependsOn(commonProjectPath)
@@ -91,6 +93,9 @@ apply(plugin = "dev.architectury.loom")
 apply(plugin = "architectury-plugin")
 apply(plugin = "com.gradleup.shadow")
 
+fun Project.versionProp(base: String): String =
+    rootProject.property("${base}_${minecraftVersion.replace(".", "_")}") as String
+
 group = rootProject.property("maven_group") as String
 version = rootProject.property("mod_version") as String
 
@@ -159,11 +164,11 @@ configurations {
 }
 
 dependencies {
-    "minecraft"("net.minecraft:minecraft:${rootProject.property("minecraft_version_1_20_1")}")
+    "minecraft"("net.minecraft:minecraft:${versionProp("minecraft_version")}")
     "mappings"(project.extensions.getByType<LoomGradleExtensionAPI>().officialMojangMappings())
-    "forge"("net.minecraftforge:forge:${rootProject.property("forge_version_1_20_1")}")
+    "forge"("net.minecraftforge:forge:${versionProp("forge_version")}")
     "modImplementation"(
-        "dev.architectury:architectury-forge:${rootProject.property("architectury_api_version_1_20_1")}"
+        "dev.architectury:architectury-forge:${versionProp("architectury_api_version")}"
     )
 
     "common"(project.files(commonProject.tasks.named("jar")))
@@ -171,26 +176,16 @@ dependencies {
     "shadowBundle"("org.sejda.imageio:webp-imageio:0.1.6")
 }
 
+val javaVersion = versionProp("java_version").toInt()
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(17))
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    toolchain.languageVersion.set(JavaLanguageVersion.of(javaVersion))
+    sourceCompatibility = JavaVersion.toVersion(javaVersion)
+    targetCompatibility = JavaVersion.toVersion(javaVersion)
     withSourcesJar()
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release.set(17)
-}
-
-tasks.withType<Jar>().configureEach {
-    manifest.attributes.keys.filter { it.startsWith("Stonecutter-") }.forEach {
-        manifest.attributes.remove(it)
-    }
-    doFirst {
-        manifest.attributes.keys.filter { it.startsWith("Stonecutter-") }.forEach {
-            manifest.attributes.remove(it)
-        }
-    }
+    options.release.set(javaVersion)
 }
 
 tasks.processResources {

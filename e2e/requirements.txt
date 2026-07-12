@@ -1,2 +1,9 @@
 minecraft-launcher-lib==8.0
 requests==2.34.2
+Pillow==12.3.0
+
+# Lock requests' complete runtime closure so CI cannot silently pick newer transitive packages.
+certifi==2026.6.17
+charset-normalizer==3.4.9
+idna==3.18
+urllib3==2.7.0

@@ -27,20 +27,10 @@ REQUIRED_RUNTIME_FIELDS = {
     "installer",
     "architectury",
     "scheduled_anchor",
+    "pr_anchor",
 }
 
-EXPECTED_ARTIFACT_NODES = {
-    "fabric-1.20.1",
-    "forge-1.20.1",
-    "fabric-1.21.1",
-    "neoforge-1.21.1",
-    "fabric-1.21.11",
-    "neoforge-1.21.11",
-    "fabric-26.1.2",
-    "neoforge-26.1.2",
-    "fabric-26.2",
-    "neoforge-26.2",
-}
+SUPPORTED_LOADERS = {"fabric", "forge", "neoforge"}
 
 
 class MatrixError(ValueError):
@@ -52,45 +42,122 @@ def load_matrix(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise MatrixError(f"cannot read release matrix {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise MatrixError("release matrix root must be an object")
     validate_matrix(data)
+    validate_build_properties(path, data)
     return data
+
+
+def read_properties(path: Path) -> dict[str, str]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise MatrixError(f"cannot read build properties {path}: {exc}") from exc
+    properties: dict[str, str] = {}
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.strip() in properties:
+            raise MatrixError(f"duplicate Gradle property {key.strip()}")
+        properties[key.strip()] = value.strip()
+    return properties
+
+
+def validate_build_properties(matrix_path: Path, data: dict[str, Any]) -> None:
+    properties = read_properties(matrix_path.resolve().parents[1] / "gradle.properties")
+    runtimes = {row["artifact_node"]: row for row in data["runtimes"]}
+    versions: dict[str, dict[str, Any]] = {}
+    for artifact in data["artifacts"]:
+        version = artifact["artifact_version"]
+        version_info = versions.setdefault(version, {"java": artifact["java"]})
+        if version_info["java"] != artifact["java"]:
+            raise MatrixError(f"release lanes disagree on Java for Minecraft {version}")
+
+        suffix = version.replace(".", "_")
+        runtime = runtimes[artifact["artifact_node"]]
+        expected_properties = {
+            f"architectury_api_version_{suffix}": runtime["architectury"]["version"],
+        }
+        if artifact["loader"] == "fabric":
+            expected_properties.update(
+                {
+                    f"fabric_loader_version_{suffix}": runtime["loader_version"],
+                    f"fabric_api_version_{suffix}": runtime["fabric_api"],
+                }
+            )
+        elif artifact["loader"] == "forge":
+            expected_properties[f"forge_version_{suffix}"] = runtime["loader_version"]
+        else:
+            expected_properties[f"neoforge_version_{suffix}"] = runtime["loader_version"]
+        for key, expected in expected_properties.items():
+            if properties.get(key) != str(expected):
+                raise MatrixError(
+                    f"Gradle property {key}={properties.get(key)!r} disagrees with matrix {expected!r}"
+                )
+
+    for version, version_info in versions.items():
+        suffix = version.replace(".", "_")
+        expected = {
+            f"minecraft_version_{suffix}": version,
+            f"java_version_{suffix}": str(version_info["java"]),
+        }
+        for key, value in expected.items():
+            if properties.get(key) != value:
+                raise MatrixError(
+                    f"Gradle property {key}={properties.get(key)!r} disagrees with matrix {value!r}"
+                )
 
 
 def validate_matrix(data: dict[str, Any]) -> None:
     if data.get("schema_version") != 1:
         raise MatrixError("release matrix schema_version must be 1")
 
+    lane_count = data.get("lane_count")
+    if isinstance(lane_count, bool) or not isinstance(lane_count, int) or lane_count <= 0:
+        raise MatrixError("release matrix lane_count must be a positive integer")
     artifacts = data.get("artifacts")
     runtimes = data.get("runtimes")
-    if not isinstance(artifacts, list) or len(artifacts) != 10:
-        raise MatrixError("release matrix must contain exactly 10 artifacts")
-    if not isinstance(runtimes, list) or len(runtimes) != 10:
-        raise MatrixError("release matrix must contain exactly 10 runtime rows")
+    if not isinstance(artifacts, list) or len(artifacts) != lane_count:
+        raise MatrixError(
+            f"release matrix must contain lane_count={lane_count} artifacts"
+        )
+    if not isinstance(runtimes, list) or len(runtimes) != lane_count:
+        raise MatrixError(
+            f"release matrix must contain lane_count={lane_count} runtime rows"
+        )
     project = data.get("project", {})
+    if not isinstance(project, dict):
+        raise MatrixError("release matrix project must be an object")
     for key in ("name", "mod_id", "description", "homepage", "sources", "issues", "license"):
         if not isinstance(project.get(key), str) or not project[key].strip():
             raise MatrixError(f"project.{key} must be a non-empty string")
     if not isinstance(project.get("modrinth_id"), str) or not project["modrinth_id"].strip():
         raise MatrixError("project.modrinth_id must be a non-empty string")
-    if not isinstance(project.get("curseforge_id"), int) or project["curseforge_id"] <= 0:
+    if (
+        isinstance(project.get("curseforge_id"), bool)
+        or not isinstance(project.get("curseforge_id"), int)
+        or project["curseforge_id"] <= 0
+    ):
         raise MatrixError("project.curseforge_id must be a positive integer")
     installers = data.get("installers", {})
     if not isinstance(installers, dict) or not installers:
         raise MatrixError("release matrix must lock runtime installers")
     for key, installer in installers.items():
+        if not isinstance(installer, dict):
+            raise MatrixError(f"installer {key} must be an object")
         if not str(installer.get("url", "")).startswith("https://"):
             raise MatrixError(f"installer {key} must use an HTTPS URL")
         if not re_full_sha256(installer.get("sha256")):
             raise MatrixError(f"installer {key} has invalid SHA-256")
 
     artifact_by_node: dict[str, dict[str, Any]] = {}
-    expected_loaders = {
-        "fabric": 5,
-        "forge": 1,
-        "neoforge": 4,
-    }
-    loader_counts = {loader: 0 for loader in expected_loaders}
+    loader_counts = {loader: 0 for loader in SUPPORTED_LOADERS}
     for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            raise MatrixError("every artifact row must be an object")
         required = {
             "artifact_node",
             "artifact_version",
@@ -108,22 +175,41 @@ def validate_matrix(data: dict[str, Any]) -> None:
             raise MatrixError(
                 f"artifact {artifact.get('artifact_node', '<unknown>')} missing {sorted(missing)}"
             )
+        for key in (
+            "artifact_node",
+            "artifact_version",
+            "loader",
+            "gradle_task",
+            "harness_task",
+            "jar",
+            "harness_jar",
+        ):
+            if not isinstance(artifact[key], str) or not artifact[key]:
+                raise MatrixError(f"artifact field {key} must be a non-empty string")
+        if not isinstance(artifact["metadata"], dict):
+            raise MatrixError(f"artifact {artifact['artifact_node']} metadata must be an object")
         node = artifact["artifact_node"]
         if node in artifact_by_node:
             raise MatrixError(f"duplicate artifact_node {node}")
         artifact_by_node[node] = artifact
         loader = artifact["loader"]
-        if loader not in loader_counts:
+        if loader not in SUPPORTED_LOADERS:
             raise MatrixError(f"unsupported artifact loader {loader!r}")
         loader_counts[loader] += 1
         version = artifact["artifact_version"]
         if node != f"{loader}-{version}":
             raise MatrixError(f"artifact node {node} does not match {loader} {version}")
         task_prefix = f":{loader}:{version}:"
-        if not artifact["gradle_task"].startswith(task_prefix):
-            raise MatrixError(f"artifact {node} Gradle task does not select its exact node")
-        if not artifact["harness_task"].startswith(task_prefix):
-            raise MatrixError(f"artifact {node} harness task does not select its exact node")
+        production_task = "shadowJar" if version.startswith("26.") else "remapJar"
+        harness_task = "e2eHarnessJar" if version.startswith("26.") else "remapE2EHarnessJar"
+        if artifact["gradle_task"] != f"{task_prefix}{production_task}":
+            raise MatrixError(
+                f"artifact {node} Gradle task must be {task_prefix}{production_task}"
+            )
+        if artifact["harness_task"] != f"{task_prefix}{harness_task}":
+            raise MatrixError(
+                f"artifact {node} harness task must be {task_prefix}{harness_task}"
+            )
         if artifact["java"] not in (17, 21, 25):
             raise MatrixError(f"artifact {node} has unsupported Java {artifact['java']}")
         for key in ("jar", "harness_jar"):
@@ -138,19 +224,26 @@ def validate_matrix(data: dict[str, Any]) -> None:
         if versions != [artifact["artifact_version"]]:
             raise MatrixError(f"artifact {node} must advertise only its exact build version")
 
-    if loader_counts != expected_loaders:
-        raise MatrixError(f"artifact loader counts {loader_counts}, expected {expected_loaders}")
-    if set(artifact_by_node) != EXPECTED_ARTIFACT_NODES:
-        raise MatrixError(
-            f"artifact nodes {sorted(artifact_by_node)}, expected {sorted(EXPECTED_ARTIFACT_NODES)}"
-        )
+    missing_loaders = SUPPORTED_LOADERS - {loader for loader, count in loader_counts.items() if count}
+    if missing_loaders:
+        raise MatrixError(f"release inventory omits loaders {sorted(missing_loaders)}")
+    unit_test_version = data.get("unit_test_version")
+    artifact_versions = {artifact["artifact_version"] for artifact in artifacts}
+    if not isinstance(unit_test_version, str) or unit_test_version not in artifact_versions:
+        raise MatrixError("unit_test_version must select a supported release version")
 
     seen_runtime_keys: set[tuple[str, str, str]] = set()
     runtime_nodes: set[str] = set()
+    pr_anchor_loaders: set[str] = set()
     for runtime in runtimes:
+        if not isinstance(runtime, dict):
+            raise MatrixError("every runtime row must be an object")
         missing = REQUIRED_RUNTIME_FIELDS - runtime.keys()
         if missing:
             raise MatrixError(f"runtime row missing {sorted(missing)}: {runtime}")
+        for key in ("artifact_node", "runtime_version", "loader", "loader_version", "installer"):
+            if not isinstance(runtime[key], str) or not runtime[key]:
+                raise MatrixError(f"runtime field {key} must be a non-empty string")
         node = runtime["artifact_node"]
         artifact = artifact_by_node.get(node)
         if artifact is None:
@@ -167,7 +260,7 @@ def validate_matrix(data: dict[str, Any]) -> None:
             raise MatrixError(f"runtime {node} must lock a loader version")
         if runtime["jar_sha256"] != "from:artifact-manifest":
             raise MatrixError(f"runtime {node}/{runtime['runtime_version']} must bind the build hash")
-        if runtime["port"] != 0:
+        if isinstance(runtime["port"], bool) or runtime["port"] != 0:
             raise MatrixError("checked-in runtime ports must be 0 (allocated per isolated profile)")
         if runtime["installer"] not in installers:
             raise MatrixError(f"runtime {node}/{runtime['runtime_version']} has no locked installer")
@@ -184,18 +277,32 @@ def validate_matrix(data: dict[str, Any]) -> None:
         elif "fabric_api" in runtime:
             raise MatrixError(f"non-Fabric runtime {node} must not declare Fabric API")
         architectury = runtime.get("architectury", {})
-        if architectury.get("kind") != "maven" or not architectury.get("version"):
+        if (
+            not isinstance(architectury, dict)
+            or architectury.get("kind") != "maven"
+            or not isinstance(architectury.get("version"), str)
+            or not architectury["version"]
+        ):
             raise MatrixError(f"runtime {node} must use a locked Maven Architectury version")
         if runtime.get("scheduled_anchor") is not True:
             raise MatrixError(f"runtime {node} must be a scheduled native anchor")
+        if not isinstance(runtime.get("pr_anchor"), bool):
+            raise MatrixError(f"runtime {node} pr_anchor must be a boolean")
+        if runtime["pr_anchor"]:
+            pr_anchor_loaders.add(runtime["loader"])
         key = (node, runtime["runtime_version"], runtime["scenario"])
         if key in seen_runtime_keys:
             raise MatrixError(f"duplicate runtime row {key}")
         seen_runtime_keys.add(key)
         runtime_nodes.add(node)
 
-    if runtime_nodes != EXPECTED_ARTIFACT_NODES:
+    if runtime_nodes != set(artifact_by_node):
         raise MatrixError("every supported artifact must have exactly one exact runtime row")
+    if pr_anchor_loaders != SUPPORTED_LOADERS:
+        raise MatrixError(
+            "PR anchors must cover Fabric, Forge, and NeoForge; "
+            f"got {sorted(pr_anchor_loaders)}"
+        )
     used_installers = {row["installer"] for row in runtimes}
     if set(installers) != used_installers:
         raise MatrixError("release matrix contains an installer unused by supported runtimes")
@@ -235,6 +342,21 @@ def validate_matrix(data: dict[str, Any]) -> None:
     scenarios = data.get("scheduled_scenarios")
     if scenarios != ["phase0-smoke", "propagation", "propagation-live", "full"]:
         raise MatrixError("scheduled_scenarios must contain the four locked E2E scenarios")
+    pr_scenarios = data.get("pr_scenarios")
+    if (
+        not isinstance(pr_scenarios, list)
+        or not pr_scenarios
+        or not all(isinstance(scenario, str) for scenario in pr_scenarios)
+    ):
+        raise MatrixError("pr_scenarios must be a non-empty list")
+    if len(pr_scenarios) != len(set(pr_scenarios)):
+        raise MatrixError("pr_scenarios must not contain duplicates")
+    if any(scenario not in scenarios for scenario in pr_scenarios):
+        raise MatrixError("pr_scenarios must be selected from scheduled_scenarios")
+    if "full" not in pr_scenarios or not any(
+        scenario.startswith("propagation") for scenario in pr_scenarios
+    ):
+        raise MatrixError("PR coverage must include full and a multiplayer propagation scenario")
 
 
 def re_full_sha256(value: Any) -> bool:
@@ -242,12 +364,12 @@ def re_full_sha256(value: Any) -> bool:
 
 
 def read_mod_version(matrix_path: Path, data: dict[str, Any]) -> str:
-    properties = matrix_path.resolve().parents[1] / "gradle.properties"
+    properties_path = matrix_path.resolve().parents[1] / "gradle.properties"
     key = data["project"]["mod_version_property"]
-    for raw in properties.read_text(encoding="utf-8").splitlines():
-        if raw.strip().startswith(f"{key}="):
-            return raw.split("=", 1)[1].strip()
-    raise MatrixError(f"{key} is missing from {properties}")
+    properties = read_properties(properties_path)
+    if key not in properties:
+        raise MatrixError(f"{key} is missing from {properties_path}")
+    return properties[key]
 
 
 def gha_matrix(
@@ -278,17 +400,28 @@ def gha_matrix(
                 "modrinth_id": data["project"]["modrinth_id"],
                 "curseforge_id": data["project"]["curseforge_id"],
             })
-    elif kind in {"runtime", "native-anchors"}:
+    elif kind in {"runtime", "native-anchors", "pr-anchors"}:
         rows = data["runtimes"]
         if kind == "native-anchors":
             rows = [row for row in rows if row.get("scheduled_anchor")]
+        elif kind == "pr-anchors":
+            rows = [row for row in rows if row.get("pr_anchor")]
         include = []
         for row in rows:
             expanded = dict(row)
+            scope = {
+                "runtime": "release-behavior",
+                "native-anchors": "scheduled-behavior",
+                "pr-anchors": "pr-behavior",
+            }[kind]
             expanded["id"] = (
-                f"{row['artifact_node']}--{row['runtime_version']}--{row['scenario']}"
+                f"{row['artifact_node']}--{row['runtime_version']}--{scope}"
                 .replace(".", "_")
             )
+            if kind in {"runtime", "native-anchors"}:
+                expanded["scenarios"] = ",".join(data["scheduled_scenarios"])
+            elif kind == "pr-anchors":
+                expanded["scenarios"] = ",".join(data["pr_scenarios"])
             include.append(expanded)
     else:  # pragma: no cover - argparse prevents this
         raise MatrixError(f"unsupported matrix kind {kind}")
@@ -305,7 +438,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--kind",
-        choices=("artifacts", "runtime", "native-anchors"),
+        choices=("artifacts", "runtime", "native-anchors", "pr-anchors"),
         help="emit a compact GitHub Actions matrix",
     )
     parser.add_argument("--pretty", action="store_true", help="pretty-print output")

@@ -9,9 +9,10 @@ plugins {
     `maven-publish`
 }
 
+apply(from = rootProject.file("gradle/archive-conventions.gradle.kts"))
+
 val minecraftVersion = stonecutter.current.version
 val versionDir = "v${minecraftVersion.replace(".", "_")}"
-val canonicalVersions = setOf("1.21.1", "1.21.11", "26.1.2", "26.2")
 val isNoRemap = minecraftVersion.startsWith("26.")
 val legacy12111JavaRoot = rootProject.file("neoforge/src/legacy1_21_11/java")
 val legacy1211JavaRoot = rootProject.file("neoforge/src/legacy1_21_1/java")
@@ -25,9 +26,13 @@ evaluationDependsOn(commonProjectPath)
 val releaseMatrixFile = rootProject.file("release/release-matrix.json")
 check(releaseMatrixFile.isFile) { "Missing central release matrix: $releaseMatrixFile" }
 val releaseMatrix = JsonSlurper().parse(releaseMatrixFile) as Map<*, *>
+val releaseArtifacts = (releaseMatrix["artifacts"] as List<*>).map { it as Map<*, *> }
+val canonicalVersions = releaseArtifacts
+    .filter { it["loader"] == "neoforge" }
+    .map { it["artifact_version"].toString() }
+    .toSet()
 val releaseProject = releaseMatrix["project"] as Map<*, *>
-val releaseArtifact = (releaseMatrix["artifacts"] as List<*>)
-    .map { it as Map<*, *> }
+val releaseArtifact = releaseArtifacts
     .single { it["artifact_node"] == "neoforge-$minecraftVersion" }
 val releaseMetadata = releaseArtifact["metadata"] as Map<*, *>
 
@@ -221,17 +226,6 @@ java {
 
 tasks.withType<JavaCompile>().configureEach {
     options.release.set(javaVersion)
-}
-
-tasks.withType<Jar>().configureEach {
-    manifest.attributes.keys.filter { it.startsWith("Stonecutter-") }.forEach {
-        manifest.attributes.remove(it)
-    }
-    doFirst {
-        manifest.attributes.keys.filter { it.startsWith("Stonecutter-") }.forEach {
-            manifest.attributes.remove(it)
-        }
-    }
 }
 
 tasks.processResources {
