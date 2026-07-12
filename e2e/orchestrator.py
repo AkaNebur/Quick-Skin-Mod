@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Run Quick Skin's exact fan-in artifacts in isolated production runtimes.
-
-Unlike the retired Loom runner, artifact-node selection and runtime-version
-selection are independent.  This is what lets the 26.1 artifact be exercised on
-26.1, 26.1.1, and 26.1.2 without rebuilding or changing tracked properties.
-"""
+"""Run each exact Quick Skin release artifact in its isolated production runtime."""
 
 from __future__ import annotations
 

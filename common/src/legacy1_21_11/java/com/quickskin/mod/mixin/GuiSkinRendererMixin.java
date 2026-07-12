@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Mixin to inject cape rendering into the PiP (Picture-in-Picture) skin rendering system.
- * In 1.21.6+, all GUI 3D rendering goes through the PiP system. Model.renderToBuffer() is final,
+ * In 1.21.11+, all GUI 3D rendering goes through the PiP system. Model.renderToBuffer() is final,
  * so we inject into GuiSkinRenderer.renderToTexture() to render the cape after the body
  * but before bufferSource.endBatch(), within the same off-screen texture context.
  */

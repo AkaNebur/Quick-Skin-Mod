@@ -132,7 +132,7 @@ public class UploadToMojangScreen extends Screen {
             this.parent.render(graphics, -1, -1, partialTicks);
         }
 
-        // Apply blur to background (graphics.flush() removed in 1.21.6)
+        // Apply blur to background (graphics.flush() removed in 1.21.11)
         BlurHandler.renderBlur();
 
         // Draw lighter overlay over entire screen (so blur is more visible)

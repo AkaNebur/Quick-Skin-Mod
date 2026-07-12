@@ -33,7 +33,7 @@ import java.util.UUID;
 @Mixin(value = CapeLayer.class, priority = 1100) // Higher priority to override TLSkinCape and other mods
 public class CapeLayerMixin {
 
-    // In MC 1.21.4+, CapeLayer has its own cape model (PlayerCapeModel) separate from PlayerModel
+    // In MC 1.21.11+, CapeLayer has its own cape model (PlayerCapeModel) separate from PlayerModel
     @Shadow @Final private HumanoidModel<?> model;
 
     @Inject(method = "submit(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/client/renderer/entity/state/AvatarRenderState;FF)V",
@@ -133,7 +133,7 @@ public class CapeLayerMixin {
         }
 
         // Replicate the vanilla cape rendering logic with our custom render type
-        // In MC 1.21.9, CapeLayer uses SubmitNodeCollector.submitModel() instead of renderToBuffer()
+        // In MC 1.21.11, CapeLayer uses SubmitNodeCollector.submitModel() instead of renderToBuffer()
         @SuppressWarnings("unchecked")
         HumanoidModel<AvatarRenderState> capeModel = (HumanoidModel<AvatarRenderState>) (HumanoidModel<?>) this.model;
         capeModel.setupAnim(renderState);

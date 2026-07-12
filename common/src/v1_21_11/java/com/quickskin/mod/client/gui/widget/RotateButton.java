@@ -20,7 +20,7 @@ public class RotateButton extends Button {
         renderDefaultSprite(pGuiGraphics);
         Font pFont = net.minecraft.client.Minecraft.getInstance().font;
         Component message = this.getMessage();
-        // In 1.21.6+, graphics.pose() returns Matrix3x2fStack with 2D push/pop/translate/scale
+        // In 1.21.11+, graphics.pose() returns Matrix3x2fStack with 2D push/pop/translate/scale
         var pose = pGuiGraphics.pose();
         pose.pushMatrix();
 

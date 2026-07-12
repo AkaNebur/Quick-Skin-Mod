@@ -35,7 +35,7 @@ public class LinkButton extends Button {
     protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         // 1.21.11: renderContents is responsible for everything including background
         renderDefaultSprite(graphics);
-        // RenderSystem.setShaderColor() removed in 1.21.6
+        // RenderSystem.setShaderColor() removed in 1.21.11
 
         // Draw the logo texture on top, inset slightly to fit within the rounded border.
         int padding = 2;

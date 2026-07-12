@@ -112,7 +112,7 @@ public class BackgroundRenderer {
             panoramaRenderer.extractRenderState(graphics, screen.width, screen.height);
 
             // Render panorama overlay (darkens the panorama like in title screen)
-            // graphics.setColor() removed in 1.21.4+; use PlatformHelper.blit for cross-version compat
+            // graphics.setColor() removed in 1.21.11+; use PlatformHelper.blit for cross-version compat
             PlatformHelper.blit(graphics, PANORAMA_OVERLAY, 0, 0, 0, 0.0F, 0.0F, screen.width, screen.height, 16, 128);
 
             // Add additional dark overlay for better UI readability

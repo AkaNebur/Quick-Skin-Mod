@@ -26,12 +26,11 @@ The repository builds ten loader artifacts from one Stonecutter-managed source t
 | 1.20.1 | Yes | Yes | - | 17 | Active |
 | 1.21.1 | Yes | - | Yes | 21 | Active |
 | 1.21.11 | Yes | - | Yes | 21 | Active |
-| 26.1-26.1.2 | Yes | - | Built; pooled claim blocked | 25 | Release-gated |
+| 26.1.2 | Yes | - | Yes | 25 | Active |
 | 26.2 | Yes | - | Yes | 25 | Active |
 
-The pooled NeoForge 26.1-26.1.2 support claim is release-gated and currently blocked, not passed. NeoForge 26.1 and 26.1.1 require a maintained Architectury compatibility build. Because that build is the pooled file's required marketplace dependency, the gate installs its exact bytes on 26.1, 26.1.1, and 26.1.2. Unless that dependency is available and passes all three runtimes, NeoForge support begins at 26.1.2 with stock Architectury.
-
-Minecraft 1.21.4 through 1.21.10 are frozen. Their existing downloads remain available, but they receive no new builds, fixes, dependency updates, or compatibility testing. See the exact files and checksums in [Frozen versions](docs/FROZEN-VERSIONS.md).
+Every artifact targets exactly the Minecraft version printed in its filename and metadata. No active
+artifact advertises a wider compatibility range.
 
 ## Installation
 
@@ -85,21 +84,18 @@ Development launches should use configuration-on-demand so unrelated version nod
 
 The aggregate build intentionally runs with `org.gradle.parallel=false`; Architectury's transformers use JVM-global properties and mixed-version transforms are not safe in parallel.
 
-Release automation also builds 10 separate, loader-remapped test harness jars and installs them beside the exact staged production files. See [Packaged-runtime E2E](e2e/README.md) for the 14-row gate and local commands.
+Release automation also builds 10 separate, loader-remapped test harness jars and installs them beside the exact staged production files. See [Packaged-runtime E2E](e2e/README.md) for the 10-row gate and local commands.
 
 ## Source layout
 
 - `common/src/main`, `fabric/src/main`, `forge/src/main`, and `neoforge/src/main` contain canonical sources.
 - Small `src/legacy*` overlays isolate genuine era-level API boundaries.
 - `PreviewRenderBackend`, `GuiCompat`, `NetworkTransport`, `MinecraftCompat`, and `PlatformHelper` define the cross-version seams.
-- Historical `src/v*` trees are migration oracles, not supported release branches. Do not modify them during normal feature work.
-
-The historical version trees remain until two successfully published, release-gate-green releases have completed and all remaining active resource references have been migrated away from them. See [Frozen versions](docs/FROZEN-VERSIONS.md) for the retention policy.
+- Each retained `src/v*` tree is an exact-version parity oracle for one currently supported target; it is not an additional release branch.
 
 ## Historical documentation
 
 - [NeoForge migration history](NEOFORGE-MIGRATION.md) describes the retired pre-Stonecutter layout only.
-- [Frozen versions](docs/FROZEN-VERSIONS.md) records archived artifact identities and support policy.
 
 ## License
 

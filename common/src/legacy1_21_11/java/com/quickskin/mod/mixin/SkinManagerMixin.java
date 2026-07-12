@@ -186,7 +186,7 @@ public class SkinManagerMixin {
      * see the modified skin through this mixin.
      */
     /**
-     * In MC 1.21.4+, getOrLoad returns CompletableFuture<Optional<PlayerSkin>>.
+     * In MC 1.21.11+, getOrLoad returns CompletableFuture<Optional<PlayerSkin>>.
      */
     @Inject(method = "getOrLoad", at = @At("RETURN"), cancellable = true)
     private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {

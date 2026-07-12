@@ -224,25 +224,11 @@ def runtime_dependencies(
         dependencies.append((api, sha256(api)))
 
     architectury = row["architectury"]
-    if architectury["kind"] == "maven":
-        url, name = maven_dependency_url(row["loader"], architectury["version"])
-        jar = download(url, cache / name)
-        dependencies.append((jar, sha256(jar)))
-    elif architectury["kind"] == "external-maintained-compat":
-        url = os.environ.get(architectury["url_env"], "").strip()
-        expected = os.environ.get(architectury["sha256_env"], "").strip().lower()
-        if not url or not re.fullmatch(r"[0-9a-f]{64}", expected):
-            raise RuntimeFailure(
-                f"{architectury['blocker']} Configure {architectury['url_env']} and "
-                f"{architectury['sha256_env']} with a maintained published dependency."
-            )
-        name = Path(urllib.parse.urlparse(url).path).name or "architectury-neoforge-26.1-compat.jar"
-        if not name.endswith(".jar"):
-            name += ".jar"
-        jar = download(url, cache / safe_id(name), expected)
-        dependencies.append((jar, expected))
-    else:
+    if architectury["kind"] != "maven":
         raise RuntimeFailure(f"unknown Architectury dependency kind {architectury['kind']!r}")
+    url, name = maven_dependency_url(row["loader"], architectury["version"])
+    jar = download(url, cache / name)
+    dependencies.append((jar, sha256(jar)))
     return dependencies
 
 

@@ -33,13 +33,13 @@ side = "BOTH"
 [[dependencies.quickskin]]
 modId = "minecraft"
 type = "required"
-versionRange = "[1.21.11,1.22)"
+versionRange = "[1.21.11,1.21.12)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.quickskin]]
 modId = "architectury"
 type = "required"
-versionRange = "[19.0,)"
+versionRange = "[19.0.1,)"
 ordering = "AFTER"
 side = "BOTH"

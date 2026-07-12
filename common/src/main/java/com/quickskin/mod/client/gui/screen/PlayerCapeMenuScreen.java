@@ -667,15 +667,15 @@ public class PlayerCapeMenuScreen extends Screen {
         // Render the animated star background
         this.renderBackgroundEffects(graphics, partialTick);
 
-        // graphics.flush() removed in 1.21.6
-        // RenderSystem.setShaderColor() removed in 1.21.6
+        // graphics.flush() removed in 1.21.11
+        // RenderSystem.setShaderColor() removed in 1.21.11
 
         // Title
         graphics.centeredText(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFFFF);
 
         super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 
-        // Push pose (1.21.6: Matrix3x2fStack uses pushMatrix/popMatrix, no Z translate in 2D)
+        // Push pose (1.21.11: Matrix3x2fStack uses pushMatrix/popMatrix, no Z translate in 2D)
         graphics.pose().pushMatrix();
 
         // Enable scissor for grid content
@@ -907,7 +907,7 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     private void renderCapeTexture(GuiGraphicsExtractor graphics, Identifier texture, CapeEntry cape, int x, int y) {
-        // RenderSystem.setShaderColor() removed in 1.21.6
+        // RenderSystem.setShaderColor() removed in 1.21.11
 
         int textureWidth = 64;
         int textureHeight = 32;
@@ -931,7 +931,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         float scaleFactor = capeDisplaySize / 56f;
 
-        // 1.21.6: Matrix3x2fStack uses pushMatrix/popMatrix and 2D translate/scale
+        // 1.21.11: Matrix3x2fStack uses pushMatrix/popMatrix and 2D translate/scale
         graphics.pose().pushMatrix();
         graphics.pose().translate(x + capeDisplaySize / 2f, y + capeDisplaySize / 2f);
         graphics.pose().scale(scaleFactor * 3.5f, scaleFactor * 3.5f);

@@ -59,7 +59,7 @@ public class PlayerModelRenderer {
             ModelPart slimRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER_SLIM);
             slimModel = new PlayerModel(slimRoot, true);
 
-            // In MC 1.21.4+, the cape is a separate model (PlayerCapeModel)
+            // In MC 1.21.11+, the cape is a separate model (PlayerCapeModel)
             ModelPart capeRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER_CAPE);
             capeModel = new PlayerCapeModel(capeRoot);
         }
@@ -194,7 +194,7 @@ public class PlayerModelRenderer {
             // Render grass block if sitting animation is active AND we're not in a world
             // When in-game, animations are controlled by the game, so don't render the custom grass block
             if ("sit".equals(playerData.getCurrentAnimation() != null ? playerData.getCurrentAnimation().toLowerCase(Locale.ROOT) : null) && mc.level == null) {
-                // In 1.21.6, graphics.pose() returns Matrix3x2fStack, use new PoseStack for 3D transforms
+                // In 1.21.11, graphics.pose() returns Matrix3x2fStack, use new PoseStack for 3D transforms
                 PoseStack poseStack = new PoseStack();
 
                 poseStack.pushPose();
@@ -212,7 +212,7 @@ public class PlayerModelRenderer {
                 poseStack.popPose();
             }
 
-            // Set cape data for GuiSkinRendererMixin (PiP bypasses CapeLayer in 1.21.6+)
+            // Set cape data for GuiSkinRendererMixin (PiP bypasses CapeLayer in 1.21.11+)
             ensureModelsLoaded();
             Identifier entityCapeTexture = null;
             if (playerData.getCapeLocation() != null) {
@@ -299,7 +299,7 @@ public class PlayerModelRenderer {
     /**
      * Manually render player model without requiring a player entity
      * Used on title screen where no world/player exists
-     * In 1.21.6+, all GUI 3D rendering must go through the PiP system.
+     * In 1.21.11+, all GUI 3D rendering must go through the PiP system.
      * Cape rendering is handled by GuiSkinRendererMixin which renders the cape
      * inside renderToTexture(), using the shared buffer source.
      */
@@ -415,7 +415,7 @@ public class PlayerModelRenderer {
         boolean shouldUpdate = (now - lastAnimationUpdate) >= ANIMATION_UPDATE_INTERVAL_MS;
 
         if (!shouldUpdate) {
-            // In MC 1.21.4+, outer layers (sleeves, pants, jacket) are children of their
+            // In MC 1.21.11+, outer layers (sleeves, pants, jacket) are children of their
             // corresponding body parts, so they inherit transforms automatically.
             // Just reset their local rotations to zero to avoid doubling.
             resetOuterLayerRotations(model);
@@ -446,14 +446,14 @@ public class PlayerModelRenderer {
                 break;
         }
 
-        // In MC 1.21.4+, outer layers are children of their body parts and inherit
+        // In MC 1.21.11+, outer layers are children of their body parts and inherit
         // transforms automatically. Reset their local rotations to zero.
         resetOuterLayerRotations(model);
     }
 
     /**
      * Reset outer layer rotations to zero.
-     * In MC 1.21.4+, outer layers (hat, sleeves, pants, jacket) are children of their
+     * In MC 1.21.11+, outer layers (hat, sleeves, pants, jacket) are children of their
      * corresponding body parts in the model hierarchy, so they inherit parent transforms.
      * Setting their local rotations to zero ensures they stay aligned with the body.
      */
@@ -652,10 +652,10 @@ public class PlayerModelRenderer {
         // Scale the block
         poseStack.scale((float)scale, (float)scale, (float)scale);
 
-        // NOTE (26.1): Minecraft#getBlockRenderer / BlockRenderDispatcher#renderSingleBlock were removed
-        // in the 26.1 block-render overhaul, and GUI rendering no longer exposes an immediate
+        // NOTE (26.1.2): Minecraft#getBlockRenderer / BlockRenderDispatcher#renderSingleBlock were removed
+        // in the 26.1.2 block-render overhaul, and GUI rendering no longer exposes an immediate
         // PoseStack/buffer context. The decorative grass block under the "sit" animation is therefore
-        // disabled on 26.1+ until reimplemented via the new GuiGraphicsExtractor PiP/model API.
+        // disabled on 26.1.2+ until reimplemented via the new GuiGraphicsExtractor PiP/model API.
         poseStack.popPose();
     }
 
@@ -703,7 +703,7 @@ public class PlayerModelRenderer {
             brightness = 1.2f + ((normalizedRotation - 270.0f) / 90.0f) * 0.225f;
         }
 
-        // 1.21.6: RenderSystem.setShaderLights now takes GpuBufferSlice instead of Vector3f.
+        // 1.21.11: RenderSystem.setShaderLights now takes GpuBufferSlice instead of Vector3f.
         // Use Lighting.Entry-based API instead. This method is currently unused.
         Minecraft.getInstance().gameRenderer.lighting().setupFor(Lighting.Entry.ENTITY_IN_UI);
     }

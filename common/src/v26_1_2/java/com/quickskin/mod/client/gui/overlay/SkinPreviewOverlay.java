@@ -209,7 +209,7 @@ public class SkinPreviewOverlay {
         previewData.setCapeLocation(null); // No cape for HUD preview
         previewData.setModelType(modelType);
 
-        // Save graphics state - use new PoseStack since graphics.pose() returns Matrix3x2fStack in 1.21.6
+        // Save graphics state - use new PoseStack since graphics.pose() returns Matrix3x2fStack in 1.21.11
         PoseStack poseStack = new PoseStack();
         poseStack.pushPose();
 

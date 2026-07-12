@@ -18,8 +18,8 @@ plugins {
 
 // Detached mode preprocesses each branch's canonical src/main tree into every node's generated
 // sources without rewriting tracked files. Active nodes consume that output, with only the narrow
-// src/legacy* era overlays declared in the branch build scripts. Historical src/v* trees are never
-// compiled and remain read-only parity oracles until the documented two-green-release cleanup.
+// src/legacy* era overlays declared in the branch build scripts. The retained src/v* trees are the
+// exact-version parity oracles for the five supported Minecraft targets and are never compiled.
 stonecutter active null
 
 stonecutter {
@@ -111,8 +111,8 @@ tasks.register("buildAllLanes") {
         ":neoforge:1.21.1:remapJar",
         ":fabric:1.21.11:remapJar",
         ":neoforge:1.21.11:remapJar",
-        ":fabric:26.1:shadowJar",
-        ":neoforge:26.1:shadowJar",
+        ":fabric:26.1.2:shadowJar",
+        ":neoforge:26.1.2:shadowJar",
         ":fabric:26.2:shadowJar",
         ":neoforge:26.2:shadowJar",
     )
@@ -128,8 +128,8 @@ tasks.register("buildAllE2EHarnesses") {
         ":neoforge:1.21.1:remapE2EHarnessJar",
         ":fabric:1.21.11:remapE2EHarnessJar",
         ":neoforge:1.21.11:remapE2EHarnessJar",
-        ":fabric:26.1:e2eHarnessJar",
-        ":neoforge:26.1:e2eHarnessJar",
+        ":fabric:26.1.2:e2eHarnessJar",
+        ":neoforge:26.1.2:e2eHarnessJar",
         ":fabric:26.2:e2eHarnessJar",
         ":neoforge:26.2:e2eHarnessJar",
     )

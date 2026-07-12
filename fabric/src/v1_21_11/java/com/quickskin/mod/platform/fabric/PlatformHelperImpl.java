@@ -12,7 +12,7 @@ import net.minecraft.resources.Identifier;
 import java.nio.file.Path;
 
 /**
- * Fabric implementation of PlatformHelper for MC 1.21.4+
+ * Fabric implementation of PlatformHelper for MC 1.21.11+
  * APIs changed in 1.21.2+:
  * - setPixelRGBA/getPixelRGBA (ABGR) → setPixel/getPixel (ARGB)
  * - model.young/crouching/riding/attackTime fields removed
@@ -74,7 +74,7 @@ public class PlatformHelperImpl {
 
     /**
      * Sets a pixel in a NativeImage
-     * For MC 1.21.4 (1.21.2+), uses setPixel with ARGB format
+     * For MC 1.21.11 (1.21.2+), uses setPixel with ARGB format
      * @param color Color in ABGR format (our standard format used throughout the codebase)
      */
     public static void setPixel(NativeImage image, int x, int y, int color) {
@@ -84,7 +84,7 @@ public class PlatformHelperImpl {
 
     /**
      * Gets a pixel from a NativeImage
-     * For MC 1.21.4 (1.21.2+), uses getPixel with ARGB format
+     * For MC 1.21.11 (1.21.2+), uses getPixel with ARGB format
      * @return Color in ABGR format (our standard format used throughout the codebase)
      */
     public static int getPixel(NativeImage image, int x, int y) {
@@ -126,7 +126,7 @@ public class PlatformHelperImpl {
 
     /**
      * Blits a texture to the screen
-     * For MC 1.21.6+, uses RenderPipelines.GUI_TEXTURED
+     * For MC 1.21.11+, uses RenderPipelines.GUI_TEXTURED
      */
     public static void blit(GuiGraphics graphics, Identifier texture, int x, int y, int blitOffset, float u, float v, int width, int height, int textureWidth, int textureHeight) {
         graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, width, height, textureWidth, textureHeight);
@@ -134,7 +134,7 @@ public class PlatformHelperImpl {
 
     /**
      * Blits a texture to the screen with width/height before UV coordinates
-     * For MC 1.21.7+, uses the 12-param blit overload with separate region sizes
+     * For MC 1.21.11+, uses the 12-param blit overload with separate region sizes
      */
     public static void blit(GuiGraphics graphics, Identifier texture, int x, int y, int width, int height, float u, float v, int regionWidth, int regionHeight, int textureWidth, int textureHeight) {
         // 12-param: blit(RenderPipeline, RL, x, y, u, v, width, height, regionWidth, regionHeight, textureWidth, textureHeight)
@@ -173,7 +173,7 @@ public class PlatformHelperImpl {
 
     /**
      * Renders a cloak on a PlayerModel
-     * For MC 1.21.4 (1.21.2+), renderCloak() was removed, render cloak ModelPart directly.
+     * For MC 1.21.11 (1.21.2+), renderCloak() was removed, render cloak ModelPart directly.
      * Uses reflection to find the cloak field since it may not exist or may be renamed.
      */
     public static void renderCloak(PlayerModel model, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, int packedOverlay) {

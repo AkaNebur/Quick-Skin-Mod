@@ -31,7 +31,7 @@ public class GuiScaleManager {
 
                 // Force window to recalculate scaled dimensions
                 // This will cause the screen to reinit, which is why the caller should return immediately
-                //? if <26.1 {
+                //? if <26.1.2 {
                 mc.resizeDisplay();
                 //?} else {
                 mc.resizeGui();
@@ -61,7 +61,7 @@ public class GuiScaleManager {
                 guiScaleOption.set(originalGuiScale);
 
                 // Force window to recalculate scaled dimensions
-                //? if <26.1 {
+                //? if <26.1.2 {
                 mc.resizeDisplay();
                 //?} else {
                 mc.resizeGui();

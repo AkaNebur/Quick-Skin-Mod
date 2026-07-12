@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * This mixin targets AvatarRenderer, which is responsible for rendering the arm model.
  * It redirects submitModelPart calls to use translucent render types for skins with transparency.
  *
- * In MC 1.21.9, the vanilla renderHand already uses entityTranslucent by default,
+ * In MC 1.21.11, the vanilla renderHand already uses entityTranslucent by default,
  * so this mixin is mostly a safety net and ensures correct behavior when other mods
  * might change the render type.
  */

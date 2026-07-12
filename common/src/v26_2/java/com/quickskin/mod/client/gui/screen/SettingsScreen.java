@@ -343,7 +343,7 @@ public class SettingsScreen extends Screen {
         );
         skinChangeCooldownEditBox.setValue(String.valueOf(config.skinChangeCooldownSeconds));
         skinChangeCooldownEditBox.setMaxLength(5);
-        // NOTE (26.1): EditBox#setFilter(Predicate) was removed; digit-only input must be reimplemented
+        // NOTE (26.1.2): EditBox#setFilter(Predicate) was removed; digit-only input must be reimplemented
         // via setResponder/validation. Field still functions; values are parsed defensively on read.
         skinChangeCooldownEditBox.active = isAdmin;
         serverSettingWidgets.add(skinChangeCooldownEditBox);

@@ -16,7 +16,7 @@ import com.quickskin.mod.config.ClientConfig;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
-//? if <26.1 {
+//? if <26.1.2 {
 import net.minecraft.client.gui.GuiGraphics;
 //?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -79,7 +79,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     public void render(GuiGraphics graphics, int index, int top, int left, int width, int height,
                       int mouseX, int mouseY, boolean isHovered, float partialTicks) {
     //?} else {
-        //? if <26.1 {
+        //? if <26.1.2 {
     public void renderContent(GuiGraphics graphics, int mouseX, int mouseY, boolean isHovered, float partialTicks) {
         //?} else {
     public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean isHovered, float partialTicks) {
@@ -167,7 +167,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         } else {
             // Fallback if texture not loaded
             graphics.fill(faceX, faceY, faceX + faceSize, faceY + faceSize, 0xFF333333);
-            //? if <26.1 {
+            //? if <26.1.2 {
             graphics.drawCenteredString(mc.font, "?", faceX + faceSize / 2,
                 faceY + faceSize / 2 - 4, 0xFFFFFF);
             //?} else {
@@ -192,7 +192,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         //? if <1.21.11 {
         graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFF);
         //?} else {
-            //? if <26.1 {
+            //? if <26.1.2 {
         graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
             //?} else {
         graphics.text(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
@@ -215,7 +215,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         //? if <1.21.11 {
         graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2, modelTextColor);
         //?} else {
-            //? if <26.1 {
+            //? if <26.1.2 {
         graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
             0xFF000000 | modelTextColor);
             //?} else {
@@ -241,7 +241,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             graphics.fill(deleteButtonX, deleteButtonY,
                 deleteButtonX + actionButtonSize, deleteButtonY + actionButtonSize,
                 deleteHovered ? 0xA0E04040 : 0x80C00000);
-            //? if <26.1 {
+            //? if <26.1.2 {
             graphics.drawString(mc.font, "x", deleteButtonX + 3, deleteButtonY + 1, 0xFFFFFF);
             //?} else {
             graphics.text(mc.font, "x", deleteButtonX + 3, deleteButtonY + 1, 0xFFFFFFFF);
@@ -258,7 +258,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             graphics.fill(deleteButtonX, editButtonY,
                 deleteButtonX + actionButtonSize, editButtonY + actionButtonSize,
                 editHovered ? 0xA040C0C0 : 0x80408080);
-            //? if <26.1 {
+            //? if <26.1.2 {
             graphics.drawString(mc.font, "✎", deleteButtonX + 2, editButtonY + 1, 0xFFFFFFFF);
             //?} else {
             graphics.text(mc.font, "✎", deleteButtonX + 2, editButtonY + 1, 0xFFFFFFFF);
@@ -274,7 +274,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
                 graphics.fill(deleteButtonX, uploadButtonY,
                     deleteButtonX + actionButtonSize, uploadButtonY + actionButtonSize,
                     uploadHovered ? 0xA040A040 : 0x80408040);
-                //? if <26.1 {
+                //? if <26.1.2 {
                 graphics.drawString(mc.font, "↑", deleteButtonX + 2, uploadButtonY + 1, 0xFFFFFFFF);
                 //?} else {
                 graphics.text(mc.font, "↑", deleteButtonX + 2, uploadButtonY + 1, 0xFFFFFFFF);
@@ -340,7 +340,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
      * which defers rendering and can cause z-order issues with modals.
      */
     private static void drawOutline(
-            //? if <26.1 {
+            //? if <26.1.2 {
             GuiGraphics graphics,
             //?} else {
             GuiGraphicsExtractor graphics,

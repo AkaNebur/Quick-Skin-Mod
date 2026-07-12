@@ -2,7 +2,7 @@ package com.quickskin.mod.platform;
 
 import dev.architectury.injectables.annotations.ExpectPlatform;
 //? if >=1.21 {
-    //? if <1.21.4 {
+    //? if <1.21.11 {
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -64,7 +64,7 @@ public class PlatformHelper {
     }
 
     //? if >=1.21 {
-        //? if <1.21.4 {
+        //? if <1.21.11 {
     public static void setPixel(NativeImage image, int x, int y, int color) {
         MinecraftCompat.INSTANCE.setPixel(image, x, y, color);
     }

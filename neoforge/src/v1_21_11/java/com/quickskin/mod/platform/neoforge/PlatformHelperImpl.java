@@ -15,7 +15,7 @@ import net.neoforged.fml.loading.FMLPaths;
 import java.nio.file.Path;
 
 /**
- * NeoForge implementation of PlatformHelper for MC 1.21.6+
+ * NeoForge implementation of PlatformHelper for MC 1.21.11+
  * Uses RenderPipelines.GUI_TEXTURED instead of RenderType::guiTextured
  */
 @SuppressWarnings("unused")

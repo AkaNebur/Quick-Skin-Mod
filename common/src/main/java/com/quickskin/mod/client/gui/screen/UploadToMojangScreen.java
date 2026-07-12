@@ -7,7 +7,7 @@ import com.quickskin.mod.client.gui.util.ButtonFactory;
 import com.quickskin.mod.client.util.MojangSkinUploader;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-//? if <26.1 {
+//? if <26.1.2 {
 import net.minecraft.client.gui.GuiGraphics;
 //?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -139,14 +139,14 @@ public class UploadToMojangScreen extends Screen {
     }
 
     @Override
-    //? if <26.1 {
+    //? if <26.1.2 {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
     //?} else {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
     //?}
         // Render parent screen in background
         if (this.parent != null) {
-            //? if <26.1 {
+            //? if <26.1.2 {
             this.parent.render(graphics, -1, -1, partialTicks);
             //?} else {
             GuiCompat.extractParent(this.parent, graphics, partialTicks);
@@ -187,7 +187,7 @@ public class UploadToMojangScreen extends Screen {
 
         // Draw title (centered)
         int titleY = this.panelY + 20;
-        //? if <26.1 {
+        //? if <26.1.2 {
         graphics.drawCenteredString(this.font, this.title,
         //?} else {
         graphics.centeredText(this.font, this.title,
@@ -204,7 +204,7 @@ public class UploadToMojangScreen extends Screen {
         if (isUploading) {
             // Show uploading state
             String uploadIcon = "\u2191";  // ↑
-            //? if <26.1 {
+            //? if <26.1.2 {
             graphics.drawCenteredString(this.font, uploadIcon,
             //?} else {
             graphics.centeredText(this.font, uploadIcon,
@@ -212,7 +212,7 @@ public class UploadToMojangScreen extends Screen {
                                        this.width / 2, iconY,
                                        INFO_COLOR);
 
-            //? if <26.1 {
+            //? if <26.1.2 {
             graphics.drawCenteredString(this.font, Component.translatable("quickskin.upload.uploading").getString(),
             //?} else {
             graphics.centeredText(this.font, Component.translatable("quickskin.upload.uploading").getString(),
@@ -221,7 +221,7 @@ public class UploadToMojangScreen extends Screen {
                                        INFO_COLOR);
             currentY += lineHeight * 2;
 
-            //? if <26.1 {
+            //? if <26.1.2 {
             graphics.drawCenteredString(this.font, Component.translatable("quickskin.upload.please_wait").getString(),
             //?} else {
             graphics.centeredText(this.font, Component.translatable("quickskin.upload.please_wait").getString(),
@@ -233,7 +233,7 @@ public class UploadToMojangScreen extends Screen {
             String icon = uploadSuccess ? "\u2713" : "\u2717";  // ✓ or ✗
             int iconColor = uploadSuccess ? SUCCESS_COLOR : ERROR_COLOR;
 
-            //? if <26.1 {
+            //? if <26.1.2 {
             graphics.drawCenteredString(this.font, icon,
             //?} else {
             graphics.centeredText(this.font, icon,
@@ -245,7 +245,7 @@ public class UploadToMojangScreen extends Screen {
             if (resultMessage != null) {
                 java.util.List<String> wrappedLines = wrapText(resultMessage, this.panelWidth - 40);
                 for (String line : wrappedLines) {
-                    //? if <26.1 {
+                    //? if <26.1.2 {
                     graphics.drawCenteredString(this.font, line,
                     //?} else {
                     graphics.centeredText(this.font, line,
@@ -258,7 +258,7 @@ public class UploadToMojangScreen extends Screen {
 
             if (uploadSuccess) {
                 currentY += lineHeight;
-                //? if <26.1 {
+                //? if <26.1.2 {
                 graphics.drawCenteredString(this.font, Component.translatable("quickskin.upload.success").getString(),
                 //?} else {
                 graphics.centeredText(this.font, Component.translatable("quickskin.upload.success").getString(),
@@ -269,7 +269,7 @@ public class UploadToMojangScreen extends Screen {
         } else {
             // Show initial instructions
             String uploadIcon = "\u2191";  // ↑
-            //? if <26.1 {
+            //? if <26.1.2 {
             graphics.drawCenteredString(this.font, uploadIcon,
             //?} else {
             graphics.centeredText(this.font, uploadIcon,
@@ -292,7 +292,7 @@ public class UploadToMojangScreen extends Screen {
             };
 
             for (String line : instructions) {
-                //? if <26.1 {
+                //? if <26.1.2 {
                 graphics.drawCenteredString(this.font, line,
                 //?} else {
                 graphics.centeredText(this.font, line,
@@ -304,7 +304,7 @@ public class UploadToMojangScreen extends Screen {
         }
 
         // Render buttons
-        //? if <26.1 {
+        //? if <26.1.2 {
         super.render(graphics, mouseX, mouseY, partialTicks);
         //?} else {
         super.extractRenderState(graphics, mouseX, mouseY, partialTicks);
@@ -383,14 +383,14 @@ public class UploadToMojangScreen extends Screen {
         this.callback.accept(false);
     }
     //? if >=1.21 {
-        //? if <1.21.6 {
+        //? if <1.21.11 {
     @Override
     public void renderBlurredBackground(float partialTick) {
         // Disable the default Minecraft blur effect - we handle blur with BlurHandler
     }
         //?}
     //?}
-    //? if >=26.1 {
+    //? if >=26.1.2 {
 
     @Override
     protected void extractBlurredBackground(net.minecraft.client.gui.GuiGraphicsExtractor guiGraphics) {

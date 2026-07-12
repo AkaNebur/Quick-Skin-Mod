@@ -205,7 +205,7 @@ public class SkinManagerMixin {
      * see the modified skin through this mixin.
      */
     //? if <26.2 {
-    /** In MC 1.21.4+, getOrLoad returns CompletableFuture<Optional<PlayerSkin>>. */
+    /** In MC 1.21.11+, getOrLoad returns CompletableFuture<Optional<PlayerSkin>>. */
     @Inject(method = "getOrLoad", at = @At("RETURN"), cancellable = true)
     //?} else {
     /** In MC 26.2, the async loader was renamed to get. */

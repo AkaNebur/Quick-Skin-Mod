@@ -6,7 +6,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.Font;
-//? if <26.1 {
+//? if <26.1.2 {
 import net.minecraft.client.gui.GuiGraphics;
 //?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -25,7 +25,7 @@ public class RotateButton extends Button {
     //? if <1.21.11 {
     public void renderString(GuiGraphics pGuiGraphics, Font pFont, int pColor) {
     //?} else {
-        //? if <26.1 {
+        //? if <26.1.2 {
     protected void renderContents(GuiGraphics pGuiGraphics, int mouseX, int mouseY, float partialTick) {
         renderDefaultSprite(pGuiGraphics);
         Font pFont = net.minecraft.client.Minecraft.getInstance().font;
@@ -40,7 +40,7 @@ public class RotateButton extends Button {
         PoseStack poseStack = pGuiGraphics.pose();
         poseStack.pushPose();
         //?} else {
-        // In 1.21.6+, graphics.pose() returns Matrix3x2fStack with 2D push/pop/translate/scale
+        // In 1.21.11+, graphics.pose() returns Matrix3x2fStack with 2D push/pop/translate/scale
         var pose = pGuiGraphics.pose();
         pose.pushMatrix();
         //?}
@@ -61,7 +61,7 @@ public class RotateButton extends Button {
         //? if <1.21.11 {
         pGuiGraphics.drawString(pFont, message, (int)(-textWidth / 2), (int)(-pFont.lineHeight / 2.0F + 1), pColor);
         //?} else {
-            //? if <26.1 {
+            //? if <26.1.2 {
         pGuiGraphics.drawString(pFont, message, (int)(-textWidth / 2), (int)(-pFont.lineHeight / 2.0F + 1), 0xFFFFFFFF);
             //?} else {
         pGuiGraphics.text(pFont, message, (int)(-textWidth / 2), (int)(-pFont.lineHeight / 2.0F + 1), 0xFFFFFFFF);

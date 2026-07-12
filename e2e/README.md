@@ -3,9 +3,8 @@
 The release gate tests the same jars that publishing receives. It does not use Loom run tasks or
 compiled `main` output.
 
-The checked-in [release matrix](../release/release-matrix.json) separates the artifact node from the
-Minecraft runtime version. Its 10 release files resolve to 14 smoke rows because each 26.1 jar is
-launched on 26.1, 26.1.1, and 26.1.2 for its loader.
+The checked-in [release matrix](../release/release-matrix.json) defines 10 release files and 10
+matching smoke rows. Every artifact advertises and launches on exactly one Minecraft version.
 
 ## Local setup
 
@@ -43,11 +42,5 @@ loader-specific dependencies and separate E2E harness.
 A row fails for a missing or changed package, missing/invalid report, unexpected step, failed or
 undersized screenshot, compatibility/error screen, crash report, or fatal mixin/access-widener/
 linkage/`@ExpectPlatform` log evidence. Every result records the literal fields
-`artifact_node`, `runtime_version`, `loader`, `scenario`, `jar_sha256`, and `port`.
-
-NeoForge 26.1 and 26.1.1 cannot boot with stock Architectury 20.x. The pooled marketplace file must
-therefore require one maintained, published compatibility artifact. All three pooled rows, including
-26.1.2, install those same exact bytes through `NEOFORGE_26_1_ARCHITECTURY_URL` and
-`NEOFORGE_26_1_ARCHITECTURY_SHA256`; publishing additionally requires its Modrinth and CurseForge
-project IDs. Missing inputs block scheduled coverage and release instead of substituting the
-development byte patch.
+`artifact_node`, `runtime_version`, `loader`, `scenario`, `jar_sha256`, and `port`. All loader and
+Architectury dependencies are locked directly in the matrix for that exact runtime.

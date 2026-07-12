@@ -22,7 +22,7 @@ public final class CpmCapabilities {
         MC_1_20_1("1.20.1", RenderPipeline.IMMEDIATE),
         MC_1_21_1("1.21.1", RenderPipeline.IMMEDIATE),
         MC_1_21_11("1.21.11", RenderPipeline.RENDER_STATE),
-        MC_26_1("26.1", RenderPipeline.EXTRACTOR),
+        MC_26_1_2("26.1.2", RenderPipeline.EXTRACTOR),
         MC_26_2("26.2", RenderPipeline.DEFERRED_COLLECTOR);
 
         private final String displayName;
@@ -71,7 +71,7 @@ public final class CpmCapabilities {
         matrix.put(Band.MC_1_20_1, availableWithEmbeddedBridge(Band.MC_1_20_1));
         matrix.put(Band.MC_1_21_1, availableWithEmbeddedBridge(Band.MC_1_21_1));
         matrix.put(Band.MC_1_21_11, availableWithDegradedEmbeddedBridge(Band.MC_1_21_11));
-        matrix.put(Band.MC_26_1, availableWithDegradedEmbeddedBridge(Band.MC_26_1));
+        matrix.put(Band.MC_26_1_2, availableWithDegradedEmbeddedBridge(Band.MC_26_1_2));
         matrix.put(Band.MC_26_2, availableWithDegradedEmbeddedBridge(Band.MC_26_2));
         MATRIX = Collections.unmodifiableMap(matrix);
     }
@@ -92,10 +92,10 @@ public final class CpmCapabilities {
         return Band.MC_1_20_1;
         //?} else if <1.21.11 {
         return Band.MC_1_21_1;
-        //?} else if <26.1 {
+        //?} else if <26.1.2 {
         return Band.MC_1_21_11;
         //?} else if <26.2 {
-        return Band.MC_26_1;
+        return Band.MC_26_1_2;
         //?} else {
         return Band.MC_26_2;
         //?}

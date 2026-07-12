@@ -15,7 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 /**
  * Handles blur rendering - simplified to be called directly from the screen.
  *
- * In MC 1.21.4+, the PostChain API was reworked (constructor changed, resize/close/process
+ * In MC 1.21.11+, the PostChain API was reworked (constructor changed, resize/close/process
  * methods removed or changed signatures), so custom PostChain-based blur is not supported.
  * This handler gracefully no-ops to allow compilation and runtime without blur effects.
  */
@@ -35,7 +35,7 @@ public class BlurHandler {
 
     /**
      * Call this after rendering the background but before rendering UI.
-     * No-op on 1.21.4+ due to PostChain API changes.
+     * No-op on 1.21.11+ due to PostChain API changes.
      */
     public static void renderBlur() {
         //? if <1.21.11 {
@@ -53,7 +53,7 @@ public class BlurHandler {
             warned = true;
         //?}
         }
-        //? if <1.21.4 {
+        //? if <1.21.11 {
         RenderSystem.disableBlend();
         RenderSystem.disableDepthTest();
         blurShader.process(0.0f);
@@ -69,7 +69,7 @@ public class BlurHandler {
 
     /**
      * Cleans up blur shader resources.
-     * No-op on 1.21.4+ since no shader is loaded.
+     * No-op on 1.21.11+ since no shader is loaded.
      */
     public static void cleanup() {
         //? if <1.21.11 {

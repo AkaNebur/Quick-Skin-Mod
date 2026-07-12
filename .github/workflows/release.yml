@@ -20,7 +20,7 @@ on:
           - beta
           - alpha
       dry_run:
-        description: Build and run all 14 smokes without publishing
+        description: Build and run all 10 smokes without publishing
         required: true
         default: true
         type: boolean
@@ -37,10 +37,6 @@ env:
   LIBGL_ALWAYS_SOFTWARE: "1"
   GALLIUM_DRIVER: llvmpipe
   __GLX_VENDOR_LIBRARY_NAME: mesa
-  NEOFORGE_26_1_ARCHITECTURY_URL: ${{ vars.NEOFORGE_26_1_ARCHITECTURY_URL }}
-  NEOFORGE_26_1_ARCHITECTURY_SHA256: ${{ vars.NEOFORGE_26_1_ARCHITECTURY_SHA256 }}
-  NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID: ${{ vars.NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID }}
-  NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID: ${{ vars.NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID }}
 
 jobs:
   build:
@@ -98,27 +94,6 @@ jobs:
           fi
           printf 'version=%s\n' "$configured" >> "$GITHUB_OUTPUT"
           printf 'channel=%s\n' "$channel" >> "$GITHUB_OUTPUT"
-
-      - name: Fail closed on pooled NeoForge 26.1 compatibility
-        shell: bash
-        run: |
-          set -euo pipefail
-          needs_compat="$(python - <<'PY'
-          import json
-          matrix = json.load(open("release/release-matrix.json", encoding="utf-8"))
-          print(str(any(
-              row.get("architectury", {}).get("kind") == "external-maintained-compat"
-              for row in matrix["runtimes"]
-          )).lower())
-          PY
-          )"
-          if [[ "$needs_compat" == "true" ]]; then
-            test -n "$NEOFORGE_26_1_ARCHITECTURY_URL"
-            [[ "$NEOFORGE_26_1_ARCHITECTURY_URL" == https://* ]]
-            [[ "$NEOFORGE_26_1_ARCHITECTURY_SHA256" =~ ^[0-9a-f]{64}$ ]]
-            test -n "$NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID"
-            test -n "$NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID"
-          fi
 
       - name: Build ten production artifacts and ten E2E harnesses
         run: >-
@@ -225,14 +200,6 @@ jobs:
       - name: Reverify staged bytes and build identity
         run: python scripts/release/verify_release.py --verify-staged
 
-      - name: Enforce NeoForge 26.1 compatibility dependency
-        if: ${{ matrix.architectury.kind == 'external-maintained-compat' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$NEOFORGE_26_1_ARCHITECTURY_URL"
-          test -n "$NEOFORGE_26_1_ARCHITECTURY_SHA256"
-
       - name: Run packaged-JAR release smoke
         shell: bash
         env:
@@ -295,14 +262,6 @@ jobs:
           --matrix release/release-matrix.json
           --manifest build/release/artifacts.json
           --verify-staged
-
-      - name: Enforce NeoForge 26.1 publication dependency
-        if: ${{ matrix.artifact_node == 'neoforge-26.1' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID"
-          test -n "$NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID"
 
       - name: Publish exact verified artifact to Modrinth and CurseForge
         uses: Kira-NT/mc-publish@v3.3

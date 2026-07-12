@@ -29,14 +29,6 @@
       "url": "https://maven.neoforged.net/releases/net/neoforged/neoforge/21.11.38-beta/neoforge-21.11.38-beta-installer.jar",
       "sha256": "305eb5c8185dd1ace6484b97db4e79011cc1529aeb4b0d2e2cb3903623b84e72"
     },
-    "neoforge-26.1.0.19-beta": {
-      "url": "https://maven.neoforged.net/releases/net/neoforged/neoforge/26.1.0.19-beta/neoforge-26.1.0.19-beta-installer.jar",
-      "sha256": "8fba9309b78ffb14a3791ed64a42b28a4bc924bb38942046949d8b0c7ebd6cc0"
-    },
-    "neoforge-26.1.1.15-beta": {
-      "url": "https://maven.neoforged.net/releases/net/neoforged/neoforge/26.1.1.15-beta/neoforge-26.1.1.15-beta-installer.jar",
-      "sha256": "210855229fb30c2378e3734902c1d07ff62ed97ff55baac21e57f42594b7c063"
-    },
     "neoforge-26.1.2.76": {
       "url": "https://maven.neoforged.net/releases/net/neoforged/neoforge/26.1.2.76/neoforge-26.1.2.76-installer.jar",
       "sha256": "f67bf87ddf8f3095ddbae4c78dbbbf5615e08b6982f4e84159eab951235974ec"
@@ -145,35 +137,35 @@
       }
     },
     {
-      "artifact_node": "fabric-26.1",
-      "artifact_version": "26.1",
+      "artifact_node": "fabric-26.1.2",
+      "artifact_version": "26.1.2",
       "loader": "fabric",
       "java": 25,
-      "gradle_task": ":fabric:26.1:shadowJar",
-      "harness_task": ":fabric:26.1:e2eHarnessJar",
-      "jar": "fabric/versions/26.1/build/libs/Quick Skin - Fabric - 26.1-{mod_version}.jar",
-      "harness_jar": "fabric/versions/26.1/build/libs/Quick Skin E2E - Fabric - 26.1-0.0.0.jar",
-      "game_versions": ["26.1", "26.1.1", "26.1.2"],
+      "gradle_task": ":fabric:26.1.2:shadowJar",
+      "harness_task": ":fabric:26.1.2:e2eHarnessJar",
+      "jar": "fabric/versions/26.1.2/build/libs/Quick Skin - Fabric - 26.1.2-{mod_version}.jar",
+      "harness_jar": "fabric/versions/26.1.2/build/libs/Quick Skin E2E - Fabric - 26.1.2-0.0.0.jar",
+      "game_versions": ["26.1.2"],
       "metadata": {
         "file": "fabric.mod.json",
-        "minecraft": ">=26.1 <=26.1.2",
-        "architectury": ">=20.0.4"
+        "minecraft": "=26.1.2",
+        "architectury": ">=20.0.6"
       }
     },
     {
-      "artifact_node": "neoforge-26.1",
-      "artifact_version": "26.1",
+      "artifact_node": "neoforge-26.1.2",
+      "artifact_version": "26.1.2",
       "loader": "neoforge",
       "java": 25,
-      "gradle_task": ":neoforge:26.1:shadowJar",
-      "harness_task": ":neoforge:26.1:e2eHarnessJar",
-      "jar": "neoforge/versions/26.1/build/libs/Quick Skin - NeoForge - 26.1-{mod_version}.jar",
-      "harness_jar": "neoforge/versions/26.1/build/libs/Quick Skin E2E - NeoForge - 26.1-0.0.0.jar",
-      "game_versions": ["26.1", "26.1.1", "26.1.2"],
+      "gradle_task": ":neoforge:26.1.2:shadowJar",
+      "harness_task": ":neoforge:26.1.2:e2eHarnessJar",
+      "jar": "neoforge/versions/26.1.2/build/libs/Quick Skin - NeoForge - 26.1.2-{mod_version}.jar",
+      "harness_jar": "neoforge/versions/26.1.2/build/libs/Quick Skin E2E - NeoForge - 26.1.2-0.0.0.jar",
+      "game_versions": ["26.1.2"],
       "metadata": {
         "file": "META-INF/neoforge.mods.toml",
-        "minecraft": "[26.1,26.1.3)",
-        "architectury": "[20.0.4,)"
+        "minecraft": "[26.1.2,26.1.3)",
+        "architectury": "[20.0.6,)"
       }
     },
     {
@@ -292,35 +284,7 @@
       "scheduled_anchor": true
     },
     {
-      "artifact_node": "fabric-26.1",
-      "runtime_version": "26.1",
-      "loader": "fabric",
-      "scenario": "phase0-smoke",
-      "jar_sha256": "from:artifact-manifest",
-      "port": 0,
-      "java": 25,
-      "loader_version": "0.19.3",
-      "installer": "fabric-1.1.0",
-      "fabric_api": "0.145.1+26.1",
-      "architectury": {"kind": "maven", "version": "20.0.4"},
-      "scheduled_anchor": false
-    },
-    {
-      "artifact_node": "fabric-26.1",
-      "runtime_version": "26.1.1",
-      "loader": "fabric",
-      "scenario": "phase0-smoke",
-      "jar_sha256": "from:artifact-manifest",
-      "port": 0,
-      "java": 25,
-      "loader_version": "0.19.3",
-      "installer": "fabric-1.1.0",
-      "fabric_api": "0.145.4+26.1.1",
-      "architectury": {"kind": "maven", "version": "20.0.4"},
-      "scheduled_anchor": false
-    },
-    {
-      "artifact_node": "fabric-26.1",
+      "artifact_node": "fabric-26.1.2",
       "runtime_version": "26.1.2",
       "loader": "fabric",
       "scenario": "phase0-smoke",
@@ -334,47 +298,7 @@
       "scheduled_anchor": true
     },
     {
-      "artifact_node": "neoforge-26.1",
-      "runtime_version": "26.1",
-      "loader": "neoforge",
-      "scenario": "phase0-smoke",
-      "jar_sha256": "from:artifact-manifest",
-      "port": 0,
-      "java": 25,
-      "loader_version": "26.1.0.19-beta",
-      "installer": "neoforge-26.1.0.19-beta",
-      "architectury": {
-        "kind": "external-maintained-compat",
-        "url_env": "NEOFORGE_26_1_ARCHITECTURY_URL",
-        "sha256_env": "NEOFORGE_26_1_ARCHITECTURY_SHA256",
-        "modrinth_id_env": "NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID",
-        "curseforge_id_env": "NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID",
-        "blocker": "Stock Architectury 20.x targets NeoForge 26.1.2 BreakBlockEvent and cannot boot NeoForge 26.1."
-      },
-      "scheduled_anchor": false
-    },
-    {
-      "artifact_node": "neoforge-26.1",
-      "runtime_version": "26.1.1",
-      "loader": "neoforge",
-      "scenario": "phase0-smoke",
-      "jar_sha256": "from:artifact-manifest",
-      "port": 0,
-      "java": 25,
-      "loader_version": "26.1.1.15-beta",
-      "installer": "neoforge-26.1.1.15-beta",
-      "architectury": {
-        "kind": "external-maintained-compat",
-        "url_env": "NEOFORGE_26_1_ARCHITECTURY_URL",
-        "sha256_env": "NEOFORGE_26_1_ARCHITECTURY_SHA256",
-        "modrinth_id_env": "NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID",
-        "curseforge_id_env": "NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID",
-        "blocker": "Stock Architectury 20.x targets NeoForge 26.1.2 BreakBlockEvent and cannot boot NeoForge 26.1.1."
-      },
-      "scheduled_anchor": false
-    },
-    {
-      "artifact_node": "neoforge-26.1",
+      "artifact_node": "neoforge-26.1.2",
       "runtime_version": "26.1.2",
       "loader": "neoforge",
       "scenario": "phase0-smoke",
@@ -383,14 +307,7 @@
       "java": 25,
       "loader_version": "26.1.2.76",
       "installer": "neoforge-26.1.2.76",
-      "architectury": {
-        "kind": "external-maintained-compat",
-        "url_env": "NEOFORGE_26_1_ARCHITECTURY_URL",
-        "sha256_env": "NEOFORGE_26_1_ARCHITECTURY_SHA256",
-        "modrinth_id_env": "NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID",
-        "curseforge_id_env": "NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID",
-        "blocker": "The pooled marketplace file requires one maintained Architectury compatibility artifact, so those exact bytes must also pass NeoForge 26.1.2."
-      },
+      "architectury": {"kind": "maven", "version": "20.0.6"},
       "scheduled_anchor": true
     },
     {
