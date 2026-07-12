@@ -65,6 +65,22 @@ public class PlayerModelRenderer {
         }
     }
 
+    /**
+     * Identifies roots owned by QuickSkin's cached preview models.
+     *
+     * @return {@code false} for the classic model, {@code true} for the slim model,
+     *         or {@code null} when the root belongs to another renderer
+     */
+    public static Boolean getQuickSkinPreviewThinArms(ModelPart root) {
+        if (classicModel != null && root == classicModel.root()) {
+            return Boolean.FALSE;
+        }
+        if (slimModel != null && root == slimModel.root()) {
+            return Boolean.TRUE;
+        }
+        return null;
+    }
+
     // Cached player entity for rendering (persists even after leaving world)
     private static Player cachedPlayer;
 

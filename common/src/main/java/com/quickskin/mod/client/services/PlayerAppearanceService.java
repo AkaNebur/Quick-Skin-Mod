@@ -3,6 +3,7 @@ package com.quickskin.mod.client.services;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.compat.CustomNPCsIntegration;
+import com.quickskin.mod.client.rendering.SkinLayers3DIntegration;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
@@ -219,16 +220,7 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
     }
 
     private void refreshSkinLayers3D(AbstractClientPlayer player) {
-        try {
-            Class<?> skinLayersClass = Class.forName("dev.tr7zw.skinlayers.SkinLayersModBase");
-            java.lang.reflect.Method refreshMethod = skinLayersClass.getDeclaredMethod("refreshPlayer", net.minecraft.world.entity.player.Player.class);
-            refreshMethod.setAccessible(true);
-            refreshMethod.invoke(null, player);
-        } catch (ClassNotFoundException e) {
-            // Mod not installed
-        } catch (Exception e) {
-            // SkinLayers3D mod may have updated
-        }
+        SkinLayers3DIntegration.refreshPlayer(player);
     }
 
     public boolean hasActiveSkin(UUID playerId) {

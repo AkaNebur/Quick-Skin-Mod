@@ -3,6 +3,7 @@ package com.quickskin.mod.mixin;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
+import com.quickskin.mod.client.rendering.SkinLayers3DIntegration;
 import net.minecraft.client.gui.render.pip.GuiSkinRenderer;
 import net.minecraft.client.renderer.state.gui.pip.GuiSkinRenderState;
 import net.minecraft.client.model.player.PlayerCapeModel;
@@ -29,6 +30,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(GuiSkinRenderer.class)
 public class GuiSkinRendererMixin {
+
+    @Inject(
+            method = "renderToTexture(Lnet/minecraft/client/renderer/state/gui/pip/GuiSkinRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;)V",
+            at = @At("HEAD")
+    )
+    private void quickskin$attachSkinLayersMeshes(GuiSkinRenderState state, PoseStack poseStack,
+                                                   SubmitNodeCollector collector, CallbackInfo ci) {
+        var root = state.playerModel().root();
+        Boolean thinArms = PlayerModelRenderer.getQuickSkinPreviewThinArms(root);
+        if (thinArms != null) {
+            SkinLayers3DIntegration.attachDeferredMeshes(root, state.texture(), thinArms);
+        }
+    }
 
     @Inject(
             method = "renderToTexture(Lnet/minecraft/client/renderer/state/gui/pip/GuiSkinRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;)V",

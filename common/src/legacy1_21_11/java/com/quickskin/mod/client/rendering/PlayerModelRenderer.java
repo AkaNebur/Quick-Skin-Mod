@@ -66,6 +66,22 @@ public class PlayerModelRenderer {
         }
     }
 
+    /**
+     * Identifies models owned by QuickSkin's cached preview renderer.
+     *
+     * @return {@code false} for the classic model, {@code true} for the slim model,
+     *         or {@code null} when the model belongs to another renderer
+     */
+    public static Boolean getQuickSkinPreviewThinArms(PlayerModel model) {
+        if (model == classicModel) {
+            return Boolean.FALSE;
+        }
+        if (model == slimModel) {
+            return Boolean.TRUE;
+        }
+        return null;
+    }
+
     // Cached player entity for rendering (persists even after leaving world)
     private static Player cachedPlayer;
 
