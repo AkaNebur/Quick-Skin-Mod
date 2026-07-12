@@ -137,18 +137,12 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             RenderSystem.enableBlend();
             //?}
 
-            //? if <1.21.4 {
             if (metadata.isCpmModel()) {
                 GuiCompat.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
                     0, 0, 64, 64, 64, 64);
             } else {
                 int textureWidth = metadata.resolution().getWidth();
                 int textureHeight = metadata.resolution().getHeight();
-            //?} else {
-            // Get texture dimensions for proper UV mapping
-            int textureWidth = metadata.resolution().getWidth();
-            int textureHeight = metadata.resolution().getHeight();
-            //?}
 
                 //? if <1.21 {
                 float scaleX = textureWidth / 64.0f;
@@ -165,9 +159,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             GuiCompat.blit(graphics, textureLocation, faceX, faceY, faceSize, faceSize,
                 40.0f * scaleX, 8.0f * scaleY, (int)(8 * scaleX), (int)(8 * scaleY),
                 textureWidth, textureHeight);
-            //? if <1.21.4 {
             }
-            //?}
 
             //? if <1.21.11 {
             RenderSystem.disableBlend();
@@ -208,7 +200,6 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         //?}
 
         // Model type and resolution
-        //? if <1.21.4 {
         String modelText;
         int modelTextColor;
         if (metadata.isCpmModel()) {
@@ -221,21 +212,15 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             }
             modelTextColor = metadata.resolution().isHD() ? 0x55FF55 : 0xAAAAAA;
         }
-        //?} else {
-        String modelText = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null) ? "Slim" : "Classic";
-        if (metadata.resolution().isHD()) {
-            modelText += " • " + metadata.resolution().name();
-        }
-        //?}
         //? if <1.21.11 {
         graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2, modelTextColor);
         //?} else {
             //? if <26.1 {
         graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
-            metadata.resolution().isHD() ? 0xFF55FF55 : 0xFFAAAAAA);
+            0xFF000000 | modelTextColor);
             //?} else {
         graphics.text(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
-            metadata.resolution().isHD() ? 0xFF55FF55 : 0xFFAAAAAA);
+            0xFF000000 | modelTextColor);
             //?}
         //?}
 
@@ -281,12 +266,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
 
             this.isEditHovered = editHovered;
 
-            //? if <1.21.11 {
             if (isPremiumAccount && !metadata.isCpmModel()) {
-            //?} else {
-            // Upload button (only for premium users)
-            if (isPremiumAccount) {
-            //?}
                 int uploadButtonY = editButtonY + actionButtonSize + 2;
                 boolean uploadHovered = mouseX >= deleteButtonX && mouseX < deleteButtonX + actionButtonSize &&
                                        mouseY >= uploadButtonY && mouseY < uploadButtonY + actionButtonSize;

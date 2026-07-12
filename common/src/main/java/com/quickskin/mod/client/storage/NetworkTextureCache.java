@@ -232,6 +232,7 @@ public class NetworkTextureCache {
             Path cpmCacheDir = PlatformHelper.getGameDirectory().resolve("quickskin").resolve("cpm-cache");
             Files.createDirectories(cpmCacheDir);
             Path tempFile = cpmCacheDir.resolve(hash + ".png");
+            com.quickskin.mod.client.compat.CPMCompatIntegration.evictHttpTextureCache(hash);
             Files.write(tempFile, original);
             tempFileCache.put(hash, tempFile);
             return tempFile;
@@ -256,9 +257,11 @@ public class NetworkTextureCache {
             }
         }
         //? if <1.21.11 {
-        for (Path tempFile : tempFileCache.values()) {
+        for (Map.Entry<String, Path> entry : tempFileCache.entrySet()) {
             try {
-                Files.deleteIfExists(tempFile);
+                com.quickskin.mod.client.compat.CPMCompatIntegration
+                        .evictHttpTextureCache(entry.getKey());
+                Files.deleteIfExists(entry.getValue());
             } catch (IOException e) {
             }
         }

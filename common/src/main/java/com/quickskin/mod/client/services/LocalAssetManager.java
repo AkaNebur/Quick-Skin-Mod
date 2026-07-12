@@ -119,6 +119,15 @@ public class LocalAssetManager {
 
         // Scan capes directory
         scanDirectory(capesDirectory, "cape");
+
+        // CPM is optional: do not even expose model files when the mod is absent.
+        if (com.quickskin.mod.client.compat.CPMCompatIntegration.isAvailable()) {
+            com.quickskin.mod.client.compat.CpmModelWorkflow.reconcilePendingSkinModeReset();
+            scanCpmModels();
+        } else {
+            com.quickskin.mod.client.compat.CpmModelWorkflow.sanitizeUnavailableState();
+        }
+        com.quickskin.mod.client.compat.CpmModelWorkflow.sanitizeMissingActiveModel();
     }
 
     /**
@@ -164,6 +173,60 @@ public class LocalAssetManager {
         }
 
         return count;
+    }
+
+    /** Scan CPM's recursive player_models tree for standalone model files. */
+    private void scanCpmModels() {
+        Path modelsDirectory = com.quickskin.mod.client.compat.CPMCompatIntegration
+                .getCPMModelsDirectory();
+        if (!Files.isDirectory(modelsDirectory)) {
+            return;
+        }
+
+        try (Stream<Path> paths = Files.walk(modelsDirectory)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String fileName = path.getFileName().toString();
+                if (!fileName.toLowerCase(Locale.ROOT).endsWith(".cpmmodel")) {
+                    continue;
+                }
+                try {
+                    scanCpmModel(path, fileName);
+                } catch (IOException | RuntimeException ignored) {
+                    // Skip only the unreadable candidate and continue the recursive scan.
+                }
+            }
+        } catch (IOException ignored) {
+            // An unreadable optional directory must not affect normal skins/capes.
+        }
+    }
+
+    private void scanCpmModel(Path path, String fileName) throws IOException {
+        String hash = HashUtil.computeFileHash(path);
+        if (hash == null) {
+            return;
+        }
+
+        com.quickskin.mod.client.compat.CPMCompatIntegration.CpmModelInfo info =
+                com.quickskin.mod.client.compat.CPMCompatIntegration.parseCpmModelInfo(path);
+        String fallbackName = fileName.substring(0, fileName.length() - 9);
+        String friendlyName = info != null && info.name != null && !info.name.isBlank()
+                ? info.name
+                : fallbackName;
+        AssetMetadata metadata = AssetMetadata.forCpmModel(
+                hash,
+                friendlyName,
+                path,
+                Files.size(path),
+                Files.getLastModifiedTime(path).toMillis()
+        );
+        metadataCache.put(hash, metadata);
+        hashToSourcePath.put(hash, path);
+
+        if (info != null && info.iconPngBytes != null) {
+            Path iconPath = getCpmIconPath(hash);
+            Files.createDirectories(iconPath.getParent());
+            Files.write(iconPath, info.iconPngBytes);
+        }
     }
 
     /**
@@ -482,11 +545,14 @@ public class LocalAssetManager {
         };
     }
 
-    /**
-     * Get all skins
-     */
+    /** Get all selectable skin entries, including optional CPM models. */
     public List<AssetMetadata> getAllSkins() {
-        return getAssetsByType("skin");
+        String playerOwnSkinHash = ClientConfig.getInstance().playerOwnSkinHash;
+        SkinSortMode sortMode = ClientConfig.getInstance().getSkinSortMode();
+        return metadataCache.values().stream()
+                .filter(metadata -> metadata.isSkin() || metadata.isCpmModel())
+                .sorted(getSortComparator(sortMode, playerOwnSkinHash))
+                .toList();
     }
 
     /**
@@ -551,32 +617,73 @@ public class LocalAssetManager {
         }
     }
 
+    private Path getCpmIconPath(String hash) {
+        return cacheDirectory.resolve("cpm_icons").resolve(hash + ".png");
+    }
+
+    private byte[] loadCpmModelIcon(String hash) {
+        Path iconPath = getCpmIconPath(hash);
+        if (!Files.exists(iconPath)) {
+            return null;
+        }
+        try {
+            return Files.readAllBytes(iconPath);
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
     /**
      * Delete local asset
      */
-    public void deleteAsset(String hash) {
+    public boolean deleteAsset(String hash) {
         AssetMetadata metadata = metadataCache.get(hash);
         if (metadata == null) {
-            return;
+            return false;
         }
 
         Path path = hashToSourcePath.get(hash);
         if (path == null || !Files.exists(path)) {
-            return;
+            return false;
         }
 
         try {
             Files.delete(path);
+            if (metadata.isSkin()) {
+                com.quickskin.mod.client.compat.CPMCompatIntegration.evictHttpTextureCache(hash);
+            }
+            if (metadata.isCpmModel()) {
+                com.quickskin.mod.client.compat.CpmModelWorkflow.onModelDeleted(metadata);
+            }
             metadataCache.remove(hash);
             hashToSourcePath.remove(hash);
+            sourceImageCache.remove(hash);
+
+            Map<TextureQuality, Identifier> registeredTextures = textureRegistry.remove(hash);
+            if (registeredTextures != null) {
+                for (Identifier location : registeredTextures.values()) {
+                    try {
+                        Minecraft.getInstance().getTextureManager().release(location);
+                    } catch (RuntimeException ignored) {
+                    }
+                }
+            }
+
+            if (metadata.isCpmModel()) {
+                try {
+                    Files.deleteIfExists(getCpmIconPath(hash));
+                } catch (IOException ignored) {
+                }
+            }
 
             // Also remove preferences for this skin
             if (skinPreferences != null) {
                 skinPreferences.remove(hash);
                 savePreferences();
             }
-
+            return true;
         } catch (IOException e) {
+            return false;
         }
     }
 
@@ -634,7 +741,15 @@ public class LocalAssetManager {
 
             // Update the metadata cache with new friendly name and path
             AssetMetadata updatedMetadata;
-            if ("skin".equals(metadata.type())) {
+            if (metadata.isCpmModel()) {
+                updatedMetadata = AssetMetadata.forCpmModel(
+                        metadata.hash(),
+                        sanitizedName,
+                        newPath,
+                        metadata.fileSize(),
+                        metadata.lastModifiedTime()
+                );
+            } else if ("skin".equals(metadata.type())) {
                 updatedMetadata = AssetMetadata.forSkin(
                         metadata.hash(),
                         sanitizedName,
@@ -667,6 +782,10 @@ public class LocalAssetManager {
 
             metadataCache.put(hash, updatedMetadata);
             hashToSourcePath.put(hash, newPath);
+            if (updatedMetadata.isCpmModel()
+                    && hash.equals(ClientConfig.getInstance().activeCpmModelHash)) {
+                com.quickskin.mod.client.compat.CpmModelWorkflow.activateModel(updatedMetadata);
+            }
 
             return RenameResult.SUCCESS;
 
@@ -752,8 +871,11 @@ public class LocalAssetManager {
             return qualityMap.get(quality);
         }
 
-        // Load and register texture
-        byte[] textureData = loadTexture(hash, quality);
+        // CPM files are not images; their separately cached embedded icon is.
+        AssetMetadata metadata = getMetadata(hash);
+        byte[] textureData = metadata != null && metadata.isCpmModel()
+                ? loadCpmModelIcon(hash)
+                : loadTexture(hash, quality);
         if (textureData == null) {
             return null;
         }
@@ -766,7 +888,7 @@ public class LocalAssetManager {
             // The animation system keeps the atlas in RAM and handles frame switching separately.
             // This prevents massive VRAM waste and fixes incorrect UV rendering when
             // the animation texture is used as a fallback.
-            AssetMetadata meta = getMetadata(hash);
+            AssetMetadata meta = metadata;
             if (meta != null && meta.isAnimated() && meta.frameCount() > 1 && quality == TextureQuality.FULL) {
                 int frameHeight = nativeImage.getHeight() / meta.frameCount();
                 if (frameHeight > 0 && frameHeight < nativeImage.getHeight()) {
@@ -805,7 +927,6 @@ public class LocalAssetManager {
             com.quickskin.mod.common.util.TextureAlphaDetector.cacheTransparencyResult(location, hasAlpha);
 
             // Parse Ears features from the original unprocessed image (preserving alpha for Alfalfa data)
-            AssetMetadata metadata = getMetadata(hash);
             if (metadata != null && "skin".equals(metadata.type())
                     && com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {
                 BufferedImage originalImage = getSourceImage(hash);

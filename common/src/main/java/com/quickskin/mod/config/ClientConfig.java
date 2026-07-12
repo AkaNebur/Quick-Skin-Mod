@@ -83,9 +83,8 @@ public class ClientConfig {
 
     // Active Skin Settings (persisted state)
     public String activeSkinHash = "";
-    //? if <1.21.11 {
     public String activeCpmModelHash = ""; // Active CPM model hash (selected .cpmmodel file)
-    //?}
+    public boolean pendingCpmSkinModeReset = false; // Reconcile CPM after it is reinstalled
     @Deprecated // Now using per-skin model preferences stored in skin-preferences.json
     public String activeModelType = "auto"; // "auto", "classic", "slim" (deprecated - kept for compatibility)
     public String activeCapeHash = ""; // Active cape hash

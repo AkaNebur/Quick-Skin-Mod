@@ -23,32 +23,23 @@ public class FileDialogHelper {
     private static final String DIALOG_CANCELLED_MSG = "File dialog cancelled";
 
     /**
-     * Opens a file dialog to select a PNG image (skin)
+     * Opens a file dialog to select a PNG image or CPM model
      * @param title Dialog title
      * @param onFileSelected Callback when file is selected (null if cancelled)
      */
     public static void openSkinFileDialog(String title, Consumer<Path> onFileSelected) {
         CompletableFuture.runAsync(() -> {
             try (MemoryStack stack = stackPush()) {
-                //? if <1.21.4 {
                 PointerBuffer filters = stack.mallocPointer(2);
                 filters.put(stack.UTF8("*.png"));
                 filters.put(stack.UTF8("*.cpmmodel"));
                 filters.flip();
-                //?} else {
-                PointerBuffer filters = stack.mallocPointer(1);
-                filters.put(stack.UTF8("*.png")).flip();
-                //?}
 
                 String file = TinyFileDialogs.tinyfd_openFileDialog(
                     title,
                     "",
                     filters,
-                    //? if <1.21.4 {
                     "Skin Files (PNG, CPM Model)",
-                    //?} else {
-                    "PNG Images",
-                    //?}
                     false
                 );
 

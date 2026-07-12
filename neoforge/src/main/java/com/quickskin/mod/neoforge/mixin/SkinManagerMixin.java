@@ -1,14 +1,12 @@
 package com.quickskin.mod.neoforge.mixin;
 
 import com.mojang.authlib.GameProfile;
-import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.core.ClientAsset;
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
@@ -20,13 +18,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.io.File;
-import java.nio.file.Path;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * NeoForge-specific mixin on SkinManager to intercept skin resolution at the canonical level.
@@ -45,10 +39,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Mixin(SkinManager.class)
 public class SkinManagerMixin {
-
-    // Cache for HttpTexture-backed ResourceLocations (for CPM compat)
-    @Unique
-    private static final Map<String, Identifier> quickskin$httpTextureCache = new ConcurrentHashMap<>();
 
     /**
      * Shared helper that applies QuickSkin overrides to a PlayerSkin.
@@ -73,13 +63,11 @@ public class SkinManagerMixin {
             boolean anyOverride = false;
 
             if (hasCustomSkin) {
-                Identifier customSkin;
-                if (CPMCompatIntegration.isAvailable()) {
-                    // When CPM is installed, register skin as HttpTexture so CPM can read pixel data
-                    customSkin = quickskin$getOrRegisterHttpTexture(uuid, service);
-                } else {
-                    customSkin = service.getSkinLocation(uuid);
-                }
+                // CPM 1.21.11+ reads authenticated profile texture payloads directly;
+                // an HttpTexture registration cannot bridge embedded PNG data here.
+                // The availability call activates the explicit degraded-capability log.
+                CPMCompatIntegration.isAvailable();
+                Identifier customSkin = service.getSkinLocation(uuid);
                 if (customSkin != null) {
                     skinTexture = customSkin;
                     anyOverride = true;
@@ -171,85 +159,6 @@ public class SkinManagerMixin {
         }
 
         return original;
-    }
-
-    /**
-     * When CPM is installed, registers the QuickSkin skin file as an HttpTexture
-     * so that CPM can extract the file path and read embedded pixel data (3D model).
-     * CPM's skin loading pipeline checks `instanceof HttpTexture` and reads from the file field.
-     *
-     * Uses reflection to access HttpTexture since the class may not exist in all MC versions.
-     */
-    @Unique
-    private static Identifier quickskin$getOrRegisterHttpTexture(UUID uuid, PlayerAppearanceService service) {
-        com.quickskin.mod.common.data.PlayerAppearance appearance = service.getAppearance(uuid);
-        if (appearance == null) return null;
-
-        String skinId = appearance.getSkinId();
-        if (skinId == null || skinId.isEmpty()) return null;
-
-        // Extract hash from skinId (format: "local_skin:hash")
-        String hash = null;
-        if (skinId.startsWith("local_skin:")) {
-            hash = skinId.substring("local_skin:".length());
-        }
-
-        if (hash == null || hash.isEmpty()) {
-            // Not a local skin (could be network skin) - fall back to DynamicTexture
-            return service.getSkinLocation(uuid);
-        }
-
-        // Check cache first
-        Identifier cached = quickskin$httpTextureCache.get(hash);
-        if (cached != null) {
-            // Verify it's still registered in TextureManager
-            // Use reflection-safe check: getTexture(Identifier) without default parameter
-            AbstractTexture existing = Minecraft.getInstance().getTextureManager().getTexture(cached);
-            if (existing != null) {
-                return cached;
-            }
-            quickskin$httpTextureCache.remove(hash);
-        }
-
-        // Find the skin file on disk
-        Path sourcePath = LocalAssetManager.getInstance().getSourcePath(hash);
-        if (sourcePath == null || !sourcePath.toFile().exists()) {
-            // File not found, fall back to DynamicTexture
-            return service.getSkinLocation(uuid);
-        }
-
-        // Create an HttpTexture pointing to the local file using reflection
-        // since HttpTexture may not exist in all MC versions
-        File skinFile = sourcePath.toFile();
-        Identifier location = Identifier.fromNamespaceAndPath(
-                QuickSkin.MOD_ID,
-                "cpm_bridge/" + hash
-        );
-
-        try {
-            Class<?> httpTextureClass = Class.forName("net.minecraft.client.renderer.texture.HttpTexture");
-            // HttpTexture constructor: (File file, String urlString, Identifier fallback, boolean processLegacySkin, Runnable onDownloaded)
-            java.lang.reflect.Constructor<?> constructor = httpTextureClass.getConstructor(
-                    File.class, String.class, Identifier.class, boolean.class, Runnable.class
-            );
-            Object httpTexture = constructor.newInstance(
-                    skinFile,
-                    "file:///" + skinFile.getAbsolutePath().replace('\\', '/'),
-                    Identifier.withDefaultNamespace("textures/entity/player/wide/steve.png"),
-                    true,
-                    (Runnable) () -> {}
-            );
-
-            Minecraft.getInstance().getTextureManager().register(location, (AbstractTexture) httpTexture);
-            quickskin$httpTextureCache.put(hash, location);
-
-            return location;
-        } catch (ClassNotFoundException e) {
-            // HttpTexture class doesn't exist in this MC version, fall back to DynamicTexture
-            return service.getSkinLocation(uuid);
-        } catch (Exception e) {
-            return service.getSkinLocation(uuid);
-        }
     }
 
     /**

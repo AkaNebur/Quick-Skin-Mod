@@ -35,8 +35,6 @@ import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 import net.minecraft.util.Util;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -375,6 +373,13 @@ public class PlayerSkinMenuScreen extends Screen {
                 // Don't trigger callback during resize - we'll set model type manually
                 skinListPanel.setSelected(metadata, !isResizing);
                 selectedSkin = metadata;
+            }
+        } else if (!config.activeCpmModelHash.isEmpty() && skinListPanel != null) {
+            AssetMetadata cpmModel = com.quickskin.mod.client.compat.CpmModelWorkflow
+                    .getPersistedActiveModel();
+            if (cpmModel != null) {
+                skinListPanel.setSelected(cpmModel, !isResizing);
+                selectedSkin = cpmModel;
             }
         } else if (config.activeSkinHash.isEmpty() && !config.playerOwnSkinHash.isEmpty() && skinListPanel != null) {
             // If no active skin is set, auto-select the player's own skin
@@ -740,34 +745,45 @@ public class PlayerSkinMenuScreen extends Screen {
     @Override
     public void onFilesDrop(List<Path> files) {
 
-        // Filter for supported image files (PNG, WebP, JPG)
-        List<Path> imageFiles = files.stream()
-                .filter(path -> {
-                    String lower = path.toString().toLowerCase(Locale.ROOT);
-                    return lower.endsWith(".png") || lower.endsWith(".webp")
-                            || lower.endsWith(".jpg");
-                })
-                .toList();
+        List<Path> imageFiles = new ArrayList<>();
+        List<Path> cpmModelFiles = new ArrayList<>();
+        for (Path path : files) {
+            String lower = path.toString().toLowerCase(Locale.ROOT);
+            if (lower.endsWith(".png") || lower.endsWith(".webp") || lower.endsWith(".jpg")) {
+                imageFiles.add(path);
+            } else if (com.quickskin.mod.client.compat.CpmModelWorkflow.isModelFile(path)) {
+                cpmModelFiles.add(path);
+            }
+        }
 
-        if (imageFiles.isEmpty()) {
-            showError(Component.literal("Unsupported file format. Use PNG, WebP, or JPG."));
+        if (imageFiles.isEmpty() && cpmModelFiles.isEmpty()) {
+            showError(Component.literal("Unsupported file format. Use PNG, WebP, JPG, or .cpmmodel."));
             return;
         }
 
-        // Import all image files
+        if (!cpmModelFiles.isEmpty()
+                && !com.quickskin.mod.client.compat.CPMCompatIntegration.isAvailable()) {
+            showError(Component.literal("CPM mod required for .cpmmodel files."));
+            cpmModelFiles.clear();
+        }
+
+        List<Path> acceptedCpmModels = List.copyOf(cpmModelFiles);
+
         if (this.minecraft != null) {
             this.minecraft.execute(() -> {
-                List<AssetMetadata> imported = SkinImporter.importSkins(imageFiles.toArray(new Path[0]));
+                List<AssetMetadata> imported = new ArrayList<>();
+                imported.addAll(SkinImporter.importSkins(imageFiles.toArray(new Path[0])));
+                for (Path cpmModel : acceptedCpmModels) {
+                    AssetMetadata metadata = SkinImporter.importCpmModel(cpmModel);
+                    if (metadata != null) {
+                        imported.add(metadata);
+                    }
+                }
 
                 if (!imported.isEmpty()) {
-
-                    // Reload the skin list
                     refreshSkinList();
-
-                    // Auto-select the first imported skin
-                    if (skinListPanel != null && !imported.isEmpty()) {
-                        AssetMetadata firstImported = imported.get(0);
-                        skinListPanel.setSelected(firstImported);
+                    if (skinListPanel != null) {
+                        skinListPanel.setSelected(imported.get(0));
                     }
                 }
             });
@@ -780,6 +796,18 @@ public class PlayerSkinMenuScreen extends Screen {
     public void onSkinSelected(SkinEntry entry) {
         if (playerPreviewPanel != null && entry != null) {
             AssetMetadata metadata = entry.getMetadata();
+
+            if (metadata.isCpmModel()) {
+                playerPreviewPanel.updateSkin(
+                        metadata,
+                        LocalAssetManager.getInstance().getTextureLocation(
+                                metadata.hash(), TextureQuality.PREVIEW)
+                );
+                if (!com.quickskin.mod.client.compat.CpmModelWorkflow.activateModel(metadata)) {
+                    showError(Component.literal("Unable to select CPM model."));
+                }
+                return;
+            }
 
             // Get the model type preference for this specific skin
             String modelType = LocalAssetManager.getInstance().getSkinModelPreference(metadata.hash());
@@ -795,15 +823,14 @@ public class PlayerSkinMenuScreen extends Screen {
 
             // Check if this is a new skin selection
             com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
-            boolean isSkinAlreadyActive = metadata.hash().equals(config.activeSkinHash);
+            boolean isSkinAlreadyActive = metadata.hash().equals(config.activeSkinHash)
+                    && config.activeCpmModelHash.isEmpty();
 
             // Apply the change if it's a new skin selection.
             if (!isSkinAlreadyActive) {
+                com.quickskin.mod.client.compat.CpmModelWorkflow.activateSkin(metadata.hash());
                 // Always save the active skin hash to config, regardless of being in-game.
                 // This makes the selection persist on the title screen.
-                config.activeSkinHash = metadata.hash();
-                config.save();
-
                 // If in-game, apply the skin to the actual player entity.
                 if (this.minecraft != null && this.minecraft.player != null) {
                     String skinId = "local_skin:" + metadata.hash();
@@ -827,6 +854,9 @@ public class PlayerSkinMenuScreen extends Screen {
 
         if (selectedEntry != null) {
             AssetMetadata metadata = selectedEntry.getMetadata();
+            if (metadata.isCpmModel()) {
+                return;
+            }
             String skinId = "local_skin:" + metadata.hash();
 
             // Save the model type preference for THIS SPECIFIC SKIN
@@ -873,7 +903,16 @@ public class PlayerSkinMenuScreen extends Screen {
         // Import on main thread (Minecraft.getInstance().execute runs on main thread)
         if (this.minecraft != null) {
             this.minecraft.execute(() -> {
-                AssetMetadata metadata = SkinImporter.importSkin(filePath);
+                AssetMetadata metadata;
+                if (com.quickskin.mod.client.compat.CpmModelWorkflow.isModelFile(filePath)) {
+                    if (!com.quickskin.mod.client.compat.CPMCompatIntegration.isAvailable()) {
+                        showError(Component.literal("CPM mod required for .cpmmodel files."));
+                        return;
+                    }
+                    metadata = SkinImporter.importCpmModel(filePath);
+                } else {
+                    metadata = SkinImporter.importSkin(filePath);
+                }
                 if (metadata != null) {
 
                     // Reload the skin list
@@ -1032,8 +1071,10 @@ public class PlayerSkinMenuScreen extends Screen {
         }
 
         try {
-            // Delete the file
-            Files.deleteIfExists(metadata.path());
+            if (!LocalAssetManager.getInstance().deleteAsset(metadata.hash())) {
+                showError(Component.translatable("quickskin.error.delete_failed", metadata.friendlyName()));
+                return;
+            }
 
             if (minecraft != null) {
                 minecraft.getSoundManager().play(
@@ -1055,7 +1096,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 }
             }
 
-        } catch (IOException e) {
+        } catch (RuntimeException e) {
             showError(Component.translatable("quickskin.error.delete_failed", e.getMessage()));
         }
     }

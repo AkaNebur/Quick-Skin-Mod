@@ -1,5 +1,6 @@
 package com.quickskin.mod.client.gui.panel;
 
+import com.quickskin.mod.client.gui.GuiCompat;
 import com.quickskin.mod.client.gui.util.ButtonFactory;
 import com.quickskin.mod.client.gui.widget.PlayerWidget;
 import com.quickskin.mod.client.gui.widget.RotateButton;
@@ -42,12 +43,14 @@ public class PlayerPreviewPanel extends AbstractWidget {
 
     @Nullable
     private AssetMetadata currentMetadata;
-    //? if <1.21.4 {
     @Nullable
+    //? if <1.21.11 {
     private net.minecraft.resources.ResourceLocation cpmIconLocation = null;
+    //?} else {
+    private net.minecraft.resources.Identifier cpmIconLocation = null;
+    //?}
     private boolean isCpmModel = false;
     private long skinChangedAt = 0;
-    //?}
 
     public PlayerPreviewPanel(int x, int y, int width, int height) {
         super(x, y, width, height, Component.empty());
@@ -274,7 +277,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
     //?}
         if (playerWidget != null && metadata != null) {
             this.currentMetadata = metadata;
-            //? if <1.21.11 {
             this.isCpmModel = metadata.isCpmModel();
             this.skinChangedAt = System.currentTimeMillis();
             this.lastCpmWearing = false;
@@ -287,7 +289,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
             }
             cpmIconLocation = null;
             playerWidget.visible = true;
-            //?}
             playerWidget.setSkin(skinLocation);
 
             // Update model type based on current mode
@@ -298,9 +299,7 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 // Use explicitly selected model
                 playerWidget.setModelType(currentModelType);
             }
-            //? if <1.21.4 {
             updateModelButtonStates();
-            //?}
         }
     }
 
@@ -382,7 +381,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
      */
     private void updateModelButtonStates() {
         if (autoModelButton != null && classicModelButton != null && slimModelButton != null) {
-            //? if <1.21.11 {
             boolean cpmActive = isCpmModel || lastCpmWearing;
             if (cpmActive) {
                 autoModelButton.active = false;
@@ -390,7 +388,6 @@ public class PlayerPreviewPanel extends AbstractWidget {
                 slimModelButton.active = false;
                 return;
             }
-            //?}
             boolean isAuto = "auto".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
             boolean isSlim = "slim".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
             boolean isClassic = "classic".equals(currentModelType != null ? currentModelType.toLowerCase(Locale.ROOT) : null);
@@ -402,12 +399,9 @@ public class PlayerPreviewPanel extends AbstractWidget {
         }
     }
 
-    //? if <1.21.4 {
     private boolean lastCpmWearing = false;
-    //?}
-    @Override
-    //? if <1.21.4 {
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+
+    private void updateCpmWearingState() {
         long elapsed = System.currentTimeMillis() - skinChangedAt;
         boolean cpmWearing;
         if (elapsed < 2000) {
@@ -419,28 +413,35 @@ public class PlayerPreviewPanel extends AbstractWidget {
             lastCpmWearing = cpmWearing;
             updateModelButtonStates();
         }
+    }
+
+    @Override
+    //? if <26.1 {
+    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        updateCpmWearingState();
         if (cpmIconLocation != null) {
-            int iconSize = Math.min(width, height) - 16;
-            int iconX = getX() + (width - iconSize) / 2;
-            int iconY = getY() + (height - iconSize) / 2;
+            int iconSize = Math.min(getWidth(), getHeight()) - 16;
+            int iconX = getX() + (getWidth() - iconSize) / 2;
+            int iconY = getY() + (getHeight() - iconSize) / 2;
+            //? if <1.21.11 {
             com.mojang.blaze3d.systems.RenderSystem.enableBlend();
-            //? if <1.21 {
-            graphics.blit(cpmIconLocation,
-            //?} else {
-            com.quickskin.mod.platform.PlatformHelper.blit(graphics, cpmIconLocation,
             //?}
-                    iconX, iconY, iconSize, iconSize,
+            GuiCompat.blit(graphics, cpmIconLocation, iconX, iconY, iconSize, iconSize,
                     0, 0, 64, 64, 64, 64);
+            //? if <1.21.11 {
             com.mojang.blaze3d.systems.RenderSystem.disableBlend();
+            //?}
         }
     //?} else {
-        //? if <26.1 {
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // This panel doesn't render anything itself - child widgets handle rendering
-        //?} else {
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
-        // This panel doesn't render anything itself - child widgets handle rendering
-        //?}
+        updateCpmWearingState();
+        if (cpmIconLocation != null) {
+            int iconSize = Math.min(getWidth(), getHeight()) - 16;
+            int iconX = getX() + (getWidth() - iconSize) / 2;
+            int iconY = getY() + (getHeight() - iconSize) / 2;
+            GuiCompat.blit(graphics, cpmIconLocation, iconX, iconY, iconSize, iconSize,
+                    0, 0, 64, 64, 64, 64);
+        }
     //?}
     }
 

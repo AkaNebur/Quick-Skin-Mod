@@ -119,8 +119,12 @@ public class LocalAssetManager {
 
         // Scan CPM models directory if CPM is available
         if (com.quickskin.mod.client.compat.CPMCompatIntegration.isAvailable()) {
+            com.quickskin.mod.client.compat.CpmModelWorkflow.reconcilePendingSkinModeReset();
             scanCpmModels();
+        } else {
+            com.quickskin.mod.client.compat.CpmModelWorkflow.sanitizeUnavailableState();
         }
+        com.quickskin.mod.client.compat.CpmModelWorkflow.sanitizeMissingActiveModel();
     }
 
     /**
@@ -623,29 +627,52 @@ public class LocalAssetManager {
     /**
      * Delete local asset
      */
-    public void deleteAsset(String hash) {
+    public boolean deleteAsset(String hash) {
         AssetMetadata metadata = metadataCache.get(hash);
         if (metadata == null) {
-            return;
+            return false;
         }
 
         Path path = hashToSourcePath.get(hash);
         if (path == null || !Files.exists(path)) {
-            return;
+            return false;
         }
 
         try {
             Files.delete(path);
+            if (metadata.isSkin()) {
+                com.quickskin.mod.client.compat.CPMCompatIntegration.evictHttpTextureCache(hash);
+            }
+            if (metadata.isCpmModel()) {
+                com.quickskin.mod.client.compat.CpmModelWorkflow.onModelDeleted(metadata);
+            }
             metadataCache.remove(hash);
             hashToSourcePath.remove(hash);
+
+            Map<TextureQuality, ResourceLocation> registeredTextures = textureRegistry.remove(hash);
+            if (registeredTextures != null) {
+                for (ResourceLocation location : registeredTextures.values()) {
+                    try {
+                        Minecraft.getInstance().getTextureManager().release(location);
+                    } catch (RuntimeException ignored) {
+                    }
+                }
+            }
+            if (metadata.isCpmModel()) {
+                try {
+                    Files.deleteIfExists(cacheDirectory.resolve("cpm_icons").resolve(hash + ".png"));
+                } catch (IOException ignored) {
+                }
+            }
 
             // Also remove preferences for this skin
             if (skinPreferences != null) {
                 skinPreferences.remove(hash);
                 savePreferences();
             }
-
+            return true;
         } catch (IOException e) {
+            return false;
         }
     }
 
@@ -744,6 +771,10 @@ public class LocalAssetManager {
 
             metadataCache.put(hash, updatedMetadata);
             hashToSourcePath.put(hash, newPath);
+            if (updatedMetadata.isCpmModel()
+                    && hash.equals(ClientConfig.getInstance().activeCpmModelHash)) {
+                com.quickskin.mod.client.compat.CpmModelWorkflow.activateModel(updatedMetadata);
+            }
 
             return RenameResult.SUCCESS;
 

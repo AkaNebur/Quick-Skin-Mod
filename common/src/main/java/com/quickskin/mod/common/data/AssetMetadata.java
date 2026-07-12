@@ -110,10 +110,10 @@ public record AssetMetadata(
         return "cape".equals(type);
     }
 
-    //? if <1.21.11 {
     public boolean isCpmModel() {
         return "cpmmodel".equals(type);
     }
+
     public static AssetMetadata forCpmModel(
             String hash,
             String friendlyName,
@@ -134,5 +134,4 @@ public record AssetMetadata(
                 lastModifiedTime
         );
     }
-    //?}
 }

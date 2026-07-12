@@ -1,6 +1,7 @@
 package com.quickskin.mod.mixin.compat;
 
 import org.objectweb.asm.tree.ClassNode;
+import org.spongepowered.asm.mixin.MixinEnvironment;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
@@ -8,8 +9,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Mixin plugin that conditionally loads Ears compatibility mixins
- * based on whether the target Ears classes exist at runtime.
+ * Resource-only gate for optional third-party compatibility mixins. Resource
+ * lookup is deliberate: Class.forName here can load Minecraft types before the
+ * mixin transformer has had a chance to process them.
  */
 public class EarsMixinPlugin implements IMixinConfigPlugin {
 
@@ -45,6 +47,10 @@ public class EarsMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public List<String> getMixins() {
+        if (MixinEnvironment.getCurrentEnvironment().getSide() == MixinEnvironment.Side.CLIENT
+                && classFileExists("com/tom/cpm/client/ClientBase.class")) {
+            return List.of("CpmRenderDepthMixin");
+        }
         return null;
     }
 

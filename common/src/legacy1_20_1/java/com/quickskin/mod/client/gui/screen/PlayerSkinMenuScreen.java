@@ -32,8 +32,6 @@ import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 import net.minecraft.Util;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -739,6 +737,7 @@ public class PlayerSkinMenuScreen extends Screen {
         }
 
         if (imageFiles.isEmpty() && cpmModelFiles.isEmpty()) {
+            showError(Component.literal("Unsupported file format. Use PNG, WebP, JPG, or .cpmmodel."));
             return;
         }
 
@@ -800,26 +799,17 @@ public class PlayerSkinMenuScreen extends Screen {
                     return;
                 }
 
-                // Get the model filename relative to player_models/
-                Path modelsDir = com.quickskin.mod.client.compat.CPMCompatIntegration.getCPMModelsDirectory();
-                Path modelPath = metadata.path();
-                String modelFileName = modelsDir.relativize(modelPath).toString().replace('\\', '/');
-
-                // Select the model in CPM
-                com.quickskin.mod.client.compat.CPMCompatIntegration.selectModel(modelFileName);
-
-                // Save the CPM model hash and clear the active skin hash
-                com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
-                config.activeSkinHash = "";
-                config.activeCpmModelHash = metadata.hash();
-                config.save();
+                if (!com.quickskin.mod.client.compat.CpmModelWorkflow.activateModel(metadata)) {
+                    showError(Component.literal("Unable to select CPM model."));
+                }
                 return;
             }
 
             com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
 
             // Check if this skin is already the active skin
-            boolean isSkinAlreadyActive = metadata.hash().equals(config.activeSkinHash);
+            boolean isSkinAlreadyActive = metadata.hash().equals(config.activeSkinHash)
+                    && config.activeCpmModelHash.isEmpty();
 
             // Get the model type preference for this specific skin
             String modelPreference = LocalAssetManager.getInstance().getSkinModelPreference(metadata.hash());
@@ -841,12 +831,9 @@ public class PlayerSkinMenuScreen extends Screen {
 
             // Apply the change if it's a new skin selection.
             if (!isSkinAlreadyActive) {
+                com.quickskin.mod.client.compat.CpmModelWorkflow.activateSkin(metadata.hash());
                 // Always save the active skin hash to config, regardless of being in-game.
                 // This makes the selection persist on the title screen.
-                config.activeSkinHash = metadata.hash();
-                config.activeCpmModelHash = ""; // Clear CPM model since we're using a regular skin
-                config.save();
-
                 // If in-game, apply the skin to the actual player entity.
                 if (this.minecraft != null && this.minecraft.player != null) {
                     String skinId = "local_skin:" + metadata.hash();
@@ -874,6 +861,9 @@ public class PlayerSkinMenuScreen extends Screen {
 
         if (selectedEntry != null) {
             AssetMetadata metadata = selectedEntry.getMetadata();
+            if (metadata.isCpmModel()) {
+                return;
+            }
             String skinId = "local_skin:" + metadata.hash();
 
             // Save the model type preference for THIS SPECIFIC SKIN
@@ -1068,8 +1058,10 @@ public class PlayerSkinMenuScreen extends Screen {
         }
 
         try {
-            // Delete the file
-            Files.deleteIfExists(metadata.path());
+            if (!LocalAssetManager.getInstance().deleteAsset(metadata.hash())) {
+                showError(Component.translatable("quickskin.error.delete_failed", metadata.friendlyName()));
+                return;
+            }
 
             if (minecraft != null) {
                 minecraft.getSoundManager().play(
@@ -1091,7 +1083,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 }
             }
 
-        } catch (IOException e) {
+        } catch (RuntimeException e) {
             showError(Component.translatable("quickskin.error.delete_failed", e.getMessage()));
         }
     }

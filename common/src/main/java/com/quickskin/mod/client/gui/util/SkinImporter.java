@@ -78,13 +78,15 @@ public class SkinImporter {
                 return assetManager.getMetadata(hash);
             }
 
-    //? if <1.21.11 {
         } catch (IOException e) {
         }
         return null;
     }
     public static AssetMetadata importCpmModel(Path sourcePath) {
         if (sourcePath == null || !Files.exists(sourcePath)) {
+            return null;
+        }
+        if (!com.quickskin.mod.client.compat.CPMCompatIntegration.isAvailable()) {
             return null;
         }
         String fileName = sourcePath.getFileName().toString();
@@ -108,7 +110,6 @@ public class SkinImporter {
             if (hash != null) {
                 return assetManager.getMetadata(hash);
             }
-    //?}
         } catch (IOException e) {
         }
 

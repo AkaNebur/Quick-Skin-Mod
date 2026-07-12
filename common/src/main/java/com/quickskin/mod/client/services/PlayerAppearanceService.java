@@ -1,10 +1,8 @@
 package com.quickskin.mod.client.services;
 
 import com.quickskin.mod.QuickSkin;
-import com.quickskin.mod.client.compat.CustomNPCsIntegration;
-//? if >=1.21 {
 import com.quickskin.mod.client.compat.CPMCompatIntegration;
-//?}
+import com.quickskin.mod.client.compat.CustomNPCsIntegration;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.PlayerAppearance;
 import com.quickskin.mod.common.data.PlayerAppearanceRepository;
@@ -98,24 +96,13 @@ public class PlayerAppearanceService implements IPlayerAppearanceService {
                 // Notify CustomNPCs integration (if available) to handle any skin cache invalidation
                 CustomNPCsIntegration.onSkinApplied(playerId, skinLocation);
 
-                //? if >=1.21 {
-                    //? if <1.21.4 {
                 // Force CPM to switch to skin mode and re-read skin data.
                 CPMCompatIntegration.forceReRegisterSkins(playerId);
-                    //?} else {
-                // Invalidate CPM's model cache so it re-reads the new skin's embedded data
-                CPMCompatIntegration.invalidatePlayerCache();
-                    //?}
-
-                //?}
                 // Associate Ears features with this player (if Ears is available)
                 if (com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {
                     String username = getPlayerUsername(playerId);
                     com.quickskin.mod.client.compat.EarsCompatIntegration.associateWithPlayer(skinLocation, playerId, username);
                 }
-                //? if <1.21 {
-                com.quickskin.mod.client.compat.CPMCompatIntegration.forceReRegisterSkins(playerId);
-                //?}
             }
         }
 
