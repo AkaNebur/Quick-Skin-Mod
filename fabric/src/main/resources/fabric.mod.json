@@ -2,17 +2,17 @@
   "schemaVersion": 1,
   "id": "quickskin",
   "version": "${version}",
-  "name": "QuickSkin",
-  "description": "QuickSkin - Customize your Minecraft player skin and cape in-game! Supports both Fabric and Forge through Architectury.",
+  "name": "Quick Skin",
+  "description": "Change, preview, and synchronize local skins, capes, and CPM models in-game across Fabric, Forge, and NeoForge.",
   "authors": [
     "The Plum Team"
   ],
   "contact": {
-    "homepage": "https://github.com/yourusername/quickskin",
-    "sources": "https://github.com/yourusername/quickskin",
-    "issues": "https://github.com/yourusername/quickskin/issues"
+    "homepage": "https://modrinth.com/mod/quick-skin",
+    "sources": "https://github.com/AkaNebur/Quick-Skin-Mod",
+    "issues": "https://github.com/AkaNebur/Quick-Skin-Mod/issues"
   },
-  "license": "MIT",
+  "license": "All Rights Reserved",
   "icon": "icon.png",
   "accessWidener": "quick-skin.accesswidener",
   "environment": "*",
@@ -31,10 +31,7 @@
   "depends": {
     "fabricloader": ">=0.19.0",
     "fabric-api": "*",
-    "minecraft": "~26.2",
-    "architectury": ">=21.0.0"
-  },
-  "suggests": {
-    "another-mod": "*"
+    "minecraft": "=26.2",
+    "architectury": ">=21.0.2"
   }
 }

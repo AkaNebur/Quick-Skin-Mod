@@ -1,0 +1,88 @@
+name: PR gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - all-in-one-migration
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  build-and-verify:
+    name: Build and verify all release lanes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install all required JDKs
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+            25
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Build ten production artifacts and ten E2E harnesses
+        run: >-
+          ./gradlew --no-daemon --no-parallel --stacktrace
+          clean buildAllLanes buildAllE2EHarnesses
+
+      - name: Stage and verify the ten production artifacts
+        run: >-
+          python scripts/release/verify_release.py
+          --matrix release/release-matrix.json
+          --manifest build/release/artifacts.json
+          --stage build/release
+
+      - name: Assert the build did not mutate tracked sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+      - name: Upload verified release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-gate-release-bundle
+          path: build/release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-gate-diagnostics
+          path: |
+            **/build/reports/
+            **/build/*.log
+            **/run/logs/
+          if-no-files-found: ignore
+          retention-days: 14

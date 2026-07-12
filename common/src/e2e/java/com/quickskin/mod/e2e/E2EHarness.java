@@ -75,7 +75,8 @@ public final class E2EHarness {
             case "propagation" -> new PropagationScenario();
             case "propagation-live" -> new PropagationLiveScenario();
             case "full" -> new FullScenario();
-            default -> new Phase0Smoke();
+            case "phase0-smoke" -> new Phase0Smoke();
+            default -> throw new IllegalArgumentException("unknown E2E scenario: " + scenarioId);
         };
     }
 
@@ -90,6 +91,7 @@ public final class E2EHarness {
             }
         } catch (Throwable t) {
             E2ELog.error("harness tick crashed", t);
+            report.record("harness_crash", "fail", t.toString(), null);
             finish(mc);
         }
     }
@@ -105,10 +107,18 @@ public final class E2EHarness {
         if (!screen.equals(lastScreen)) {
             E2ELog.info("screen -> " + screen);
             lastScreen = screen;
-            // A startup WARNINGS screen (e.g. 26.2 NeoForge's LoadingErrorScreen) blocks the
-            // --quickPlayMultiplayer auto-connect; press its "proceed" button so startup continues.
-            // No-op on screens/loaders that don't show one. Done on screen-change so we press once.
-            VanillaShim.proceedPastWarningScreen(mc);
+            // A release gate must never click through a loader compatibility/error screen. Doing so
+            // can turn an invalid dependency range or a recoverable mod-loading failure into a false
+            // pass. Record the screen immediately; the runner will retain the client log and frame.
+            if (VanillaShim.isWarningOrErrorScreen(sc)) {
+                String shot = version + "_00_startup_warning_" + role + ".png";
+                boolean captured = VanillaShim.screenshot(mc, shot);
+                report.record("startup_warning_screen", "fail",
+                        "unexpected startup compatibility/error screen: " + screen,
+                        captured ? shot : null);
+                finish(mc);
+                return;
+            }
         }
         if (mc.player != null && mc.level != null) {
             steps = resolveScenario().build(mc);
@@ -160,15 +170,24 @@ public final class E2EHarness {
 
         if (ready) {
             String shot = null;
-            if (s.screenshot != null && VanillaShim.screenshot(mc, s.screenshot)) {
-                shot = s.screenshot;
-                lastShot = s.screenshot; // remember the most recent grab for FLUSH validation
+            boolean screenshotFailed = false;
+            if (s.screenshot != null) {
+                if (VanillaShim.screenshot(mc, s.screenshot)) {
+                    shot = s.screenshot;
+                    lastShot = s.screenshot; // remember the most recent grab for FLUSH validation
+                } else {
+                    screenshotFailed = true;
+                }
             }
             Step.Result r;
             try {
                 r = (s.assertion == null) ? Step.Result.pass("no assertion") : s.assertion.run();
             } catch (Throwable t) {
                 r = Step.Result.fail("assertion threw: " + t);
+            }
+            if (screenshotFailed) {
+                r = Step.Result.fail("screenshot dispatch failed: " + s.screenshot
+                        + "; assertion=" + r.message());
             }
             E2ELog.info("step[" + stepIndex + "] " + s.name + " : "
                     + (r.pass() ? "PASS" : "FAIL") + " - " + r.message());
@@ -207,6 +226,16 @@ public final class E2EHarness {
             }
         }
         if (tick >= flushDeadline) {
+            if (lastShot != null) {
+                int width = pngWidth(screenshotFile(lastShot));
+                if (width < MIN_SHOT_WIDTH) {
+                    report.record("screenshot_flush", "fail",
+                            "last screenshot never reached " + MIN_SHOT_WIDTH
+                                    + "px width after " + lastShotRetries + " retries: "
+                                    + lastShot + " (width=" + width + ")",
+                            lastShot);
+                }
+            }
             finish(mc);
         }
     }

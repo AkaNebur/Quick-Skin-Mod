@@ -14,13 +14,12 @@ plugins {
     id("dev.architectury.loom-no-remap") version "1.17.480" apply false
     id("architectury-plugin") version "3.5.167" apply false
     id("com.gradleup.shadow") version "8.3.11" apply false
-    id("com.modrinth.minotaur") version "2.9.0" apply false
-    id("net.darkhax.curseforgegradle") version "1.1.18" apply false
 }
 
 // Detached mode preprocesses each branch's canonical src/main tree into every node's generated
-// sources without rewriting tracked files. The 26.x nodes consume that output; older nodes
-// continue to replace their source sets with the read-only src/v* parity trees.
+// sources without rewriting tracked files. Active nodes consume that output, with only the narrow
+// src/legacy* era overlays declared in the branch build scripts. Historical src/v* trees are never
+// compiled and remain read-only parity oracles until the documented two-green-release cleanup.
 stonecutter active null
 
 stonecutter {
@@ -116,5 +115,22 @@ tasks.register("buildAllLanes") {
         ":neoforge:26.1:shadowJar",
         ":fabric:26.2:shadowJar",
         ":neoforge:26.2:shadowJar",
+    )
+}
+
+tasks.register("buildAllE2EHarnesses") {
+    group = "verification"
+    description = "Builds the separate packaged-runtime E2E harness for every release artifact."
+    dependsOn(
+        ":fabric:1.20.1:remapE2EHarnessJar",
+        ":forge:1.20.1:remapE2EHarnessJar",
+        ":fabric:1.21.1:remapE2EHarnessJar",
+        ":neoforge:1.21.1:remapE2EHarnessJar",
+        ":fabric:1.21.11:remapE2EHarnessJar",
+        ":neoforge:1.21.11:remapE2EHarnessJar",
+        ":fabric:26.1:e2eHarnessJar",
+        ":neoforge:26.1:e2eHarnessJar",
+        ":fabric:26.2:e2eHarnessJar",
+        ":neoforge:26.2:e2eHarnessJar",
     )
 }

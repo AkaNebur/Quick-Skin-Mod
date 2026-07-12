@@ -1,197 +1,106 @@
-# QuickSkin - Minecraft 1.20.1 Fabric/Forge Mod
+# Quick Skin
 
-A cross-platform skin customization mod built with Architectury API for both Fabric and Forge.
+Quick Skin is a client-and-server Minecraft mod for changing skins and capes in-game. It supports local and network-synchronized appearances, HD textures, animated capes, and optional integrations without requiring players to leave the game.
+
+- [Modrinth](https://modrinth.com/mod/quick-skin) (`zAIE84Ch`)
+- [CurseForge](https://www.curseforge.com/minecraft/mc-mods/quick-skin) (`1323980`)
 
 ## Features
 
-✅ **Cross-Platform Support** - Works on both Fabric and Forge using Architectury API 9.2.14
-✅ **HD Skins** - Support for skins up to 2048x1024 resolution
-✅ **Animated Capes** - GIF support for animated capes
-✅ **Service-Oriented Architecture** - Clean, maintainable codebase with focused services
-✅ **Vanilla Rendering** - No external rendering libraries needed
-✅ **Local Asset Management** - Automatic scanning and caching of local textures
-✅ **Interactive GUI** - Modern skin selection menu with 3D preview
-✅ **Mixin-Based Texture Swapping** - Seamless texture override system
+- Change skins and capes from the title screen or pause menu.
+- Import PNG, WebP, and JPEG skins, including HD skins up to 2048x1024.
+- Import static and animated capes, with server-configurable change cooldowns.
+- Choose automatic, classic, or slim player models.
+- Preview appearances in an interactive 3D player widget.
+- Synchronize Quick Skin appearances when the mod is installed on the server.
+- Use optional Customizable Player Models (`.cpmmodel`) and 3D Skin Layers integrations when their matching third-party mod is installed.
 
-## Architecture
+Quick Skin does not declare CPM or 3D Skin Layers as required dependencies. If an optional mod or API is unavailable, the corresponding integration disables itself and normal skin/cape behavior remains available.
 
-### Module Structure
-```
-quick-skin-1.20.1-fabric-forge/
-├── common/          # 90% of code - platform-agnostic
-│   ├── src/main/java/com/quickskin/mod/
-│   │   ├── client/
-│   │   │   ├── gui/         # Phase 8: UI components
-│   │   │   ├── input/       # Phase 4: Keybinds
-│   │   │   ├── rendering/   # Phase 6: Vanilla rendering
-│   │   │   └── services/    # Phase 2: Service layer
-│   │   ├── common/
-│   │   │   ├── data/        # Phase 2: Data models
-│   │   │   └── util/        # Phase 5: Utilities
-│   │   ├── config/          # Phase 10: Configuration
-│   │   ├── event/           # Phase 4: Event handlers
-│   │   ├── mixin/           # Phase 9: Mixins
-│   │   ├── networking/      # Phase 3: Networking
-│   │   └── platform/        # Phase 1: Platform abstraction
-│   └── src/main/resources/
-│       └── quickskin.mixins.json
-├── forge/           # Forge-specific wrapper
-│   └── src/main/java/com/quickskin/mod/
-│       ├── forge/
-│       └── platform/forge/  # Forge PlatformHelper implementation
-├── fabric/          # Fabric-specific wrapper
-│   └── src/main/java/com/quickskin/mod/
-│       ├── fabric/
-│       └── platform/fabric/ # Fabric PlatformHelper implementation
-└── build.gradle     # Multi-module Gradle configuration
-```
+## Active build matrix
 
-### Key Systems
+The repository builds ten loader artifacts from one Stonecutter-managed source tree.
 
-#### Phase 1: Foundation
-- Multi-module Gradle project with Architectury
-- Platform abstraction layer (@ExpectPlatform)
-- Entry points for Fabric and Forge
+| Minecraft band | Fabric | Forge | NeoForge | Java | Status |
+|---|:---:|:---:|:---:|---:|---|
+| 1.20.1 | Yes | Yes | - | 17 | Active |
+| 1.21.1 | Yes | - | Yes | 21 | Active |
+| 1.21.11 | Yes | - | Yes | 21 | Active |
+| 26.1-26.1.2 | Yes | - | Built; pooled claim blocked | 25 | Release-gated |
+| 26.2 | Yes | - | Yes | 25 | Active |
 
-#### Phase 2: Service Layer
-- **SkinService** - Skin texture management
-- **CapeService** - Cape texture management
-- **ModelService** - Model type detection (slim/classic)
-- **PlayerAppearanceService** - Main coordinator service
-- **PlayerAppearanceRepository** - Single source of truth
+The pooled NeoForge 26.1-26.1.2 support claim is release-gated and currently blocked, not passed. NeoForge 26.1 and 26.1.1 require a maintained Architectury compatibility build. Because that build is the pooled file's required marketplace dependency, the gate installs its exact bytes on 26.1, 26.1.1, and 26.1.2. Unless that dependency is available and passes all three runtimes, NeoForge support begins at 26.1.2 with stock Architectury.
 
-#### Phase 3: Networking
-- Cross-platform networking with Architectury's NetworkManager
-- 11 packet types (5 C2S, 6 S2C)
-- Thread-safe packet handling with context.queue()
+Minecraft 1.21.4 through 1.21.10 are frozen. Their existing downloads remain available, but they receive no new builds, fixes, dependency updates, or compatibility testing. See the exact files and checksums in [Frozen versions](docs/FROZEN-VERSIONS.md).
 
-#### Phase 4: Event Handling
-- Common events (server-side)
-- Client events (player join/quit, GUI, tick)
-- Keybind registry (K key for menu)
+## Installation
 
-#### Phase 5: Asset Management
-- **LocalAssetManager** - Filesystem scanning and caching
-- **SkinModelDetector** - Auto-detection of slim vs classic
-- **HDTextureProcessor** - HD skin processing
-- **GifUtil** - Animated cape processing
-- Hash-based asset identification (SHA1)
-- Multi-quality texture system (FULL, PREVIEW, THUMBNAIL, NORMALIZED)
+Choose the jar whose Minecraft version and loader match your instance. Quick Skin also requires:
 
-#### Phase 6: Vanilla Rendering
-- **PreviewPlayerData** - State holder for 3D previews
-- **PlayerModelRenderer** - Vanilla PlayerModel rendering
-- **CapeRenderer** - Static and animated cape rendering
-- No GeckoLib dependency
+- Architectury API for the selected Minecraft version and loader.
+- Fabric API on Fabric.
+- Forge or NeoForge on its corresponding artifact.
 
-#### Phase 7: Animation System
-- **AnimatedTextureManager** - Frame management
-- **AnimationMetadata** - Time-based frame data
-- GIF to PNG atlas conversion
+Install Quick Skin on the client for local appearance management. Install it on the server as well when you want Quick Skin appearance synchronization, shared texture transfer, or server-enforced cooldowns.
 
-#### Phase 8: GUI System
-- **PlayerSkinMenuScreen** - Main menu (K key)
-- **PlayerWidget** - 3D rotating player preview with mouse interaction
-- **SkinListWidget** - Scrollable skin list
-- **SkinEntry** - Individual skin entries with thumbnails
-- Auto-rotation, drag-to-rotate, scroll-to-zoom
-- Model type buttons (Auto/Slim/Classic)
-- Action buttons (Import/Cape/Settings)
+## Using Quick Skin
 
-#### Phase 9: Mixins
-- **PlayerInfoMixin** - Intercepts getSkinLocation, getModelName, getCapeLocation
-- Texture registration with Minecraft's TextureManager
-- BufferedImage → NativeImage conversion
-- Dynamic texture loading
+1. Open the Quick Skin menu from the title or pause screen, or bind its configurable key.
+2. Import a skin or place it under `.minecraft/quickskin/skins/`.
+3. Import a cape or place it under `.minecraft/quickskin/capes/`.
+4. Select an appearance, preview it, and choose automatic, classic, or slim arms.
 
-#### Phase 10: Configuration
-- **ClientConfig** - Client-side settings (JSON)
-- **ServerConfig** - Server-side settings (JSON)
-- Auto-save/load from config directory
+When CPM is installed, standalone models live under `.minecraft/player_models/` and can be imported as `.cpmmodel` files. Explicit model-file selection is supported across active bands. Embedded CPM data inside an arbitrary Quick Skin PNG is a degraded compatibility case on 1.21.11 and later because current CPM no longer reads the registered player texture through its legacy bridge.
 
-## Usage
+3D Skin Layers preview support follows the availability of the upstream mod for each loader. Entity previews are owned by the third-party renderer; Quick Skin supplies only the missing manual/title-screen preview path.
 
-### For Players
+## Building
 
-1. **Open the skin menu**: Press `K` (configurable)
-2. **Browse skins**: Scroll through your local skins in the left panel
-3. **Preview**: Click a skin to see it on the 3D model
-4. **Interact with preview**:
-   - Drag to rotate
-   - Scroll to zoom
-   - Hover for head tracking
-5. **Select model type**: Choose Auto/Slim/Classic
-6. **Apply**: Click to apply the skin
-
-### Adding Custom Skins
-
-Place `.png` skin files in:
-```
-.minecraft/quickskin/skins/
-```
-
-Place `.png` or `.gif` cape files in:
-```
-.minecraft/quickskin/capes/
-```
-
-The mod will automatically detect and cache them on startup.
-
-### HD Skin Support
-
-QuickSkin supports HD skins up to 2048x1024:
-- Standard: 64x64
-- HD 2x: 128x64
-- HD 4x: 256x128
-- HD 8x: 512x256
-- HD 16x: 1024x512
-- HD 32x: 2048x1024
-
-## Development
-
-### Building
+Build all ten production artifacts in one serial Gradle invocation:
 
 ```bash
-./gradlew build
+./gradlew --no-parallel buildAllLanes
 ```
 
-Output JARs:
-- `fabric/build/libs/quickskin-<version>-fabric.jar`
-- `forge/build/libs/quickskin-<version>-forge.jar`
+On Windows:
 
-### Project Structure
+```powershell
+.\gradlew.bat --no-parallel buildAllLanes
+```
 
-- **Common Module** (90% of code): Platform-agnostic logic
-- **Forge Module** (5%): Forge-specific entry points
-- **Fabric Module** (5%): Fabric-specific entry points
+Production jars are written under the selected module and version node, for example:
 
-### Key Design Patterns
+```text
+fabric/versions/1.21.11/build/libs/
+neoforge/versions/26.2/build/libs/
+forge/versions/1.20.1/build/libs/
+```
 
-- **Singleton**: Services use singleton pattern
-- **Repository**: PlayerAppearanceRepository as data store
-- **Observer**: Event system for decoupled communication
-- **Strategy**: Platform-specific implementations via @ExpectPlatform
-- **Facade**: PlayerAppearanceService coordinates other services
+Development launches should use configuration-on-demand so unrelated version nodes are not configured:
 
-## Dependencies
+```bash
+./gradlew :fabric:26.2:runClient --configure-on-demand
+./gradlew :neoforge:1.21.11:runServer --configure-on-demand
+```
 
-- **Minecraft**: 1.20.1
-- **Forge**: 47.4.0
-- **Fabric Loader**: 0.15.11
-- **Architectury API**: 9.2.14
-- **Yarn Mappings**: 1.20.1+build.1
-- **Java**: 17
+The aggregate build intentionally runs with `org.gradle.parallel=false`; Architectury's transformers use JVM-global properties and mixed-version transforms are not safe in parallel.
 
-## Compatibility
+Release automation also builds 10 separate, loader-remapped test harness jars and installs them beside the exact staged production files. See [Packaged-runtime E2E](e2e/README.md) for the 14-row gate and local commands.
 
-- Compatible with Optifine/Oculus
-- SkinLayers3D compatibility (optional)
-- Lower priority mixins to allow other mods to run first
+## Source layout
+
+- `common/src/main`, `fabric/src/main`, `forge/src/main`, and `neoforge/src/main` contain canonical sources.
+- Small `src/legacy*` overlays isolate genuine era-level API boundaries.
+- `PreviewRenderBackend`, `GuiCompat`, `NetworkTransport`, `MinecraftCompat`, and `PlatformHelper` define the cross-version seams.
+- Historical `src/v*` trees are migration oracles, not supported release branches. Do not modify them during normal feature work.
+
+The historical version trees remain until two successfully published, release-gate-green releases have completed and all remaining active resource references have been migrated away from them. See [Frozen versions](docs/FROZEN-VERSIONS.md) for the retention policy.
+
+## Historical documentation
+
+- [NeoForge migration history](NEOFORGE-MIGRATION.md) describes the retired pre-Stonecutter layout only.
+- [Frozen versions](docs/FROZEN-VERSIONS.md) records archived artifact identities and support policy.
 
 ## License
 
 All rights reserved.
-
-## Credits
-
-Built with Architectury API for cross-platform compatibility.

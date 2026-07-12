@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "name": "Quick Skin E2E (dev-only)",
   "description": "Dev-only end-to-end test harness for Quick Skin. Never shipped in the release jar.",
+  "license": "All Rights Reserved",
   "environment": "client",
   "entrypoints": {
     "client": [

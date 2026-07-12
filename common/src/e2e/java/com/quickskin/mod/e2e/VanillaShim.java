@@ -2,13 +2,14 @@ package com.quickskin.mod.e2e;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.AbstractClientPlayer;
 
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -33,7 +34,8 @@ import java.util.function.Consumer;
  *       record, 26.x).</li>
  *   <li><b>main render target</b> (for screenshots): {@code Minecraft.getMainRenderTarget()} vs
  *       {@code mc.gameRenderer.mainRenderTarget()} (26.x).</li>
- *   <li><b>Screenshot.grab</b>: a {@code int downscale} param was inserted in 1.21.x; both shapes are
+ *   <li><b>Screenshot.grab</b>: classic Fabric exposes intermediary class/method names at runtime,
+ *       and an {@code int downscale} param was inserted after 1.20.1; both mappings and shapes are
  *       handled.</li>
  *   <li><b>widget press</b>: {@code AbstractWidget.onPress()} (no-arg) vs
  *       {@code onPress(InputWithModifiers)} (26.x).</li>
@@ -53,7 +55,9 @@ public final class VanillaShim {
     public static boolean setScreen(Minecraft mc, Object screen) {
         try {
             for (Method m : Minecraft.class.getMethods()) {
-                if (m.getName().equals("setScreen") && m.getParameterCount() == 1) {
+                if ((m.getName().equals("setScreen") || m.getName().equals("method_1507")
+                        || m.getName().equals("m_91152_"))
+                        && m.getParameterCount() == 1) {
                     m.setAccessible(true);
                     m.invoke(mc, screen);
                     return true;
@@ -82,7 +86,16 @@ public final class VanillaShim {
     public static Screen currentScreen(Minecraft mc) {
         try {
             try {
-                Field f = Minecraft.class.getField("screen"); // 1.20.1..1.21.x public field
+                Field f;
+                try {
+                    f = Minecraft.class.getField("screen"); // named runtime
+                } catch (NoSuchFieldException namedMissing) {
+                    try {
+                        f = Minecraft.class.getField("field_1755"); // Fabric intermediary runtime
+                    } catch (NoSuchFieldException intermediaryMissing) {
+                        f = Minecraft.class.getField("f_91080_"); // Forge SRG runtime
+                    }
+                }
                 return (Screen) f.get(mc);
             } catch (NoSuchFieldException ignore) { /* 26.x: relocated to Gui */ }
             Object gui = mc.gui;
@@ -99,7 +112,9 @@ public final class VanillaShim {
     /** This player's profile name. {@code GameProfile.getName()} (class) vs {@code name()} (record, 26.x). */
     public static String playerName(AbstractClientPlayer p) {
         try {
-            Method gp = findNoArg(p.getClass(), "getGameProfile");
+            Method gp = findNoArg(
+                    p.getClass(), "getGameProfile", "method_7334", "m_36316_"
+            );
             Object profile = (gp != null) ? gp.invoke(p) : null;
             if (profile != null) {
                 Method m = findNoArg(profile.getClass(), "getName");
@@ -130,65 +145,45 @@ public final class VanillaShim {
     public static String cloakTextureStr(AbstractClientPlayer p) { return String.valueOf(cloakTexture(p)); }
 
     /**
-     * Dev-only: if a startup <em>warnings</em> screen is blocking auto-connect, press its "proceed"
-     * button so startup (and {@code --quickPlayMultiplayer}) continues. 26.2 NeoForge surfaces a
-     * {@code LoadingErrorScreen} for recoverable warnings (e.g. a mod pack declaring
-     * {@code pack_format > 64} without {@code min_format}/{@code max_format}, or architectury's
-     * {@code @OnlyIn} notice) that a human would click through; the harness has no one to click.
-     * Only acts on error/warning screens and only presses a clearly-forward button (never quit/log),
-     * so it is a no-op on versions/loaders that don't show such a screen.
-     * @return true if a proceed button was pressed.
+     * Whether a loader compatibility, warning, or error screen is blocking startup. Packaged-JAR
+     * E2E treats this as a hard failure instead of accepting it on the user's behalf.
      */
-    public static boolean proceedPastWarningScreen(Minecraft mc) {
-        Screen sc = currentScreen(mc);
+    public static boolean isWarningOrErrorScreen(Screen sc) {
         if (sc == null) return false;
-        String cn = sc.getClass().getName().toLowerCase();
-        if (!(cn.contains("loadingerror") || cn.contains("errorscreen") || cn.contains("warning"))) return false;
-        try {
-            for (GuiEventListener c : sc.children()) {
-                if (!(c instanceof AbstractWidget w)) continue;
-                String label;
-                try { label = w.getMessage().getString().toLowerCase(); } catch (Throwable t) { continue; }
-                // Only press a clearly-forward action; never quit/exit/cancel or "open log".
-                if (label.contains("quit") || label.contains("exit") || label.contains("cancel")
-                        || label.contains("log") || label.contains("file") || label.contains("folder")) continue;
-                if (label.contains("continue") || label.contains("proceed") || label.contains("ignore")
-                        || label.contains("skip") || label.contains("done") || label.contains("ok")
-                        || label.contains("yes") || label.contains("got it") || label.contains("understand")) {
-                    if (press(w)) {
-                        E2ELog.info("proceedPastWarningScreen: pressed '" + label + "' on " + sc.getClass().getSimpleName());
-                        return true;
-                    }
-                }
-            }
-            E2ELog.warn("proceedPastWarningScreen: no forward button found on " + sc.getClass().getName());
-        } catch (Throwable t) {
-            E2ELog.warn("proceedPastWarningScreen: " + t);
-        }
-        return false;
+        String cn = sc.getClass().getName().toLowerCase(Locale.ROOT);
+        return cn.contains("loadingerror") || cn.contains("errorscreen") || cn.contains("warning");
     }
 
     private static String resolveLoc(AbstractClientPlayer p, String directName, String[] skinAccessors) {
         if (p == null) return null;
         try {
             // 1.20.1: a direct getter returning a ResourceLocation.
-            Method direct = findNoArg(p.getClass(), directName);
+            Method direct = findNoArg(
+                    p.getClass(),
+                    directName,
+                    directName.equals("getSkinTextureLocation") ? "method_3117" : "method_3119",
+                    directName.equals("getSkinTextureLocation") ? "m_108560_" : "m_108561_"
+            );
             if (direct != null) {
                 Object r = direct.invoke(p);
                 return (r == null) ? null : r.toString();
             }
             // 1.21.x/26.x: getSkin() -> PlayerSkin, then an accessor for the skin/cape component.
-            Method getSkin = findNoArg(p.getClass(), "getSkin");
+            Method getSkin = findNoArg(p.getClass(), "getSkin", "method_52814", "method_52810");
             if (getSkin != null) {
                 Object skin = getSkin.invoke(p);
                 if (skin != null) {
                     for (String acc : skinAccessors) {
-                        Method m = findNoArg(skin.getClass(), acc);
+                        Method m = switch (acc) {
+                            case "texture" -> findNoArg(skin.getClass(), acc, "comp_1626");
+                            case "capeTexture" -> findNoArg(skin.getClass(), acc, "comp_1627");
+                            default -> findNoArg(skin.getClass(), acc);
+                        };
                         if (m == null) continue;
                         Object tex = m.invoke(skin);
                         if (tex == null) return null;
                         // 26.x: the accessor returns a ClientAsset.Texture; unwrap texturePath() -> Identifier.
-                        Method tp = findNoArg(tex.getClass(), "texturePath");
+                        Method tp = findNoArg(tex.getClass(), "texturePath", "comp_3627");
                         Object loc = (tp != null) ? tp.invoke(tex) : tex; // 1.21.x: already a ResourceLocation
                         return (loc == null) ? null : loc.toString();
                     }
@@ -208,10 +203,13 @@ public final class VanillaShim {
     public static boolean press(Object widget) {
         if (widget == null) return false;
         try {
-            Method m0 = findNoArg(widget.getClass(), "onPress");
+            Method m0 = findNoArg(
+                    widget.getClass(), "onPress", "method_25306", "m_5691_"
+            );
             if (m0 != null) { m0.invoke(widget); return true; }
             for (Method m : widget.getClass().getMethods()) {
-                if (m.getName().equals("onPress") && m.getParameterCount() == 1) {
+                if ((m.getName().equals("onPress") || m.getName().equals("method_25306"))
+                        && m.getParameterCount() == 1) {
                     m.setAccessible(true);
                     m.invoke(widget, new Object[]{ null });
                     return true;
@@ -229,25 +227,25 @@ public final class VanillaShim {
      */
     public static boolean screenshot(Minecraft mc, String name) {
         try {
-            Class<?> screenshot = Class.forName("net.minecraft.client.Screenshot");
+            Class<?> screenshot = loadNamedClass("net.minecraft.client.Screenshot");
             File gameDir = new File(System.getProperty("user.dir"));
             Object fb = mainRenderTarget(mc);
             if (fb == null) { E2ELog.warn("main render target unavailable"); return false; }
             Consumer<Object> noop = msg -> {};
 
             for (Method m : screenshot.getDeclaredMethods()) {
-                if (!m.getName().equals("grab")) continue;
+                if (!Modifier.isStatic(m.getModifiers())) continue;
                 Class<?>[] p = m.getParameterTypes();
                 // 1.20.1: (File dir, String name, RenderTarget fb, Consumer<Component> msg)
                 if (p.length == 4 && p[0] == File.class && p[1] == String.class
-                        && p[3] == Consumer.class) {
+                        && p[2].isInstance(fb) && p[3] == Consumer.class) {
                     m.setAccessible(true);
                     m.invoke(null, gameDir, name, fb, noop);
                     return true;
                 }
                 // 1.21.x/26.x: (File dir, String name, RenderTarget fb, int downscale, Consumer<Component> msg)
                 if (p.length == 5 && p[0] == File.class && p[1] == String.class
-                        && p[3] == int.class && p[4] == Consumer.class) {
+                        && p[2].isInstance(fb) && p[3] == int.class && p[4] == Consumer.class) {
                     m.setAccessible(true);
                     m.invoke(null, gameDir, name, fb, 1, noop);
                     return true;
@@ -264,7 +262,9 @@ public final class VanillaShim {
     /** The main {@code RenderTarget}: {@code Minecraft.getMainRenderTarget()} or {@code mc.gameRenderer.mainRenderTarget()} (26.x). */
     private static Object mainRenderTarget(Minecraft mc) {
         try {
-            Method m = findNoArg(mc.getClass(), "getMainRenderTarget"); // 1.20.1..1.21.x
+            Method m = findNoArg(
+                    mc.getClass(), "getMainRenderTarget", "method_1522", "m_91385_"
+            ); // 1.20.1..1.21.x
             if (m != null) return m.invoke(mc);
             Object gr = mc.gameRenderer; // 26.x: public field; RenderTarget via GameRenderer.mainRenderTarget()
             if (gr != null) {
@@ -277,11 +277,45 @@ public final class VanillaShim {
         return null;
     }
 
-    private static Method findNoArg(Class<?> c, String name) {
+    /** Resolve a named Minecraft class through Fabric's runtime mapping resolver when necessary. */
+    private static Class<?> loadNamedClass(String namedClass) throws ClassNotFoundException {
+        try {
+            return Class.forName(namedClass);
+        } catch (ClassNotFoundException namedMissing) {
+            if (namedClass.equals("net.minecraft.client.Screenshot")) {
+                try {
+                    return Class.forName("net.minecraft.class_318");
+                } catch (ClassNotFoundException intermediaryMissing) {
+                    namedMissing.addSuppressed(intermediaryMissing);
+                }
+            }
+            try {
+                Class<?> fabricLoaderClass = Class.forName("net.fabricmc.loader.api.FabricLoader");
+                Object loader = fabricLoaderClass.getMethod("getInstance").invoke(null);
+                Object resolver = fabricLoaderClass.getMethod("getMappingResolver").invoke(loader);
+                Class<?> resolverClass = Class.forName("net.fabricmc.loader.api.MappingResolver");
+                String runtimeName = (String) resolverClass
+                        .getMethod("mapClassName", String.class, String.class)
+                        .invoke(resolver, "named", namedClass);
+                return Class.forName(runtimeName);
+            } catch (ClassNotFoundException noFabricLoader) {
+                throw namedMissing;
+            } catch (ReflectiveOperationException mappingFailure) {
+                namedMissing.addSuppressed(mappingFailure);
+                throw namedMissing;
+            }
+        }
+    }
+
+    private static Method findNoArg(Class<?> c, String... names) {
         for (Method m : c.getMethods()) {
-            if (m.getParameterCount() == 0 && m.getName().equals(name)) {
-                m.setAccessible(true);
-                return m;
+            if (m.getParameterCount() == 0) {
+                for (String name : names) {
+                    if (m.getName().equals(name)) {
+                        m.setAccessible(true);
+                        return m;
+                    }
+                }
             }
         }
         return null;

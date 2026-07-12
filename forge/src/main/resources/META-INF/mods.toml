@@ -1,20 +1,19 @@
 # Forge mod metadata for QuickSkin
 modLoader = "javafml"
 loaderVersion = "[47,)"
-license = "MIT"
-issueTrackerURL = "https://github.com/yourusername/quickskin/issues"
+license = "All Rights Reserved"
+issueTrackerURL = "https://github.com/AkaNebur/Quick-Skin-Mod/issues"
 
 [[mods]]
 modId = "quickskin"
 version = "${version}"
-displayName = "QuickSkin"
+displayName = "Quick Skin"
 displayTest = "IGNORE_ALL_VERSION"
 authors = "The Plum Team"
 description = '''
-QuickSkin - Customize your Minecraft player skin and cape in-game!
-Supports both Fabric and Forge through Architectury.
+Change, preview, and synchronize local skins, capes, and CPM models in-game across Fabric, Forge, and NeoForge.
 '''
-displayURL = "https://github.com/yourusername/quickskin"
+displayURL = "https://modrinth.com/mod/quick-skin"
 logoFile = "icon.png"
 
 [[dependencies.quickskin]]
@@ -27,7 +26,7 @@ side = "BOTH"
 [[dependencies.quickskin]]
 modId = "minecraft"
 mandatory = true
-versionRange = "[1.20.1,1.21)"
+versionRange = "[1.20.1,1.20.2)"
 ordering = "NONE"
 side = "BOTH"
 

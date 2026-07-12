@@ -1,5 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import dev.architectury.plugin.ArchitectPluginExtension
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
 import org.gradle.api.tasks.Sync
 
@@ -18,6 +20,18 @@ val consolidatedLegacyJava = layout.buildDirectory.dir("generated/consolidated/m
 val commonProjectPath = requireNotNull(stonecutter.node.sibling("common")).hierarchy.toString()
 val commonProject = project(commonProjectPath)
 evaluationDependsOn(commonProjectPath)
+
+val releaseMatrixFile = rootProject.file("release/release-matrix.json")
+check(releaseMatrixFile.isFile) { "Missing central release matrix: $releaseMatrixFile" }
+val releaseMatrix = JsonSlurper().parse(releaseMatrixFile) as Map<*, *>
+val releaseProject = releaseMatrix["project"] as Map<*, *>
+val releaseArtifact = (releaseMatrix["artifacts"] as List<*>)
+    .map { it as Map<*, *> }
+    .single { it["artifact_node"] == "fabric-$minecraftVersion" }
+val releaseMetadata = releaseArtifact["metadata"] as Map<*, *>
+
+fun matrixString(values: Map<*, *>, key: String): String =
+    requireNotNull(values[key]) { "Missing '$key' in $releaseMatrixFile" }.toString()
 
 apply(plugin = if (isNoRemap) "dev.architectury.loom-no-remap" else "dev.architectury.loom")
 apply(plugin = "architectury-plugin")
@@ -123,6 +137,27 @@ if (minecraftVersion == "1.20.1") {
     }
 }
 
+// The harness compiles against the selected node's named main output, but its JAR contains only the
+// separate test mod. Production runtime profiles install this harness beside the exact release JAR;
+// they never put main output or a development Quick Skin JAR on the runtime classpath.
+val mainSourceSet = sourceSets.named("main").get()
+val e2eSourceSet = sourceSets.create("e2e") {
+    java.setSrcDirs(
+        listOf(
+            rootProject.file("fabric/src/e2e/java"),
+            rootProject.file("common/src/e2e/java"),
+        )
+    )
+    resources.setSrcDirs(
+        listOf(
+            rootProject.file("fabric/src/e2e/resources"),
+            rootProject.file("common/src/e2e/resources"),
+        )
+    )
+    compileClasspath += mainSourceSet.output + mainSourceSet.compileClasspath
+    runtimeClasspath += output + compileClasspath
+}
+
 extensions.configure<LoomGradleExtensionAPI>("loom") {
     if (isNoRemap) {
         val awFile = rootProject.file("fabric/src/main/resources/quick-skin.accesswidener")
@@ -180,8 +215,39 @@ tasks.withType<Jar>().configureEach {
 
 tasks.processResources {
     inputs.property("version", project.version)
+    inputs.file(releaseMatrixFile)
     filesMatching("fabric.mod.json") {
         expand("version" to project.version)
+    }
+    doLast {
+        val metadataFile = destinationDir.resolve("fabric.mod.json")
+        check(metadataFile.isFile) { "Processed Fabric metadata is missing: $metadataFile" }
+        @Suppress("UNCHECKED_CAST")
+        val json = JsonSlurper().parse(metadataFile) as MutableMap<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val contact = json["contact"] as MutableMap<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val depends = json["depends"] as MutableMap<String, Any?>
+
+        json["name"] = matrixString(releaseProject, "name")
+        json["description"] = matrixString(releaseProject, "description")
+        json["license"] = matrixString(releaseProject, "license")
+        contact["homepage"] = matrixString(releaseProject, "homepage")
+        contact["sources"] = matrixString(releaseProject, "sources")
+        contact["issues"] = matrixString(releaseProject, "issues")
+        depends["minecraft"] = matrixString(releaseMetadata, "minecraft")
+        depends["architectury"] = matrixString(releaseMetadata, "architectury")
+        val suggestions = releaseMetadata["suggests"]
+        if (suggestions is Map<*, *>) {
+            json["suggests"] = suggestions
+        } else {
+            json.remove("suggests")
+        }
+
+        metadataFile.writeText(
+            JsonOutput.prettyPrint(JsonOutput.toJson(json)) + "\n",
+            Charsets.UTF_8,
+        )
     }
     if (minecraftVersion == "1.21.1" || minecraftVersion == "26.1") {
         doLast {
@@ -234,5 +300,46 @@ if (isNoRemap) {
         val shadowJar = tasks.named<ShadowJar>("shadowJar")
         mustRunAfter(shadowJar)
         inputFile.set(shadowJar.get().archiveFile)
+    }
+}
+
+val e2eArchiveBaseName = "Quick Skin E2E - Fabric - $minecraftVersion"
+if (isNoRemap) {
+    tasks.register<Jar>("e2eHarnessJar") {
+        group = "verification"
+        description = "Packages the client-only E2E harness without production Quick Skin classes."
+        dependsOn(tasks.named(e2eSourceSet.classesTaskName))
+        from(e2eSourceSet.output)
+        archiveBaseName.set(e2eArchiveBaseName)
+        archiveVersion.set("0.0.0")
+        archiveClassifier.set("")
+    }
+} else {
+    val e2eHarnessDevJar = tasks.register<Jar>("e2eHarnessDevJar") {
+        group = "verification"
+        description = "Packages the named intermediary input for the remapped E2E harness."
+        dependsOn(tasks.named(e2eSourceSet.classesTaskName))
+        from(e2eSourceSet.output)
+        archiveBaseName.set(e2eArchiveBaseName)
+        archiveVersion.set("0.0.0")
+        archiveClassifier.set("dev")
+        destinationDirectory.set(layout.buildDirectory.dir("devlibs"))
+    }
+    val productionRemap = tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar")
+    tasks.register<net.fabricmc.loom.task.RemapJarTask>("remapE2EHarnessJar") {
+        group = "verification"
+        description = "Remaps the separate E2E harness for a real Fabric production runtime."
+        dependsOn(e2eHarnessDevJar)
+        inputFile.set(e2eHarnessDevJar.flatMap { it.archiveFile })
+        sourceNamespace.set(productionRemap.flatMap { it.sourceNamespace })
+        targetNamespace.set(productionRemap.flatMap { it.targetNamespace })
+        classpath.from(productionRemap.map { it.classpath }, e2eSourceSet.compileClasspath)
+        addNestedDependencies.set(false)
+        readMixinConfigsFromManifest.set(false)
+        injectAccessWidener.set(false)
+        useMixinAP.set(false)
+        archiveBaseName.set(e2eArchiveBaseName)
+        archiveVersion.set("0.0.0")
+        archiveClassifier.set("")
     }
 }

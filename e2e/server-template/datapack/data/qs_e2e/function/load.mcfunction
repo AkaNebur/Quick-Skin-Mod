@@ -1,8 +1,5 @@
-# Runs once on world load (minecraft:load tag). Makes screenshots deterministic: full daylight,
-# no day/night or weather cycle (Forge otherwise spawns into night, hiding the observed player).
+# Runs once on world load (minecraft:load tag). Starts screenshots in clear daylight.
+# Gamerule identifiers changed in 26.x, so this cross-version pack avoids them.
 # This is the 1.21+ ("function", singular) copy; the 1.20.1 copy lives under "functions/".
-gamerule doDaylightCycle false
-gamerule doWeatherCycle false
-gamerule doMobSpawning false
 weather clear
 time set day

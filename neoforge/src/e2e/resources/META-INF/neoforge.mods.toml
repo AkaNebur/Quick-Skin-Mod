@@ -3,7 +3,7 @@
 # (1.21.x and 26.x), so this single manifest serves all of them.
 modLoader = "javafml"
 loaderVersion = "[1,)"
-license = "MIT"
+license = "All Rights Reserved"
 
 [[mods]]
 modId = "quick_skin_e2e"

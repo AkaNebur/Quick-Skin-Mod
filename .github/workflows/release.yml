@@ -1,0 +1,326 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version number; must equal mod_version
+        required: true
+        type: string
+      channel:
+        description: Marketplace release channel
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - beta
+          - alpha
+      dry_run:
+        description: Build and run all 14 smokes without publishing
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+  LIBGL_ALWAYS_SOFTWARE: "1"
+  GALLIUM_DRIVER: llvmpipe
+  __GLX_VENDOR_LIBRARY_NAME: mesa
+  NEOFORGE_26_1_ARCHITECTURY_URL: ${{ vars.NEOFORGE_26_1_ARCHITECTURY_URL }}
+  NEOFORGE_26_1_ARCHITECTURY_SHA256: ${{ vars.NEOFORGE_26_1_ARCHITECTURY_SHA256 }}
+  NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID: ${{ vars.NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID }}
+  NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID: ${{ vars.NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID }}
+
+jobs:
+  build:
+    name: Build immutable release bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      channel: ${{ steps.release.outputs.channel }}
+      runtimes: ${{ steps.matrices.outputs.runtimes }}
+      artifacts: ${{ steps.matrices.outputs.artifacts }}
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v6
+
+      - name: Install all required JDKs
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+            25
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Validate requested release identity
+        id: release
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+          configured="$(sed -n 's/^mod_version=//p' gradle.properties)"
+          test -n "$configured"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            requested="${GITHUB_REF_NAME#v}"
+            channel="release"
+          else
+            requested="$INPUT_VERSION"
+            channel="$INPUT_CHANNEL"
+          fi
+          if [[ "$requested" != "$configured" ]]; then
+            printf 'Requested version %s does not equal mod_version %s\n' \
+              "$requested" "$configured" >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$configured" >> "$GITHUB_OUTPUT"
+          printf 'channel=%s\n' "$channel" >> "$GITHUB_OUTPUT"
+
+      - name: Fail closed on pooled NeoForge 26.1 compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          needs_compat="$(python - <<'PY'
+          import json
+          matrix = json.load(open("release/release-matrix.json", encoding="utf-8"))
+          print(str(any(
+              row.get("architectury", {}).get("kind") == "external-maintained-compat"
+              for row in matrix["runtimes"]
+          )).lower())
+          PY
+          )"
+          if [[ "$needs_compat" == "true" ]]; then
+            test -n "$NEOFORGE_26_1_ARCHITECTURY_URL"
+            [[ "$NEOFORGE_26_1_ARCHITECTURY_URL" == https://* ]]
+            [[ "$NEOFORGE_26_1_ARCHITECTURY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+            test -n "$NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID"
+            test -n "$NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID"
+          fi
+
+      - name: Build ten production artifacts and ten E2E harnesses
+        run: >-
+          ./gradlew --no-daemon --no-parallel --stacktrace
+          clean buildAllLanes buildAllE2EHarnesses
+
+      - name: Stage and verify the ten production artifacts
+        run: >-
+          python scripts/release/verify_release.py
+          --matrix release/release-matrix.json
+          --manifest build/release/artifacts.json
+          --stage build/release
+
+      - name: Resolve release matrices
+        id: matrices
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtimes="$(python scripts/release/matrix.py \
+            --matrix release/release-matrix.json \
+            --kind runtime)"
+          artifacts="$(python scripts/release/matrix.py \
+            --matrix release/release-matrix.json \
+            --kind artifacts)"
+          python -c 'import json,sys; value=json.loads(sys.argv[1]); assert value' "$runtimes"
+          python -c 'import json,sys; value=json.loads(sys.argv[1]); assert value' "$artifacts"
+          printf 'runtimes=%s\n' "$runtimes" >> "$GITHUB_OUTPUT"
+          printf 'artifacts=%s\n' "$artifacts" >> "$GITHUB_OUTPUT"
+
+      - name: Upload immutable release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ steps.release.outputs.version }}
+          path: build/release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+
+  runtime-smoke:
+    name: ${{ matrix.id }} - packaged phase0 smoke
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.build.outputs.runtimes) }}
+
+    steps:
+      - name: Check out orchestration code
+        uses: actions/checkout@v6
+
+      - name: Install all required JDKs
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+            25
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install packaged-runtime launcher
+        run: python -m pip install --requirement e2e/requirements.txt
+
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+
+      - name: Install software-rendering runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            xvfb \
+            xauth \
+            mesa-utils \
+            libgl1-mesa-dri \
+            libglx-mesa0 \
+            libasound2t64 \
+            libopenal1 \
+            libx11-6 \
+            libxcursor1 \
+            libxext6 \
+            libxi6 \
+            libxinerama1 \
+            libxrandr2 \
+            libxrender1 \
+            libxtst6 \
+            libxxf86vm1
+
+      - name: Download immutable release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: release-${{ needs.build.outputs.version }}
+          path: build/release
+
+      - name: Reverify staged bytes and build identity
+        run: python scripts/release/verify_release.py --verify-staged
+
+      - name: Enforce NeoForge 26.1 compatibility dependency
+        if: ${{ matrix.architectury.kind == 'external-maintained-compat' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$NEOFORGE_26_1_ARCHITECTURY_URL"
+          test -n "$NEOFORGE_26_1_ARCHITECTURY_SHA256"
+
+      - name: Run packaged-JAR release smoke
+        shell: bash
+        env:
+          E2E_ROW_JSON: ${{ toJSON(matrix) }}
+        run: |
+          set -euo pipefail
+          xvfb-run --auto-servernum \
+            --server-args="-screen 0 1280x720x24 -ac +extension GLX +render -noreset" \
+            python e2e/orchestrator.py \
+              --matrix release/release-matrix.json \
+              --row-json "$E2E_ROW_JSON" \
+              --artifacts-manifest build/release/artifacts.json \
+              --packaged \
+              --scenarios phase0-smoke
+
+      - name: Upload packaged-smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-smoke-${{ matrix.id }}
+          path: e2e-out/
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 90
+
+  publish:
+    name: Publish ${{ matrix.artifact_node }}
+    needs:
+      - build
+      - runtime-smoke
+    if: ${{ github.event_name == 'push' || inputs.dry_run == false }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.build.outputs.artifacts) }}
+
+    steps:
+      - name: Check out release metadata
+        uses: actions/checkout@v6
+
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Download immutable release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: release-${{ needs.build.outputs.version }}
+          path: build/release
+
+      - name: Reverify staged bytes before publication
+        run: >-
+          python scripts/release/verify_release.py
+          --matrix release/release-matrix.json
+          --manifest build/release/artifacts.json
+          --verify-staged
+
+      - name: Enforce NeoForge 26.1 publication dependency
+        if: ${{ matrix.artifact_node == 'neoforge-26.1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$NEOFORGE_26_1_ARCHITECTURY_MODRINTH_ID"
+          test -n "$NEOFORGE_26_1_ARCHITECTURY_CURSEFORGE_ID"
+
+      - name: Publish exact verified artifact to Modrinth and CurseForge
+        uses: Kira-NT/mc-publish@v3.3
+        with:
+          modrinth-id: ${{ matrix.modrinth_id }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          curseforge-id: ${{ matrix.curseforge_id }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: ${{ matrix.file }}
+          name: ${{ matrix.name }}
+          version: ${{ needs.build.outputs.version }}
+          version-type: ${{ needs.build.outputs.channel }}
+          changelog-file: CHANGELOG.md
+          loaders: ${{ matrix.loader }}
+          game-versions: ${{ matrix.game_versions }}
+          game-version-filter: none
+          dependencies: ${{ matrix.dependencies }}
+          java: ${{ matrix.java }}
+          retry-attempts: 3
+          retry-delay: 10000
+          fail-mode: fail

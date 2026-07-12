@@ -1,188 +1,208 @@
 #!/usr/bin/env python3
-"""
-Quick Skin E2E multi-version orchestrator (Phase 3).
+"""Run Quick Skin's exact fan-in artifacts in isolated production runtimes.
 
-Drives the per-combo bash orchestrator (run-e2e.sh) across a matrix of Minecraft versions, loaders,
-and scenarios, then aggregates the per-client report.json results into a single summary (printed
-table + e2e-out/summary.json). Each (version, loader, scenario) combo is run SEQUENTIALLY — never
-overlapping — because every server binds port 25565 and stacking runs both clashes the port and
-overloads the machine (which flakes the second-client login handshake).
-
-run-e2e.sh already handles one combo robustly (build harness -> pre-seed a fresh day-pinned server
-world -> boot server -> launch auto-connecting client(s) -> poll done.marker -> collect artifacts ->
-teardown). This script is the matrix layer on top: which versions, which loaders per version, which
-scenarios, plus result aggregation. It does not re-implement the launch logic.
-
-Loader rules (locked): 1.20.1 -> fabric + forge; 1.21.x / 26.x -> fabric + neoforge (Forge is
-1.20.1-only). The selector is overridden per combo via run-e2e.sh's first arg (-> -Pminecraft_version),
-so gradle.properties is never edited.
-
-Usage:
-  python3 e2e/orchestrator.py                          # full validated matrix
-  python3 e2e/orchestrator.py --versions 1.21.1,26.2   # subset of versions
-  python3 e2e/orchestrator.py --loaders fabric         # restrict loaders
-  python3 e2e/orchestrator.py --scenarios full,propagation-live
-  python3 e2e/orchestrator.py --list                   # print the matrix and exit
-
-Exit code is non-zero if any combo failed, so it doubles as a CI gate.
+Unlike the retired Loom runner, artifact-node selection and runtime-version
+selection are independent.  This is what lets the 26.1 artifact be exercised on
+26.1, 26.1.1, and 26.1.2 without rebuilding or changing tracked properties.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
-import time
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
-RUN_SH = REPO / "e2e" / "run-e2e.sh"
-OUT_ROOT = REPO / "e2e-out"
+sys.path.insert(0, str(REPO / "scripts" / "release"))
 
-# Loaders available per Minecraft version. 1.20.1 is the only Forge target; everything 1.21+/26.x is
-# NeoForge. Fabric is always present. Extend this as more versions are validated — the shared e2e
-# source set must compile against every enabled version (see fabric/neoforge build scripts).
-VERSION_LOADERS: dict[str, list[str]] = {
-    "1.20.1": ["fabric", "forge"],
-    "1.21.1": ["fabric", "neoforge"],
-    "26.2": ["fabric", "neoforge"],
-}
-
-# Default scenario sweep, cheapest/most-robust first so a broken combo fails fast on the simple case.
-DEFAULT_SCENARIOS = ["phase0-smoke", "propagation", "propagation-live", "full"]
+from matrix import MatrixError, load_matrix  # noqa: E402
+from packaged_runtime import run_packaged_row  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Quick Skin E2E multi-version orchestrator")
-    p.add_argument("--versions", help="comma-separated MC versions (default: all known)")
-    p.add_argument("--loaders", help="comma-separated loaders to restrict to (e.g. fabric)")
-    p.add_argument("--scenarios", help=f"comma-separated scenarios (default: {','.join(DEFAULT_SCENARIOS)})")
-    p.add_argument("--list", action="store_true", help="print the resolved matrix and exit")
-    return p.parse_args()
-
-
-def resolve_matrix(args: argparse.Namespace) -> list[tuple[str, str, str]]:
-    versions = args.versions.split(",") if args.versions else list(VERSION_LOADERS)
-    loader_filter = set(args.loaders.split(",")) if args.loaders else None
-    scenarios = args.scenarios.split(",") if args.scenarios else list(DEFAULT_SCENARIOS)
-
-    combos: list[tuple[str, str, str]] = []
-    for v in versions:
-        v = v.strip()
-        if v not in VERSION_LOADERS:
-            sys.exit(f"unknown version {v!r}; known: {', '.join(VERSION_LOADERS)}")
-        for loader in VERSION_LOADERS[v]:
-            if loader_filter and loader not in loader_filter:
-                continue
-            for scen in scenarios:
-                combos.append((v, loader, scen.strip()))
-    return combos
-
-
-def read_reports(version: str, loader: str) -> dict:
-    """Collect the per-role report.json statuses for a finished combo."""
-    base = OUT_ROOT / version / loader
-    roles: dict[str, dict] = {}
-    for role_dir in ("client_a", "client_b"):
-        report = base / role_dir / "report.json"
-        if report.exists():
-            try:
-                data = json.loads(report.read_text())
-                steps = data.get("steps", [])
-                roles[role_dir] = {
-                    "status": data.get("status"),
-                    "scenario": data.get("scenario"),
-                    "steps_total": len(steps),
-                    "steps_pass": sum(1 for s in steps if s.get("status") == "pass"),
-                    "failures": [s["name"] for s in steps if s.get("status") != "pass"],
-                }
-            except (json.JSONDecodeError, OSError) as e:
-                roles[role_dir] = {"status": "unreadable", "error": str(e)}
-    return roles
-
-
-def run_combo(version: str, loader: str, scenario: str) -> dict:
-    """Run one (version, loader, scenario) via run-e2e.sh; return a result record."""
-    print(f"\n{'=' * 72}\n>>> {version} / {loader} / {scenario}\n{'=' * 72}", flush=True)
-    # Belt-and-suspenders teardown: kill any stragglers from a prior combo before binding the port.
-    subprocess.run(["pkill", "-f", "quickskin.e2e"], check=False)
-    time.sleep(2)
-    # Clear stale per-role reports so the aggregated summary reflects only THIS combo (a 1-client
-    # scenario must not inherit a prior 2-client run's client_b report from the shared out dir).
-    for role_dir in ("client_a", "client_b"):
-        rp = OUT_ROOT / version / loader / role_dir / "report.json"
-        if rp.exists():
-            rp.unlink()
-
-    start = time.time()
-    proc = subprocess.run(
-        ["bash", str(RUN_SH), version, loader, scenario],
-        cwd=str(REPO),
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--matrix", type=Path, default=Path("release/release-matrix.json"))
+    parser.add_argument(
+        "--artifacts-manifest", type=Path, default=Path("build/release/artifacts.json")
     )
-    elapsed = round(time.time() - start, 1)
+    parser.add_argument(
+        "--row-json",
+        help="one GitHub matrix row as JSON; only its locked identity fields are trusted",
+    )
+    parser.add_argument("--artifact-node", help="restrict to one artifact node")
+    parser.add_argument("--runtime-version", help="restrict to one runtime version")
+    parser.add_argument("--loader", choices=("fabric", "forge", "neoforge"))
+    parser.add_argument(
+        "--scenarios",
+        help="comma-separated scenario override (scheduled jobs pass all four here)",
+    )
+    parser.add_argument("--output-root", type=Path, default=Path("e2e-out"))
+    parser.add_argument("--packaged", action="store_true", help="required acknowledgement")
+    parser.add_argument("--list", action="store_true", help="print resolved logical rows and exit")
+    return parser.parse_args()
 
-    # run-e2e.sh exits 0 only when every required client passed; cross-check the reports too.
-    reports = read_reports(version, loader)
-    rec = {
-        "version": version,
-        "loader": loader,
-        "scenario": scenario,
-        "exit_code": proc.returncode,
-        "passed": proc.returncode == 0,
-        "elapsed_s": elapsed,
-        "reports": reports,
-    }
-    print(f"<<< {version}/{loader}/{scenario}: "
-          f"{'PASS' if rec['passed'] else 'FAIL'} ({elapsed}s)", flush=True)
-    return rec
+
+def absolute(path: Path) -> Path:
+    return path.resolve() if path.is_absolute() else (REPO / path).resolve()
 
 
-def print_summary(results: list[dict]) -> None:
-    print(f"\n{'=' * 72}\nSUMMARY\n{'=' * 72}")
-    width = max((len(f"{r['version']}/{r['loader']}/{r['scenario']}") for r in results), default=10)
-    for r in results:
-        combo = f"{r['version']}/{r['loader']}/{r['scenario']}"
-        roles = r["reports"]
-        detail = " ".join(
-            f"{role.replace('client_', '').upper()}={info.get('status')}"
-            f"({info.get('steps_pass')}/{info.get('steps_total')})"
-            for role, info in sorted(roles.items())
-        ) or "(no report)"
-        status = "PASS" if r["passed"] else "FAIL"
-        print(f"  {combo:<{width}}  {status:<4}  {r['elapsed_s']:>6}s  {detail}")
-    passed = sum(1 for r in results if r["passed"])
-    print(f"\n  {passed}/{len(results)} combos passed")
+def select_rows(data: dict[str, Any], args: argparse.Namespace) -> list[dict[str, Any]]:
+    rows = list(data["runtimes"])
+    if args.row_json:
+        try:
+            requested = json.loads(args.row_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid --row-json: {exc}") from exc
+        if not isinstance(requested, dict):
+            raise ValueError("--row-json must contain one JSON object")
+        identity = (
+            requested.get("artifact_node"),
+            requested.get("runtime_version"),
+            requested.get("loader"),
+        )
+        rows = [
+            row
+            for row in rows
+            if (row["artifact_node"], row["runtime_version"], row["loader"]) == identity
+        ]
+        if len(rows) != 1:
+            raise ValueError(f"--row-json does not identify exactly one locked runtime row: {identity}")
+    if args.artifact_node:
+        rows = [row for row in rows if row["artifact_node"] == args.artifact_node]
+    if args.runtime_version:
+        rows = [row for row in rows if row["runtime_version"] == args.runtime_version]
+    if args.loader:
+        rows = [row for row in rows if row["loader"] == args.loader]
+    if not rows:
+        raise ValueError("runtime selection is empty")
+    return rows
+
+
+def scenarios_for(data: dict[str, Any], row: dict[str, Any], args: argparse.Namespace) -> list[str]:
+    scenarios = (
+        [value.strip() for value in args.scenarios.split(",") if value.strip()]
+        if args.scenarios
+        else [row["scenario"]]
+    )
+    known = set(data["scheduled_scenarios"])
+    unknown = [scenario for scenario in scenarios if scenario not in known]
+    if unknown:
+        raise ValueError(f"unknown E2E scenarios: {unknown}; known: {sorted(known)}")
+    return scenarios
+
+
+def read_manifest(path: Path) -> dict[str, Any]:
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read artifact manifest {path}: {exc}") from exc
+    if manifest.get("schema_version") != 1 or len(manifest.get("artifacts", [])) != 10:
+        raise ValueError("artifact manifest must be schema 1 with exactly 10 production records")
+    return manifest
+
+
+def manifest_hash(manifest: dict[str, Any] | None, node: str) -> str:
+    if manifest is None:
+        return "from:artifact-manifest"
+    records = [record for record in manifest["artifacts"] if record.get("artifact_node") == node]
+    if len(records) != 1:
+        raise ValueError(f"artifact manifest has {len(records)} records for {node}")
+    return records[0]["sha256"]
+
+
+def print_rows(
+    data: dict[str, Any], rows: list[dict[str, Any]], args: argparse.Namespace, manifest: dict[str, Any] | None
+) -> None:
+    resolved: list[dict[str, Any]] = []
+    for row in rows:
+        for scenario in scenarios_for(data, row, args):
+            resolved.append(
+                {
+                    "artifact_node": row["artifact_node"],
+                    "runtime_version": row["runtime_version"],
+                    "loader": row["loader"],
+                    "scenario": scenario,
+                    "jar_sha256": manifest_hash(manifest, row["artifact_node"]),
+                    "port": 0,
+                    "architectury_kind": row["architectury"]["kind"],
+                }
+            )
+    print(json.dumps({"include": resolved}, indent=2))
 
 
 def main() -> int:
     args = parse_args()
-    combos = resolve_matrix(args)
+    matrix_path = absolute(args.matrix)
+    manifest_path = absolute(args.artifacts_manifest)
+    output_root = absolute(args.output_root)
+    try:
+        data = load_matrix(matrix_path)
+        rows = select_rows(data, args)
+        manifest = read_manifest(manifest_path) if manifest_path.exists() else None
+        if args.list:
+            print_rows(data, rows, args, manifest)
+            return 0
+        if not args.packaged:
+            raise ValueError(
+                "the development-run launcher was retired; pass --packaged to run fan-in jars"
+            )
+        if manifest is None:
+            raise ValueError(f"packaged execution requires {manifest_path}")
 
-    if args.list:
-        print("Resolved matrix (run sequentially):")
-        for v, loader, scen in combos:
-            print(f"  {v} / {loader} / {scen}")
-        print(f"\n{len(combos)} combos")
-        return 0
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            for scenario in scenarios_for(data, row, args):
+                print(
+                    f">>> {row['artifact_node']} artifact on {row['runtime_version']} "
+                    f"{row['loader']} / {scenario}",
+                    flush=True,
+                )
+                result = run_packaged_row(
+                    REPO,
+                    data,
+                    row,
+                    scenario,
+                    manifest,
+                    manifest_path,
+                    output_root,
+                )
+                results.append(result)
+                print(
+                    f"<<< {result['status'].upper()} ({result['elapsed_s']}s)"
+                    + (f": {result['error']}" if result.get("error") else ""),
+                    flush=True,
+                )
 
-    if not RUN_SH.exists():
-        sys.exit(f"run-e2e.sh not found at {RUN_SH}")
-
-    print(f"Quick Skin E2E orchestrator: {len(combos)} combos (sequential)")
-    results = [run_combo(v, loader, scen) for v, loader, scen in combos]
-
-    print_summary(results)
-
-    OUT_ROOT.mkdir(parents=True, exist_ok=True)
-    summary_path = OUT_ROOT / "summary.json"
-    # Note: timestamp intentionally omitted (kept deterministic + dependency-free); the file mtime
-    # records when it was written.
-    summary_path.write_text(json.dumps({"results": results}, indent=2))
-    print(f"\nWrote {summary_path}")
-
-    return 0 if all(r["passed"] for r in results) else 1
+        output_root.mkdir(parents=True, exist_ok=True)
+        resolved = [
+            {
+                key: result[key]
+                for key in (
+                    "artifact_node",
+                    "runtime_version",
+                    "loader",
+                    "scenario",
+                    "jar_sha256",
+                    "port",
+                )
+            }
+            for result in results
+        ]
+        (output_root / "resolved-matrix.json").write_text(
+            json.dumps({"rows": resolved}, indent=2) + "\n", encoding="utf-8"
+        )
+        (output_root / "summary.json").write_text(
+            json.dumps({"results": results}, indent=2) + "\n", encoding="utf-8"
+        )
+        passed = sum(result["status"] == "pass" for result in results)
+        print(f"{passed}/{len(results)} packaged runtime rows passed")
+        return 0 if passed == len(results) else 1
+    except (MatrixError, ValueError, OSError) as exc:
+        print(f"E2E configuration failed: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

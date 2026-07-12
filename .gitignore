@@ -3,6 +3,7 @@
 build/
 out/
 classes/
+/.architectury-transformer/
 
 # Eclipse
 *.launch
@@ -43,6 +44,17 @@ usernamecache.json
 # Local environment
 .env
 local.properties
+/.claude/
+
+# Compiled classes accidentally produced outside Gradle output directories
+*.class
+
+# Retired migration scratch tree; history remains available in Git
+/.migration-archive/
 
 # E2E test harness output (screenshots + reports collected by the orchestrator)
 e2e-out/
+
+# Python tooling caches
+__pycache__/
+*.py[cod]
