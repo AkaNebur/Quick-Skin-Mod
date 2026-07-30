@@ -1,0 +1,181 @@
+name: PR gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - all-in-one-migration
+      - forge-and-fabric-1.20.1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  LIBGL_ALWAYS_SOFTWARE: "1"
+  GALLIUM_DRIVER: llvmpipe
+  __GLX_VENDOR_LIBRARY_NAME: mesa
+
+jobs:
+  build-and-verify:
+    name: Build, verify, and run packaged behavior
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+
+      - name: Verify exact Gradle bootstrap checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd gradle/wrapper && sha256sum --check --strict gradle-wrapper.jar.sha256)
+          distribution_hash="$(tr -d '\r\n' < gradle/wrapper/gradle-9.4.0-bin.zip.sha256)"
+          grep --fixed-strings --line-regexp "distributionSha256Sum=$distribution_hash" \
+            gradle/wrapper/gradle-wrapper.properties
+
+      - name: Install all required JDKs
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+
+      - name: Install Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Validate central matrix
+        run: python scripts/release/matrix.py --matrix release/release-matrix.json > /dev/null
+
+      - name: Build all production artifacts and E2E harnesses
+        run: >-
+          ./gradlew --no-daemon --no-parallel --stacktrace
+          clean buildAllLanes buildAllE2EHarnesses
+
+      - name: Stage and verify all production artifacts
+        run: >-
+          python scripts/release/verify_release.py
+          --matrix release/release-matrix.json
+          --manifest build/release/artifacts.json
+          --stage build/release
+
+      - name: Assert the build did not mutate tracked sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+      - name: Install locked packaged-runtime launcher
+        run: >-
+          python -m pip install --only-binary=:all:
+          --requirement e2e/requirements.txt
+
+      - name: Install software-rendering runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            xvfb \
+            xauth \
+            mesa-utils \
+            libgl1-mesa-dri \
+            libglx-mesa0 \
+            libasound2t64 \
+            libopenal1 \
+            libx11-6 \
+            libxcursor1 \
+            libxext6 \
+            libxi6 \
+            libxinerama1 \
+            libxrandr2 \
+            libxrender1 \
+            libxtst6 \
+            libxxf86vm1
+
+      - name: Reverify staged bytes before launching Minecraft
+        run: python scripts/release/verify_release.py --verify-staged
+
+      - name: Run packaged behavior for both loader lanes
+        shell: bash
+        run: |
+          set -euo pipefail
+          scenarios="$(python -c \
+            'import json; print(",".join(json.load(open("release/release-matrix.json"))["pr_scenarios"]))')"
+          xvfb-run --auto-servernum \
+            --server-args="-screen 0 1280x720x24 -ac +extension GLX +render -noreset" \
+            python e2e/orchestrator.py \
+              --matrix release/release-matrix.json \
+              --artifacts-manifest build/release/artifacts.json \
+              --packaged \
+              --scenarios "$scenarios"
+
+      - name: Print failed packaged reports and harness logs
+        if: failure()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for report in e2e-out/profiles/*/client_*/e2e-report/report.json; do
+            echo "::group::$report"
+            sed -n '1,260p' "$report"
+            echo "::endgroup::"
+          done
+          for log in e2e-out/profiles/*/logs/*.log; do
+            echo "::group::$log"
+            grep -Ein '\[QS-E2E\]|error|exception|timeout|fail|disconnect' "$log" | tail -n 300 || true
+            echo "::endgroup::"
+          done
+
+      - name: Upload compact PR behavior evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-behavior-evidence
+          path: |
+            e2e-out/summary.json
+            e2e-out/resolved-matrix.json
+            e2e-out/profiles/**/result.json
+            e2e-out/profiles/**/logs/**
+            e2e-out/profiles/**/e2e-report/**
+            e2e-out/profiles/**/screenshots/**
+            e2e-out/profiles/**/crash-reports/**
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 7
+
+      - name: Upload build diagnostics
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-gate-diagnostics
+          path: |
+            **/build/reports/
+            **/build/test-results/
+            **/build/*.log
+            **/run/logs/
+          if-no-files-found: ignore
+          retention-days: 7

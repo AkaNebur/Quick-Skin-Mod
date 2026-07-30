@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "quick-skin-e2e",
+  "version": "0.0.0",
+  "name": "Quick Skin E2E (dev-only)",
+  "description": "Dev-only end-to-end test harness for Quick Skin. Never shipped in the release jar.",
+  "license": "All Rights Reserved",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.quickskin.mod.e2e.fabric.E2EFabricClient"
+    ]
+  },
+  "depends": {
+    "quickskin": "*"
+  }
+}

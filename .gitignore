@@ -1,0 +1,62 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+/.architectury-transformer/
+# Stonecutter's root branch work directories.
+/versions/
+
+# Eclipse
+*.launch
+.settings/
+.metadata
+.classpath
+.project
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Visual Studio Code
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Fabric/Forge
+run/
+logs/
+crash-reports/
+.cache/
+.mixin.out/
+
+# Minecraft client/server files
+options.txt
+servers.dat
+usercache.json
+usernamecache.json
+
+# Build outputs (keep only source, ignore compiled)
+*.jar
+!gradle-wrapper.jar
+
+# Local environment
+.env
+local.properties
+/.claude/
+
+# Compiled classes accidentally produced outside Gradle output directories
+*.class
+
+# Retired migration scratch tree; history remains available in Git
+/.migration-archive/
+
+# E2E test harness output (screenshots + reports collected by the orchestrator)
+e2e-out/
+
+# Python tooling caches
+__pycache__/
+*.py[cod]
