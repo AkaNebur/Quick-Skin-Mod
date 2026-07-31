@@ -521,8 +521,14 @@ def client_command(
             "defaultExecutablePath": java,
             "gameDirectory": str(game_dir),
             "customResolution": True,
-            "resolutionWidth": "1280",
-            "resolutionHeight": "720",
+            # Must fit inside the virtual display the CI workflows start (see the xvfb-run
+            # --server-args in on-demand-e2e.yml and release.yml); a window larger than the
+            # screen is silently clamped and the evidence stops matching what was asked for.
+            # Pixel comparisons are unaffected by this number: the regions are fractional, so
+            # the same transition measured 0.0723 at 2560x1440 locally and 0.0725 at 1280x720
+            # in CI. It only governs how legible the captured evidence is.
+            "resolutionWidth": "1920",
+            "resolutionHeight": "1080",
             "quickPlayMultiplayer": f"127.0.0.1:{port}",
             "jvmArguments": [
                 "-Xms512M",
