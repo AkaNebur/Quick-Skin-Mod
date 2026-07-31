@@ -99,16 +99,43 @@ EXPECTED_SCREENSHOT_STEPS: dict[tuple[str, str], set[str]] = {
     ("full", "client_a"): set(EXPECTED_STEPS[("full", "client_a")]),
 }
 
+# Fractional (left, top, right, bottom) crop holding the observed player and no HUD: the toasts sit
+# above/right of it, the hotbar below, the held item bottom-right. A whole-frame threshold cannot
+# assert that a PLAYER changed, because an idle HUD animation moves more pixels than a body does --
+# that is exactly how a stale render once passed this gate. Restricting the comparison to this box
+# makes the number mean "the player's pixels changed" instead of "the frames are not identical".
+PLAYER_REGION = (0.30, 0.28, 0.60, 0.85)
+
+# A live skin+cape swap moves ~0.10 of the region (measured: 0.106 for a skin change, 0.061 for a
+# cape appearing). Idle arm sway between two frames of an UNCHANGED player moves ~0.004. 0.03 sits
+# an order of magnitude above the sway floor and well under the smallest real change.
+MINIMUM_APPEARANCE_CHANGE = 0.03
+
 # These comparisons assert only invariant visual change, never renderer-specific golden pixels.
 # They catch a frozen animation, an ignored apply, or a reused screenshot while tolerating lighting,
 # GPU, UI-scale, and version differences.
-DISTINCT_SCREENSHOT_PAIRS: dict[tuple[str, str], list[tuple[str, str, float]]] = {
+#
+# Entries are (first_step, second_step, minimum_changed_fraction) over the whole frame, or
+# (first_step, second_step, minimum_changed_fraction, region) to restrict the comparison to a
+# fractional crop.
+ScreenshotPair = (
+    tuple[str, str, float] | tuple[str, str, float, tuple[float, float, float, float]]
+)
+DISTINCT_SCREENSHOT_PAIRS: dict[tuple[str, str], list[ScreenshotPair]] = {
     ("phase0-smoke", "client_a"): [("baseline", "apply_local_skin", 0.00001)],
     ("propagation", "client_a"): [("baseline", "apply_local_look", 0.00001)],
     ("propagation", "client_b"): [("baseline", "observe_a", 0.00001)],
     ("propagation-live", "client_a"): [("baseline", "apply_live", 0.00001)],
+    # The point of the live scenario: the observer must SEE the transition, not merely resolve new
+    # identifiers. The programmatic assertion checks ids and cached bytes, which stayed true while
+    # the render was stale, so the pixels are what actually proves propagation here.
     ("propagation-live", "client_b"): [
-        ("observe_before", "await_live_change", 0.00001)
+        (
+            "observe_before",
+            "await_live_change",
+            MINIMUM_APPEARANCE_CHANGE,
+            PLAYER_REGION,
+        )
     ],
     ("full", "client_a"): [
         ("baseline", "local_skin_apply", 0.00001),
@@ -670,7 +697,10 @@ def inspect_screenshot(path: Path) -> dict[str, Any]:
 
 
 def compare_screenshots(
-    first: Path, second: Path, minimum_changed_fraction: float
+    first: Path,
+    second: Path,
+    minimum_changed_fraction: float,
+    region: tuple[float, float, float, float] | None = None,
 ) -> dict[str, Any]:
     try:
         from PIL import Image, ImageChops
@@ -686,6 +716,21 @@ def compare_screenshots(
                     f"screenshots changed dimensions unexpectedly: {first} {first_rgb.size}, "
                     f"{second} {second_rgb.size}"
                 )
+            if region is not None:
+                width, height = first_rgb.size
+                left, top, right, bottom = region
+                box = (
+                    int(left * width),
+                    int(top * height),
+                    int(right * width),
+                    int(bottom * height),
+                )
+                if box[0] >= box[2] or box[1] >= box[3]:
+                    raise RuntimeFailure(
+                        f"comparison region {region} is empty at {width}x{height}"
+                    )
+                first_rgb = first_rgb.crop(box)
+                second_rgb = second_rgb.crop(box)
             difference = ImageChops.difference(first_rgb, second_rgb).convert("L")
             histogram = difference.histogram()
             pixels = difference.width * difference.height
@@ -699,14 +744,19 @@ def compare_screenshots(
         raise RuntimeFailure(f"cannot compare screenshots {first} and {second}: {exc}") from exc
 
     if changed_fraction < minimum_changed_fraction:
+        scope = "in region " + repr(region) if region is not None else "over the frame"
         raise RuntimeFailure(
-            f"screenshots expected to change are visually identical: {first} -> {second} "
+            f"screenshots expected to change did not change enough {scope}: {first} -> {second} "
             f"(changed={changed_fraction:.7f}, required={minimum_changed_fraction:.7f})"
         )
-    return {
+    comparison: dict[str, Any] = {
         "changed_fraction": round(changed_fraction, 7),
         "rms_difference": round(rms_difference, 3),
+        "required_changed_fraction": minimum_changed_fraction,
     }
+    if region is not None:
+        comparison["region"] = list(region)
+    return comparison
 
 
 def validate_report(game_dir: Path, row: dict[str, Any], scenario: str, role: str) -> dict[str, Any]:
@@ -747,15 +797,18 @@ def validate_report(game_dir: Path, row: dict[str, Any], scenario: str, role: st
             screenshot_paths[step["name"]] = screenshot_path
             screenshot_validation[step["name"]] = inspect_screenshot(screenshot_path)
     pair_validation: dict[str, dict[str, Any]] = {}
-    for first_step, second_step, minimum_change in DISTINCT_SCREENSHOT_PAIRS.get(
-        (scenario, role), []
-    ):
+    for pair in DISTINCT_SCREENSHOT_PAIRS.get((scenario, role), []):
+        first_step, second_step, minimum_change = pair[0], pair[1], pair[2]
+        region = pair[3] if len(pair) > 3 else None
         if first_step not in screenshot_paths or second_step not in screenshot_paths:
             raise RuntimeFailure(
                 f"pixel comparison contract is missing {role}/{first_step} or {role}/{second_step}"
             )
         pair_validation[f"{first_step}->{second_step}"] = compare_screenshots(
-            screenshot_paths[first_step], screenshot_paths[second_step], minimum_change
+            screenshot_paths[first_step],
+            screenshot_paths[second_step],
+            minimum_change,
+            region,
         )
     report["pixel_validation"] = {
         "screenshots": screenshot_validation,

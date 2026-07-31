@@ -257,6 +257,10 @@ public final class PropagationLiveScenario implements Scenario {
                     stepTowardVantage(mc); // keep position + aim steady on A
                     return checkPropagation(mc).pass(); // the live change must have landed
                 })
+                // The change lands mid-tick, from the network: the tick that first sees it is one
+                // frame ahead of the framebuffer. Hold the resolved state for a second of ticks so
+                // the captured frame is the rendered transition, not the frame before it.
+                .settleTicks(20)
                 .timeoutTicks(20 * 90) // up to 90s: B watching, waiting for A to apply + relay
                 .screenshot(v + "_live_02_after_" + role + ".png")
                 .assertion(() -> {

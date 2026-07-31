@@ -37,6 +37,7 @@ public final class E2EHarness {
     private int stepIndex = 0;
     private boolean actionRun = false;
     private int actionTick = 0;
+    private int readyTick = -1; // first tick the current step's ready predicate held; -1 = not yet
     private int flushDeadline = 0;
 
     // Track the last dispatched screenshot so FLUSH can confirm it landed at full size and re-grab a
@@ -168,7 +169,15 @@ public final class E2EHarness {
         int waited = tick - actionTick;
         boolean ready = waited >= s.minTicks && (s.ready == null || safe(s.ready));
 
-        if (ready) {
+        if (!ready) {
+            readyTick = -1; // the state flickered; the settle window restarts on the next hold
+        } else {
+            if (readyTick < 0) readyTick = tick;
+            // Screenshot.grab reads the last PRESENTED frame, so capturing on the tick the predicate
+            // first held would record the frame drawn BEFORE the awaited change. Let the state hold
+            // (and keep rendering) so the captured frame actually shows it.
+            if (tick - readyTick < s.settleTicks) return;
+
             String shot = null;
             boolean screenshotFailed = false;
             if (s.screenshot != null) {
@@ -268,6 +277,7 @@ public final class E2EHarness {
     private void advance() {
         stepIndex++;
         actionRun = false;
+        readyTick = -1;
     }
 
     private void finish(Minecraft mc) {
