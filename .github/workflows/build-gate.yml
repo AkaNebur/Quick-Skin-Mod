@@ -1,0 +1,106 @@
+name: Build gate
+
+# The fast lane: everything that can be checked without launching Minecraft. It runs on every
+# push and pull request so a broken compile, a bad matrix, or a build that dirties tracked
+# sources is caught immediately.
+#
+# The packaged E2E and the AI visual review deliberately do NOT run here. They need a virtual
+# display and software rendering, which costs an order of magnitude more wall-clock than this
+# job, and they are run on demand from `on-demand-e2e.yml` instead.
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - all-in-one-migration
+      - forge-and-fabric-1.20.1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  build-and-verify:
+    name: Build and verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+
+      - name: Verify exact Gradle bootstrap checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd gradle/wrapper && sha256sum --check --strict gradle-wrapper.jar.sha256)
+          distribution_hash="$(tr -d '\r\n' < gradle/wrapper/gradle-9.4.0-bin.zip.sha256)"
+          grep --fixed-strings --line-regexp "distributionSha256Sum=$distribution_hash" \
+            gradle/wrapper/gradle-wrapper.properties
+
+      - name: Install all required JDKs
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+
+      - name: Install Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Validate central matrix
+        run: python scripts/release/matrix.py --matrix release/release-matrix.json > /dev/null
+
+      - name: Build all production artifacts and E2E harnesses
+        run: >-
+          ./gradlew --no-daemon --no-parallel --stacktrace
+          clean buildAllLanes buildAllE2EHarnesses
+
+      - name: Stage and verify all production artifacts
+        run: >-
+          python scripts/release/verify_release.py
+          --matrix release/release-matrix.json
+          --manifest build/release/artifacts.json
+          --stage build/release
+
+      - name: Assert the build did not mutate tracked sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+      - name: Upload build diagnostics
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-gate-diagnostics
+          path: |
+            **/build/reports/
+            **/build/test-results/
+            **/build/*.log
+            **/run/logs/
+          if-no-files-found: ignore
+          retention-days: 7

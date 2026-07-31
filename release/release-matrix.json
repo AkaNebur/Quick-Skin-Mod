@@ -118,6 +118,7 @@
   ],
   "pr_scenarios": [
     "phase0-smoke",
+    "propagation",
     "propagation-live",
     "full"
   ]

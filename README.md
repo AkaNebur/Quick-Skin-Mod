@@ -1,6 +1,6 @@
 # Quick Skin
 
-[![PR gate](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/pr-gate.yml/badge.svg?branch=forge-and-fabric-1.20.1)](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/pr-gate.yml?query=branch%3Aforge-and-fabric-1.20.1)
+[![Build gate](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml/badge.svg?branch=forge-and-fabric-1.20.1)](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml?query=branch%3Aforge-and-fabric-1.20.1)
 
 Quick Skin is a client-and-server Minecraft 1.20.1 mod for changing skins and capes in-game. It supports local and network-synchronized appearances, HD textures, animated capes, and optional integrations without requiring players to leave the game.
 
