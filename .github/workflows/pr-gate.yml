@@ -215,46 +215,21 @@ jobs:
           python3 e2e/visual_review.py > visual-review-manifest.json
           python3 -c "import json;print('frames to review:', len(json.load(open('visual-review-manifest.json'))))"
 
+      # Driven through the Claude Code CLI rather than claude-code-action, because the
+      # action rejects `push` events and this gate has to cover direct pushes too.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.220
+
       # The programmatic E2E assertions verify mod state, never pixels. This step is the only
       # thing in the pipeline that looks at what actually rendered.
       - name: Review rendered frames
-        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: >-
-            --model claude-opus-5
-            --max-turns 60
-            --allowedTools Read,Write
-          prompt: |
-            You are the visual QA gate for a Minecraft mod's end-to-end tests. Read the
-            JSON array in visual-review-manifest.json. Each entry has a `path` (a PNG in
-            this workspace), a `label`, and an `expectation` describing what that frame
-            should show.
-
-            Open EVERY image with the Read tool and compare it against its expectation.
-            Review all of them — a frame you skip is treated as a failure.
-
-            Judge conservatively. You are the only pixel-level check in this pipeline, but
-            a false alarm blocks a build, so report a defect only when the rendering is
-            clearly wrong against its expectation: a garbled or missing texture, the wrong
-            colours on a skin or cape, a cape clipping through an elytra, transparency
-            artifacts, a black or empty frame, or an "after" frame identical to its
-            "before" when a change was supposed to happen. Differences in framing,
-            lighting, camera angle, time of day, or HUD toasts are NOT defects. The camera
-            usually sits behind the player, so a front-facing detail you cannot see is not
-            a defect either.
-
-            Write your verdicts to visual-review-report.json as a JSON array with one
-            object per manifest entry, and nothing else in the file:
-              {
-                "label":     "<the label, copied verbatim from the manifest>",
-                "visible":   "<what you actually see, 1-2 sentences>",
-                "matches":   <true|false>,
-                "anomalies": ["<each real visual problem>"],
-                "defect":    <true only if this is a genuine rendering bug>
-              }
-            Set "defect": false when the frame is acceptable, even if you noted a cosmetic
-            difference in "anomalies". Do not edit any other file and do not fix anything.
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude --print "$(cat e2e/visual_review_prompt.md)" \
+            --model claude-opus-5 \
+            --allowedTools Read,Write \
+            --permission-mode acceptEdits
 
       - name: Gate on the review
         run: |
