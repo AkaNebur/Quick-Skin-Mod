@@ -8,16 +8,17 @@ Quick Skin is source-available, not open source. You may fork it to submit pull 
 may not redistribute the source or publish modified builds. Read [LICENSE](LICENSE) before
 contributing; submitting a pull request accepts its contribution terms.
 
-## The four documents to know
+## The instruction documents to know
 
 - [README.md](README.md) explains what the mod does and how to build it.
-- [AGENTS.md](AGENTS.md) is the authoritative operational and architecture contract for every
-  coding assistant.
+- [AGENTS.md](AGENTS.md) is an import-only manifest. Every `@path.md` listed there is part of the
+  authoritative instruction set for coding assistants.
 - [VERSION-BRANCHES.md](VERSION-BRANCHES.md) explains how shared changes reach release branches.
 - [e2e/README.md](e2e/README.md) describes the packaged Minecraft tests used by CI.
 
-`CLAUDE.md` deliberately contains only `@AGENTS.md`. This gives Claude the same rules as other
-agents without maintaining two copies. Do not expand it with duplicated instructions.
+`CLAUDE.md` deliberately contains only `@AGENTS.md`, which in turn imports the focused files under
+`docs/ai/`. This gives Claude the same modular rules as other agents without maintaining duplicate
+copies. Do not put rules directly in either manifest.
 
 ## 1. Choose the correct base branch
 
@@ -39,6 +40,9 @@ git branch --remotes
 
 Never work on `automation/sync/*`. GitHub Actions owns those temporary branches and deletes them
 after their tested port PR is merged.
+
+Do not edit the marked release-status table in `README.md`. Automation discovers release branches,
+reads each branch's matrix, and regenerates its build and packaged-E2E badges.
 
 The current synchronizer attempts to port every new `master` change to every release branch. A
 change described as “all versions except one” therefore needs an explicit design decision before
@@ -83,15 +87,16 @@ your fork.
 
 ## 3. Give an AI enough context
 
-Coding agents should discover `AGENTS.md` automatically, but make the requirement explicit. A good
-starter prompt is:
+Coding agents should discover `AGENTS.md` automatically, but import behavior differs between tools.
+Make the requirement explicit. A good starter prompt is:
 
 ```text
-Read AGENTS.md completely, then read CONTRIBUTING.md and the focused documentation relevant to
-this task. Inspect git status, the active release matrix, canonical sources, and every active
-overlay before editing. Explain the intended branch/version/loader scope, make the smallest
-coherent change, preserve unrelated work, do not edit generated output, and run proportional
-checks. Do not commit, push, open a PR, weaken tests, or change the support matrix unless I ask.
+Open AGENTS.md and read every @-imported Markdown file completely, then read CONTRIBUTING.md and
+the focused documentation relevant to this task. Inspect git status, the active release matrix,
+canonical sources, and every active overlay before editing. Explain the intended
+branch/version/loader scope, make the smallest coherent change, preserve unrelated work, do not
+edit generated output, and run proportional checks. Do not commit, push, open a PR, weaken tests,
+or change the support matrix unless I ask.
 
 Task: <describe one concrete bug or feature, including how to reproduce it>
 ```
@@ -112,7 +117,8 @@ AI output is not automatically correct. Before accepting it:
 - never paste tokens, account credentials, signing keys, or private user data into a prompt;
 - keep one issue per branch so failures and reviews remain understandable.
 
-If an agent says that a generated file must be edited, stop and point it back to `AGENTS.md`.
+If an agent says that a generated file must be edited, stop and point it back to the source-set
+architecture document imported by `AGENTS.md`.
 
 ## 4. Know where changes belong
 
@@ -163,6 +169,7 @@ Run the repository-level checks before handing work off:
 git diff --check
 python -m py_compile \
   scripts/release/matrix.py \
+  scripts/release/status_table.py \
   scripts/release/verify_release.py \
   scripts/release/version_branches.py \
   e2e/orchestrator.py \

@@ -133,11 +133,12 @@ jobs:
           gh run download "$FAILED_RUN_ID" \
             --dir .ai-port-evidence/artifacts || true
           npm install -g @anthropic-ai/claude-code@2.1.220
-          claude --print "Repair the failed trusted automated version-port PR #$pr_number. Read \
-          AGENTS.md completely, then inspect .ai-port-evidence/failed-run.log and any artifacts. \
-          Preserve the target branch's exact Minecraft version, loaders, matrix and overlays. Fix \
-          the root cause in tracked canonical sources or active overlays; never weaken assertions, \
-          remove coverage, edit generated output, commit or push. Run the smallest relevant checks." \
+          claude --print "Repair the failed trusted automated version-port PR #$pr_number. Open \
+          AGENTS.md and read every @-imported Markdown file completely, then inspect \
+          .ai-port-evidence/failed-run.log and any artifacts. Preserve the target branch's exact \
+          Minecraft version, loaders, matrix and overlays. Fix the root cause in tracked canonical \
+          sources or active overlays; never weaken assertions, remove coverage, edit generated \
+          output, commit or push. Run the smallest relevant checks." \
             --model claude-opus-5 \
             --allowedTools Read,Edit,Write,Bash \
             --permission-mode acceptEdits
@@ -173,21 +174,57 @@ jobs:
             local workflow="$1"
             gh run list --workflow "$workflow" --branch "$HEAD_BRANCH" \
               --event workflow_dispatch --limit 20 \
-              --json headSha,status,conclusion \
-              --jq ".[] | select(.headSha == \"$head_sha\") | [.status,.conclusion] | @tsv" \
+              --json databaseId,headSha,status,conclusion \
+              --jq ".[] | select(.headSha == \"$head_sha\") | [.databaseId,.status,.conclusion] | @tsv" \
               | head -n 1
           }
           build_result="$(latest_result build-gate.yml)"
           e2e_result="$(latest_result on-demand-e2e.yml)"
-          if [[ "$build_result" != $'completed\tsuccess' ]] \
-              || [[ "$e2e_result" != $'completed\tsuccess' ]]; then
+          IFS=$'\t' read -r build_run_id build_status build_conclusion \
+            <<< "$build_result"
+          IFS=$'\t' read -r e2e_run_id e2e_status e2e_conclusion \
+            <<< "$e2e_result"
+          if [[ "$build_status" != completed || "$build_conclusion" != success ]] \
+              || [[ "$e2e_status" != completed || "$e2e_conclusion" != success ]]; then
             printf 'Waiting for exact-head gates: build=%q e2e=%q\n' \
               "$build_result" "$e2e_result"
             exit 0
           fi
-          pr_number="$(gh pr list --state open --head "$HEAD_BRANCH" \
-            --json number --jq '.[0].number')"
+          pr_json="$(gh pr list --state open --head "$HEAD_BRANCH" \
+            --json number,baseRefName --jq '.[0]')"
+          pr_number="$(jq -r .number <<< "$pr_json")"
+          target_branch="$(jq -r .baseRefName <<< "$pr_json")"
           test -n "$pr_number"
+          test -n "$target_branch"
+          python3 scripts/release/version_branches.py \
+            --target "$target_branch" > /dev/null
           gh pr comment "$pr_number" --body \
             "Both explicitly dispatched exact-head gates passed; merging the version port."
           gh pr merge "$pr_number" --merge --delete-branch
+
+          target_sha=''
+          for attempt in {1..30}; do
+            target_sha="$(gh pr view "$pr_number" --json mergeCommit \
+              --jq '.mergeCommit.oid // ""')"
+            if [[ -n "$target_sha" ]]; then
+              break
+            fi
+            sleep 2
+          done
+          test -n "$target_sha"
+          git fetch --no-tags origin "$target_branch"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$target_sha" ]]
+          git merge-base --is-ancestor "$head_sha" "$target_sha"
+          [[ "$(git rev-parse "${head_sha}^{tree}")" \
+            == "$(git rev-parse "${target_sha}^{tree}")" ]]
+
+          gh workflow run build-gate.yml --ref "$target_branch" \
+            -f attest_run_id="$build_run_id" \
+            -f attest_branch="$HEAD_BRANCH" \
+            -f attest_sha="$head_sha" \
+            -f attest_target_sha="$target_sha"
+          gh workflow run on-demand-e2e.yml --ref "$target_branch" \
+            -f attest_run_id="$e2e_run_id" \
+            -f attest_branch="$HEAD_BRANCH" \
+            -f attest_sha="$head_sha" \
+            -f attest_target_sha="$target_sha"

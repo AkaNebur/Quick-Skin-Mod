@@ -13,6 +13,7 @@ import json
 import re
 import sys
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 
 VERSION_BRANCH = re.compile(
@@ -21,8 +22,30 @@ VERSION_BRANCH = re.compile(
 )
 
 
+@dataclass(frozen=True)
+class VersionBranch:
+    name: str
+    loaders: tuple[str, ...]
+    version: str
+
+    @property
+    def version_key(self) -> tuple[int, ...]:
+        return tuple(int(part) for part in self.version.split("."))
+
+
+def parse_version_branch(name: str) -> VersionBranch | None:
+    match = VERSION_BRANCH.fullmatch(name)
+    if match is None:
+        return None
+    return VersionBranch(
+        name=name,
+        loaders=tuple(match.group("loaders").split("-and-")),
+        version=match.group("version"),
+    )
+
+
 def is_version_branch(name: str) -> bool:
-    return VERSION_BRANCH.fullmatch(name) is not None
+    return parse_version_branch(name) is not None
 
 
 def discover_version_branches(
