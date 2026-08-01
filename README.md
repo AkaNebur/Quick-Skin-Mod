@@ -1,6 +1,6 @@
 # Quick Skin
 
-[![Build gate](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml/badge.svg?branch=forge-and-fabric-1.20.1)](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml?query=branch%3Aforge-and-fabric-1.20.1)
+[![Build gate](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml/badge.svg?branch=master)](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml?query=branch%3Amaster)
 
 Quick Skin is a client-and-server Minecraft 1.20.1 mod for changing skins and capes in-game. It supports local and network-synchronized appearances, HD textures, animated capes, and optional integrations without requiring players to leave the game.
 
@@ -92,6 +92,11 @@ Release automation also builds two separate, loader-remapped test harness jars a
 - `common/src/legacy1_20_1` isolates the Minecraft 1.20.1 API boundary.
 - `PreviewRenderBackend`, `GuiCompat`, `NetworkTransport`, `MinecraftCompat`, and `PlatformHelper` define the cross-version seams.
 - Copy-based `src/v*` snapshots are retired; matrix validation rejects their reintroduction. Their preserved reference and resource-routing plan are documented in [Migration oracle retirement](ORACLE-RETIREMENT.md).
+
+Shared changes land on `master` and are ported through tested pull requests to one release branch
+per Minecraft version. Git stores those branches as shared history plus their small compatibility
+deltas; it does not duplicate unchanged source blobs. See [Version branches](VERSION-BRANCHES.md)
+for the naming, synchronization, AI-repair, and merge contract.
 
 ## Historical documentation
 

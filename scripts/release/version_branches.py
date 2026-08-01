@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Discover release branches without maintaining a second version inventory.
+
+The release matrix inside each branch remains authoritative for its Minecraft
+lanes.  This module only recognizes the repository's branch naming contract so
+the synchronization workflow can discover targets from GitHub itself.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from collections.abc import Iterable
+
+
+VERSION_BRANCH = re.compile(
+    r"^(?P<loaders>[a-z0-9]+(?:-and-[a-z0-9]+)*)-"
+    r"(?P<version>[0-9]+(?:\.[0-9]+)+)$"
+)
+
+
+def is_version_branch(name: str) -> bool:
+    return VERSION_BRANCH.fullmatch(name) is not None
+
+
+def discover_version_branches(
+    names: Iterable[str], *, exclude: Iterable[str] = ()
+) -> list[str]:
+    excluded = set(exclude)
+    return sorted(
+        {
+            name.strip()
+            for name in names
+            if name.strip()
+            and name.strip() not in excluded
+            and is_version_branch(name.strip())
+        }
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="branch to omit; may be supplied more than once",
+    )
+    parser.add_argument(
+        "--target",
+        help="validate and emit one explicitly requested release branch",
+    )
+    args = parser.parse_args(argv)
+
+    if args.target:
+        if not is_version_branch(args.target) or args.target in args.exclude:
+            parser.error(f"not a version branch: {args.target}")
+        branches = [args.target]
+    else:
+        branches = discover_version_branches(sys.stdin, exclude=args.exclude)
+    print(json.dumps(branches, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

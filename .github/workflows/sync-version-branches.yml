@@ -1,0 +1,210 @@
+name: Sync version branches
+
+# Shared changes land on master. Every release branch is discovered from the remote naming
+# contract; its own release matrix remains the only lane inventory. A clean merge is mechanical.
+# Claude is invoked only for a conflict, on this trusted master-push event.
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Optional exact version branch; empty means every discovered branch
+        required: false
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: sync-version-branches
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    name: Discover release branches
+    runs-on: ubuntu-24.04
+    outputs:
+      targets: ${{ steps.targets.outputs.value }}
+    steps:
+      - name: Check out trusted synchronization code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Resolve targets from GitHub
+        id: targets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$REQUESTED_TARGET" ]]; then
+            value="$(python3 scripts/release/version_branches.py \
+              --exclude master --target "$REQUESTED_TARGET")"
+          else
+            value="$(gh api --paginate "repos/$GITHUB_REPOSITORY/branches?per_page=100" \
+              --jq '.[].name' | python3 scripts/release/version_branches.py --exclude master)"
+          fi
+          printf 'value=%s\n' "$value" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    name: Port master to ${{ matrix.target }}
+    needs: discover
+    if: ${{ needs.discover.outputs.targets != '[]' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        target: ${{ fromJSON(needs.discover.outputs.targets) }}
+
+    steps:
+      - name: Check out the exact target branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ matrix.target }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Prepare target-specific merge
+        id: merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git fetch --no-tags origin master
+          if git merge-base --is-ancestor origin/master HEAD; then
+            printf 'needed=false\n' >> "$GITHUB_OUTPUT"
+            printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
+            printf 'existing=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          existing_branch="$(gh pr list --state open --base "$TARGET_BRANCH" --limit 100 \
+            --json headRefName,labels \
+            --jq '[.[] | select(.headRefName | startswith("automation/sync/")) | select([.labels[].name] | index("automated-version-sync"))][0].headRefName // ""')"
+          if [[ -n "$existing_branch" ]]; then
+            sync_branch="$existing_branch"
+            git fetch --no-tags origin "$sync_branch"
+            git switch -C "$sync_branch" FETCH_HEAD
+            printf 'existing=true\n' >> "$GITHUB_OUTPUT"
+          else
+            slug="${TARGET_BRANCH//[^A-Za-z0-9._-]/-}"
+            sync_branch="automation/sync/${slug}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            git switch -c "$sync_branch"
+            printf 'existing=false\n' >> "$GITHUB_OUTPUT"
+          fi
+          printf 'branch=%s\n' "$sync_branch" >> "$GITHUB_OUTPUT"
+          if git merge-base --is-ancestor origin/master HEAD; then
+            printf 'needed=false\n' >> "$GITHUB_OUTPUT"
+            printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          set +e
+          git merge --no-ff --no-commit origin/master
+          merge_status=$?
+          set -e
+          printf 'needed=true\n' >> "$GITHUB_OUTPUT"
+          if [[ $merge_status -eq 0 ]]; then
+            git commit -m "chore: sync master into $TARGET_BRANCH"
+            printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'conflicted=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install JDKs for conflict repair
+        if: steps.merge.outputs.conflicted == 'true'
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+            25
+
+      - name: Resolve port conflicts with Claude
+        if: steps.merge.outputs.conflicted == 'true'
+        shell: bash
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TARGET_BRANCH: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          test -n "$CLAUDE_CODE_OAUTH_TOKEN"
+          npm install -g @anthropic-ai/claude-code@2.1.220
+          claude --print "Resolve the current Git merge conflicts while porting master into \
+          release branch $TARGET_BRANCH. Read AGENTS.md completely. Preserve the target branch's \
+          exact Minecraft version, loader pair, release matrix, overlays, metadata and Java level. \
+          Port shared behavior semantically through its era-specific adapters. Never edit generated \
+          or build output. Run the smallest relevant validation, do not commit or push, and leave no \
+          unmerged paths." --model claude-opus-5 \
+            --allowedTools Read,Edit,Write,Bash \
+            --permission-mode acceptEdits
+          test -z "$(git diff --name-only --diff-filter=U)"
+          git diff --check
+          git add -A
+          git commit -m "chore: sync master into $TARGET_BRANCH"
+
+      - name: Validate the port before publishing it
+        if: steps.merge.outputs.needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            scripts/release/matrix.py \
+            scripts/release/verify_release.py \
+            scripts/release/version_branches.py
+          python3 -m unittest discover -s scripts/release/tests -p 'test_*.py' -v
+          python3 scripts/release/matrix.py \
+            --matrix release/release-matrix.json > /dev/null
+          git diff --check "origin/${{ matrix.target }}...HEAD"
+
+      - name: Push the isolated port branch
+        if: steps.merge.outputs.needed == 'true'
+        shell: bash
+        env:
+          SYNC_BRANCH: ${{ steps.merge.outputs.branch }}
+        run: git push origin "HEAD:refs/heads/$SYNC_BRANCH"
+
+      - name: Open the port PR and dispatch both gates
+        if: steps.merge.outputs.needed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_BRANCH: ${{ steps.merge.outputs.branch }}
+          TARGET_BRANCH: ${{ matrix.target }}
+          EXISTING_PORT: ${{ steps.merge.outputs.existing }}
+        run: |
+          set -euo pipefail
+          gh label create automated-version-sync \
+            --color 1D76DB \
+            --description 'Trusted master-to-version synchronization' \
+            --force
+          if [[ "$EXISTING_PORT" == true ]]; then
+            pr_url="$(gh pr list --state open --head "$SYNC_BRANCH" \
+              --json url --jq '.[0].url')"
+            test -n "$pr_url"
+            gh pr comment "$pr_url" --body \
+              "Updated this open port with the latest \`master\`; redispatching both exact-head gates."
+          else
+            pr_url="$(gh pr create \
+              --base "$TARGET_BRANCH" \
+              --head "$SYNC_BRANCH" \
+              --title "chore: sync master into $TARGET_BRANCH" \
+              --label automated-version-sync \
+              --body "Automated semantic port of master into \`$TARGET_BRANCH\`. The branch's own release matrix selects every build and packaged E2E lane. Build gate and Packaged E2E are dispatched explicitly; the PR merges only after both pass.")"
+          fi
+          gh workflow run build-gate.yml --ref "$SYNC_BRANCH"
+          gh workflow run on-demand-e2e.yml --ref "$SYNC_BRANCH"
+          printf 'Prepared %s\n' "$pr_url"

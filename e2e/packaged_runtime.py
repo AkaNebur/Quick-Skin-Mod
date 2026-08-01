@@ -279,6 +279,7 @@ def maven_dependency_url(loader: str, version: str, fabric_api: bool = False) ->
     module = {
         "fabric": "architectury-fabric",
         "forge": "architectury-forge",
+        "neoforge": "architectury-neoforge",
     }[loader]
     filename = f"{module}-{version}.jar"
     return (
@@ -345,6 +346,8 @@ def installed_version_id(row: dict[str, Any]) -> str:
     if row["loader"] == "forge":
         forge_loader = row["loader_version"].removeprefix(f"{row['runtime_version']}-")
         return f"{row['runtime_version']}-forge-{forge_loader}"
+    if row["loader"] == "neoforge":
+        return f"neoforge-{row['loader_version']}"
     raise RuntimeFailure(f"unsupported loader {row['loader']!r}")
 
 
@@ -354,8 +357,8 @@ def normalize_inherited_profile(version_json: Path, loader: str) -> None:
     Loader installers normally omit ``jar`` and rely on the official launcher
     to select the inherited vanilla jar.  minecraft-launcher-lib instead falls
     back to the loader profile id. Fabric needs an explicit inherited jar.
-    Forge intentionally keeps the profile-id tail nonexistent: its ModLauncher
-    bootstrap owns the transformed Minecraft module, and putting
+    Forge and NeoForge intentionally keep the profile-id tail nonexistent: their
+    ModLauncher bootstrap owns the transformed Minecraft module, and putting
     the vanilla jar on its classpath creates a duplicate-module failure.
     """
     try:
@@ -430,6 +433,10 @@ def prepare_client_install(
         ]
     elif row["loader"] == "forge":
         arguments = [java, "-jar", str(installer), "--installClient", str(directory)]
+    elif row["loader"] == "neoforge":
+        # Direct installer invocation avoids minecraft-launcher-lib's pre-26.x
+        # NeoForge version normalizer while retaining its standard command builder.
+        arguments = [java, "-jar", str(installer), "--install-client", str(directory)]
     else:
         raise RuntimeFailure(f"unsupported loader {row['loader']!r}")
     run_checked(arguments, directory, install_log, process_env(java), timeout=1800)
@@ -472,9 +479,10 @@ def prepare_server(
             raise RuntimeFailure(f"Fabric server launcher was not created at {launcher}")
         return [java, "-Xms512M", "-Xmx1024M", "-jar", str(launcher), "nogui"]
 
-    if row["loader"] != "forge":
+    if row["loader"] not in {"forge", "neoforge"}:
         raise RuntimeFailure(f"unsupported loader {row['loader']!r}")
-    run_checked([java, "-jar", str(installer), "--installServer", str(server)], server, log, env)
+    install_flag = "--installServer" if row["loader"] == "forge" else "--install-server"
+    run_checked([java, "-jar", str(installer), install_flag, str(server)], server, log, env)
     (server / "user_jvm_args.txt").write_text("-Xms512M\n-Xmx1024M\n", encoding="utf-8")
     if os.name == "nt":
         script = server / "run.bat"
@@ -919,6 +927,12 @@ def run_packaged_row(
         for game_dir in (client_a, *([client_b] if two_clients else [])):
             copy_verified(harness_jar, game_dir / "mods", record["harness"]["sha256"])
             shutil.copy2(repo / "e2e" / "options.txt.template", game_dir / "options.txt")
+            if row["loader"] == "neoforge":
+                (game_dir / "config").mkdir(parents=True, exist_ok=True)
+                shutil.copy2(
+                    repo / "e2e" / "fml.toml.neoforge",
+                    game_dir / "config" / "fml.toml",
+                )
         result["installed_quickskin"] = installed_quickskin
 
         env = process_env(java)

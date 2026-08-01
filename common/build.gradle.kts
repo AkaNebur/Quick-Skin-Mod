@@ -241,11 +241,15 @@ tasks.test {
     }
 }
 
-// Keep the production transform identity independent from checkout paths and supply the single
-// 1.20.1 mapping set explicitly so Fabric and Forge produce reproducible transformed classes.
+// Keep the production transform identity independent from checkout paths. Loader branches share
+// this transform seam; NeoForge does not consume classic refmap/SRG properties.
 gradle.projectsEvaluated {
     tasks.withType<TransformingTask>().configureEach {
-        val targetPlatform = if (name.endsWith("Forge")) "forge" else "fabric"
+        val targetPlatform = when {
+            name.endsWith("NeoForge") -> "neoforge"
+            name.endsWith("Forge") -> "forge"
+            else -> "fabric"
+        }
 
         properties.set(providers.provider {
             val architecturyExtension = project.extensions.getByType<ArchitectPluginExtension>()
@@ -262,14 +266,16 @@ gradle.projectsEvaluated {
                 "architectury.mcmeta.version" to "4",
             )
 
-            if (targetPlatform == "forge" && !loomInterface.addRefmapForForge) {
-                result["architectury.forge.fix_mixins"] = "false"
-            } else if (loomInterface.legacyMixinApEnabled) {
-                result["architectury.refmap.name"] = loomInterface.refmapName
-            }
+            if (targetPlatform != "neoforge") {
+                if (targetPlatform == "forge" && !loomInterface.addRefmapForForge) {
+                    result["architectury.forge.fix_mixins"] = "false"
+                } else if (loomInterface.legacyMixinApEnabled) {
+                    result["architectury.refmap.name"] = loomInterface.refmapName
+                }
 
-            if (!loomInterface.disableObfuscation) {
-                result["architectury.srg.mappings"] = loomInterface.tinyMappingsWithSrg.toString()
+                if (!loomInterface.disableObfuscation) {
+                    result["architectury.srg.mappings"] = loomInterface.tinyMappingsWithSrg.toString()
+                }
             }
 
             if (!loomInterface.disableObfuscation) {

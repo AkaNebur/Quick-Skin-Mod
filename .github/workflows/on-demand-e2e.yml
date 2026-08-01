@@ -1,21 +1,20 @@
-name: On-demand packaged E2E
+name: Packaged E2E
 
 # The slow lane, and the only one that launches Minecraft: it builds the inputs once, fans the
 # four packaged scenarios out across both loaders, then has Claude look at the frames that
-# actually rendered. It runs only when a human asks for it — no push trigger, no cron — because
-# software rendering under Xvfb costs an order of magnitude more wall-clock than a compile.
-#
-# Trigger it from the Actions tab, or with:
-#   gh workflow run on-demand-e2e.yml --ref forge-and-fabric-1.20.1
+# actually rendered. Pull requests run it automatically against only the two lanes declared by
+# their target version branch. Version synchronization also dispatches it explicitly because
+# events created with GITHUB_TOKEN do not recursively trigger ordinary pull-request workflows.
 on:
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: on-demand-packaged-e2e
-  cancel-in-progress: false
+  group: packaged-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   PYTHONUNBUFFERED: "1"
@@ -57,6 +56,7 @@ jobs:
           java-version: |
             17
             21
+            25
 
       - name: Install Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -99,7 +99,7 @@ jobs:
           path: build/release/
           if-no-files-found: error
           compression-level: 0
-          retention-days: 14
+          retention-days: 1
 
   e2e:
     name: ${{ matrix.id }} - four scenarios
@@ -122,7 +122,10 @@ jobs:
         uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: |
+            17
+            21
+            25
 
       - name: Install Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -186,7 +189,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: on-demand-e2e-${{ matrix.id }}
+          name: packaged-e2e-${{ matrix.id }}
           path: |
             e2e-out/summary.json
             e2e-out/resolved-matrix.json
@@ -197,11 +200,14 @@ jobs:
             e2e-out/profiles/**/crash-reports/**
           if-no-files-found: warn
           compression-level: 6
-          retention-days: 30
+          retention-days: 1
 
   visual-review:
     name: AI visual review
     needs: e2e
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -220,7 +226,7 @@ jobs:
       - name: Fetch packaged behavior evidence
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: on-demand-e2e-*
+          pattern: packaged-e2e-*
           merge-multiple: true
           path: e2e-out
 
@@ -262,4 +268,46 @@ jobs:
             visual-review-manifest.json
             visual-review-report.json
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 3
+
+  notify-version-port:
+    name: Notify version port controller
+    needs:
+      - build
+      - e2e
+      - visual-review
+    if: >-
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      startsWith(github.ref_name, 'automation/sync/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Dispatch the settled E2E result
+        shell: bash
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          VISUAL_RESULT: ${{ needs.visual-review.result }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          conclusion=success
+          for result in "$BUILD_RESULT" "$E2E_RESULT" "$VISUAL_RESULT"; do
+            if [[ "$result" != success ]]; then
+              conclusion=failure
+            fi
+          done
+          jq -n \
+            --arg gate on-demand-e2e.yml \
+            --arg conclusion "$conclusion" \
+            --arg head_branch "$GITHUB_REF_NAME" \
+            --arg head_sha "$GITHUB_SHA" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg source_event "$GITHUB_EVENT_NAME" \
+            --arg source_repository "$GITHUB_REPOSITORY" \
+            '{event_type:"version-port-gate-completed",client_payload:{gate:$gate,conclusion:$conclusion,head_branch:$head_branch,head_sha:$head_sha,run_id:$run_id,source_event:$source_event,source_repository:$source_repository}}' \
+            | gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches" --input -
