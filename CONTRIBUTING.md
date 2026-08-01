@@ -1,0 +1,278 @@
+# Contributing to Quick Skin
+
+You do not need to know the whole project before contributing. This guide takes you from a fresh
+fork to a pull request and shows how to use a coding assistant without letting it guess the
+project's rules.
+
+Quick Skin is source-available, not open source. You may fork it to submit pull requests, but you
+may not redistribute the source or publish modified builds. Read [LICENSE](LICENSE) before
+contributing; submitting a pull request accepts its contribution terms.
+
+## The four documents to know
+
+- [README.md](README.md) explains what the mod does and how to build it.
+- [AGENTS.md](AGENTS.md) is the authoritative operational and architecture contract for every
+  coding assistant.
+- [VERSION-BRANCHES.md](VERSION-BRANCHES.md) explains how shared changes reach release branches.
+- [e2e/README.md](e2e/README.md) describes the packaged Minecraft tests used by CI.
+
+`CLAUDE.md` deliberately contains only `@AGENTS.md`. This gives Claude the same rules as other
+agents without maintaining two copies. Do not expand it with duplicated instructions.
+
+## 1. Choose the correct base branch
+
+The first decision is whether the change is shared or version-specific.
+
+| Your change | Pull-request base |
+|---|---|
+| Shared behavior, security, tests, CI, build tooling, or general documentation | `master` |
+| Only one Minecraft version or loader pair | That exact release branch |
+| A new Minecraft version, loader, or release lane | Discuss it in an issue first; the release matrix must change first |
+
+Release branches are named from their loader pair and Minecraft version, such as
+`forge-and-fabric-1.20.1`. Check the current remote branch list instead of copying a version from
+this guide:
+
+```bash
+git branch --remotes
+```
+
+Never work on `automation/sync/*`. GitHub Actions owns those temporary branches and deletes them
+after their tested port PR is merged.
+
+The current synchronizer attempts to port every new `master` change to every release branch. A
+change described as “all versions except one” therefore needs an explicit design decision before
+coding. Open an issue or draft PR stating the exclusion; do not let an AI hide the policy in many
+scattered version conditions.
+
+## 2. Prepare a checkout
+
+Install these prerequisites:
+
+- Git;
+- JDK 21 or newer to launch Gradle and Stonecutter;
+- Python 3.13 recommended for the release and E2E helper scripts.
+
+The Gradle wrapper downloads Gradle itself, and Gradle toolchains select the Java version declared
+by the active release matrix. A normal build does not require a globally installed Gradle.
+
+Fork the repository on GitHub, then replace `YOUR-GITHUB-USER` below:
+
+```bash
+git clone https://github.com/YOUR-GITHUB-USER/Quick-Skin-Mod.git
+cd Quick-Skin-Mod
+git remote add upstream https://github.com/AkaNebur/Quick-Skin-Mod.git
+git fetch upstream
+```
+
+Create a topic branch from the correct base. For a shared fix:
+
+```bash
+git switch --create fix/short-description upstream/master
+```
+
+For a version-only fix, use that release branch instead, for example:
+
+```bash
+git switch --create fix/1.20.1-short-description \
+  upstream/forge-and-fabric-1.20.1
+```
+
+Use your own short branch description. Do not commit directly to `master` or a release branch in
+your fork.
+
+## 3. Give an AI enough context
+
+Coding agents should discover `AGENTS.md` automatically, but make the requirement explicit. A good
+starter prompt is:
+
+```text
+Read AGENTS.md completely, then read CONTRIBUTING.md and the focused documentation relevant to
+this task. Inspect git status, the active release matrix, canonical sources, and every active
+overlay before editing. Explain the intended branch/version/loader scope, make the smallest
+coherent change, preserve unrelated work, do not edit generated output, and run proportional
+checks. Do not commit, push, open a PR, weaken tests, or change the support matrix unless I ask.
+
+Task: <describe one concrete bug or feature, including how to reproduce it>
+```
+
+Help the agent by including:
+
+- what you expected and what happened instead;
+- the Minecraft version and loader;
+- reproduction steps and the smallest relevant log excerpt;
+- whether the change should apply to every version or one release branch;
+- screenshots when the problem is visual.
+
+AI output is not automatically correct. Before accepting it:
+
+- read the diff and ask the agent to explain unfamiliar code;
+- reject fixes that delete tests, relax assertions, remove bounds, or hide exceptions;
+- check that it changed canonical sources or active overlays, not generated output;
+- never paste tokens, account credentials, signing keys, or private user data into a prompt;
+- keep one issue per branch so failures and reviews remain understandable.
+
+If an agent says that a generated file must be edited, stop and point it back to `AGENTS.md`.
+
+## 4. Know where changes belong
+
+| Area | Tracked source |
+|---|---|
+| Shared runtime and protocol behavior | `common/src/main` |
+| Fabric integration | `fabric/src/main` |
+| Forge or NeoForge integration | The active loader module's `src/main` |
+| Version API replacements | Matrix-declared `src/legacy*` overlays |
+| Loader-independent regression tests | `common/src/test` |
+| Packaged Minecraft test mod | `common/src/e2e` and loader `src/e2e` |
+| Supported artifacts and E2E lanes | `release/release-matrix.json` |
+
+Do not edit or commit anything below generated `versions/` trees, `build/`, `.gradle/`,
+`.architectury-transformer/`, `e2e-out/`, or `build/release/`. Minecraft runtime directories,
+screenshots, caches, staged jars, and IDE output also stay untracked.
+
+When a class exists in both a canonical tree and an active overlay, changing only the canonical
+file does not change the overlaid release. Search before editing:
+
+```bash
+rg "ClassName|methodName" --glob "*.java" .
+```
+
+Missing loader directories are normal on branches whose matrix does not support that loader.
+
+## 5. Run proportional checks
+
+Run the smallest useful test while developing. On Unix-like systems:
+
+```bash
+./gradlew --no-daemon --no-parallel testStableLane
+```
+
+On Windows, replace `./gradlew` with `.\gradlew.bat`.
+
+Changes to build routing, loaders, resources, overlays, networking boundaries, or release output
+need the aggregate gate:
+
+```bash
+./gradlew --no-daemon --no-parallel clean \
+  buildAllLanes buildAllE2EHarnesses
+```
+
+Run the repository-level checks before handing work off:
+
+```bash
+git diff --check
+python -m py_compile \
+  scripts/release/matrix.py \
+  scripts/release/verify_release.py \
+  scripts/release/version_branches.py \
+  e2e/orchestrator.py \
+  e2e/packaged_runtime.py \
+  e2e/visual_review.py
+python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
+```
+
+Do not run multiple Gradle commands at the same time. Architectury's transforms share JVM-global
+state and this repository deliberately builds serially.
+
+You normally do not need to launch packaged Minecraft E2E locally. The pull-request workflow
+builds immutable jars and runs the declared scenarios on GitHub. Fork pull requests do not receive
+repository secrets, so secret-dependent AI review may be skipped while programmatic checks still
+run.
+
+## 6. Review and commit
+
+Keep one logical concern per commit. Subjects use the conventional form already present in the
+history:
+
+| Prefix | Use it for |
+|---|---|
+| `feat:` | User-visible capability |
+| `fix:` | Bug or regression |
+| `refactor:` | Behavior-preserving code structure |
+| `test:` | Test-only changes |
+| `build:` | Gradle, matrix, dependency, or artifact routing |
+| `ci:` | GitHub Actions and automation |
+| `docs:` | Documentation only |
+| `chore:` | Maintenance that fits no category above |
+
+Use an imperative, specific subject, for example:
+
+```text
+fix: retain typed cape cache identity
+docs: explain AI-assisted contribution flow
+```
+
+Review exactly what will be committed:
+
+```bash
+git status --short
+git diff --check
+git diff
+git add path/to/intended-file
+git diff --cached --check
+git diff --cached
+git commit -m "fix: describe the actual change"
+```
+
+Ask an AI to commit only after you have reviewed the staged diff. Do not ask it to force-push,
+rewrite someone else's commits, or bundle unrelated cleanup into your change.
+
+## 7. Update your branch safely
+
+Before the first push, update an unpublished shared-change branch with:
+
+```bash
+git fetch upstream
+git rebase upstream/master
+```
+
+Use the exact release branch instead of `master` for a version-only change. If the rebase becomes
+confusing, return to the pre-rebase state safely:
+
+```bash
+git rebase --abort
+```
+
+After a PR is already open, avoid rewriting its history if you are unfamiliar with force pushes.
+Use GitHub's **Update branch** button when available, or merge the base branch normally:
+
+```bash
+git fetch upstream
+git merge --no-edit upstream/master
+git push origin HEAD
+```
+
+Again, substitute the PR's release base when it does not target `master`.
+
+## 8. Open the pull request
+
+Push the topic branch to your fork and open a PR against the base chosen in step 1:
+
+```bash
+git push --set-upstream origin HEAD
+```
+
+Use the pull-request template. A reviewer should be able to determine:
+
+- why the change is needed;
+- which versions and loaders it affects;
+- whether canonical and overlay implementations agree;
+- which commands you ran and their outcomes;
+- what you did not test;
+- whether AI materially authored or reviewed the change;
+- whether the release matrix or generated output changed.
+
+Use a conventional PR title such as `fix: reject an oversized texture before allocation`.
+Draft PRs are welcome when you want early help. Include concise logs as text or an attachment rather
+than committing runtime directories.
+
+CI is part of the review. A green compile alone is not enough for runtime-sensitive changes: wait
+for the packaged E2E result. Do not work around a failure by weakening a gate. Explain the failure,
+fix its cause, and push another commit.
+
+## Getting help
+
+Open an issue when the correct branch, source owner, or expected behavior is unclear. Include the
+version, loader, reproduction steps, relevant logs, and whether you want to work on the fix. It is
+better to ask before a large migration than to make an AI rewrite several source trees on an
+incorrect assumption.

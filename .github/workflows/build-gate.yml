@@ -67,6 +67,17 @@ jobs:
       - name: Validate central matrix
         run: python scripts/release/matrix.py --matrix release/release-matrix.json > /dev/null
 
+      - name: Validate release tooling and repository policy
+        run: |
+          python -m py_compile \
+            scripts/release/matrix.py \
+            scripts/release/verify_release.py \
+            scripts/release/version_branches.py \
+            e2e/orchestrator.py \
+            e2e/packaged_runtime.py \
+            e2e/visual_review.py
+          python -m unittest discover -s scripts/release/tests -p 'test_*.py' -v
+
       - name: Build all production artifacts and E2E harnesses
         run: >-
           ./gradlew --no-daemon --no-parallel --stacktrace

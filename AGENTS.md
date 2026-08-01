@@ -12,6 +12,17 @@ If a tool requires a root `CLAUDE.md`, that file must contain only:
 
 Do not duplicate these instructions in `CLAUDE.md`; duplicated guidance drifts.
 
+### Documentation map
+
+- `AGENTS.md` is the only repository-wide operational contract for coding agents.
+- `CLAUDE.md` is only a compatibility redirect to this file.
+- `CONTRIBUTING.md` is the human-facing path from an unfamiliar checkout to a reviewed pull
+  request, including an AI-assisted workflow.
+- `README.md` is for users and builders; focused architecture documents own their subjects.
+
+Do not create another root instruction file that restates this contract. Add a nested `AGENTS.md`
+only when a directory genuinely needs narrower rules, and keep it limited to those local deltas.
+
 ## Project and release contract
 
 Quick Skin is a client-and-server Minecraft mod built from one Stonecutter-managed source tree. The
@@ -48,6 +59,34 @@ loader change starts in the release matrix and must pass its validation and muta
   in place when newer shared commits arrive.
 - Shared behavior changes start on `master`. A version-only fix starts on its release branch and
   must be reflected in canonical `master` sources when the same behavior applies elsewhere.
+
+### Task routing
+
+Choose the target before editing:
+
+| Change scope | Start from | Expected destination |
+|---|---|---|
+| Shared behavior, security, tests, automation, or general documentation | `master` | Workflow-owned port PRs to release branches |
+| One exact Minecraft version or loader pair | That release branch | Only that release branch |
+| Version/loader support inventory | `master`, matrix first | New or updated release branch after matrix validation |
+| Generated output or staged artifacts | Nowhere | Fix the tracked input instead |
+
+At the start of every task:
+
+1. Inspect `git status --short --branch` and preserve existing work.
+2. Read the active `release/release-matrix.json`; never infer support from directory names alone.
+3. Read the relevant focused document and module build file.
+4. Search canonical sources and every active overlay for the affected path or symbol.
+5. State the intended scope and run the smallest check that can disprove the change while
+   iterating.
+
+Never develop directly on `automation/sync/*`; those branches are disposable workflow-owned PR
+heads. Human contributors start with `CONTRIBUTING.md` and use a separate topic branch.
+
+The current synchronizer attempts every release branch for a new `master` change. If intended
+scope excludes a version, make that exception explicit before editing. Do not silently spread broad
+Stonecutter conditionals or create a second branch inventory; choose a narrow adapter/overlay,
+version-branch change, or explicit synchronization-policy change and document the decision.
 
 ## Source-set architecture
 
@@ -179,6 +218,7 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
 
 ## Editing workflow
 
+- Read `CONTRIBUTING.md` when preparing a human-facing branch, commit, or pull request.
 - Read `release/release-matrix.json` and the relevant module `build.gradle.kts` before changing
   versions, loaders, source roots, resources, artifact tasks, or E2E coverage.
 - Search canonical sources and all active overlays before changing a cross-version class or method.
@@ -189,8 +229,18 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
   but must never package Quick Skin production classes.
 - Do not run multiple Gradle invocations concurrently. Architectury uses JVM-global transform state,
   and this repository intentionally disables parallel Gradle execution for aggregate builds.
-- Use conventional commit subjects consistent with repository history, for example `feat:`,
-  `fix:`, `refactor:`, `test:`, `build:`, or `chore:`. Commit only when explicitly requested.
+- Keep each commit to one reviewable concern. Use an imperative conventional subject consistent
+  with repository history: `feat:`, `fix:`, `refactor:`, `test:`, `build:`, `docs:`, `ci:`, or
+  `chore:`.
+- Before committing, inspect the staged diff, run `git diff --check` and
+  `git diff --cached --check`, and confirm that no generated or unrelated files are staged. Commit,
+  amend, rebase, push, force-push, open a PR, or merge only when explicitly requested.
+- Never rewrite commits that may belong to the user or another contributor. Updating an unshared
+  topic branch may use rebase when requested; updating a shared branch must use a non-destructive
+  merge or a fresh topic branch.
+- A pull request targets `master` for shared changes and the exact release branch for version-only
+  changes. Its title follows the same conventional format, and its body records scope, validation,
+  risks, generated-output status, and material AI assistance.
 
 ## Verification
 
@@ -260,5 +310,8 @@ When release determinism is in scope, rebuild `buildAllLanes buildAllE2EHarnesse
 - Keep oracle preservation and post-retirement resource routing in `ORACLE-RETIREMENT.md`.
 - Keep packaged-runtime behavior in `e2e/README.md`.
 - Keep the synchronization and thin-branch contract in `VERSION-BRANCHES.md`.
+- Keep the newcomer and AI-assisted contribution path in `CONTRIBUTING.md`, and keep
+  `.github/pull_request_template.md` aligned with it.
+- Keep root `CLAUDE.md` byte-for-byte equivalent to `@AGENTS.md` followed by one newline.
 - Update this file whenever source-set routing, overlay ownership, lifecycle composition roots,
   security boundaries, or mandatory verification commands change.

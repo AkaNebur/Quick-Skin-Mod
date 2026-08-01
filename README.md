@@ -104,9 +104,12 @@ for the naming, synchronization, AI-repair, and merge contract.
 
 ## Contributing
 
-Contributions are welcome — fork the repo, make your change and open a pull
-request. Bug reports and feature ideas are just as useful, so open an issue if
-something is broken.
+Contributions are welcome, including from people using a coding assistant and encountering the
+project for the first time. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for branch selection,
+safe AI prompting, source ownership, tests, commits, updates, and the pull-request checklist.
+
+Bug reports and feature ideas are just as useful, so open an issue if something is broken. Coding
+agents use [AGENTS.md](AGENTS.md) as the repository-wide operational contract.
 
 ## License
 
