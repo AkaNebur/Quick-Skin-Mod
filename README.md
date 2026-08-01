@@ -1,8 +1,8 @@
 # Quick Skin
 
-[![Build gate](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml/badge.svg?branch=master)](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml?query=branch%3Amaster)
+[![Build gate](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml/badge.svg?branch=fabric-and-neoforge-1.21.1)](https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/build-gate.yml?query=branch%3Afabric-and-neoforge-1.21.1)
 
-Quick Skin is a client-and-server Minecraft 1.20.1 mod for changing skins and capes in-game. It supports local and network-synchronized appearances, HD textures, animated capes, and optional integrations without requiring players to leave the game.
+Quick Skin is a client-and-server Minecraft 1.21.1 mod for changing skins and capes in-game. It supports local and network-synchronized appearances, HD textures, animated capes, and optional integrations without requiring players to leave the game.
 
 - [Modrinth](https://modrinth.com/mod/quick-skin) (`zAIE84Ch`)
 - [CurseForge](https://www.curseforge.com/minecraft/mc-mods/quick-skin) (`1323980`)
@@ -21,11 +21,11 @@ Quick Skin does not declare CPM or 3D Skin Layers as required dependencies. If a
 
 ## Active build matrix
 
-This branch builds two Minecraft 1.20.1 loader artifacts from one Stonecutter-managed source tree.
+This branch builds two Minecraft 1.21.1 loader artifacts from one Stonecutter-managed source tree.
 
-| Minecraft | Fabric | Forge | Java | Status |
+| Minecraft | Fabric | NeoForge | Java | Status |
 |---|:---:|:---:|---:|---|
-| 1.20.1 | Yes | Yes | 17 | Active |
+| 1.21.1 | Yes | Yes | 21 | Active |
 
 Every artifact targets exactly the Minecraft version printed in its filename and metadata. No active
 artifact advertises a wider compatibility range.
@@ -36,7 +36,7 @@ Choose the jar whose Minecraft version and loader match your instance. Quick Ski
 
 - Architectury API for the selected Minecraft version and loader.
 - Fabric API on Fabric.
-- Forge when using the Forge artifact.
+- NeoForge when using the NeoForge artifact.
 
 Install Quick Skin on the client for local appearance management. Install it on the server as well when you want Quick Skin appearance synchronization, shared texture transfer, or server-enforced cooldowns.
 
@@ -66,20 +66,20 @@ On Windows:
 ```
 
 Launch Gradle with JDK 21 or newer because the Stonecutter build plugin requires it. The produced
-Minecraft 1.20.1 jars still target Java 17 through Gradle's Java toolchain.
+Minecraft 1.21.1 jars target Java 21 through Gradle's Java toolchain.
 
 Production jars are written under the selected module and version node, for example:
 
 ```text
-fabric/versions/1.20.1/build/libs/
-forge/versions/1.20.1/build/libs/
+fabric/versions/1.21.1/build/libs/
+neoforge/versions/1.21.1/build/libs/
 ```
 
 Development launches should use configuration-on-demand so unrelated version nodes are not configured:
 
 ```bash
-./gradlew :fabric:1.20.1:runClient --configure-on-demand
-./gradlew :forge:1.20.1:runServer --configure-on-demand
+./gradlew :fabric:1.21.1:runClient --configure-on-demand
+./gradlew :neoforge:1.21.1:runServer --configure-on-demand
 ```
 
 The aggregate build intentionally runs with `org.gradle.parallel=false`; Architectury's transformers use JVM-global properties and concurrent transforms are not safe.
@@ -88,8 +88,8 @@ Release automation also builds two separate, loader-remapped test harness jars a
 
 ## Source layout
 
-- `common/src/main`, `fabric/src/main`, and `forge/src/main` contain canonical sources.
-- `common/src/legacy1_20_1` isolates the Minecraft 1.20.1 API boundary.
+- `common/src/main`, `fabric/src/main`, and `neoforge/src/main` contain canonical sources.
+- `common/src/legacy1_21_1` and `neoforge/src/legacy1_21_1` isolate the Minecraft 1.21.1 API boundary.
 - `PreviewRenderBackend`, `GuiCompat`, `NetworkTransport`, `MinecraftCompat`, and `PlatformHelper` define the cross-version seams.
 - Copy-based `src/v*` snapshots are retired; matrix validation rejects their reintroduction. Their preserved reference and resource-routing plan are documented in [Migration oracle retirement](ORACLE-RETIREMENT.md).
 

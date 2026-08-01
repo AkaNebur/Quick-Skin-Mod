@@ -2,7 +2,7 @@
 
 Quick Skin keeps shared development on `master` and one independently buildable release branch for
 each Minecraft version. A release branch name describes its active loader pair and exact Minecraft
-version, for example `forge-and-fabric-1.20.1`.
+version, for example `fabric-and-neoforge-1.21.1`.
 
 These are ordinary Git branches. GitHub displays a complete source tree after checkout because the
 branch must build independently, but unchanged files still reference the same content-addressed Git
@@ -44,13 +44,13 @@ are skipped for forked pull requests; untrusted code never receives the Claude c
 Compare only a release branch's compatibility delta:
 
 ```bash
-git diff master...forge-and-fabric-1.20.1
+git diff master...fabric-and-neoforge-1.21.1
 ```
 
 Work on multiple versions without duplicating the Git object database:
 
 ```bash
-git worktree add ../quick-skin-1.20.1 forge-and-fabric-1.20.1
+git worktree add ../quick-skin-1.21.1 fabric-and-neoforge-1.21.1
 ```
 
 Each working tree contains a full checkout, but all worktrees share the repository's `.git` object

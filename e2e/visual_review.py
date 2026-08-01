@@ -11,7 +11,7 @@ frame that didn't actually advance, etc.
 Usage:
   python3 e2e/visual_review.py                 # key (visually-rich) kinds, all combos -> JSON manifest
   python3 e2e/visual_review.py --all           # every screenshot
-  python3 e2e/visual_review.py --combos 1.20.1/fabric,1.20.1/forge
+  python3 e2e/visual_review.py --combos 1.21.1/fabric,1.21.1/neoforge
 The JSON ([{path,label,kind,expectation}]) is printed to stdout; an orchestrating agent passes it to
 the AI review workflow.
 """
@@ -129,7 +129,7 @@ def main() -> int:
     ap.add_argument("--all", action="store_true", help="include every screenshot, not just key kinds")
     ap.add_argument(
         "--combos",
-        help="comma-separated <version>/<loader> filter (e.g. 1.20.1/fabric,1.20.1/forge)",
+        help="comma-separated <version>/<loader> filter (e.g. 1.21.1/fabric,1.21.1/neoforge)",
     )
     args = ap.parse_args()
 

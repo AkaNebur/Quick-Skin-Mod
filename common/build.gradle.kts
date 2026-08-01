@@ -103,25 +103,10 @@ check(actualLegacyDirectories == declaredLegacyDirectories) {
 }
 
 val canonicalOnlyAfterLegacyByVersion = mapOf(
-    "1.20.1" to setOf(
-            "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
-            "com/quickskin/mod/mixin/GuiSkinRendererMixin.java",
-            "com/quickskin/mod/mixin/PlayerRendererMixin.java",
-            "com/quickskin/mod/mixin/SkinManagerMixin.java",
-            "com/quickskin/mod/networking/payloads/CooldownUpdatePayload.java",
-            "com/quickskin/mod/networking/payloads/PayloadCodecs.java",
-            "com/quickskin/mod/networking/payloads/RequestTexturePayload.java",
-            "com/quickskin/mod/networking/payloads/SendAnimationMetadataPayload.java",
-            "com/quickskin/mod/networking/payloads/SendTextureChunkPayload.java",
-            "com/quickskin/mod/networking/payloads/SendTexturePayload.java",
-            "com/quickskin/mod/networking/payloads/SyncAppearancePayload.java",
-            "com/quickskin/mod/networking/payloads/SyncServerConfigPayload.java",
-            "com/quickskin/mod/networking/payloads/TextureChunkPayload.java",
-            "com/quickskin/mod/networking/payloads/UpdateAppearancePayload.java",
-            "com/quickskin/mod/networking/payloads/UpdateServerConfigPayload.java",
-            "com/quickskin/mod/networking/payloads/UploadAnimationMetadataPayload.java",
-            "com/quickskin/mod/networking/payloads/UploadTexturePayload.java",
-            "com/quickskin/mod/platform/MinecraftCompat26_2.java",
+    "1.21.1" to setOf(
+        "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
+        "com/quickskin/mod/mixin/GuiSkinRendererMixin.java",
+        "com/quickskin/mod/platform/MinecraftCompat26_2.java",
     ),
 )
 check(canonicalOnlyAfterLegacyByVersion.keys == declaredLegacyVersions) {
@@ -241,11 +226,18 @@ tasks.test {
     }
 }
 
-// Keep the production transform identity independent from checkout paths and supply the single
-// 1.20.1 mapping set explicitly so Fabric and Forge produce reproducible transformed classes.
+// COMPATIBILITY QUARANTINE (Architectury Plugin 3.5.167): production transforms ask Loom for
+// mixin mappings from every Loom project, including incompatible 26.x no-remap nodes. The pinned
+// plugin exposes no public property-map hook, so keep its internal transformer types confined to
+// this block. Remove it once upstream scopes the scan. Projects with another mapping identifier
+// remain filtered exactly as Architectury does.
 gradle.projectsEvaluated {
     tasks.withType<TransformingTask>().configureEach {
-        val targetPlatform = if (name.endsWith("Forge")) "forge" else "fabric"
+        val targetPlatform = when {
+            name.endsWith("NeoForge") -> "neoforge"
+            name.endsWith("Forge") -> "forge"
+            else -> "fabric"
+        }
 
         properties.set(providers.provider {
             val architecturyExtension = project.extensions.getByType<ArchitectPluginExtension>()
@@ -262,14 +254,16 @@ gradle.projectsEvaluated {
                 "architectury.mcmeta.version" to "4",
             )
 
-            if (targetPlatform == "forge" && !loomInterface.addRefmapForForge) {
-                result["architectury.forge.fix_mixins"] = "false"
-            } else if (loomInterface.legacyMixinApEnabled) {
-                result["architectury.refmap.name"] = loomInterface.refmapName
-            }
+            if (targetPlatform != "neoforge") {
+                if (targetPlatform == "forge" && !loomInterface.addRefmapForForge) {
+                    result["architectury.forge.fix_mixins"] = "false"
+                } else if (loomInterface.legacyMixinApEnabled) {
+                    result["architectury.refmap.name"] = loomInterface.refmapName
+                }
 
-            if (!loomInterface.disableObfuscation) {
-                result["architectury.srg.mappings"] = loomInterface.tinyMappingsWithSrg.toString()
+                if (!loomInterface.disableObfuscation) {
+                    result["architectury.srg.mappings"] = loomInterface.tinyMappingsWithSrg.toString()
+                }
             }
 
             if (!loomInterface.disableObfuscation) {

@@ -24,7 +24,7 @@ The active production matrix on this branch contains exactly two artifacts:
 
 | Minecraft | Loaders | Java |
 |---|---|---:|
-| 1.20.1 | Fabric, Forge | 17 |
+| 1.21.1 | Fabric, NeoForge | 21 |
 
 Every artifact targets exactly the Minecraft version in its filename and metadata. A support or
 loader change starts in the release matrix and must pass its validation and mutation tests.
@@ -32,7 +32,7 @@ loader change starts in the release matrix and must pass its validation and muta
 ### Version branch model
 
 - `master` is the shared integration branch. Release branches use the naming form
-  `<loader>-and-<loader>-<minecraft>`, for example `forge-and-fabric-1.20.1`.
+  `<loader>-and-<loader>-<minecraft>`, for example `fabric-and-neoforge-1.21.1`.
 - A release branch is a normal descendant of `master`, not an orphan patch branch. Unchanged Git
   blobs are shared; the branch-specific commits contain only its matrix, loader/API adapters,
   overlays, metadata, and documentation differences.
@@ -55,14 +55,14 @@ These are the primary implementation trees:
 
 - `common/src/main`: shared client, server, networking, storage, and compatibility code.
 - `fabric/src/main`: canonical Fabric entry points and loader integration.
-- `forge/src/main`: the active Forge 1.20.1 integration.
+- `neoforge/src/main`: canonical NeoForge entry points and loader integration.
 - `common/src/e2e` plus each loader's `src/e2e`: the separate packaged-runtime test mod.
-- `common/src/test`: loader-independent JUnit regression tests compiled against the common 1.20.1
+- `common/src/test`: loader-independent JUnit regression tests compiled against the common 1.21.1
   node.
 
 Stonecutter preprocesses each canonical `src/main` tree into detached generated sources. Never edit
-generated or staged output under `common/versions`, `fabric/versions`, `forge/versions`,
-any `build/` directory, `.gradle/`, `.architectury-transformer/`, `e2e-out/`, or
+generated or staged output under `common/versions`, `fabric/versions`, `neoforge/versions`, any
+`build/` directory, `.gradle/`, `.architectury-transformer/`, `e2e-out/`, or
 `build/release/`. Fix the tracked canonical source or active overlay instead.
 
 ### Active `legacy*` overlays
@@ -88,14 +88,13 @@ overlays are:
 
 | Module | Minecraft | Active overlay |
 |---|---|---|
-| common | 1.20.1 | `common/src/legacy1_20_1` |
-| fabric | 1.20.1 | none; canonical output |
-| forge | 1.20.1 | none; `forge/src/main` |
+| common | 1.21.1 | `common/src/legacy1_21_1` |
+| fabric | 1.21.1 | none; canonical output |
+| neoforge | 1.21.1 | `neoforge/src/legacy1_21_1` |
 
-The remaining whole-file canonical replacements are genuine 1.20.1 rewrites:
-`ModNetworking`, `ServerNetworkHandler`, `PlayerInfoMixin`, and
-`MixinAbstractClientPlayer`. Other overlay Java files are additive compatibility classes or thin
-1.20.1 backends.
+The NeoForge whole-file replacements are genuine 1.21.1 rewrites: `CapeLayerMixin`,
+`PlayerInfoMixin`, `MixinAbstractClientPlayer`, and `PlatformHelperImpl`. Common overlay Java files
+are additive compatibility classes or thin 1.21.1 render/network/platform backends.
 
 Keep overlays narrow. Prefer a small adapter or a Stonecutter version branch over copying an entire
 service, screen, or handler. When a class exists in an active overlay:
@@ -206,14 +205,14 @@ The active common test lane:
 
 ```powershell
 .\gradlew.bat --no-daemon --no-parallel `
-  :common:1.20.1:test
+  :common:1.21.1:test
 ```
 
 Full production and packaged-harness gate:
 
 ```powershell
 .\gradlew.bat --no-daemon --no-parallel clean `
-  :common:1.20.1:test `
+  :common:1.21.1:test `
   buildAllLanes buildAllE2EHarnesses
 ```
 
@@ -242,7 +241,7 @@ python -m py_compile scripts/release/matrix.py scripts/release/verify_release.py
 python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
 ```
 
-Packaged Minecraft runtime scenarios require a display and the Java 17 toolchain. Use Xvfb on
+Packaged Minecraft runtime scenarios require a display and the Java 21 toolchain. Use Xvfb on
 headless Linux and in CI; on a desktop session, macOS included, run the orchestrator directly.
 Follow `e2e/README.md` for what is verified on which platform, and do not substitute Loom
 development runs for packaged-JAR E2E evidence. Gradle and Stonecutter must themselves start on
