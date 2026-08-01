@@ -1,5 +1,5 @@
 <!--
-Read CONTRIBUTING.md and AGENTS.md before completing this template.
+Read CONTRIBUTING.md and every document imported by AGENTS.md before completing this template.
 Delete instructional comments, but keep every heading. Use "Not applicable" where appropriate.
 -->
 

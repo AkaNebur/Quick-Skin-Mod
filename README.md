@@ -109,7 +109,7 @@ project for the first time. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for br
 safe AI prompting, source ownership, tests, commits, updates, and the pull-request checklist.
 
 Bug reports and feature ideas are just as useful, so open an issue if something is broken. Coding
-agents use [AGENTS.md](AGENTS.md) as the repository-wide operational contract.
+agents begin at [AGENTS.md](AGENTS.md), the import-only manifest for the focused AI instructions.
 
 ## License
 

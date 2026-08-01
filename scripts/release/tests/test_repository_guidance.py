@@ -7,6 +7,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 LOCAL_LINK = re.compile(r"\[[^\]]+\]\((?!https?://)([^)#]+)(?:#[^)]+)?\)")
+AGENT_IMPORTS = (
+    "docs/ai/PROJECT.md",
+    "docs/ai/SOURCE-ARCHITECTURE.md",
+    "docs/ai/RUNTIME-INVARIANTS.md",
+    "docs/ai/WORKFLOW.md",
+)
 
 
 class RepositoryGuidanceTest(unittest.TestCase):
@@ -15,6 +21,16 @@ class RepositoryGuidanceTest(unittest.TestCase):
             (ROOT / "CLAUDE.md").read_text(encoding="utf-8"),
             "@AGENTS.md\n",
         )
+
+    def test_agents_is_only_a_complete_import_manifest(self) -> None:
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertEqual(
+            agents,
+            "".join(f"@{path}\n" for path in AGENT_IMPORTS),
+        )
+        for path in AGENT_IMPORTS:
+            with self.subTest(path=path):
+                self.assertTrue((ROOT / path).is_file())
 
     def test_human_and_agent_entry_points_are_linked(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -40,6 +56,7 @@ class RepositoryGuidanceTest(unittest.TestCase):
             ROOT / "README.md",
             ROOT / "CONTRIBUTING.md",
             ROOT / ".github" / "pull_request_template.md",
+            *(ROOT / path for path in AGENT_IMPORTS),
         )
         for document in documents:
             text = document.read_text(encoding="utf-8")
