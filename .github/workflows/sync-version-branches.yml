@@ -78,6 +78,7 @@ jobs:
         id: merge
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           TARGET_BRANCH: ${{ matrix.target }}
         run: |
           set -euo pipefail
@@ -87,17 +88,34 @@ jobs:
           if git merge-base --is-ancestor origin/master HEAD; then
             printf 'needed=false\n' >> "$GITHUB_OUTPUT"
             printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
+            printf 'existing=false\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          slug="${TARGET_BRANCH//[^A-Za-z0-9._-]/-}"
-          sync_branch="automation/sync/${slug}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          git switch -c "$sync_branch"
+          existing_branch="$(gh pr list --state open --base "$TARGET_BRANCH" --limit 100 \
+            --json headRefName,labels \
+            --jq '[.[] | select(.headRefName | startswith("automation/sync/")) | select([.labels[].name] | index("automated-version-sync"))][0].headRefName // ""')"
+          if [[ -n "$existing_branch" ]]; then
+            sync_branch="$existing_branch"
+            git fetch --no-tags origin "$sync_branch"
+            git switch -C "$sync_branch" FETCH_HEAD
+            printf 'existing=true\n' >> "$GITHUB_OUTPUT"
+          else
+            slug="${TARGET_BRANCH//[^A-Za-z0-9._-]/-}"
+            sync_branch="automation/sync/${slug}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            git switch -c "$sync_branch"
+            printf 'existing=false\n' >> "$GITHUB_OUTPUT"
+          fi
+          printf 'branch=%s\n' "$sync_branch" >> "$GITHUB_OUTPUT"
+          if git merge-base --is-ancestor origin/master HEAD; then
+            printf 'needed=false\n' >> "$GITHUB_OUTPUT"
+            printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           set +e
           git merge --no-ff --no-commit origin/master
           merge_status=$?
           set -e
           printf 'needed=true\n' >> "$GITHUB_OUTPUT"
-          printf 'branch=%s\n' "$sync_branch" >> "$GITHUB_OUTPUT"
           if [[ $merge_status -eq 0 ]]; then
             git commit -m "chore: sync master into $TARGET_BRANCH"
             printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
@@ -166,18 +184,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SYNC_BRANCH: ${{ steps.merge.outputs.branch }}
           TARGET_BRANCH: ${{ matrix.target }}
+          EXISTING_PORT: ${{ steps.merge.outputs.existing }}
         run: |
           set -euo pipefail
           gh label create automated-version-sync \
             --color 1D76DB \
             --description 'Trusted master-to-version synchronization' \
             --force
-          pr_url="$(gh pr create \
-            --base "$TARGET_BRANCH" \
-            --head "$SYNC_BRANCH" \
-            --title "chore: sync master into $TARGET_BRANCH" \
-            --label automated-version-sync \
-            --body "Automated semantic port of master into \`$TARGET_BRANCH\`. The branch's own release matrix selects every build and packaged E2E lane. Build gate and Packaged E2E are dispatched explicitly; the PR merges only after both pass.")"
+          if [[ "$EXISTING_PORT" == true ]]; then
+            pr_url="$(gh pr list --state open --head "$SYNC_BRANCH" \
+              --json url --jq '.[0].url')"
+            test -n "$pr_url"
+            gh pr comment "$pr_url" --body \
+              "Updated this open port with the latest \`master\`; redispatching both exact-head gates."
+          else
+            pr_url="$(gh pr create \
+              --base "$TARGET_BRANCH" \
+              --head "$SYNC_BRANCH" \
+              --title "chore: sync master into $TARGET_BRANCH" \
+              --label automated-version-sync \
+              --body "Automated semantic port of master into \`$TARGET_BRANCH\`. The branch's own release matrix selects every build and packaged E2E lane. Build gate and Packaged E2E are dispatched explicitly; the PR merges only after both pass.")"
+          fi
           gh workflow run build-gate.yml --ref "$SYNC_BRANCH"
           gh workflow run on-demand-e2e.yml --ref "$SYNC_BRANCH"
-          printf 'Created %s\n' "$pr_url"
+          printf 'Prepared %s\n' "$pr_url"
