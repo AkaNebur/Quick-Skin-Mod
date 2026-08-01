@@ -41,6 +41,9 @@ git branch --remotes
 Never work on `automation/sync/*`. GitHub Actions owns those temporary branches and deletes them
 after their tested port PR is merged.
 
+Do not edit the marked release-status table in `README.md`. Automation discovers release branches,
+reads each branch's matrix, and regenerates its build and packaged-E2E badges.
+
 The current synchronizer attempts to port every new `master` change to every release branch. A
 change described as “all versions except one” therefore needs an explicit design decision before
 coding. Open an issue or draft PR stating the exclusion; do not let an AI hide the policy in many
@@ -166,6 +169,7 @@ Run the repository-level checks before handing work off:
 git diff --check
 python -m py_compile \
   scripts/release/matrix.py \
+  scripts/release/status_table.py \
   scripts/release/verify_release.py \
   scripts/release/version_branches.py \
   e2e/orchestrator.py \

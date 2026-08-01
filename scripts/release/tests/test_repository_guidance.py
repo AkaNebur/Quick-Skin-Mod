@@ -51,6 +51,33 @@ class RepositoryGuidanceTest(unittest.TestCase):
             build_gate,
         )
 
+    def test_release_badges_are_backed_by_exact_tree_attestations(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        build_gate = (ROOT / ".github" / "workflows" / "build-gate.yml").read_text(
+            encoding="utf-8"
+        )
+        e2e_gate = (
+            ROOT / ".github" / "workflows" / "on-demand-e2e.yml"
+        ).read_text(encoding="utf-8")
+        handler = (
+            ROOT / ".github" / "workflows" / "handle-version-port-result.yml"
+        ).read_text(encoding="utf-8")
+        attestation = (
+            ROOT / ".github" / "workflows" / "verify-gate-attestation.yml"
+        ).read_text(encoding="utf-8")
+        refresh = (
+            ROOT / ".github" / "workflows" / "refresh-release-status.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(readme.count("<!-- release-status:start -->"), 1)
+        self.assertEqual(readme.count("<!-- release-status:end -->"), 1)
+        self.assertIn("uses: ./.github/workflows/verify-gate-attestation.yml", build_gate)
+        self.assertIn("uses: ./.github/workflows/verify-gate-attestation.yml", e2e_gate)
+        self.assertIn("gh workflow run build-gate.yml --ref \"$target_branch\"", handler)
+        self.assertIn("gh workflow run on-demand-e2e.yml --ref \"$target_branch\"", handler)
+        self.assertIn('${TESTED_SHA}^{tree}', attestation)
+        self.assertIn("scripts/release/status_table.py", refresh)
+
     def test_new_guidance_has_no_broken_local_links(self) -> None:
         documents = (
             ROOT / "README.md",

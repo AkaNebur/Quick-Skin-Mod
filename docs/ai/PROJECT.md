@@ -48,6 +48,11 @@ loader change starts in the release matrix and must pass its validation and muta
   Each gate reports completion through a trusted `repository_dispatch`; the result handler merges
   only when the latest exact-head run of both gates succeeds. An open synchronization PR is updated
   in place when newer shared commits arrive.
+- After merging, the controller publishes lightweight Build and Packaged E2E attestations on the
+  final release branch. They must verify the original trusted run IDs, exact tested commit, ancestry,
+  and identical Git trees; never rerun Minecraft merely to populate a badge or attest a changed tree.
+- The marked README release-status table is generated from discovered release branches and each
+  branch's matrix. Do not edit its rows manually or add a branch/version list to its workflow.
 - Shared behavior changes start on `master`. A version-only fix starts on its release branch and
   must be reflected in canonical `master` sources when the same behavior applies elsewhere.
 

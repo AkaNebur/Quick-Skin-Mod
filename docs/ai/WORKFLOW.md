@@ -74,7 +74,7 @@ Also run:
 ```powershell
 git diff --check
 python -m py_compile scripts/release/matrix.py scripts/release/verify_release.py `
-  scripts/release/version_branches.py e2e/orchestrator.py `
+  scripts/release/status_table.py scripts/release/version_branches.py e2e/orchestrator.py `
   e2e/packaged_runtime.py e2e/visual_review.py
 python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
 ```
@@ -96,6 +96,8 @@ When release determinism is in scope, rebuild `buildAllLanes buildAllE2EHarnesse
 - Keep oracle preservation and post-retirement resource routing in `ORACLE-RETIREMENT.md`.
 - Keep packaged-runtime behavior in `e2e/README.md`.
 - Keep the synchronization and thin-branch contract in `VERSION-BRANCHES.md`.
+- Keep the generated README status block aligned through `scripts/release/status_table.py`; never
+  hand-maintain its version rows.
 - Keep the newcomer and AI-assisted contribution path in `CONTRIBUTING.md`, and keep
   `.github/pull_request_template.md` aligned with it.
 - Keep root `AGENTS.md` limited to one `@path.md` import per line and keep root `CLAUDE.md`

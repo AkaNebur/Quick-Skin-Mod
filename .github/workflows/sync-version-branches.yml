@@ -144,11 +144,11 @@ jobs:
           test -n "$CLAUDE_CODE_OAUTH_TOKEN"
           npm install -g @anthropic-ai/claude-code@2.1.220
           claude --print "Resolve the current Git merge conflicts while porting master into \
-          release branch $TARGET_BRANCH. Read AGENTS.md completely. Preserve the target branch's \
-          exact Minecraft version, loader pair, release matrix, overlays, metadata and Java level. \
-          Port shared behavior semantically through its era-specific adapters. Never edit generated \
-          or build output. Run the smallest relevant validation, do not commit or push, and leave no \
-          unmerged paths." --model claude-opus-5 \
+          release branch $TARGET_BRANCH. Open AGENTS.md and read every @-imported Markdown file \
+          completely. Preserve the target branch's exact Minecraft version, loader pair, release \
+          matrix, overlays, metadata and Java level. Port shared behavior semantically through its \
+          era-specific adapters. Never edit generated or build output. Run the smallest relevant \
+          validation, do not commit or push, and leave no unmerged paths." --model claude-opus-5 \
             --allowedTools Read,Edit,Write,Bash \
             --permission-mode acceptEdits
           test -z "$(git diff --name-only --diff-filter=U)"
@@ -163,6 +163,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile \
             scripts/release/matrix.py \
+            scripts/release/status_table.py \
             scripts/release/verify_release.py \
             scripts/release/version_branches.py
           python3 -m unittest discover -s scripts/release/tests -p 'test_*.py' -v

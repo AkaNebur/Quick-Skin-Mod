@@ -74,3 +74,8 @@ Pull requests run smoke, live propagation, and full behavior on both loader lane
 all four scenarios for both lanes against the manifest-bound bytes from the exact release commit.
 The same packaged workflow can also be dispatched manually, and master-to-version synchronization
 dispatches it explicitly before an automated port is allowed to merge.
+
+After that tested port merges, the controller dispatches a lightweight run of the same workflow on
+the final release branch. That run does not launch Minecraft: it verifies the successful source
+run and requires the final merge commit to have exactly the tested Git tree. This is the evidence
+shown by each branch-specific Packaged E2E badge in the root README.
