@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--artifact-node", help="restrict to one artifact node")
     parser.add_argument("--runtime-version", help="restrict to one runtime version")
-    parser.add_argument("--loader", choices=("fabric", "forge"))
+    parser.add_argument("--loader", choices=("fabric", "forge", "neoforge"))
     parser.add_argument(
         "--scenarios",
         help="comma-separated scenario override (scheduled jobs pass all four here)",

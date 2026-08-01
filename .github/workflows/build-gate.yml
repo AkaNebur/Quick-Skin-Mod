@@ -4,16 +4,10 @@ name: Build gate
 # push and pull request so a broken compile, a bad matrix, or a build that dirties tracked
 # sources is caught immediately.
 #
-# The packaged E2E and the AI visual review deliberately do NOT run here. They need a virtual
-# display and software rendering, which costs an order of magnitude more wall-clock than this
-# job, and they are run on demand from `on-demand-e2e.yml` instead.
+# Packaged E2E remains a separate workflow so version branches can run both gates independently.
 on:
   pull_request:
   push:
-    branches:
-      - master
-      - all-in-one-migration
-      - forge-and-fabric-1.20.1
   workflow_dispatch:
 
 permissions:
@@ -58,6 +52,7 @@ jobs:
           java-version: |
             17
             21
+            25
 
       - name: Install Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -103,4 +98,4 @@ jobs:
             **/build/*.log
             **/run/logs/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3

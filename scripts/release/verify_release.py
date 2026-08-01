@@ -162,22 +162,33 @@ def verify_fml_metadata(
         architectury.get("versionRange") == artifact["metadata"]["architectury"],
         "FML Architectury range disagrees with release matrix",
     )
-    require(artifact["loader"] == "forge", "unsupported FML loader")
-    loader_metadata = dependency_by_id(metadata, "forge")
+    require(artifact["loader"] in {"forge", "neoforge"}, "unsupported FML loader")
+    loader_dependency = artifact["loader"]
+    loader_metadata = dependency_by_id(metadata, loader_dependency)
     require(
         loader_metadata.get("versionRange") == artifact["metadata"]["loader"],
         "FML loader dependency range disagrees with release matrix",
     )
     mixins = metadata.get("mixins", [])
+    mixin_names = {
+        mixin.get("config") for mixin in mixins if isinstance(mixin, dict)
+    }
     for mixin in mixins:
         require(isinstance(mixin, dict), "FML mixin declaration must be an object")
         name = mixin.get("config")
         require(bool(name) and name in names, f"FML metadata references missing mixin {name!r}")
-    for name in ("quickskin.mixins.json", "quickskin-ears.mixins.json"):
-        require(name in manifest, f"Forge manifest omits required mixin config {name}")
-        require(name in names, f"Forge manifest references missing mixin {name}")
-
-    entrypoint = "com/quickskin/mod/forge/QuickSkinForge.class"
+    if artifact["loader"] == "forge":
+        for name in ("quickskin.mixins.json", "quickskin-ears.mixins.json"):
+            require(name in manifest, f"Forge manifest omits required mixin config {name}")
+            require(name in names, f"Forge manifest references missing mixin {name}")
+        entrypoint = "com/quickskin/mod/forge/QuickSkinForge.class"
+    else:
+        require(
+            {"quickskin-neoforge.mixins.json", "quickskin-ears.mixins.json"}
+            <= mixin_names,
+            "NeoForge metadata omits a required Quick Skin mixin config",
+        )
+        entrypoint = "com/quickskin/mod/neoforge/QuickSkinForge.class"
     require(entrypoint in names, f"FML entrypoint class is missing: {entrypoint}")
 
 

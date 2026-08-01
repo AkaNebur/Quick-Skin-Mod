@@ -1,0 +1,138 @@
+name: Handle version port result
+
+# GITHUB_TOKEN-created PRs intentionally do not trigger recursive workflows. The sync workflow
+# dispatches both gates itself; this trusted completion handler repairs one failed attempt with
+# Claude, or merges only after both latest runs for the exact head SHA are green.
+on:
+  workflow_run:
+    workflows:
+      - Build gate
+      - Packaged E2E
+    types:
+      - completed
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: version-port-result-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  handle:
+    name: Repair or complete version port
+    if: >-
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'automation/sync/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out the exact port head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Install all supported JDKs
+        if: github.event.workflow_run.conclusion != 'success'
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+            25
+
+      - name: Repair one failed gate with Claude
+        if: github.event.workflow_run.conclusion != 'success'
+        shell: bash
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr_number="$(gh pr list --state open --head "$HEAD_BRANCH" \
+            --json number --jq '.[0].number')"
+          test -n "$pr_number"
+          if gh pr view "$pr_number" --json labels --jq '.labels[].name' \
+              | grep -Fxq ai-repair-attempted; then
+            gh pr comment "$pr_number" --body \
+              "The latest automated gate still fails after the bounded AI repair. Leaving this PR open for review."
+            exit 0
+          fi
+          gh label create ai-repair-attempted \
+            --color D93F0B \
+            --description 'One bounded automated repair has been attempted' \
+            --force
+          gh pr edit "$pr_number" --add-label ai-repair-attempted
+          test -n "$CLAUDE_CODE_OAUTH_TOKEN"
+          mkdir -p .ai-port-evidence
+          gh run view "$FAILED_RUN_ID" --log-failed \
+            > .ai-port-evidence/failed-run.log || true
+          gh run download "$FAILED_RUN_ID" \
+            --dir .ai-port-evidence/artifacts || true
+          npm install -g @anthropic-ai/claude-code@2.1.220
+          claude --print "Repair the failed trusted automated version-port PR #$pr_number. Read \
+          AGENTS.md completely, then inspect .ai-port-evidence/failed-run.log and any artifacts. \
+          Preserve the target branch's exact Minecraft version, loaders, matrix and overlays. Fix \
+          the root cause in tracked canonical sources or active overlays; never weaken assertions, \
+          remove coverage, edit generated output, commit or push. Run the smallest relevant checks." \
+            --model claude-opus-5 \
+            --allowedTools Read,Edit,Write,Bash \
+            --permission-mode acceptEdits
+          rm -rf .ai-port-evidence
+          test -z "$(git diff --name-only --diff-filter=U)"
+          git diff --check
+          python3 scripts/release/matrix.py \
+            --matrix release/release-matrix.json > /dev/null
+          python3 -m unittest discover -s scripts/release/tests -p 'test_*.py' -v
+          test -n "$(git status --porcelain)"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: repair automated version port"
+          git push origin "HEAD:refs/heads/$HEAD_BRANCH"
+          gh workflow run build-gate.yml --ref "$HEAD_BRANCH"
+          gh workflow run on-demand-e2e.yml --ref "$HEAD_BRANCH"
+          gh pr comment "$pr_number" --body \
+            "Claude applied the single bounded repair attempt and redispatched both gates."
+
+      - name: Merge after both exact-head gates pass
+        if: github.event.workflow_run.conclusion == 'success'
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          latest_result() {
+            local workflow="$1"
+            gh run list --workflow "$workflow" --branch "$HEAD_BRANCH" \
+              --event workflow_dispatch --limit 20 \
+              --json headSha,status,conclusion \
+              --jq ".[] | select(.headSha == \"$head_sha\") | [.status,.conclusion] | @tsv" \
+              | head -n 1
+          }
+          build_result="$(latest_result build-gate.yml)"
+          e2e_result="$(latest_result on-demand-e2e.yml)"
+          if [[ "$build_result" != $'completed\tsuccess' ]] \
+              || [[ "$e2e_result" != $'completed\tsuccess' ]]; then
+            printf 'Waiting for exact-head gates: build=%q e2e=%q\n' \
+              "$build_result" "$e2e_result"
+            exit 0
+          fi
+          pr_number="$(gh pr list --state open --head "$HEAD_BRANCH" \
+            --json number --jq '.[0].number')"
+          test -n "$pr_number"
+          gh pr comment "$pr_number" --body \
+            "Both explicitly dispatched exact-head gates passed; merging the version port."
+          gh pr merge "$pr_number" --merge --delete-branch

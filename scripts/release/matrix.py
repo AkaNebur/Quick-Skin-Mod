@@ -31,7 +31,12 @@ REQUIRED_RUNTIME_FIELDS = {
     "pr_anchor",
 }
 
-SUPPORTED_LOADERS = {"fabric", "forge"}
+KNOWN_LOADERS = {"fabric", "forge", "neoforge"}
+LOADER_DISPLAY_NAMES = {
+    "fabric": "Fabric",
+    "forge": "Forge",
+    "neoforge": "NeoForge",
+}
 VERSIONED_PROPERTY_PREFIXES = (
     "minecraft_version_",
     "java_version_",
@@ -39,6 +44,7 @@ VERSIONED_PROPERTY_PREFIXES = (
     "fabric_loader_version_",
     "fabric_api_version_",
     "forge_version_",
+    "neoforge_version_",
 )
 
 
@@ -98,8 +104,10 @@ def validate_build_properties(matrix_path: Path, data: dict[str, Any]) -> None:
                     f"fabric_api_version_{suffix}": runtime["fabric_api"],
                 }
             )
-        elif artifact["loader"] == "forge":
-            expected_properties[f"forge_version_{suffix}"] = runtime["loader_version"]
+        elif artifact["loader"] in {"forge", "neoforge"}:
+            expected_properties[
+                f"{artifact['loader']}_version_{suffix}"
+            ] = runtime["loader_version"]
         else:
             raise MatrixError(f"unsupported artifact loader {artifact['loader']!r}")
         for key, expected in expected_properties.items():
@@ -233,7 +241,7 @@ def validate_matrix(data: dict[str, Any]) -> None:
             raise MatrixError(f"installer {key} has invalid SHA-256")
 
     artifact_by_node: dict[str, dict[str, Any]] = {}
-    loader_counts = {loader: 0 for loader in SUPPORTED_LOADERS}
+    loader_counts = {loader: 0 for loader in KNOWN_LOADERS}
     for artifact in artifacts:
         if not isinstance(artifact, dict):
             raise MatrixError("every artifact row must be an object")
@@ -275,7 +283,7 @@ def validate_matrix(data: dict[str, Any]) -> None:
             raise MatrixError(f"duplicate artifact_node {node}")
         artifact_by_node[node] = artifact
         loader = artifact["loader"]
-        if loader not in SUPPORTED_LOADERS:
+        if loader not in KNOWN_LOADERS:
             raise MatrixError(f"unsupported artifact loader {loader!r}")
         loader_counts[loader] += 1
         version = artifact["artifact_version"]
@@ -310,19 +318,17 @@ def validate_matrix(data: dict[str, Any]) -> None:
         if versions != [artifact["artifact_version"]]:
             raise MatrixError(f"artifact {node} must advertise only its exact build version")
 
-    missing_loaders = SUPPORTED_LOADERS - {loader for loader, count in loader_counts.items() if count}
-    if missing_loaders:
-        raise MatrixError(f"release inventory omits loaders {sorted(missing_loaders)}")
+    active_loaders = {loader for loader, count in loader_counts.items() if count}
     unit_test_version = data.get("unit_test_version")
     artifact_versions = {artifact["artifact_version"] for artifact in artifacts}
     if not isinstance(unit_test_version, str) or unit_test_version not in artifact_versions:
         raise MatrixError("unit_test_version must select a supported release version")
 
     source_overlays = data.get("source_overlays")
-    expected_source_modules = {"common", *SUPPORTED_LOADERS}
+    expected_source_modules = {"common", *active_loaders}
     if not isinstance(source_overlays, dict) or set(source_overlays) != expected_source_modules:
         raise MatrixError(
-            "source_overlays must define common, fabric, and forge exactly once"
+            "source_overlays must define common and every active loader exactly once"
         )
     for module, routes in source_overlays.items():
         if not isinstance(routes, dict):
@@ -426,9 +432,9 @@ def validate_matrix(data: dict[str, Any]) -> None:
 
     if runtime_nodes != set(artifact_by_node):
         raise MatrixError("every supported artifact must have exactly one exact runtime row")
-    if pr_anchor_loaders != SUPPORTED_LOADERS:
+    if pr_anchor_loaders != active_loaders:
         raise MatrixError(
-            "PR anchors must cover Fabric and Forge; "
+            "PR anchors must cover every active loader; "
             f"got {sorted(pr_anchor_loaders)}"
         )
     used_installers = {row["installer"] for row in runtimes}
@@ -439,6 +445,7 @@ def validate_matrix(data: dict[str, Any]) -> None:
     metadata_files = {
         "fabric": "fabric.mod.json",
         "forge": "META-INF/mods.toml",
+        "neoforge": "META-INF/neoforge.mods.toml",
     }
     for node, artifact in artifact_by_node.items():
         loader = artifact["loader"]
@@ -563,7 +570,7 @@ def gha_matrix(
                 "file": f"build/release/files/{filename}",
                 "name": (
                     f"Quick Skin {mod_version} ["
-                    f"{artifact['loader'].replace('fabric', 'Fabric').replace('forge', 'Forge')}] "
+                    f"{LOADER_DISPLAY_NAMES[artifact['loader']]}] "
                     f"[MC {artifact['artifact_version']}]"
                 ),
                 "loader": artifact["loader"],

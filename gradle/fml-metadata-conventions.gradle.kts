@@ -10,10 +10,10 @@ val matrixString = matrixState["quickSkinMatrixString"]
 val minecraftVersion = extensions.extraProperties["quickSkinFmlMinecraftVersion"].toString()
 val loader = project.path.split(':').getOrNull(1)
     ?: error("Cannot derive loader branch from $path")
-check(loader == "forge") {
-    "FML metadata conventions apply only to the Forge project, not $path"
+check(loader == "forge" || loader == "neoforge") {
+    "FML metadata conventions apply only to Forge/NeoForge projects, not $path"
 }
-val loaderLabel = "Forge"
+val loaderLabel = if (loader == "forge") "Forge" else "NeoForge"
 val releaseProject = releaseMatrix["project"] as Map<*, *>
 val releaseArtifact = releaseArtifacts.single {
     it["artifact_node"] == "$loader-$minecraftVersion"

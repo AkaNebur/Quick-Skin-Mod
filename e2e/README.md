@@ -71,5 +71,6 @@ images, so GPU and Minecraft-version rendering differences are allowed. Every re
 Architectury dependencies are locked directly in the matrix for that exact runtime.
 
 Pull requests run smoke, live propagation, and full behavior on both loader lanes. A release runs
-all four scenarios for both lanes against the manifest-bound bytes from the exact release commit;
-the weekly workflow remains an independent recurring soak of the same contract.
+all four scenarios for both lanes against the manifest-bound bytes from the exact release commit.
+The same packaged workflow can also be dispatched manually, and master-to-version synchronization
+dispatches it explicitly before an automated port is allowed to merge.

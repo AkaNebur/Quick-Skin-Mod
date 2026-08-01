@@ -29,6 +29,24 @@ The active production matrix on this branch contains exactly two artifacts:
 Every artifact targets exactly the Minecraft version in its filename and metadata. A support or
 loader change starts in the release matrix and must pass its validation and mutation tests.
 
+### Version branch model
+
+- `master` is the shared integration branch. Release branches use the naming form
+  `<loader>-and-<loader>-<minecraft>`, for example `forge-and-fabric-1.20.1`.
+- A release branch is a normal descendant of `master`, not an orphan patch branch. Unchanged Git
+  blobs are shared; the branch-specific commits contain only its matrix, loader/API adapters,
+  overlays, metadata, and documentation differences.
+- `.github/workflows/sync-version-branches.yml` discovers release branches from their names. It must
+  not contain a Minecraft-version list. The matrix checked into each target remains authoritative.
+- A trusted push to `master` creates a target-specific synchronization branch and PR. Clean merges
+  are mechanical. Claude may resolve a merge conflict while preserving the target matrix and may
+  make one bounded repair after a failed gate.
+- GITHUB_TOKEN-created PRs do not recursively start ordinary PR workflows, so synchronization
+  explicitly dispatches `build-gate.yml` and `on-demand-e2e.yml`. The result handler merges only
+  when the latest exact-head run of both workflows succeeds; otherwise the PR remains open.
+- Shared behavior changes start on `master`. A version-only fix starts on its release branch and
+  must be reflected in canonical `master` sources when the same behavior applies elsewhere.
+
 ## Source-set architecture
 
 ### Canonical sources
@@ -219,7 +237,8 @@ Also run:
 ```powershell
 git diff --check
 python -m py_compile scripts/release/matrix.py scripts/release/verify_release.py `
-  e2e/orchestrator.py e2e/packaged_runtime.py e2e/visual_review.py
+  scripts/release/version_branches.py e2e/orchestrator.py `
+  e2e/packaged_runtime.py e2e/visual_review.py
 python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
 ```
 
@@ -227,7 +246,8 @@ Packaged Minecraft runtime scenarios require a display and the Java 17 toolchain
 headless Linux and in CI; on a desktop session, macOS included, run the orchestrator directly.
 Follow `e2e/README.md` for what is verified on which platform, and do not substitute Loom
 development runs for packaged-JAR E2E evidence. Gradle and Stonecutter must themselves start on
-JDK 21 or newer; CI therefore installs both JDK 17 and JDK 21.
+JDK 21 or newer; shared CI installs JDK 17, JDK 21, and JDK 25 so each version branch can select
+its matrix-declared toolchain.
 
 When release determinism is in scope, rebuild `buildAllLanes buildAllE2EHarnesses` with
 `--rerun-tasks` and compare both production and both harness SHA-256 values with the first build.
@@ -238,5 +258,6 @@ When release determinism is in scope, rebuild `buildAllLanes buildAllE2EHarnesse
   release matrix.
 - Keep oracle preservation and post-retirement resource routing in `ORACLE-RETIREMENT.md`.
 - Keep packaged-runtime behavior in `e2e/README.md`.
+- Keep the synchronization and thin-branch contract in `VERSION-BRANCHES.md`.
 - Update this file whenever source-set routing, overlay ownership, lifecycle composition roots,
   security boundaries, or mandatory verification commands change.
