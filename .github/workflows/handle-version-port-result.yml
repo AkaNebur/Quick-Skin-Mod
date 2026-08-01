@@ -1,16 +1,12 @@
 name: Handle version port result
 
-# GITHUB_TOKEN may dispatch another workflow, but that child run does not emit a recursive
-# workflow_run event. The trusted sync workflow therefore starts this coordinator explicitly.
-# It polls both exact-head gates, performs at most one Claude repair, and merges only when both
-# current runs are green.
+# Runs dispatched with GITHUB_TOKEN do not emit a usable workflow_run chain. Each trusted gate
+# therefore emits this repository_dispatch after it settles. This handler repairs one failed
+# attempt with Claude, or merges only after both latest runs for the exact head SHA are green.
 on:
-  workflow_dispatch:
-    inputs:
-      head_branch:
-        description: Exact automation/sync branch to coordinate
-        required: true
-        type: string
+  repository_dispatch:
+    types:
+      - version-port-gate-completed
 
 permissions:
   actions: write
@@ -19,98 +15,83 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: version-port-result-${{ inputs.head_branch }}
-  cancel-in-progress: true
+  group: version-port-result-${{ github.event.client_payload.head_branch }}
+  cancel-in-progress: false
 
 jobs:
   handle:
     name: Repair or complete version port
-    if: startsWith(inputs.head_branch, 'automation/sync/')
+    if: >-
+      github.event.client_payload.source_event == 'workflow_dispatch' &&
+      github.event.client_payload.source_repository == github.repository &&
+      (github.event.client_payload.gate == 'build-gate.yml' ||
+      github.event.client_payload.gate == 'on-demand-e2e.yml') &&
+      startsWith(github.event.client_payload.head_branch, 'automation/sync/')
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 90
 
     steps:
       - name: Check out the exact port head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          ref: ${{ inputs.head_branch }}
+          ref: ${{ github.event.client_payload.head_sha }}
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Wait for both exact-head gates
-        id: gates
+      - name: Ignore a superseded gate result
+        id: port
         shell: bash
         env:
-          HEAD_BRANCH: ${{ inputs.head_branch }}
-          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.event.client_payload.head_sha }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
         run: |
           set -euo pipefail
-          head_sha="$(git rev-parse HEAD)"
-          printf 'head_sha=%s\n' "$head_sha" >> "$GITHUB_OUTPUT"
-          deadline=$((SECONDS + 5400))
-          latest_run() {
-            local workflow="$1"
-            gh run list --workflow "$workflow" --branch "$HEAD_BRANCH" \
-              --event workflow_dispatch --limit 50 \
-              --json databaseId,headSha,status,conclusion \
-              --jq ".[] | select(.headSha == \"$head_sha\") | [.databaseId,.status,.conclusion] | @tsv" \
-              | head -n 1
-          }
-          while true; do
-            build_run="$(latest_run build-gate.yml)"
-            e2e_run="$(latest_run on-demand-e2e.yml)"
-            build_id=''
-            build_status=''
-            build_conclusion=''
-            e2e_id=''
-            e2e_status=''
-            e2e_conclusion=''
-            if [[ -n "$build_run" ]]; then
-              IFS=$'\t' read -r build_id build_status build_conclusion <<< "$build_run"
-            fi
-            if [[ -n "$e2e_run" ]]; then
-              IFS=$'\t' read -r e2e_id e2e_status e2e_conclusion <<< "$e2e_run"
-            fi
-            printf 'Exact-head gates: build=%s/%s/%s e2e=%s/%s/%s\n' \
-              "$build_id" "$build_status" "$build_conclusion" \
-              "$e2e_id" "$e2e_status" "$e2e_conclusion"
-            if [[ "$build_status" == completed && "$e2e_status" == completed ]]; then
-              break
-            fi
-            if (( SECONDS >= deadline )); then
-              printf 'result=timeout\n' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            sleep 20
-          done
-          if [[ "$build_conclusion" == success && "$e2e_conclusion" == success ]]; then
-            printf 'result=success\n' >> "$GITHUB_OUTPUT"
+          if ! git fetch --no-tags origin "$HEAD_BRANCH"; then
+            printf 'current=false\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          failed_run_id="$build_id"
-          if [[ "$build_conclusion" == success ]]; then
-            failed_run_id="$e2e_id"
+          if [[ "$(git rev-parse FETCH_HEAD)" == "$EXPECTED_SHA" ]]; then
+            printf 'current=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'current=false\n' >> "$GITHUB_OUTPUT"
           fi
-          printf 'failed_run_id=%s\n' "$failed_run_id" >> "$GITHUB_OUTPUT"
-          printf 'result=failure\n' >> "$GITHUB_OUTPUT"
 
-      - name: Report a gate timeout
-        if: steps.gates.outputs.result == 'timeout'
+      - name: Verify the notifying gate
+        if: steps.port.outputs.current == 'true'
         shell: bash
         env:
-          HEAD_BRANCH: ${{ inputs.head_branch }}
+          EXPECTED_CONCLUSION: ${{ github.event.client_payload.conclusion }}
+          EXPECTED_GATE: ${{ github.event.client_payload.gate }}
+          EXPECTED_SHA: ${{ github.event.client_payload.head_sha }}
+          GATE_RUN_ID: ${{ github.event.client_payload.run_id }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          pr_number="$(gh pr list --state open --head "$HEAD_BRANCH" \
-            --json number --jq '.[0].number')"
-          test -n "$pr_number"
-          gh pr comment "$pr_number" --body \
-            "Timed out waiting for both exact-head gates. Leaving this PR open for review."
-          exit 1
+          run_json=''
+          for attempt in {1..30}; do
+            run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GATE_RUN_ID")"
+            if [[ "$(jq -r .status <<< "$run_json")" == completed ]]; then
+              break
+            fi
+            sleep 2
+          done
+          [[ "$(jq -r .status <<< "$run_json")" == completed ]]
+          [[ "$(jq -r .event <<< "$run_json")" == workflow_dispatch ]]
+          [[ "$(jq -r .head_branch <<< "$run_json")" == "$HEAD_BRANCH" ]]
+          [[ "$(jq -r .head_sha <<< "$run_json")" == "$EXPECTED_SHA" ]]
+          [[ "$(jq -r .path <<< "$run_json")" == ".github/workflows/$EXPECTED_GATE" ]]
+          actual_conclusion="$(jq -r .conclusion <<< "$run_json")"
+          if [[ "$EXPECTED_CONCLUSION" == success ]]; then
+            [[ "$actual_conclusion" == success ]]
+          else
+            [[ "$actual_conclusion" != success ]]
+          fi
 
       - name: Install all supported JDKs
-        if: steps.gates.outputs.result == 'failure'
+        if: >-
+          steps.port.outputs.current == 'true' &&
+          github.event.client_payload.conclusion != 'success'
         uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
         with:
           distribution: temurin
@@ -120,12 +101,14 @@ jobs:
             25
 
       - name: Repair one failed gate with Claude
-        if: steps.gates.outputs.result == 'failure'
+        if: >-
+          steps.port.outputs.current == 'true' &&
+          github.event.client_payload.conclusion != 'success'
         shell: bash
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          FAILED_RUN_ID: ${{ steps.gates.outputs.failed_run_id }}
-          HEAD_BRANCH: ${{ inputs.head_branch }}
+          FAILED_RUN_ID: ${{ github.event.client_payload.run_id }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -174,27 +157,37 @@ jobs:
           gh workflow run on-demand-e2e.yml --ref "$HEAD_BRANCH"
           gh pr comment "$pr_number" --body \
             "Claude applied the single bounded repair attempt and redispatched both gates."
-          gh workflow run handle-version-port-result.yml --ref master \
-            -f head_branch="$HEAD_BRANCH"
 
       - name: Merge after both exact-head gates pass
-        if: steps.gates.outputs.result == 'success'
+        if: >-
+          steps.port.outputs.current == 'true' &&
+          github.event.client_payload.conclusion == 'success'
         shell: bash
         env:
-          EXPECTED_HEAD_SHA: ${{ steps.gates.outputs.head_sha }}
-          HEAD_BRANCH: ${{ inputs.head_branch }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          latest_result() {
+            local workflow="$1"
+            gh run list --workflow "$workflow" --branch "$HEAD_BRANCH" \
+              --event workflow_dispatch --limit 20 \
+              --json headSha,status,conclusion \
+              --jq ".[] | select(.headSha == \"$head_sha\") | [.status,.conclusion] | @tsv" \
+              | head -n 1
+          }
+          build_result="$(latest_result build-gate.yml)"
+          e2e_result="$(latest_result on-demand-e2e.yml)"
+          if [[ "$build_result" != $'completed\tsuccess' ]] \
+              || [[ "$e2e_result" != $'completed\tsuccess' ]]; then
+            printf 'Waiting for exact-head gates: build=%q e2e=%q\n' \
+              "$build_result" "$e2e_result"
+            exit 0
+          fi
           pr_number="$(gh pr list --state open --head "$HEAD_BRANCH" \
             --json number --jq '.[0].number')"
           test -n "$pr_number"
-          current_head_sha="$(gh pr view "$pr_number" --json headRefOid --jq '.headRefOid')"
-          if [[ "$current_head_sha" != "$EXPECTED_HEAD_SHA" ]]; then
-            printf 'Port head advanced from %s to %s; a newer coordinator owns it.\n' \
-              "$EXPECTED_HEAD_SHA" "$current_head_sha"
-            exit 0
-          fi
           gh pr comment "$pr_number" --body \
             "Both explicitly dispatched exact-head gates passed; merging the version port."
           gh pr merge "$pr_number" --merge --delete-branch
