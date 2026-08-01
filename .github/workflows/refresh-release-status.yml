@@ -1,0 +1,95 @@
+name: Refresh release status table
+
+# The README status inventory is generated from live release branches and the matrix committed to
+# each branch. Branch create/delete events keep it current; the schedule repairs missed events.
+on:
+  create:
+  delete:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-release-status
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Regenerate version badges
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      github.event.ref_type == 'branch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out current master
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: master
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Install Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Discover branches and fetch their authoritative matrices
+        id: branches
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          branches="$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name' \
+            | python3 scripts/release/version_branches.py --exclude master)"
+          [[ "$branches" != '[]' ]]
+          while IFS= read -r branch; do
+            git fetch --no-tags origin \
+              "refs/heads/${branch}:refs/remotes/origin/${branch}"
+          done < <(jq -r '.[]' <<< "$branches")
+          printf 'value=%s\n' "$branches" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate the marked README block
+        shell: bash
+        env:
+          BRANCHES: ${{ steps.branches.outputs.value }}
+        run: |
+          set -euo pipefail
+          jq -r '.[]' <<< "$BRANCHES" \
+            | python3 scripts/release/status_table.py \
+                --repository "$GITHUB_REPOSITORY" \
+                --readme README.md \
+                --write
+
+      - name: Validate generated documentation and release tooling
+        run: |
+          git diff --check
+          python3 -m py_compile \
+            scripts/release/matrix.py \
+            scripts/release/status_table.py \
+            scripts/release/version_branches.py
+          python3 -m unittest discover \
+            -s scripts/release/tests -p 'test_*.py' -v
+
+      - name: Commit a changed table
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- README.md; then
+            echo 'Release status table is already current.'
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add README.md
+          git diff --cached --check
+          git commit -m 'docs: refresh release status table'
+          git pull --rebase origin master
+          git push origin HEAD:master

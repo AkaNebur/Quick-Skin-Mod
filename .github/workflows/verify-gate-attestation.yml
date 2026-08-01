@@ -1,0 +1,91 @@
+name: Verify gate attestation
+
+# Reusable, lightweight proof that a release-branch tree is byte-for-byte the tree already tested
+# by one trusted workflow run. Callers surface this result under their own workflow name, which
+# lets GitHub's native branch badges report the exact release state without rebuilding Minecraft.
+on:
+  workflow_call:
+    inputs:
+      source_run_id:
+        required: true
+        type: string
+      source_workflow:
+        required: true
+        type: string
+      tested_branch:
+        required: true
+        type: string
+      tested_sha:
+        required: true
+        type: string
+      target_sha:
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify:
+    name: Verify exact tested tree
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the final release commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.target_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify branch, commit, tree, and source run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_WORKFLOW: ${{ inputs.source_workflow }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          TESTED_BRANCH: ${{ inputs.tested_branch }}
+          TESTED_SHA: ${{ inputs.tested_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_WORKFLOW" == build-gate.yml \
+            || "$SOURCE_WORKFLOW" == on-demand-e2e.yml ]]
+          [[ "$TESTED_BRANCH" == automation/sync/* ]]
+          [[ "$GITHUB_SHA" == "$TARGET_SHA" ]]
+          python3 scripts/release/version_branches.py \
+            --target "$GITHUB_REF_NAME" > /dev/null
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/$GITHUB_REF_NAME" \
+            --jq .commit.sha)" == "$TARGET_SHA" ]]
+
+          git cat-file -e "${TESTED_SHA}^{commit}"
+          git merge-base --is-ancestor "$TESTED_SHA" "$TARGET_SHA"
+          [[ "$(git rev-parse "${TESTED_SHA}^{tree}")" \
+            == "$(git rev-parse "${TARGET_SHA}^{tree}")" ]]
+
+          run_json="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
+          [[ "$(jq -r .status <<< "$run_json")" == completed ]]
+          [[ "$(jq -r .conclusion <<< "$run_json")" == success ]]
+          [[ "$(jq -r .event <<< "$run_json")" == workflow_dispatch ]]
+          [[ "$(jq -r .head_branch <<< "$run_json")" == "$TESTED_BRANCH" ]]
+          [[ "$(jq -r .head_sha <<< "$run_json")" == "$TESTED_SHA" ]]
+          [[ "$(jq -r .path <<< "$run_json")" \
+            == ".github/workflows/$SOURCE_WORKFLOW" ]]
+          [[ "$(jq -r '.head_repository.full_name // ""' <<< "$run_json")" \
+            == "$GITHUB_REPOSITORY" ]]
+
+          python3 scripts/release/matrix.py \
+            --matrix release/release-matrix.json > /dev/null
+
+          {
+            printf '### Verified release gate\n\n'
+            printf -- '- Target branch: `%s`\n' "$GITHUB_REF_NAME"
+            printf -- '- Final commit: `%s`\n' "$TARGET_SHA"
+            printf -- '- Tested commit: `%s`\n' "$TESTED_SHA"
+            printf -- '- Source workflow: `%s` (run `%s`)\n' \
+              "$SOURCE_WORKFLOW" "$SOURCE_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"

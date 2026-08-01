@@ -8,8 +8,26 @@ name: Packaged E2E
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      attest_run_id:
+        description: Internal source run to attest; empty performs packaged E2E
+        required: false
+        type: string
+      attest_branch:
+        description: Internal tested automation branch
+        required: false
+        type: string
+      attest_sha:
+        description: Internal exact tested commit
+        required: false
+        type: string
+      attest_target_sha:
+        description: Internal final release commit
+        required: false
+        type: string
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -25,6 +43,9 @@ env:
 jobs:
   build:
     name: Build immutable E2E input bundle
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.attest_run_id == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
@@ -270,6 +291,22 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
+  attest:
+    name: Attest tested E2E on release branch
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.attest_run_id != ''
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/verify-gate-attestation.yml
+    with:
+      source_run_id: ${{ inputs.attest_run_id }}
+      source_workflow: on-demand-e2e.yml
+      tested_branch: ${{ inputs.attest_branch }}
+      tested_sha: ${{ inputs.attest_sha }}
+      target_sha: ${{ inputs.attest_target_sha }}
+
   notify-version-port:
     name: Notify version port controller
     needs:
@@ -279,6 +316,7 @@ jobs:
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
+      inputs.attest_run_id == '' &&
       startsWith(github.ref_name, 'automation/sync/')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
