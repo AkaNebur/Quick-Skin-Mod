@@ -32,14 +32,16 @@ val releaseLanes = releaseArtifacts.map { artifact ->
         ?: error("Release artifact is missing artifact_version")
     val node = artifact["artifact_node"]?.toString()
         ?: error("Release artifact is missing artifact_node")
-    check(loader in setOf("fabric", "forge")) { "Unsupported release loader: $loader" }
+    check(loader in setOf("fabric", "forge", "neoforge")) {
+        "Unsupported release loader: $loader"
+    }
     check(node == "$loader-$version") { "Release node $node does not match $loader $version" }
     loader to version
 }
 check(releaseLanes.distinct().size == releaseLanes.size) { "Duplicate lane in $releaseMatrixFile" }
 val releaseLoaders = releaseLanes.map { it.first }.toSet()
-check(releaseLoaders == setOf("fabric", "forge")) {
-    "Release lanes must cover exactly Fabric and Forge"
+check(releaseLoaders.isNotEmpty()) {
+    "Release lanes must declare at least one active loader"
 }
 val releaseVersions = releaseLanes.map { it.second }.distinct().toTypedArray()
 

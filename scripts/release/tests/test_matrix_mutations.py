@@ -24,6 +24,12 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
     def mutated(self) -> dict:
         return copy.deepcopy(self.base)
 
+    def artifact(self, data: dict, loader: str) -> dict:
+        return next(row for row in data["artifacts"] if row["loader"] == loader)
+
+    def fml_artifact(self, data: dict) -> dict:
+        return next(row for row in data["artifacts"] if row["loader"] != "fabric")
+
     def assert_invalid(self, data: dict, message: str) -> None:
         with self.assertRaisesRegex(release_matrix.MatrixError, message):
             release_matrix.validate_matrix(data)
@@ -45,36 +51,42 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
 
     def test_version_can_explicitly_select_no_remap(self) -> None:
         data = self.mutated()
+        version = data["unit_test_version"]
         for artifact in data["artifacts"]:
-            if artifact["artifact_version"] != "1.20.1":
+            if artifact["artifact_version"] != version:
                 continue
             artifact["no_remap"] = True
-            prefix = f":{artifact['loader']}:1.20.1:"
+            prefix = f":{artifact['loader']}:{version}:"
             artifact["gradle_task"] = prefix + "shadowJar"
             artifact["harness_task"] = prefix + "e2eHarnessJar"
         release_matrix.validate_matrix(data)
 
     def test_new_java_major_is_data_not_an_allowlist_change(self) -> None:
         data = self.mutated()
+        version = data["unit_test_version"]
         for artifact in data["artifacts"]:
-            if artifact["artifact_version"] == "1.20.1":
+            if artifact["artifact_version"] == version:
                 artifact["java"] = 26
         for runtime in data["runtimes"]:
-            if runtime["runtime_version"] == "1.20.1":
+            if runtime["runtime_version"] == version:
                 runtime["java"] = 26
         release_matrix.validate_matrix(data)
 
     def test_paired_lanes_must_agree_on_no_remap(self) -> None:
         data = self.mutated()
-        artifact = next(row for row in data["artifacts"] if row["artifact_node"] == "fabric-1.20.1")
+        artifact = self.artifact(data, "fabric")
+        prefix = f":fabric:{artifact['artifact_version']}:"
         artifact["no_remap"] = True
-        artifact["gradle_task"] = ":fabric:1.20.1:shadowJar"
-        artifact["harness_task"] = ":fabric:1.20.1:e2eHarnessJar"
+        artifact["gradle_task"] = prefix + "shadowJar"
+        artifact["harness_task"] = prefix + "e2eHarnessJar"
         self.assert_invalid(data, "disagree on Java/no_remap")
 
     def test_task_names_follow_explicit_no_remap(self) -> None:
         data = self.mutated()
-        data["artifacts"][0]["gradle_task"] = ":fabric:1.20.1:shadowJar"
+        artifact = data["artifacts"][0]
+        artifact["gradle_task"] = (
+            f":{artifact['loader']}:{artifact['artifact_version']}:shadowJar"
+        )
         self.assert_invalid(data, "Gradle task must be")
 
     def test_overlay_routes_cannot_name_unknown_versions(self) -> None:
@@ -84,11 +96,12 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
 
     def test_overlay_routes_require_legacy_roots(self) -> None:
         data = self.mutated()
-        data["source_overlays"]["common"]["1.20.1"] = "v1_20_1"
+        version = next(iter(data["source_overlays"]["common"]))
+        data["source_overlays"]["common"][version] = "v1_20_1"
         self.assert_invalid(data, "must name legacy")
 
         traversal = self.mutated()
-        traversal["source_overlays"]["common"]["1.20.1"] = "legacy../../escape"
+        traversal["source_overlays"]["common"][version] = "legacy../../escape"
         self.assert_invalid(traversal, "must name legacy")
 
     def test_source_root_validation_rejects_orphans_and_retired_snapshots(self) -> None:
@@ -104,7 +117,8 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             matrix_path = self.make_source_fixture(root)
-            oracle = root / "forge" / "src" / "v99" / "java" / "Oracle.java"
+            loader = self.fml_artifact(self.base)["loader"]
+            oracle = root / loader / "src" / "v99" / "java" / "Oracle.java"
             oracle.parent.mkdir(parents=True)
             oracle.write_text("final class Oracle {}\n", encoding="utf-8")
             with self.assertRaisesRegex(release_matrix.MatrixError, "version snapshots remain"):
@@ -125,9 +139,10 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
                     marker.parent.mkdir(parents=True)
                     marker.write_text("live\n", encoding="utf-8")
             relative = Path("com/quickskin/mod/Duplicated.java")
+            active_overlay = next(iter(self.base["source_overlays"]["common"].values()))
             roots = [
                 root / "common" / "src" / "main" / "java",
-                root / "common" / "src" / "legacy1_20_1" / "java",
+                root / "common" / "src" / active_overlay / "java",
                 root / "common" / "src" / "legacy_fixture" / "java",
             ]
             for java_root in roots:
@@ -152,51 +167,43 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
         self.assert_invalid(missing, "missing.*metadata_range")
 
         fabric_broad = self.mutated()
-        fabric_broad["artifacts"][0]["metadata_range"] = ">=1.20.1"
-        self.assert_invalid(fabric_broad, "metadata_range must be =1.20.1")
+        fabric = self.artifact(fabric_broad, "fabric")
+        version = fabric["artifact_version"]
+        fabric["metadata_range"] = f">={version}"
+        self.assert_invalid(fabric_broad, f"metadata_range must be ={version}")
 
-        forge_wrong_lower = self.mutated()
-        row = next(
-            artifact for artifact in forge_wrong_lower["artifacts"]
-            if artifact["artifact_node"] == "forge-1.20.1"
-        )
-        row["metadata_range"] = "[1.20,1.20.2)"
-        self.assert_invalid(forge_wrong_lower, "must start at its exact version")
+        fml_wrong_lower = self.mutated()
+        row = self.fml_artifact(fml_wrong_lower)
+        row["metadata_range"] = "[0.0,0.1)"
+        self.assert_invalid(fml_wrong_lower, "must start at its exact version")
 
-        forge_broad = self.mutated()
-        row = next(
-            artifact for artifact in forge_broad["artifacts"]
-            if artifact["artifact_node"] == "forge-1.20.1"
-        )
-        row["metadata_range"] = "[1.20.1,1.21)"
-        self.assert_invalid(forge_broad, "immediate patch successor 1.20.2")
+        fml_broad = self.mutated()
+        row = self.fml_artifact(fml_broad)
+        row["metadata_range"] = f"[{row['artifact_version']},999)"
+        self.assert_invalid(fml_broad, "immediate patch successor")
 
         duplicated = self.mutated()
-        duplicated["artifacts"][0]["metadata"]["minecraft"] = "=1.20.1"
+        duplicated["artifacts"][0]["metadata"]["minecraft"] = (
+            duplicated["artifacts"][0]["metadata_range"]
+        )
         self.assert_invalid(duplicated, "only in metadata_range")
 
     def test_fml_pack_formats_are_explicit_positive_integers(self) -> None:
         missing = self.mutated()
-        forge = next(
-            artifact for artifact in missing["artifacts"]
-            if artifact["artifact_node"] == "forge-1.20.1"
-        )
-        del forge["metadata"]["pack_format"]
+        fml = self.fml_artifact(missing)
+        del fml["metadata"]["pack_format"]
         self.assert_invalid(missing, "metadata.pack_format must be a positive integer")
 
         wrong_type = self.mutated()
-        forge = next(
-            artifact for artifact in wrong_type["artifacts"]
-            if artifact["artifact_node"] == "forge-1.20.1"
-        )
-        forge["metadata"]["server_data_pack_format"] = "15"
+        fml = self.fml_artifact(wrong_type)
+        fml["metadata"]["server_data_pack_format"] = "15"
         self.assert_invalid(
             wrong_type,
             "metadata.server_data_pack_format must be a positive integer",
         )
 
         fabric = self.mutated()
-        fabric["artifacts"][0]["metadata"]["pack_format"] = 15
+        self.artifact(fabric, "fabric")["metadata"]["pack_format"] = 15
         self.assert_invalid(fabric, "must not declare FML pack formats")
 
     def test_orphan_versioned_gradle_property_is_rejected(self) -> None:
