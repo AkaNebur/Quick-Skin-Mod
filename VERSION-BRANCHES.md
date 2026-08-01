@@ -23,14 +23,18 @@ objects as `master`. Only changed blobs, trees, and commits add repository stora
 `Sync version branches` runs after a trusted push to `master` and can also be dispatched for one
 exact target. It discovers remote release branches from the naming contract, then for each target:
 
-1. creates an isolated `automation/sync/...` branch from the target;
+1. creates an isolated `automation/sync/...` branch from the target, or updates its existing open
+   synchronization PR in place;
 2. merges `master`, invoking Claude only if semantic conflict resolution is required;
 3. validates the target matrix and release mutation tests;
 4. opens a PR and explicitly dispatches both `Build gate` and `Packaged E2E` for its exact head;
-5. merges and deletes the automation branch only after both exact-head gates pass.
+5. receives a trusted `repository_dispatch` when each gate settles;
+6. merges and deletes the automation branch only after both exact-head gates pass.
 
 GitHub deliberately suppresses recursive workflow events produced with `GITHUB_TOKEN`, which is
-why the two gates are explicitly dispatched instead of relying on the PR-opened event.
+why the gates are explicitly dispatched instead of relying on the PR-opened event. Each gate emits
+a trusted `repository_dispatch` after it settles, avoiding both a suppressed `workflow_run` chain
+and an idle polling runner per version branch.
 
 If either gate fails, the trusted result workflow gives Claude one bounded repair attempt using the
 failed logs and evidence. It redispatches both gates for the new commit. A second failure leaves the

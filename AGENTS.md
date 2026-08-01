@@ -41,9 +41,11 @@ loader change starts in the release matrix and must pass its validation and muta
 - A trusted push to `master` creates a target-specific synchronization branch and PR. Clean merges
   are mechanical. Claude may resolve a merge conflict while preserving the target matrix and may
   make one bounded repair after a failed gate.
-- GITHUB_TOKEN-created PRs do not recursively start ordinary PR workflows, so synchronization
-  explicitly dispatches `build-gate.yml` and `on-demand-e2e.yml`. The result handler merges only
-  when the latest exact-head run of both workflows succeeds; otherwise the PR remains open.
+- GITHUB_TOKEN-created PRs and child runs do not recursively start ordinary PR or completion
+  workflows, so synchronization explicitly dispatches `build-gate.yml` and `on-demand-e2e.yml`.
+  Each gate reports completion through a trusted `repository_dispatch`; the result handler merges
+  only when the latest exact-head run of both gates succeeds. An open synchronization PR is updated
+  in place when newer shared commits arrive.
 - Shared behavior changes start on `master`. A version-only fix starts on its release branch and
   must be reflected in canonical `master` sources when the same behavior applies elsewhere.
 

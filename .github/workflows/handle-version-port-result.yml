@@ -1,15 +1,12 @@
 name: Handle version port result
 
-# GITHUB_TOKEN-created PRs intentionally do not trigger recursive workflows. The sync workflow
-# dispatches both gates itself; this trusted completion handler repairs one failed attempt with
-# Claude, or merges only after both latest runs for the exact head SHA are green.
+# Runs dispatched with GITHUB_TOKEN do not emit a usable workflow_run chain. Each trusted gate
+# therefore emits this repository_dispatch after it settles. This handler repairs one failed
+# attempt with Claude, or merges only after both latest runs for the exact head SHA are green.
 on:
-  workflow_run:
-    workflows:
-      - Build gate
-      - Packaged E2E
+  repository_dispatch:
     types:
-      - completed
+      - version-port-gate-completed
 
 permissions:
   actions: write
@@ -18,15 +15,18 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: version-port-result-${{ github.event.workflow_run.head_branch }}
+  group: version-port-result-${{ github.event.client_payload.head_branch }}
   cancel-in-progress: false
 
 jobs:
   handle:
     name: Repair or complete version port
     if: >-
-      github.event.workflow_run.event == 'workflow_dispatch' &&
-      startsWith(github.event.workflow_run.head_branch, 'automation/sync/')
+      github.event.client_payload.source_event == 'workflow_dispatch' &&
+      github.event.client_payload.source_repository == github.repository &&
+      (github.event.client_payload.gate == 'build-gate.yml' ||
+      github.event.client_payload.gate == 'on-demand-e2e.yml') &&
+      startsWith(github.event.client_payload.head_branch, 'automation/sync/')
     runs-on: ubuntu-24.04
     timeout-minutes: 90
 
@@ -34,12 +34,64 @@ jobs:
       - name: Check out the exact port head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.client_payload.head_sha }}
           fetch-depth: 0
           persist-credentials: true
 
+      - name: Ignore a superseded gate result
+        id: port
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.client_payload.head_sha }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
+        run: |
+          set -euo pipefail
+          if ! git fetch --no-tags origin "$HEAD_BRANCH"; then
+            printf 'current=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$(git rev-parse FETCH_HEAD)" == "$EXPECTED_SHA" ]]; then
+            printf 'current=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'current=false\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify the notifying gate
+        if: steps.port.outputs.current == 'true'
+        shell: bash
+        env:
+          EXPECTED_CONCLUSION: ${{ github.event.client_payload.conclusion }}
+          EXPECTED_GATE: ${{ github.event.client_payload.gate }}
+          EXPECTED_SHA: ${{ github.event.client_payload.head_sha }}
+          GATE_RUN_ID: ${{ github.event.client_payload.run_id }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_json=''
+          for attempt in {1..30}; do
+            run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GATE_RUN_ID")"
+            if [[ "$(jq -r .status <<< "$run_json")" == completed ]]; then
+              break
+            fi
+            sleep 2
+          done
+          [[ "$(jq -r .status <<< "$run_json")" == completed ]]
+          [[ "$(jq -r .event <<< "$run_json")" == workflow_dispatch ]]
+          [[ "$(jq -r .head_branch <<< "$run_json")" == "$HEAD_BRANCH" ]]
+          [[ "$(jq -r .head_sha <<< "$run_json")" == "$EXPECTED_SHA" ]]
+          [[ "$(jq -r .path <<< "$run_json")" == ".github/workflows/$EXPECTED_GATE" ]]
+          actual_conclusion="$(jq -r .conclusion <<< "$run_json")"
+          if [[ "$EXPECTED_CONCLUSION" == success ]]; then
+            [[ "$actual_conclusion" == success ]]
+          else
+            [[ "$actual_conclusion" != success ]]
+          fi
+
       - name: Install all supported JDKs
-        if: github.event.workflow_run.conclusion != 'success'
+        if: >-
+          steps.port.outputs.current == 'true' &&
+          github.event.client_payload.conclusion != 'success'
         uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
         with:
           distribution: temurin
@@ -49,12 +101,14 @@ jobs:
             25
 
       - name: Repair one failed gate with Claude
-        if: github.event.workflow_run.conclusion != 'success'
+        if: >-
+          steps.port.outputs.current == 'true' &&
+          github.event.client_payload.conclusion != 'success'
         shell: bash
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          FAILED_RUN_ID: ${{ github.event.client_payload.run_id }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -105,10 +159,12 @@ jobs:
             "Claude applied the single bounded repair attempt and redispatched both gates."
 
       - name: Merge after both exact-head gates pass
-        if: github.event.workflow_run.conclusion == 'success'
+        if: >-
+          steps.port.outputs.current == 'true' &&
+          github.event.client_payload.conclusion == 'success'
         shell: bash
         env:
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
