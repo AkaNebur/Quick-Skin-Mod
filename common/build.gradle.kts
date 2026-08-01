@@ -226,11 +226,8 @@ tasks.test {
     }
 }
 
-// COMPATIBILITY QUARANTINE (Architectury Plugin 3.5.167): production transforms ask Loom for
-// mixin mappings from every Loom project, including incompatible 26.x no-remap nodes. The pinned
-// plugin exposes no public property-map hook, so keep its internal transformer types confined to
-// this block. Remove it once upstream scopes the scan. Projects with another mapping identifier
-// remain filtered exactly as Architectury does.
+// Keep the production transform identity independent from checkout paths. Loader branches share
+// this transform seam; NeoForge does not consume classic refmap/SRG properties.
 gradle.projectsEvaluated {
     tasks.withType<TransformingTask>().configureEach {
         val targetPlatform = when {

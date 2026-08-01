@@ -1,7 +1,6 @@
 accessWidener	v2	official
-# Minecraft 26.1.2 made Screen.addRenderableWidget / addRenderableOnly / addWidget protected.
-# Architectury's ScreenHooks calls these reflectively; its own bundled access widener is not
-# applied in the Architectury Loom 1.17 no-remap *dev* runtime (issue #328), so widen them here.
+# Architectury's screen hooks call these protected helpers, so expose them consistently to the
+# Fabric 1.20.1 development and packaged runtimes.
 accessible	method	net/minecraft/client/gui/screens/Screen	addRenderableWidget	(Lnet/minecraft/client/gui/components/events/GuiEventListener;)Lnet/minecraft/client/gui/components/events/GuiEventListener;
 accessible	method	net/minecraft/client/gui/screens/Screen	addRenderableOnly	(Lnet/minecraft/client/gui/components/Renderable;)Lnet/minecraft/client/gui/components/Renderable;
 accessible	method	net/minecraft/client/gui/screens/Screen	addWidget	(Lnet/minecraft/client/gui/components/events/GuiEventListener;)Lnet/minecraft/client/gui/components/events/GuiEventListener;
