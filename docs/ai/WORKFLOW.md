@@ -1,0 +1,106 @@
+# Editing and verification workflow
+
+This file is part of the repository-wide instruction set imported by `AGENTS.md`.
+
+## Editing workflow
+
+- Read `CONTRIBUTING.md` when preparing a human-facing branch, commit, or pull request.
+- Read `release/release-matrix.json` and the relevant module `build.gradle.kts` before changing
+  versions, loaders, source roots, resources, artifact tasks, or E2E coverage.
+- Search canonical sources and all active overlays before changing a cross-version class or method.
+- Preserve unrelated working-tree changes. Do not rewrite or delete user work to simplify a patch.
+- Do not commit generated JARs, staged release files, Minecraft runtime directories, screenshots,
+  caches, or IDE output.
+- Keep production and E2E JARs physically separate. The E2E harness may compile against main output
+  but must never package Quick Skin production classes.
+- Do not run multiple Gradle invocations concurrently. Architectury uses JVM-global transform state,
+  and this repository intentionally disables parallel Gradle execution for aggregate builds.
+- Keep each commit to one reviewable concern. Use an imperative conventional subject consistent
+  with repository history: `feat:`, `fix:`, `refactor:`, `test:`, `build:`, `docs:`, `ci:`, or
+  `chore:`.
+- Before committing, inspect the staged diff, run `git diff --check` and
+  `git diff --cached --check`, and confirm that no generated or unrelated files are staged. Commit,
+  amend, rebase, push, force-push, open a PR, or merge only when explicitly requested.
+- Never rewrite commits that may belong to the user or another contributor. Updating an unshared
+  topic branch may use rebase when requested; updating a shared branch must use a non-destructive
+  merge or a fresh topic branch.
+- A pull request targets `master` for shared changes and the exact release branch for version-only
+  changes. Its title follows the same conventional format, and its body records scope, validation,
+  risks, generated-output status, and material AI assistance.
+
+## Verification
+
+Use the smallest relevant check while iterating, then run the proportional aggregate gate before
+handoff. On Windows, use `gradlew.bat`; on Unix-like systems, use `./gradlew`.
+
+Fast stable unit lane:
+
+```powershell
+.\gradlew.bat --no-parallel testStableLane
+```
+
+The active common test lane:
+
+```powershell
+.\gradlew.bat --no-daemon --no-parallel `
+  :common:1.20.1:test
+```
+
+Full production and packaged-harness gate:
+
+```powershell
+.\gradlew.bat --no-daemon --no-parallel clean `
+  :common:1.20.1:test `
+  buildAllLanes buildAllE2EHarnesses
+```
+
+Stage and verify the exact release outputs:
+
+```powershell
+python scripts/release/verify_release.py `
+  --matrix release/release-matrix.json `
+  --manifest build/release/artifacts.json `
+  --stage build/release
+
+python scripts/release/verify_release.py `
+  --matrix release/release-matrix.json `
+  --manifest build/release/artifacts.json `
+  --stage build/release `
+  --verify-staged
+```
+
+Also run:
+
+```powershell
+git diff --check
+python -m py_compile scripts/release/matrix.py scripts/release/verify_release.py `
+  scripts/release/status_table.py scripts/release/version_branches.py e2e/orchestrator.py `
+  e2e/packaged_runtime.py e2e/visual_review.py
+python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
+```
+
+Packaged Minecraft runtime scenarios require a display and the Java 17 toolchain. Use Xvfb on
+headless Linux and in CI; on a desktop session, macOS included, run the orchestrator directly.
+Follow `e2e/README.md` for what is verified on which platform, and do not substitute Loom
+development runs for packaged-JAR E2E evidence. Gradle and Stonecutter must themselves start on
+JDK 21 or newer; shared CI installs JDK 17, JDK 21, and JDK 25 so each version branch can select
+its matrix-declared toolchain.
+
+When release determinism is in scope, rebuild `buildAllLanes buildAllE2EHarnesses` with
+`--rerun-tasks` and compare both production and both harness SHA-256 values with the first build.
+
+## Documentation maintenance
+
+- Keep the active support table and user build instructions in `README.md` synchronized with the
+  release matrix.
+- Keep oracle preservation and post-retirement resource routing in `ORACLE-RETIREMENT.md`.
+- Keep packaged-runtime behavior in `e2e/README.md`.
+- Keep the synchronization and thin-branch contract in `VERSION-BRANCHES.md`.
+- Keep the generated README status block aligned through `scripts/release/status_table.py`; never
+  hand-maintain its version rows.
+- Keep the newcomer and AI-assisted contribution path in `CONTRIBUTING.md`, and keep
+  `.github/pull_request_template.md` aligned with it.
+- Keep root `AGENTS.md` limited to one `@path.md` import per line and keep root `CLAUDE.md`
+  byte-for-byte equivalent to `@AGENTS.md` followed by one newline.
+- Update the appropriate imported file whenever source-set routing, overlay ownership, lifecycle
+  composition roots, security boundaries, or mandatory verification commands change.

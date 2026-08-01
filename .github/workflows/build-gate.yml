@@ -9,8 +9,26 @@ on:
   pull_request:
   push:
   workflow_dispatch:
+    inputs:
+      attest_run_id:
+        description: Internal source run to attest; empty performs the full build
+        required: false
+        type: string
+      attest_branch:
+        description: Internal tested automation branch
+        required: false
+        type: string
+      attest_sha:
+        description: Internal exact tested commit
+        required: false
+        type: string
+      attest_target_sha:
+        description: Internal final release commit
+        required: false
+        type: string
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -23,6 +41,9 @@ env:
 jobs:
   build:
     name: Build and verify
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.attest_run_id == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
@@ -71,6 +92,7 @@ jobs:
         run: |
           python -m py_compile \
             scripts/release/matrix.py \
+            scripts/release/status_table.py \
             scripts/release/verify_release.py \
             scripts/release/version_branches.py \
             e2e/orchestrator.py \
@@ -111,12 +133,29 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+  attest:
+    name: Attest tested build on release branch
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.attest_run_id != ''
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/verify-gate-attestation.yml
+    with:
+      source_run_id: ${{ inputs.attest_run_id }}
+      source_workflow: build-gate.yml
+      tested_branch: ${{ inputs.attest_branch }}
+      tested_sha: ${{ inputs.attest_sha }}
+      target_sha: ${{ inputs.attest_target_sha }}
+
   notify-version-port:
     name: Notify version port controller
     needs: build
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
+      inputs.attest_run_id == '' &&
       startsWith(github.ref_name, 'automation/sync/')
     runs-on: ubuntu-24.04
     timeout-minutes: 5

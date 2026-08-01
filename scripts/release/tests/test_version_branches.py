@@ -12,6 +12,16 @@ import version_branches  # noqa: E402
 
 
 class VersionBranchDiscoveryTest(unittest.TestCase):
+    def test_parses_loader_pair_and_numeric_version_key(self) -> None:
+        parsed = version_branches.parse_version_branch(
+            "fabric-and-neoforge-1.21.1"
+        )
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed.loaders, ("fabric", "neoforge"))
+        self.assertEqual(parsed.version, "1.21.1")
+        self.assertEqual(parsed.version_key, (1, 21, 1))
+
     def test_recognizes_loader_and_exact_minecraft_suffix(self) -> None:
         self.assertTrue(
             version_branches.is_version_branch("forge-and-fabric-1.20.1")
