@@ -66,7 +66,7 @@ reason. Exactly four trusted-artifact rules cover those local outputs:
 |---|---|---|
 | `^remapped[.].+$` | any | Loom-remapped mod/API modules |
 | `^loom$` | `^mappings$` | Loom layered mappings |
-| `^net[.]minecraft$` | merged Minecraft/Forge names only | Loom merged game modules |
+| `^net[.]minecraft$` | merged Minecraft/Forge/NeoForge names only | Loom merged game modules |
 | `^net[.]minecraftforge[.][0-9a-f]{64}$` | `^fmlloader$` | Loom transformed Forge loader |
 
 This is not permission to trust similarly named downloads. The project repository policy excludes
@@ -82,8 +82,10 @@ add its own reviewed checksum before it is allowed in CI or release paths.
 
 ## Updating dependencies
 
-Start from a trusted checkout and intentionally change the declared version first. Then regenerate
-the active graph and selective locks in one serialized invocation:
+Start from a trusted checkout and intentionally change the declared version first. Generate the
+active graph from an empty, task-specific `GRADLE_USER_HOME`; a previously resolved Gradle graph
+can avoid re-reading POM or module metadata and hide checksums that a clean CI runner will require.
+Then regenerate the metadata and selective locks in one serialized invocation:
 
 ```bash
 ./gradlew --no-daemon --no-parallel \
@@ -99,6 +101,8 @@ never add a broad trusted group to make a failure disappear. `origin="Generated 
 honest bootstrap marker, not proof of publisher authenticity; repository routing and human review
 remain part of the trust decision.
 
-Run the policy regression tests and then the proportional Gradle build gate in strict mode. A
+Run the policy regression tests and then the proportional Gradle build gate in strict mode. Finally,
+configure the build once from a second empty `GRADLE_USER_HOME` without
+`--write-verification-metadata`; this proves the reviewed file is sufficient on its own. A
 dependency-verification failure after an unrelated change is a security review event, not a cache
 problem to bypass.
