@@ -41,6 +41,16 @@ FATAL_LOG_PATTERNS = (
     re.compile(r"(?i)crash report saved to"),
 )
 
+KQUEUE_NATIVE_INIT_FAILURE = (
+    "java.lang.NoClassDefFoundError: Could not initialize class "
+    "io.netty.channel.kqueue.Native"
+)
+KQUEUE_UNSUPPORTED_PLATFORM_CAUSE = (
+    "java.lang.IllegalStateException: Only supported on OSX/BSD"
+)
+DEBUG_FILE_APPENDER_FAILURE = "An exception occurred processing Appender DebugFile"
+DEBUG_FILE_APPENDER_STACK_WINDOW = 96
+
 EXPECTED_STEPS: dict[tuple[str, str], list[str]] = {
     ("phase0-smoke", "client_a"): ["baseline", "apply_local_skin"],
     ("propagation", "client_a"): ["baseline", "apply_local_look"],
@@ -831,6 +841,31 @@ def validate_report(game_dir: Path, row: dict[str, Any], scenario: str, role: st
     return report
 
 
+def is_benign_kqueue_debug_appender_line(lines: list[str], line_index: int) -> bool:
+    """Recognize NeoForge's harmless Linux kqueue-probe logging recursion.
+
+    Minecraft probes Netty's macOS/BSD kqueue transport before falling back to a supported
+    transport.  NeoForge's extended DebugFile throwable renderer can try to initialize the failed
+    native class again while formatting that DEBUG message, which breaks only the appender and
+    prints a NoClassDefFoundError to the redirected console.  The game keeps running.  Ignore only
+    the exact NoClassDefFoundError inside that appender stack and only when the original unsupported
+    platform cause is present; every other linkage error remains fatal.
+    """
+
+    if KQUEUE_NATIVE_INIT_FAILURE not in lines[line_index]:
+        return False
+
+    first_candidate = max(0, line_index - DEBUG_FILE_APPENDER_STACK_WINDOW)
+    for header_index in range(line_index, first_candidate - 1, -1):
+        if DEBUG_FILE_APPENDER_FAILURE not in lines[header_index]:
+            continue
+        block = lines[
+            header_index : min(len(lines), header_index + DEBUG_FILE_APPENDER_STACK_WINDOW)
+        ]
+        return any(KQUEUE_UNSUPPORTED_PLATFORM_CAUSE in candidate for candidate in block)
+    return False
+
+
 def scan_runtime_logs(logs: list[Path]) -> None:
     hits: list[str] = []
     for log in logs:
@@ -839,9 +874,12 @@ def scan_runtime_logs(logs: list[Path]) -> None:
         content = log.read_text(encoding="utf-8", errors="replace")
         if "client" in log.stem.lower() and "[QS-E2E] FINISHED status=pass" not in content:
             hits.append(f"{log}: missing [QS-E2E] FINISHED status=pass")
-        for line_number, line in enumerate(content.splitlines(), start=1):
+        lines = content.splitlines()
+        for line_index, line in enumerate(lines):
             if any(pattern.search(line) for pattern in FATAL_LOG_PATTERNS):
-                hits.append(f"{log}:{line_number}: {line[:300]}")
+                if is_benign_kqueue_debug_appender_line(lines, line_index):
+                    continue
+                hits.append(f"{log}:{line_index + 1}: {line[:300]}")
     if hits:
         raise RuntimeFailure("fatal runtime log evidence:\n" + "\n".join(hits[:30]))
 
