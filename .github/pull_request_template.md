@@ -13,6 +13,7 @@ Delete instructional comments, but keep every heading. Use "Not applicable" wher
 - Minecraft version(s):
 - Loader(s):
 - Shared change or version-only change:
+- Release branches affected and any explicit exclusions:
 - Related issue:
 
 ## Implementation notes
@@ -43,6 +44,12 @@ command -> result
 - [ ] I did not commit jars, Minecraft runtime files, screenshots, caches, secrets, or IDE output.
 - [ ] I did not weaken assertions, bounds, validation, or CI gates to make the change pass.
 - [ ] Any support or loader change starts in `release/release-matrix.json`.
+- [ ] I identified every discovered release branch affected by a shared change and documented each
+      intentional exclusion.
+- [ ] When behavior, build instructions, source layout, or compatibility facts changed, the README
+      remains accurate for every affected branch; generated README blocks were not hand-edited.
+- [ ] Any inspection or edit of a different branch used a separate ephemeral worktree, and no
+      dirty or user-owned worktree was force-removed.
 
 ## AI assistance
 

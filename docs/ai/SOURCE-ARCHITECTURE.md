@@ -65,3 +65,18 @@ is preserved by the `pre-scalability-oracle-retirement` Git tag. Consult that ta
 reference, then make the effective change in canonical sources or an active overlay. Matrix
 validation rejects reintroduced `src/v*` content and live Java classes with more than two copies.
 See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
+
+## Visual evidence and static-site sources
+
+- `e2e/visual-catalog.json` is the semantic catalog for screenshot checkpoints. Its identity is
+  scenario + client role + report step; filenames and ordinals are payload details only.
+- `e2e/visual_evidence.py` reads successful `result.json` reports, verifies the catalog contract,
+  PNG containment, dimensions, and SHA-256, and exposes the shared evidence model used by the AI
+  review and public site.
+- `scripts/pages/evidence.py` creates and validates a small branch-scoped public bundle. It may copy
+  only catalogued screenshots and structured provenance—never runtime logs or arbitrary HTML.
+- `scripts/pages/build_site.py` combines exact branch bundles and renders the tracked assets under
+  `site/`. `site/` contains presentation code, not a support/version inventory; supported versions
+  always come from validated evidence discovered from release branches.
+- `_site/`, `public-evidence/`, and downloaded Actions artifacts are generated output. Do not commit
+  them or edit them as source.
