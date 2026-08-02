@@ -29,6 +29,14 @@ jobs:
     outputs:
       targets: ${{ steps.targets.outputs.value }}
     steps:
+      - name: Require master as the synchronization source
+        shell: bash
+        env:
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_REF" == refs/heads/master ]]
+
       - name: Check out trusted synchronization code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:

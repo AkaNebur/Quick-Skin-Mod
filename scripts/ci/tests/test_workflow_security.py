@@ -91,6 +91,22 @@ class WorkflowSecurityTest(unittest.TestCase):
         publish = job_block("sync-version-branches.yml", "publish")
         self.assertIn("needs.propose.result == 'success'", publish)
 
+    def test_version_sync_accepts_only_master_as_its_source(self) -> None:
+        discover = job_block("sync-version-branches.yml", "discover")
+        self.assertIn('[[ "$SOURCE_REF" == refs/heads/master ]]', discover)
+
+    def test_version_port_merge_revalidates_the_exact_pr(self) -> None:
+        merge = job_block("handle-version-port-result.yml", "merge")
+        for required in (
+            "headRefOid",
+            "baseRefOid",
+            "automated-version-sync",
+            'git merge-base --is-ancestor "$base_sha" "$head_sha"',
+            '--match-head-commit "$head_sha"',
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, merge)
+
     def test_credentialed_writers_do_not_receive_claude_credentials(self) -> None:
         for workflow, job in (
             ("sync-version-branches.yml", "publish"),

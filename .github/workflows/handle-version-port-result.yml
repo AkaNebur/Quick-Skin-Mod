@@ -349,17 +349,43 @@ jobs:
               "$build_result" "$e2e_result"
             exit 0
           fi
-          pr_json="$(gh pr list --state open --head "$HEAD_BRANCH" \
-            --json number,baseRefName --jq '.[0]')"
-          pr_number="$(jq -r .number <<< "$pr_json")"
-          target_branch="$(jq -r .baseRefName <<< "$pr_json")"
+          pr_number="$(gh pr list --state open --head "$HEAD_BRANCH" \
+            --json number --jq 'if length == 1 then .[0].number else empty end')"
           test -n "$pr_number"
-          test -n "$target_branch"
+          pr_json="$(gh pr view "$pr_number" \
+            --json baseRefName,baseRefOid,headRefName,headRefOid,isCrossRepository,labels,state)"
+          jq -e \
+            --arg branch "$HEAD_BRANCH" \
+            --arg head "$head_sha" \
+            '.state == "OPEN" and .headRefName == $branch and .headRefOid == $head and (.isCrossRepository | not) and ([.labels[].name] | index("automated-version-sync")) != null' \
+            <<< "$pr_json" > /dev/null
+          target_branch="$(jq -r .baseRefName <<< "$pr_json")"
+          base_sha="$(jq -r .baseRefOid <<< "$pr_json")"
           python3 scripts/release/version_branches.py \
             --target "$target_branch" > /dev/null
+          target_slug="${target_branch//[^A-Za-z0-9._-]/-}"
+          [[ "$HEAD_BRANCH" == "automation/sync/$target_slug/"* ]]
+
+          git fetch --no-tags origin \
+            "+refs/heads/$HEAD_BRANCH:refs/remotes/origin/$HEAD_BRANCH" \
+            "+refs/heads/$target_branch:refs/remotes/origin/$target_branch"
+          [[ "$(git rev-parse "refs/remotes/origin/$HEAD_BRANCH")" == "$head_sha" ]]
+          [[ "$(git rev-parse "refs/remotes/origin/$target_branch")" == "$base_sha" ]]
+          git merge-base --is-ancestor "$base_sha" "$head_sha"
+
+          current_pr_json="$(gh pr view "$pr_number" \
+            --json baseRefName,baseRefOid,headRefName,headRefOid,isCrossRepository,labels,state)"
+          jq -e \
+            --arg base "$base_sha" \
+            --arg branch "$HEAD_BRANCH" \
+            --arg head "$head_sha" \
+            --arg target "$target_branch" \
+            '.state == "OPEN" and .baseRefName == $target and .baseRefOid == $base and .headRefName == $branch and .headRefOid == $head and (.isCrossRepository | not) and ([.labels[].name] | index("automated-version-sync")) != null' \
+            <<< "$current_pr_json" > /dev/null
           gh pr comment "$pr_number" --body \
             "Both explicitly dispatched exact-head gates passed; merging the version port."
-          gh pr merge "$pr_number" --merge --delete-branch
+          gh pr merge "$pr_number" --merge --delete-branch \
+            --match-head-commit "$head_sha"
 
           target_sha=''
           for attempt in {1..30}; do
