@@ -69,6 +69,8 @@ class RepositoryGuidanceTest(unittest.TestCase):
             ROOT / ".github" / "workflows" / "refresh-release-status.yml"
         ).read_text(encoding="utf-8")
 
+        self.assertEqual(readme.count("<!-- branch-profile:start -->"), 1)
+        self.assertEqual(readme.count("<!-- branch-profile:end -->"), 1)
         self.assertEqual(readme.count("<!-- release-status:start -->"), 1)
         self.assertEqual(readme.count("<!-- release-status:end -->"), 1)
         self.assertIn("uses: ./.github/workflows/verify-gate-attestation.yml", build_gate)
@@ -77,6 +79,35 @@ class RepositoryGuidanceTest(unittest.TestCase):
         self.assertIn("gh workflow run on-demand-e2e.yml --ref \"$target_branch\"", handler)
         self.assertIn('${TESTED_SHA}^{tree}', attestation)
         self.assertIn("scripts/release/status_table.py", refresh)
+
+    def test_shared_delivery_and_ephemeral_worktrees_are_explicit(self) -> None:
+        project = (ROOT / "docs" / "ai" / "PROJECT.md").read_text(
+            encoding="utf-8"
+        )
+        workflow = (ROOT / "docs" / "ai" / "WORKFLOW.md").read_text(
+            encoding="utf-8"
+        )
+        version_branches = (ROOT / "VERSION-BRANCHES.md").read_text(
+            encoding="utf-8"
+        )
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+        self.assertIn("every discovered release branch", project)
+        self.assertIn("exact-head Build", project)
+        self.assertIn("intentional branch exclusion", project)
+        self.assertIn("separate ephemeral Git worktree", workflow)
+        self.assertIn("never use `--force`", workflow)
+        self.assertIn("scripts/release/branch_readme.py", workflow)
+        for command in (
+            "mktemp -d",
+            "git worktree add --detach",
+            "git worktree add -b",
+            'git worktree remove "$qsm_worktree_path"',
+        ):
+            with self.subTest(command=command):
+                self.assertIn(command, version_branches)
+        self.assertRegex(contributing, r"per\s+discovered\s+release branch")
+        self.assertRegex(contributing, r"separate ephemeral\s+worktree")
 
     def test_release_publication_is_recoverable_and_non_destructive(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
@@ -134,11 +165,16 @@ class RepositoryGuidanceTest(unittest.TestCase):
         self.assertIn("interval: monthly", dependabot)
 
     def test_new_guidance_has_no_broken_local_links(self) -> None:
+        decision_documents = tuple(
+            sorted((ROOT / "docs" / "architecture" / "decisions").glob("*.md"))
+        )
         documents = (
             ROOT / "README.md",
             ROOT / "CONTRIBUTING.md",
+            ROOT / "VERSION-BRANCHES.md",
             ROOT / ".github" / "pull_request_template.md",
             *(ROOT / path for path in AGENT_IMPORTS),
+            *decision_documents,
         )
         for document in documents:
             text = document.read_text(encoding="utf-8")
