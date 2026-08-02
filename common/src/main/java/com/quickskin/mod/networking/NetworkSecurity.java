@@ -1,6 +1,7 @@
 package com.quickskin.mod.networking;
 
 import com.quickskin.mod.common.data.AnimationMetadata;
+import com.quickskin.mod.common.data.ContentId;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
@@ -25,16 +26,17 @@ public final class NetworkSecurity {
     }
 
     public static boolean isValidContentId(String contentId) {
-        if (contentId == null || contentId.length() != TextureTransferLimits.CONTENT_ID_LENGTH) {
-            return false;
-        }
-        for (int i = 0; i < contentId.length(); i++) {
-            char c = contentId.charAt(i);
-            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-                return false;
-            }
-        }
-        return true;
+        return ContentId.parse(contentId) != null;
+    }
+
+    public static boolean isValidStrongContentId(String contentId) {
+        ContentId parsed = ContentId.parse(contentId);
+        return parsed != null && parsed.algorithm() == ContentId.Algorithm.SHA256;
+    }
+
+    public static boolean isValidLegacyContentId(String contentId) {
+        ContentId parsed = ContentId.parse(contentId);
+        return parsed != null && parsed.algorithm() == ContentId.Algorithm.SHA1;
     }
 
     public static boolean isValidTextureType(String textureType) {
@@ -65,6 +67,23 @@ public final class NetworkSecurity {
                     && isValidContentId(appearanceId.substring(prefix.length()));
         }
         return true;
+    }
+
+    /** V2 keeps non-local appearance names but requires strong IDs for local content. */
+    public static boolean isValidV2AppearanceId(String appearanceId, String textureType) {
+        if (!isValidLocalAppearanceId(appearanceId, textureType)) return false;
+        if (appearanceId == null || appearanceId.isEmpty()) return true;
+        String prefix = "skin".equals(textureType) ? "local_skin:" : "local_cape:";
+        return !appearanceId.startsWith(prefix)
+                || isValidStrongContentId(appearanceId.substring(prefix.length()));
+    }
+
+    public static boolean isValidLegacyAppearanceId(String appearanceId, String textureType) {
+        if (!isValidLocalAppearanceId(appearanceId, textureType)) return false;
+        if (appearanceId == null || appearanceId.isEmpty()) return true;
+        String prefix = "skin".equals(textureType) ? "local_skin:" : "local_cape:";
+        return !appearanceId.startsWith(prefix)
+                || isValidLegacyContentId(appearanceId.substring(prefix.length()));
     }
 
     /**

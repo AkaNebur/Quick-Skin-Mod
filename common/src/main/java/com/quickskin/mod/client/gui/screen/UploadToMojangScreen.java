@@ -1,5 +1,6 @@
 package com.quickskin.mod.client.gui.screen;
 
+import com.quickskin.mod.client.concurrent.ClientIoExecutor;
 import com.quickskin.mod.client.gui.GuiCompat;
 import com.quickskin.mod.common.data.AssetMetadata;
 import com.quickskin.mod.client.gui.effect.BlurHandler;
@@ -17,6 +18,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 @Environment(EnvType.CLIENT)
@@ -53,6 +55,9 @@ public class UploadToMojangScreen extends Screen {
     private boolean uploadComplete = false;
     private String resultMessage = null;
     private boolean uploadSuccess = false;
+    private boolean active;
+    private long uploadAttempt;
+    private CompletableFuture<MojangSkinUploader.UploadResult> uploadTask;
 
     private Button cancelButton;
     private Button uploadButton;
@@ -66,6 +71,8 @@ public class UploadToMojangScreen extends Screen {
 
     @Override
     protected void init() {
+        active = true;
+
         // Calculate centered panel position
         this.panelX = (this.width - this.panelWidth) / 2;
         this.panelY = (this.height - this.panelHeight) / 2;
@@ -113,29 +120,50 @@ public class UploadToMojangScreen extends Screen {
         uploadButton.setMessage(Component.translatable("quickskin.button.upload_skin"));
         cancelButton.active = false;
 
-        // Upload in background thread to avoid blocking UI
-        new Thread(() -> {
-            MojangSkinUploader.UploadResult result = MojangSkinUploader.uploadSkin(metadata);
-
-            // Update UI on main thread
-            if (minecraft != null) {
-                minecraft.execute(() -> {
-                    isUploading = false;
-                    uploadComplete = true;
-                    uploadSuccess = result.success;
-                    resultMessage = result.message;
-
-                    // Update button text
-                    cancelButton.active = true;
-                    cancelButton.setMessage(Component.translatable("quickskin.button.close"));
-
-                    if (!result.success) {
-                        uploadButton.active = true;
-                        uploadButton.setMessage(Component.translatable("quickskin.button.retry"));
-                    }
-                });
+        // Upload on the process-owned bounded client I/O executor.
+        long attempt = ++uploadAttempt;
+        var client = minecraft;
+        CompletableFuture<MojangSkinUploader.UploadResult> task =
+                ClientIoExecutor.supplyAsync(() -> MojangSkinUploader.uploadSkin(metadata));
+        uploadTask = task;
+        task.whenComplete((result, error) -> {
+            if (client != null) {
+                client.execute(() -> completeUpload(attempt, result, error));
             }
-        }, "Skin-Upload-Thread").start();
+        });
+    }
+
+    private void completeUpload(
+            long attempt,
+            MojangSkinUploader.UploadResult result,
+            Throwable error) {
+        if (!active || attempt != uploadAttempt) return;
+        uploadTask = null;
+
+        if (error != null) {
+            String detail = error.getMessage();
+            if (detail == null || detail.isBlank()) {
+                detail = Component.translatable("quickskin.error.unknown").getString();
+            }
+            result = new MojangSkinUploader.UploadResult(
+                    false,
+                    Component.translatable("quickskin.error.unexpected_error", detail).getString(),
+                    0);
+        }
+
+        isUploading = false;
+        uploadComplete = true;
+        uploadSuccess = result.success;
+        resultMessage = result.message;
+
+        // Update button text
+        cancelButton.active = true;
+        cancelButton.setMessage(Component.translatable("quickskin.button.close"));
+
+        if (!result.success) {
+            uploadButton.active = true;
+            uploadButton.setMessage(Component.translatable("quickskin.button.retry"));
+        }
     }
 
     @Override
@@ -349,6 +377,12 @@ public class UploadToMojangScreen extends Screen {
 
     @Override
     public void removed() {
+        active = false;
+        uploadAttempt++;
+        if (uploadTask != null) {
+            uploadTask.cancel(false);
+            uploadTask = null;
+        }
         super.removed();
         // Cleanup blur resources
         BlurHandler.cleanup();

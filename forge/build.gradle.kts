@@ -1,6 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import dev.architectury.plugin.ArchitectPluginExtension
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
+import org.gradle.api.artifacts.dsl.LockMode
 
 plugins {
     java
@@ -39,6 +40,7 @@ extensions.configure<ArchitectPluginExtension>("architectury") {
 repositories {
     mavenCentral()
 }
+apply(from = rootProject.file("gradle/repository-policy.gradle.kts"))
 
 sourceSets {
     main {
@@ -88,6 +90,17 @@ configurations {
     named("developmentForge") {
         extendsFrom(configurations["common"])
     }
+}
+
+// Only the dependency physically shaded into the release JAR is version-locked. Loom's generated
+// Minecraft, mappings, remap, and development configurations remain checksum-verified without
+// brittle lock state tied to generated Stonecutter project directories.
+dependencyLocking {
+    lockMode = LockMode.STRICT
+    lockFile = rootProject.file("gradle/dependency-locks/forge-$minecraftVersion.lockfile")
+}
+configurations.named("shadowBundle") {
+    resolutionStrategy.activateDependencyLocking()
 }
 
 dependencies {

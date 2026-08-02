@@ -2,8 +2,10 @@ package com.quickskin.mod.server.storage;
 
 import com.quickskin.mod.networking.NetworkSecurity;
 import com.quickskin.mod.networking.TextureTransferLimits;
+import com.quickskin.mod.common.data.ContentAliasIndex;
+import com.quickskin.mod.common.data.ContentAliases;
+import com.quickskin.mod.common.data.ContentId;
 import com.quickskin.mod.common.util.BoundedFileReader;
-import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.common.util.PngAnimationIdentity;
 import com.quickskin.mod.server.concurrent.ServerCacheIoExecutor;
 import net.minecraft.server.MinecraftServer;
@@ -42,6 +44,8 @@ public class ServerTextureCache {
 
     private final LinkedHashMap<String, CacheEntry> textureCache =
             new LinkedHashMap<>(16, 0.75f, true);
+    private final ContentAliasIndex contentAliases =
+            new ContentAliasIndex(TextureTransferLimits.MAX_SERVER_CACHE_ENTRIES);
     private final PinnedTextureBudget pinnedTextures =
             new PinnedTextureBudget(TextureTransferLimits.MAX_SERVER_PINNED_BYTES);
     private final LinkedHashMap<String, EntryDeletion> pendingDeletions =
@@ -64,6 +68,7 @@ public class ServerTextureCache {
         generation++;
         cancelPendingDeletions();
         textureCache.clear();
+        contentAliases.clear();
         cachedBytes = 0;
         pinnedTextures.clear();
         Path worldPath = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
@@ -120,9 +125,13 @@ public class ServerTextureCache {
 
         // Own a private immutable byte snapshot before hashing or decoding it.
         byte[] copy = Arrays.copyOf(textureData, textureData.length);
-        String computedHash = HashUtil.computeHash(copy);
+        ContentAliases computedAliases = ContentAliases.forBytes(copy);
+        ContentId expected = expectedHash == null ? null : ContentId.parse(expectedHash);
+        String computedHash = expected == null
+                ? computedAliases.sha1()
+                : computedAliases.forAlgorithm(expected.algorithm());
         if (!NetworkSecurity.isValidContentId(computedHash)
-                || (expectedHash != null && !expectedHash.equals(computedHash))
+                || (expectedHash != null && !ContentId.matches(expectedHash, copy))
                 || !NetworkSecurity.isValidTextureData(copy, textureType)) {
             LOGGER.warn("Rejected invalid texture upload (id={}, type={}, bytes={})",
                     expectedHash, textureType, copy.length);
@@ -166,6 +175,7 @@ public class ServerTextureCache {
                         preparedDirectory,
                         stagedImage,
                         computedHash,
+                        computedAliases,
                         ownerId,
                         textureType,
                         embeddedAnimationMetadata,
@@ -186,10 +196,14 @@ public class ServerTextureCache {
                 || storageDirectory == null
                 || !storageDirectory.equals(prepared.storageDirectory)) return false;
 
-        CacheEntry previous = textureCache.get(prepared.hash);
-        if (previous == null && !cancelPendingDeletion(prepared.hash)) {
+        boolean aliasesWereNew = contentAliases.resolve(prepared.aliases.sha256()) == null;
+        String primary = contentAliases.register(prepared.hash, prepared.aliases);
+        if (primary == null) return false;
+        CacheEntry previous = textureCache.get(primary);
+        if (previous == null && !cancelPendingDeletion(primary)) {
             LOGGER.debug("Deferring texture {} while its old cache files are being evicted",
-                    prepared.hash);
+                    primary);
+            if (aliasesWereNew) contentAliases.removePrimary(primary);
             return false;
         }
         OwnerBinding uploader = new OwnerBinding(prepared.ownerId, prepared.textureType);
@@ -198,7 +212,7 @@ public class ServerTextureCache {
             owners.addAll(previous.owners);
             if (!Arrays.equals(previous.data, prepared.data)) {
                 LOGGER.warn("Rejected attempted takeover of texture {} by {}",
-                        prepared.hash, prepared.ownerId);
+                        primary, prepared.ownerId);
                 return false;
             }
             if (previous.owners.contains(uploader)) return true;
@@ -208,20 +222,23 @@ public class ServerTextureCache {
 
         CacheEntry candidate = new CacheEntry(
                 prepared.data, prepared.embeddedAnimationMetadata, owners);
-        if (!commitPreparedFiles(prepared, candidate, previous)) return false;
+        if (!commitPreparedFiles(prepared, primary, candidate, previous)) {
+            if (aliasesWereNew) contentAliases.removePrimary(primary);
+            return false;
+        }
 
-        previous = textureCache.put(prepared.hash, candidate);
+        previous = textureCache.put(primary, candidate);
         if (previous != null) cachedBytes -= previous.data.length;
         cachedBytes += candidate.data.length;
         evictToLimits();
-        return textureCache.containsKey(prepared.hash);
+        return textureCache.containsKey(primary);
     }
 
     public byte @Nullable [] getTexture(String hash) {
         if (!NetworkSecurity.isValidContentId(hash)) return null;
         CacheEntry entry;
         synchronized (this) {
-            entry = textureCache.get(hash);
+            entry = textureCache.get(resolvePrimary(hash));
         }
         // Cache entries are immutable; perform the potentially 16 MiB copy after releasing the
         // cache monitor so unrelated ownership/size checks are not blocked by bulk memory work.
@@ -230,7 +247,7 @@ public class ServerTextureCache {
 
     public synchronized int getTextureSize(String hash) {
         if (!NetworkSecurity.isValidContentId(hash)) return -1;
-        CacheEntry entry = textureCache.get(hash);
+        CacheEntry entry = textureCache.get(resolvePrimary(hash));
         return entry == null ? -1 : entry.data.length;
     }
 
@@ -239,7 +256,7 @@ public class ServerTextureCache {
                 || !NetworkSecurity.isValidTextureType(textureType)) {
             return false;
         }
-        CacheEntry entry = textureCache.get(hash);
+        CacheEntry entry = textureCache.get(resolvePrimary(hash));
         return entry != null && entry.owners.contains(new OwnerBinding(ownerId, textureType));
     }
 
@@ -262,7 +279,8 @@ public class ServerTextureCache {
     }
 
     public boolean isPinned(String hash) {
-        return pinnedTextures.isPinned(hash);
+        String primary = resolvePrimary(hash);
+        return primary != null && pinnedTextures.isPinned(primary);
     }
 
     public long getPinnedBytes() {
@@ -280,10 +298,11 @@ public class ServerTextureCache {
                 || !appearanceId.startsWith(prefix)) return true;
         String hash = appearanceId.substring(prefix.length());
         if (!NetworkSecurity.isValidContentId(hash)) return false;
-        CacheEntry entry = textureCache.get(hash);
+        String primary = resolvePrimary(hash);
+        CacheEntry entry = primary == null ? null : textureCache.get(primary);
         if (entry == null
                 || !entry.owners.contains(new OwnerBinding(playerId, textureType))) return false;
-        Integer previous = requested.putIfAbsent(hash, entry.data.length);
+        Integer previous = requested.putIfAbsent(primary, entry.data.length);
         return previous == null || previous == entry.data.length;
     }
 
@@ -292,12 +311,31 @@ public class ServerTextureCache {
         if (!NetworkSecurity.isValidContentId(hash) || !NetworkSecurity.isValidTextureType(textureType)) {
             return false;
         }
-        CacheEntry entry = textureCache.get(hash);
+        CacheEntry entry = textureCache.get(resolvePrimary(hash));
         if (entry == null) return false;
         for (OwnerBinding owner : entry.owners) {
             if (textureType.equals(owner.textureType)) return true;
         }
         return false;
+    }
+
+    /** Returns the cache's stable storage key for either authenticated wire alias. */
+    public synchronized @Nullable String resolveContentId(String contentId) {
+        if (!NetworkSecurity.isValidContentId(contentId)) return null;
+        String primary = contentAliases.resolve(contentId);
+        return primary != null && textureCache.containsKey(primary) ? primary : null;
+    }
+
+    /** Translates only aliases proven to describe the same cached canonical PNG. */
+    public synchronized @Nullable String contentIdFor(
+            String contentId, ContentId.Algorithm algorithm) {
+        if (algorithm == null) return null;
+        String translated = contentAliases.alias(contentId, algorithm);
+        return translated != null && resolveContentId(translated) != null ? translated : null;
+    }
+
+    private String resolvePrimary(String contentId) {
+        return contentAliases.resolve(contentId);
     }
 
     /**
@@ -308,14 +346,16 @@ public class ServerTextureCache {
             String hash, String metadataJson) {
         if (!NetworkSecurity.isValidContentId(hash) || metadataJson == null) return false;
         String embeddedIdentity;
+        String primary;
         synchronized (this) {
-            CacheEntry entry = textureCache.get(hash);
+            primary = resolvePrimary(hash);
+            CacheEntry entry = textureCache.get(primary);
             if (entry == null) return false;
             embeddedIdentity = entry.embeddedAnimationMetadata;
         }
         return (embeddedIdentity == null || embeddedIdentity.equals(metadataJson))
                 && ServerAnimationCache.getInstance()
-                        .isMetadataIdentityCompatible(hash, metadataJson);
+                        .isMetadataIdentityCompatible(primary, metadataJson);
     }
 
     public void saveAll() {
@@ -335,6 +375,7 @@ public class ServerTextureCache {
     public synchronized void clear() {
         generation++;
         textureCache.clear();
+        contentAliases.clear();
         cachedBytes = 0;
         pinnedTextures.clear();
         deleteStagedFiles(storageDirectory);
@@ -342,15 +383,16 @@ public class ServerTextureCache {
     }
 
     private boolean commitPreparedFiles(
-            PreparedTexture prepared, CacheEntry candidate, @Nullable CacheEntry previous) {
-        Path imageFile = safeFile(prepared.hash, ".png");
-        Path ownerFile = safeFile(prepared.hash, ".owner");
+            PreparedTexture prepared, String primary,
+            CacheEntry candidate, @Nullable CacheEntry previous) {
+        Path imageFile = safeFile(primary, ".png");
+        Path ownerFile = safeFile(primary, ".owner");
         Path ownerTemp = safeFile(
-                prepared.hash, ".owner." + UUID.randomUUID() + ".ingress.tmp");
+                primary, ".owner." + UUID.randomUUID() + ".ingress.tmp");
         if (imageFile == null || ownerFile == null || ownerTemp == null
                 || Files.isSymbolicLink(imageFile) || Files.isSymbolicLink(ownerFile)
                 || Files.isSymbolicLink(ownerTemp) || Files.isSymbolicLink(prepared.stagedImage)) {
-            LOGGER.warn("Refusing unsafe texture cache path for {}", prepared.hash);
+            LOGGER.warn("Refusing unsafe texture cache path for {}", primary);
             return false;
         }
         try {
@@ -363,7 +405,7 @@ public class ServerTextureCache {
             atomicReplace(ownerTemp, ownerFile);
             return true;
         } catch (IOException exception) {
-            LOGGER.error("Unable to commit QuickSkin texture {}", prepared.hash, exception);
+            LOGGER.error("Unable to commit QuickSkin texture {}", primary, exception);
             return false;
         } finally {
             deleteTempFile(ownerTemp);
@@ -437,6 +479,7 @@ public class ServerTextureCache {
     private void loadCachedTextures() {
         if (storageDirectory == null || !Files.isDirectory(storageDirectory, LinkOption.NOFOLLOW_LINKS)) return;
 
+        Map<String, String> legacyMigrations = new LinkedHashMap<>();
         PriorityQueue<Path> newestFiles = new PriorityQueue<>(
                 Comparator.comparingLong(this::lastModified));
         try (Stream<Path> paths = Files.list(storageDirectory)) {
@@ -477,7 +520,7 @@ public class ServerTextureCache {
                 byte[] data = BoundedFileReader.readBytes(
                         path, TextureTransferLimits.MAX_TEXTURE_BYTES);
                 String embeddedAnimationMetadata = PngAnimationIdentity.extract(data);
-                if (!hash.equals(HashUtil.computeHash(data))
+                if (!ContentId.matches(hash, data)
                         || !isValidForOwnedTypes(data, ownership.owners)
                         || (embeddedAnimationMetadata != null
                                 && NetworkSecurity.parseAnimationMetadata(
@@ -486,14 +529,90 @@ public class ServerTextureCache {
                     scheduleEntryDeletion(hash);
                     continue;
                 }
+                ContentAliases aliases = ContentAliases.forBytes(data);
+                String primary = contentAliases.register(hash, aliases);
+                if (primary == null) {
+                    LOGGER.warn("Ignoring conflicting texture aliases for {}", hash);
+                    scheduleEntryDeletion(hash);
+                    continue;
+                }
                 CacheEntry entry = new CacheEntry(
                         data, embeddedAnimationMetadata, ownership.owners);
-                textureCache.put(hash, entry);
-                cachedBytes += data.length;
+                CacheEntry previous = textureCache.get(primary);
+                if (previous != null) {
+                    if (!Arrays.equals(previous.data, data)) {
+                        LOGGER.warn("Ignoring colliding texture cache entry {}", hash);
+                        scheduleEntryDeletion(hash);
+                        continue;
+                    }
+                    Set<OwnerBinding> merged = new LinkedHashSet<>(previous.owners);
+                    if (merged.size() + ownership.owners.size() > MAX_OWNERS_PER_TEXTURE) {
+                        scheduleEntryDeletion(hash);
+                        continue;
+                    }
+                    merged.addAll(ownership.owners);
+                    textureCache.put(primary, new CacheEntry(
+                            previous.data, previous.embeddedAnimationMetadata, merged));
+                } else {
+                    textureCache.put(primary, entry);
+                    cachedBytes += data.length;
+                }
+                if (!primary.equals(hash)) legacyMigrations.put(hash, primary);
                 evictToLimits();
             } catch (IOException e) {
                 LOGGER.warn("Unable to load QuickSkin texture cache entry {}", path, e);
             }
+        }
+        migrateLegacyCacheEntries(legacyMigrations);
+    }
+
+    /**
+     * Migrates an authenticated SHA-1 filename only after its SHA-256 replacement and ownership
+     * sidecar have been atomically written and read back. A failed migration deliberately retains
+     * the legacy files so the next startup can retry without losing the cached blob.
+     */
+    private void migrateLegacyCacheEntries(Map<String, String> migrations) {
+        if (migrations.isEmpty()) return;
+        Map<String, Boolean> persistedPrimaries = new LinkedHashMap<>();
+        for (Map.Entry<String, String> migration : migrations.entrySet()) {
+            String legacy = migration.getKey();
+            String primary = migration.getValue();
+            CacheEntry entry = textureCache.get(primary);
+            if (entry == null) {
+                // The entry was intentionally evicted while restoring the bounded cache.
+                scheduleEntryDeletion(legacy);
+                continue;
+            }
+            boolean persisted = persistedPrimaries.computeIfAbsent(primary, ignored ->
+                    saveTextureToDisk(primary, entry)
+                            && isPersistedEntry(primary, entry));
+            if (persisted) {
+                scheduleLegacyAliasDeletion(legacy);
+            } else {
+                LOGGER.warn("Retaining legacy texture cache entry {} because migration to {} "
+                        + "could not be verified", legacy, primary);
+            }
+        }
+    }
+
+    private boolean isPersistedEntry(String hash, CacheEntry expected) {
+        Path imageFile = safeFile(hash, ".png");
+        Path ownerFile = safeFile(hash, ".owner");
+        if (imageFile == null || ownerFile == null
+                || !Files.isRegularFile(imageFile, LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(ownerFile, LinkOption.NOFOLLOW_LINKS)) return false;
+        try {
+            if (Files.size(imageFile) != expected.data.length
+                    || Files.size(ownerFile) > 16 * 1024) return false;
+            byte[] persistedData = BoundedFileReader.readBytes(
+                    imageFile, TextureTransferLimits.MAX_TEXTURE_BYTES);
+            byte[] persistedOwners = BoundedFileReader.readBytes(ownerFile, 16 * 1024);
+            return ContentId.matches(hash, persistedData)
+                    && Arrays.equals(expected.data, persistedData)
+                    && Arrays.equals(ownershipBytes(expected.owners), persistedOwners);
+        } catch (IOException exception) {
+            LOGGER.warn("Unable to verify migrated QuickSkin texture {}", hash, exception);
+            return false;
         }
     }
 
@@ -542,17 +661,28 @@ public class ServerTextureCache {
             iterator.remove();
             cachedBytes -= eldest.getValue().data.length;
             pinnedTextures.removeTexture(eldest.getKey());
+            contentAliases.removePrimary(eldest.getKey());
             evicted.add(eldest.getKey());
         }
         scheduleEntryDeletions(evicted);
     }
 
     private void scheduleEntryDeletion(String hash) {
-        scheduleEntryDeletions(List.of(hash));
+        scheduleEntryDeletions(List.of(hash), true);
+    }
+
+    /** Deletes only an obsolete texture/owner alias after its strong replacement is durable. */
+    private void scheduleLegacyAliasDeletion(String hash) {
+        scheduleEntryDeletions(List.of(hash), false);
     }
 
     /** Captures contained paths under the monitor; all actual deletes happen on the I/O worker. */
     private void scheduleEntryDeletions(List<String> hashes) {
+        scheduleEntryDeletions(hashes, true);
+    }
+
+    private void scheduleEntryDeletions(
+            List<String> hashes, boolean removeAnimationMetadata) {
         if (hashes == null || hashes.isEmpty()) return;
         List<EntryDeletion> accepted = new ArrayList<>();
         synchronized (this) {
@@ -568,7 +698,8 @@ public class ServerTextureCache {
                 if (image == null && ownership == null) continue;
                 EntryDeletion deletion = new EntryDeletion(
                         hash, image, ownership,
-                        ServerAnimationCache.getInstance().generation());
+                        ServerAnimationCache.getInstance().generation(),
+                        removeAnimationMetadata);
                 pendingDeletions.put(hash, deletion);
                 pinnedTextures.removeTexture(hash);
                 accepted.add(deletion);
@@ -600,8 +731,10 @@ public class ServerTextureCache {
         try {
             deleteFile(deletion.image);
             deleteFile(deletion.ownership);
-            ServerAnimationCache.getInstance().removeMetadata(
-                    deletion.hash, deletion.animationGeneration);
+            if (deletion.removeAnimationMetadata) {
+                ServerAnimationCache.getInstance().removeMetadata(
+                        deletion.hash, deletion.animationGeneration);
+            }
         } finally {
             synchronized (this) {
                 pendingDeletions.remove(deletion.hash, deletion);
@@ -654,6 +787,7 @@ public class ServerTextureCache {
         private final Path storageDirectory;
         private final Path stagedImage;
         private final String hash;
+        private final ContentAliases aliases;
         private final UUID ownerId;
         private final String textureType;
         private final String embeddedAnimationMetadata;
@@ -666,6 +800,7 @@ public class ServerTextureCache {
                 Path storageDirectory,
                 Path stagedImage,
                 String hash,
+                ContentAliases aliases,
                 UUID ownerId,
                 String textureType,
                 String embeddedAnimationMetadata,
@@ -675,6 +810,7 @@ public class ServerTextureCache {
             this.storageDirectory = storageDirectory;
             this.stagedImage = stagedImage;
             this.hash = hash;
+            this.aliases = aliases;
             this.ownerId = ownerId;
             this.textureType = textureType;
             this.embeddedAnimationMetadata = embeddedAnimationMetadata;
@@ -760,15 +896,17 @@ public class ServerTextureCache {
         private final Path image;
         private final Path ownership;
         private final long animationGeneration;
+        private final boolean removeAnimationMetadata;
         private final AtomicInteger state = new AtomicInteger(QUEUED);
 
         private EntryDeletion(
                 String hash, Path image, Path ownership,
-                long animationGeneration) {
+                long animationGeneration, boolean removeAnimationMetadata) {
             this.hash = hash;
             this.image = image;
             this.ownership = ownership;
             this.animationGeneration = animationGeneration;
+            this.removeAnimationMetadata = removeAnimationMetadata;
         }
 
         private boolean begin() {

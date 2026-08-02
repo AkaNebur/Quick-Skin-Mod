@@ -24,6 +24,9 @@ public final class TextureTransferRateLimiter {
     private static final long REQUEST_WINDOW_MILLIS = 10_000L;
     private static final long MAX_DOWNLOAD_BYTES_PER_WINDOW =
             4L * TextureTransferLimits.MAX_TEXTURE_BYTES;
+    /** Matches the client's bounded retry count while preventing unbounded main-thread queues. */
+    private static final int MAX_PROTOCOL_HELLO_TOKENS = 5;
+    private static final long PROTOCOL_HELLO_REFILL_MILLIS = 2_000L;
 
     private final LinkedHashMap<SessionKey, SessionState> sessions =
             new LinkedHashMap<>(16, 0.75f, true);
@@ -88,6 +91,24 @@ public final class TextureTransferRateLimiter {
         }
         if (state.requests >= MAX_REQUESTS_PER_WINDOW) return false;
         state.requests++;
+        state.lastActivity = now;
+        return true;
+    }
+
+    /**
+     * Admits protocol hellos on the network thread before they enqueue main-thread work.
+     *
+     * <p>The small per-connection token bucket permits the client's finite retry burst, then
+     * replenishes slowly. Exact-session cleanup prevents an old disconnect from resetting a
+     * replacement connection's budget.</p>
+     */
+    public synchronized boolean allowProtocolHello(UUID playerId, Object session) {
+        long now = System.currentTimeMillis();
+        SessionState state = state(playerId, session, now);
+        if (state == null) return false;
+        refillProtocolHelloTokens(state, now);
+        if (state.protocolHelloTokens < 1) return false;
+        state.protocolHelloTokens--;
         state.lastActivity = now;
         return true;
     }
@@ -202,6 +223,16 @@ public final class TextureTransferRateLimiter {
         state.decodedPixels = 0;
     }
 
+    private void refillProtocolHelloTokens(SessionState state, long now) {
+        long elapsed = now - state.protocolHelloRefillAt;
+        if (elapsed < PROTOCOL_HELLO_REFILL_MILLIS) return;
+        long tokens = elapsed / PROTOCOL_HELLO_REFILL_MILLIS;
+        state.protocolHelloTokens = (int) Math.min(
+                MAX_PROTOCOL_HELLO_TOKENS,
+                (long) state.protocolHelloTokens + tokens);
+        state.protocolHelloRefillAt += tokens * PROTOCOL_HELLO_REFILL_MILLIS;
+    }
+
     private static final class SessionKey {
         private final UUID playerId;
         private final Object session;
@@ -249,11 +280,15 @@ public final class TextureTransferRateLimiter {
         private int requests;
         private int appearanceSnapshotRequests;
         private long downloadBytes;
+        private int protocolHelloTokens;
+        private long protocolHelloRefillAt;
         private long lastActivity;
 
         private SessionState(long now) {
             uploadWindowStarted = now;
             requestWindowStarted = now;
+            protocolHelloTokens = MAX_PROTOCOL_HELLO_TOKENS;
+            protocolHelloRefillAt = now;
             lastActivity = now;
         }
     }

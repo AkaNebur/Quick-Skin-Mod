@@ -218,7 +218,16 @@ def validate_matrix(data: dict[str, Any]) -> None:
     project = data.get("project", {})
     if not isinstance(project, dict):
         raise MatrixError("release matrix project must be an object")
-    for key in ("name", "mod_id", "description", "homepage", "sources", "issues", "license"):
+    for key in (
+        "name",
+        "mod_id",
+        "description",
+        "homepage",
+        "sources",
+        "issues",
+        "license",
+        "release_branch",
+    ):
         if not isinstance(project.get(key), str) or not project[key].strip():
             raise MatrixError(f"project.{key} must be a non-empty string")
     if not isinstance(project.get("modrinth_id"), str) or not project["modrinth_id"].strip():
@@ -323,6 +332,19 @@ def validate_matrix(data: dict[str, Any]) -> None:
     artifact_versions = {artifact["artifact_version"] for artifact in artifacts}
     if not isinstance(unit_test_version, str) or unit_test_version not in artifact_versions:
         raise MatrixError("unit_test_version must select a supported release version")
+
+    release_branch = project["release_branch"]
+    branch_match = re.fullmatch(
+        r"((?:fabric|forge|neoforge)(?:-and-(?:fabric|forge|neoforge))+)-([0-9]+(?:\.[0-9]+)+)",
+        release_branch,
+    )
+    if branch_match is None:
+        raise MatrixError("project.release_branch must use the release-branch naming contract")
+    branch_loaders = set(branch_match.group(1).split("-and-"))
+    if branch_loaders != active_loaders:
+        raise MatrixError("project.release_branch loaders disagree with active artifacts")
+    if branch_match.group(2) not in artifact_versions:
+        raise MatrixError("project.release_branch version is absent from active artifacts")
 
     source_overlays = data.get("source_overlays")
     expected_source_modules = {"common", *active_loaders}
@@ -554,17 +576,27 @@ def read_mod_version(matrix_path: Path, data: dict[str, Any]) -> str:
     return properties[key]
 
 
+def release_id(data: dict[str, Any], mod_version: str) -> str:
+    """Stable public identity: Minecraft era plus logical in-JAR mod version."""
+    versions = sorted(
+        {str(row["artifact_version"]) for row in data["artifacts"]},
+        key=lambda value: tuple(int(part) for part in value.split(".")),
+    )
+    return f"mc{'+'.join(versions)}-v{mod_version}"
+
+
 def gha_matrix(
     data: dict[str, Any], kind: str, mod_version: str
 ) -> dict[str, list[dict[str, Any]]]:
-    if kind == "artifacts":
+    if kind in {"artifacts", "publications"}:
         include = []
+        identity = release_id(data, mod_version)
         for artifact in data["artifacts"]:
             dependencies = ["architectury-api(required)"]
             if artifact["loader"] == "fabric":
                 dependencies.append("fabric-api(required)")
             filename = Path(artifact["jar"].replace("{mod_version}", mod_version)).name
-            include.append({
+            expanded = {
                 "id": artifact["artifact_node"],
                 "artifact_node": artifact["artifact_node"],
                 "file": f"build/release/files/{filename}",
@@ -581,7 +613,18 @@ def gha_matrix(
                 "version": mod_version,
                 "modrinth_id": data["project"]["modrinth_id"],
                 "curseforge_id": data["project"]["curseforge_id"],
-            })
+                "release_id": identity,
+                "publication_id": f"{identity}-{artifact['artifact_node']}",
+            }
+            if kind == "artifacts":
+                include.append(expanded)
+            else:
+                for marketplace in ("modrinth", "curseforge"):
+                    include.append({
+                        **expanded,
+                        "id": f"{artifact['artifact_node']}--{marketplace}",
+                        "marketplace": marketplace,
+                    })
     elif kind in {"runtime", "native-anchors", "pr-anchors"}:
         rows = data["runtimes"]
         if kind == "native-anchors":
@@ -620,7 +663,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--kind",
-        choices=("artifacts", "runtime", "native-anchors", "pr-anchors"),
+        choices=("artifacts", "publications", "runtime", "native-anchors", "pr-anchors"),
         help="emit a compact GitHub Actions matrix",
     )
     parser.add_argument("--pretty", action="store_true", help="pretty-print output")

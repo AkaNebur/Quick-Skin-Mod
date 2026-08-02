@@ -7,7 +7,7 @@ import java.nio.file.Path;
  * Stored in memory cache for fast lookup
  */
 public record AssetMetadata(
-    String hash,              // SHA1 hash of file content (unique ID)
+    String hash,              // Canonical SHA-256 content ID (sha256-...)
     String friendlyName,      // Display name (filename without extension)
     String type,              // "skin" or "cape"
     Path path,                // Original file path
@@ -18,6 +18,12 @@ public record AssetMetadata(
     String skinModel,         // "classic" or "slim" (null for capes)
     long lastModifiedTime     // File modification timestamp in milliseconds
 ) {
+    public AssetMetadata {
+        ContentId contentId = ContentId.parse(hash);
+        if (contentId == null || contentId.algorithm() != ContentId.Algorithm.SHA256) {
+            throw new IllegalArgumentException("Local asset metadata requires a SHA-256 primary");
+        }
+    }
 
     /**
      * Create metadata for a static skin
