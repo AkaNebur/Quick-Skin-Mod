@@ -37,7 +37,14 @@ public abstract class PasConfiguratorMixin extends Screen {
         super(component);
     }
 
-    @Inject(method = "method_25426", at = @At("TAIL"), remap = false)
+    @Inject(
+            method = "method_25426",
+            at = @At("TAIL"),
+            require = 0,
+            expect = 1,
+            allow = 1,
+            remap = false
+    )
     private void quickskin$onInit(CallbackInfo ci) {
         try {
             // Get the parent (ArmorStandNamerAdapter) via reflection
@@ -80,7 +87,14 @@ public abstract class PasConfiguratorMixin extends Screen {
         }
     }
 
-    @Inject(method = "method_25393", at = @At("TAIL"), remap = false)
+    @Inject(
+            method = "method_25393",
+            at = @At("TAIL"),
+            require = 0,
+            expect = 1,
+            allow = 1,
+            remap = false
+    )
     private void quickskin$onTick(CallbackInfo ci) {
         if (quickskin$skinButton != null && quickskin$skinTabButton != null) {
             try {

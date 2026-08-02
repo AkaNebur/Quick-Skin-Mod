@@ -259,15 +259,36 @@ public class SkinManagerMixin {
      * Used by vanilla code and any mod that resolves a skin synchronously via SkinManager.
      */
 //? if <1.21.11 {
-    @Inject(method = "getInsecureSkin", at = @At("RETURN"), cancellable = true)
+    @Inject(
+            method = "getInsecureSkin",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$modifyInsecureSkin(GameProfile profile, CallbackInfoReturnable<PlayerSkin> cir) {
         UUID uuid = profile.getId();
 //?} else if <26.2 {
-    @Inject(method = "getInsecureSkin", at = @At("RETURN"), cancellable = true)
+    @Inject(
+            method = "getInsecureSkin",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$modifyInsecureSkin(GameProfile profile, CallbackInfoReturnable<PlayerSkin> cir) {
         UUID uuid = profile.id();
 //?} else {
-    @Inject(method = "createLookup", at = @At("RETURN"), cancellable = true)
+    @Inject(
+            method = "createLookup",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$modifyInsecureSkin(GameProfile profile, boolean secure, CallbackInfoReturnable<java.util.function.Supplier<PlayerSkin>> cir) {
         UUID uuid = profile.id();
 //?}
@@ -298,24 +319,52 @@ public class SkinManagerMixin {
      * see the modified skin through this mixin.
      */
 //? if <1.21.11 {
-    @Inject(method = "getOrLoad", at = @At("RETURN"), cancellable = true)
+    @Inject(
+            method = "getOrLoad",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<PlayerSkin>> cir) {
         UUID uuid = profile.getId();
 //?} else if <26.1.2 {
     /**
      * In MC 1.21.11+, getOrLoad returns CompletableFuture<Optional<PlayerSkin>>.
      */
-    @Inject(method = "getOrLoad", at = @At("RETURN"), cancellable = true)
+    @Inject(
+            method = "getOrLoad",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
         UUID uuid = profile.id();
 //?} else if <26.2 {
     /** In MC 1.21.11+, getOrLoad returns CompletableFuture<Optional<PlayerSkin>>. */
-    @Inject(method = "getOrLoad", at = @At("RETURN"), cancellable = true)
+    @Inject(
+            method = "getOrLoad",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
         UUID uuid = profile.id();
 //?} else {
     /** In MC 26.2, the async loader was renamed to get. */
-    @Inject(method = "get", at = @At("RETURN"), cancellable = true)
+    @Inject(
+            method = "get",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
         UUID uuid = profile.id();
 //?}

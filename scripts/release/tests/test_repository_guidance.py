@@ -78,6 +78,61 @@ class RepositoryGuidanceTest(unittest.TestCase):
         self.assertIn('${TESTED_SHA}^{tree}', attestation)
         self.assertIn("scripts/release/status_table.py", refresh)
 
+    def test_release_publication_is_recoverable_and_non_destructive(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+            encoding="utf-8"
+        )
+        release_helper = (
+            ROOT / "scripts" / "release" / "github_release.py"
+        ).read_text(encoding="utf-8")
+        release_identity = (
+            ROOT / "scripts" / "release" / "release_identity.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('tags:\n      - "mc*-v*"', workflow)
+        self.assertIn("--kind publications", workflow)
+        self.assertIn("fail-fast: false", workflow)
+        self.assertIn("github_release.py stage", workflow)
+        self.assertIn("github_release.py publish", workflow)
+        self.assertIn("reconcile_publication.py", workflow)
+        self.assertIn("verify_reproducibility.py", workflow)
+        self.assertIn("--rerun-tasks", workflow)
+        self.assertIn("validate_changelog", release_identity)
+        attest_pin = "actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26"
+        self.assertEqual(workflow.count(attest_pin), 2)
+        self.assertIn("sbom-path: build/release/sbom/quick-skin.cdx.json", workflow)
+        combined = workflow + release_helper
+        self.assertNotIn("gh release delete", combined)
+        self.assertNotIn("git push --delete", combined)
+        self.assertNotIn("gh release upload --clobber", combined)
+
+    def test_github_governance_is_declarative_and_fail_closed(self) -> None:
+        config = (
+            ROOT / "release" / "github-governance.json"
+        ).read_text(encoding="utf-8")
+        helper = (
+            ROOT / "scripts" / "release" / "github_governance.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('"Build and verify"', config)
+        self.assertIn('"Packaged E2E gate"', config)
+        self.assertIn('"prevent_self_review": false', config)
+        self.assertIn('"deployment_policies"', config)
+        self.assertIn("refusing to activate governance", helper)
+        self.assertIn("contains unmanaged deployment policies", helper)
+        self.assertNotIn("rulesets/{ruleset_id}", helper)
+        self.assertNotIn("--method DELETE", helper)
+
+    def test_dependency_updates_are_reviewed_pull_requests(self) -> None:
+        dependabot = (ROOT / ".github" / "dependabot.yml").read_text(
+            encoding="utf-8"
+        )
+        for ecosystem in ("github-actions", "gradle", "npm"):
+            with self.subTest(ecosystem=ecosystem):
+                self.assertIn(f"package-ecosystem: {ecosystem}", dependabot)
+        self.assertIn("directory: /.github/claude", dependabot)
+        self.assertIn("interval: monthly", dependabot)
+
     def test_new_guidance_has_no_broken_local_links(self) -> None:
         documents = (
             ROOT / "README.md",

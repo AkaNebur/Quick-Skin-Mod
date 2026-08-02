@@ -98,5 +98,24 @@ public class ClientNetworking {
             ClientNetworkHandler::handleAppearanceSnapshotComplete
         );
 
+        //? if >=1.21 {
+        NetworkManager.registerReceiver(
+                NetworkManager.s2c(), ProtocolAckPayload.TYPE,
+                ProtocolAckPayload.CODEC, ClientNetworkHandler::handleProtocolAck);
+        NetworkManager.registerReceiver(
+                NetworkManager.s2c(), SyncAppearanceV2Payload.TYPE,
+                SyncAppearanceV2Payload.CODEC, ClientNetworkHandler::handleSyncAppearanceV2);
+        NetworkManager.registerReceiver(
+                NetworkManager.s2c(), SendTextureV2Payload.TYPE,
+                SendTextureV2Payload.CODEC, ClientNetworkHandler::handleSendTextureV2);
+        NetworkManager.registerReceiver(
+                NetworkManager.s2c(), SendTextureChunkV2Payload.TYPE,
+                SendTextureChunkV2Payload.CODEC, ClientNetworkHandler::handleSendTextureChunkV2);
+        NetworkManager.registerReceiver(
+                NetworkManager.s2c(), SendAnimationMetadataV2Payload.TYPE,
+                SendAnimationMetadataV2Payload.CODEC,
+                ClientNetworkHandler::handleSendAnimationMetadataV2);
+        //?}
+
     }
 }

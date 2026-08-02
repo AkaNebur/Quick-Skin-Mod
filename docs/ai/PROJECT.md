@@ -11,6 +11,9 @@ repository root.
 - `CONTRIBUTING.md` is the human-facing path from an unfamiliar checkout to a reviewed pull
   request, including an AI-assisted workflow.
 - `README.md` is for users and builders; focused architecture documents own their subjects.
+- `RELEASING.md` owns immutable identity, publication, recovery, provenance, and GitHub governance.
+- [`docs/architecture/decisions/`](../architecture/decisions/0001-postpone-1-21-release-train-consolidation.md)
+  records evidence-backed architectural decisions that must survive individual worktrees.
 
 Do not put operational rules directly in `AGENTS.md` or `CLAUDE.md`, and do not create another root
 instruction file that restates this contract. Add a nested `AGENTS.md` only when a directory
@@ -31,6 +34,12 @@ The active production matrix on this branch contains exactly two artifacts:
 Every artifact targets exactly the Minecraft version in its filename and metadata. A support or
 loader change starts in the release matrix and must pass its validation and mutation tests.
 
+The matrix also names its one canonical release branch. `scripts/release/release_identity.py`
+derives the only valid tag and publication prefix from the sorted Minecraft versions plus the
+logical mod version. A publishing run must be the exact head of that branch. Manual release runs
+are validation-only; only the canonical tag can publish. See `RELEASING.md` for the recoverable,
+immutable workflow and governance activation contract.
+
 ## Version branch model
 
 - `master` is the shared integration branch. Release branches use the naming form
@@ -42,7 +51,9 @@ loader change starts in the release matrix and must pass its validation and muta
   not contain a Minecraft-version list. The matrix checked into each target remains authoritative.
 - A trusted push to `master` creates a target-specific synchronization branch and PR. Clean merges
   are mechanical. Claude may resolve a merge conflict while preserving the target matrix and may
-  make one bounded repair after a failed gate.
+  make one bounded repair after a failed gate. AI jobs have read-only GitHub permissions, check out
+  without persisted credentials, and emit only bounded patch artifacts. A separate job revalidates
+  the patch policy, matrix, and repository tests before receiving write credentials.
 - GITHUB_TOKEN-created PRs and child runs do not recursively start ordinary PR or completion
   workflows, so synchronization explicitly dispatches `build-gate.yml` and `on-demand-e2e.yml`.
   Each gate reports completion through a trusted `repository_dispatch`; the result handler merges
@@ -52,7 +63,8 @@ loader change starts in the release matrix and must pass its validation and muta
   final release branch. They must verify the original trusted run IDs, exact tested commit, ancestry,
   and identical Git trees; never rerun Minecraft merely to populate a badge or attest a changed tree.
 - The marked README release-status table is generated from discovered release branches and each
-  branch's matrix. Do not edit its rows manually or add a branch/version list to its workflow.
+  branch's matrix. Its workflow updates one idempotent automation PR and never pushes directly to
+  `master`. Do not edit its rows manually or add a branch/version list to its workflow.
 - Shared behavior changes start on `master`. A version-only fix starts on its release branch and
   must be reflected in canonical `master` sources when the same behavior applies elsewhere.
 

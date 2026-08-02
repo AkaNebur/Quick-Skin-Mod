@@ -2,8 +2,8 @@ package com.quickskin.mod.client.storage;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.ContentId;
 import com.quickskin.mod.client.concurrent.ClientIoExecutor;
-import com.quickskin.mod.common.util.HashUtil;
 import com.quickskin.mod.common.util.SafeImageReader;
 import com.quickskin.mod.networking.NetworkSecurity;
 import com.quickskin.mod.networking.TextureRequestCoordinator;
@@ -94,7 +94,7 @@ public class NetworkTextureCache {
             long reservedPixels, int reservedBytes) {
         if (!NetworkSecurity.isValidContentId(hash)
                 || !NetworkSecurity.isValidTextureType(textureType)
-                || !hash.equals(HashUtil.computeHash(textureData))
+                || !ContentId.matches(hash, textureData)
                 || NetworkSecurity.getTexturePixelCount(textureData, textureType) < 1) {
             LOGGER.warn("Rejected invalid network texture (id={}, type={}, bytes={})",
                     hash, textureType, textureData == null ? -1 : textureData.length);

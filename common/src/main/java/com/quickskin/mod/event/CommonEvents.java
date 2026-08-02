@@ -4,9 +4,9 @@ package com.quickskin.mod.event;
 import com.quickskin.mod.networking.ServerNetworkHandler;
 //?}
 import com.quickskin.mod.networking.NetworkTransport;
+import com.quickskin.mod.networking.ProtocolNetwork;
 //? if <1.21 {
 import com.quickskin.mod.networking.ServerNetworkHandler;
-import com.quickskin.mod.server.data.QuickSkinPlayerTracker;
 //?} else {
 import com.quickskin.mod.networking.payloads.CooldownUpdatePayload;
 //?}
@@ -61,12 +61,8 @@ public class CommonEvents {
 
             // Send QuickSkin data only to players that have the mod installed
             ServerPlayer serverPlayer = (ServerPlayer) player;
-            //? if <1.21 {
-            boolean hasQuickSkin = NetworkTransport.INSTANCE.canPlayerReceiveQuickSkin(serverPlayer)
-                    || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID());
-            //?} else {
-            boolean hasQuickSkin = NetworkTransport.INSTANCE.canPlayerReceive(serverPlayer, SyncAppearancePayload.TYPE);
-            //?}
+            ProtocolNetwork.classifyServerPeer(serverPlayer);
+            boolean hasQuickSkin = ProtocolNetwork.canReceive(serverPlayer);
 
             if (hasQuickSkin) {
                 // Phase 3: Send all other players' appearances to the joining player
@@ -77,7 +73,10 @@ public class CommonEvents {
 
                 // Send current cooldown status to joining player
                 int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
-                if (cooldownSeconds > 0 && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())) {
+                if (cooldownSeconds > 0
+                        && ProtocolNetwork.canReceiveCooldown(serverPlayer)
+                        && ServerCooldownManager.getInstance()
+                                .isPlayerOnCooldown(player.getUUID())) {
                     long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID());
                     //? if <1.21 {
                     NetworkTransport.INSTANCE.sendCooldownToPlayer(serverPlayer, cooldownEndTime);
@@ -97,16 +96,10 @@ public class CommonEvents {
         // Player quits server
         PlayerEvent.PLAYER_QUIT.register(player -> {
             ServerPlayer serverPlayer = (ServerPlayer) player;
-            boolean removed = serverRuntime.playerDisconnected(
+            serverRuntime.playerDisconnected(
                     serverPlayer.level().getServer(),
                     serverPlayer.getUUID(),
                     serverPlayer.connection);
-
-            //? if <1.21 {
-            if (removed) {
-                QuickSkinPlayerTracker.getInstance().removePlayer(player.getUUID());
-            }
-            //?}
         });
 
         // Player respawns (after death)
@@ -114,8 +107,7 @@ public class CommonEvents {
         PlayerEvent.PLAYER_RESPAWN.register((player, conqueredEnd) -> {
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
-                if (NetworkTransport.INSTANCE.canPlayerReceiveQuickSkin(serverPlayer)
-                        || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID())) {
+                if (ProtocolNetwork.canReceive(serverPlayer)) {
                     ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
                 }
             }
@@ -127,12 +119,7 @@ public class CommonEvents {
             // Re-sync appearance if needed (sometimes skins don't transfer across dimensions)
             if (player instanceof ServerPlayer) {
                 ServerPlayer serverPlayer = (ServerPlayer) player;
-                //? if <1.21 {
-                if (NetworkTransport.INSTANCE.canPlayerReceiveQuickSkin(serverPlayer)
-                        || QuickSkinPlayerTracker.getInstance().isConfirmed(serverPlayer.getUUID())) {
-                //?} else {
-                if (NetworkTransport.INSTANCE.canPlayerReceive(serverPlayer, SyncAppearancePayload.TYPE)) {
-                //?}
+                if (ProtocolNetwork.canReceive(serverPlayer)) {
                     // Phase 3: Re-send all appearances to this player
                     ServerNetworkHandler.sendAllAppearancesToPlayer(serverPlayer);
                 }
@@ -143,9 +130,6 @@ public class CommonEvents {
 
         // Server starting
         LifecycleEvent.SERVER_STARTING.register(server -> {
-            //? if <1.21 {
-            QuickSkinPlayerTracker.getInstance().clear();
-            //?}
             serverRuntime.start(server);
         });
 
@@ -157,9 +141,6 @@ public class CommonEvents {
         // Server stopped
         LifecycleEvent.SERVER_STOPPED.register(server -> {
             serverRuntime.stop(server);
-            //? if <1.21 {
-            QuickSkinPlayerTracker.getInstance().clear();
-            //?}
         });
 
         initialized = true;

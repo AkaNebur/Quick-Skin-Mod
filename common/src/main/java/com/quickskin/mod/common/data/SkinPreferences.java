@@ -11,6 +11,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -26,6 +27,8 @@ public class SkinPreferences {
 
     // Map of skin hash -> preference data
     private Map<String, SkinPreference> preferences = new HashMap<>();
+    // Runtime-only bridge while a verified on-disk alias migration is waiting to be retried.
+    private transient Map<String, String> strongToLegacyFallbacks = new HashMap<>();
 
     /**
      * Individual skin preference
@@ -46,6 +49,10 @@ public class SkinPreferences {
      */
     public synchronized String getModelType(String hash) {
         SkinPreference pref = preferences.get(hash);
+        if (pref == null) {
+            String legacy = aliasFallbacks().get(hash);
+            if (legacy != null) pref = preferences.get(legacy);
+        }
         return pref != null && isModel(pref.modelType) ? pref.modelType : "auto";
     }
 
@@ -68,6 +75,10 @@ public class SkinPreferences {
      */
     public synchronized void remove(String hash) {
         preferences.remove(hash);
+        String legacy = aliasFallbacks().remove(hash);
+        if (legacy != null) preferences.remove(legacy);
+        aliasFallbacks().entrySet().removeIf(entry -> hash != null
+                && hash.equals(entry.getValue()));
     }
 
     /**
@@ -75,6 +86,7 @@ public class SkinPreferences {
      */
     public synchronized void clear() {
         preferences.clear();
+        aliasFallbacks().clear();
     }
 
     /**
@@ -104,30 +116,55 @@ public class SkinPreferences {
      * @param path Path to JSON file
      */
     public synchronized void save(Path path) {
-        Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
         try {
-            // Ensure parent directory exists
-            if (path.getParent() != null) {
-                Files.createDirectories(path.getParent());
-            }
-
             normalize();
-            byte[] encoded = GSON.toJson(this).getBytes(StandardCharsets.UTF_8);
-            if (encoded.length > MAX_FILE_BYTES) {
-                QuickSkin.LOGGER.error("Refusing to save oversized skin preferences {}", path);
-                return;
-            }
-            Files.write(temporary, encoded);
-            atomicReplace(temporary, path);
+            writeVerified(path, preferences);
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Unable to save skin preferences {}", path, e);
-        } finally {
-            try {
-                Files.deleteIfExists(temporary);
-            } catch (IOException cleanupError) {
-                QuickSkin.LOGGER.debug("Unable to remove skin preferences temp file {}",
-                        temporary, cleanupError);
+        }
+    }
+
+    /**
+     * Moves preferences from unambiguous SHA-1 aliases to SHA-256 primaries. The replacement is
+     * fully written and byte-verified before the old on-disk document is replaced; on failure the
+     * in-memory map and the legacy file are both retained.
+     */
+    public synchronized boolean migrateAliases(Map<String, String> aliases, Path path) {
+        if (aliases == null || aliases.isEmpty() || path == null) return false;
+        normalize();
+        Map<String, SkinPreference> migrated = new HashMap<>(preferences);
+        boolean changed = false;
+        for (Map.Entry<String, String> alias : aliases.entrySet()) {
+            ContentId legacy = ContentId.parse(alias.getKey());
+            ContentId strong = ContentId.parse(alias.getValue());
+            if (legacy == null || legacy.algorithm() != ContentId.Algorithm.SHA1
+                    || strong == null || strong.algorithm() != ContentId.Algorithm.SHA256) {
+                continue;
             }
+            SkinPreference oldPreference = migrated.get(alias.getKey());
+            if (oldPreference == null) continue;
+            migrated.putIfAbsent(alias.getValue(), oldPreference);
+            migrated.remove(alias.getKey());
+            changed = true;
+        }
+        if (!changed) return false;
+
+        try {
+            writeVerified(path, migrated);
+            preferences = migrated;
+            for (String strong : aliases.values()) aliasFallbacks().remove(strong);
+            return true;
+        } catch (IOException error) {
+            // Keep the legacy map retryable without making canonical runtime lookups lose the
+            // user's preference. This bridge is transient and never weakens the persisted file.
+            for (Map.Entry<String, String> alias : aliases.entrySet()) {
+                if (preferences.containsKey(alias.getKey())
+                        && !preferences.containsKey(alias.getValue())) {
+                    aliasFallbacks().put(alias.getValue(), alias.getKey());
+                }
+            }
+            QuickSkin.LOGGER.warn("Unable to migrate skin preferences {}", path, error);
+            return false;
         }
     }
 
@@ -149,15 +186,13 @@ public class SkinPreferences {
         }
     }
 
+    private Map<String, String> aliasFallbacks() {
+        if (strongToLegacyFallbacks == null) strongToLegacyFallbacks = new HashMap<>();
+        return strongToLegacyFallbacks;
+    }
+
     private static boolean isHash(String hash) {
-        if (hash == null || hash.length() != 40) return false;
-        for (int index = 0; index < hash.length(); index++) {
-            char value = hash.charAt(index);
-            if (!((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f'))) {
-                return false;
-            }
-        }
-        return true;
+        return ContentId.parse(hash) != null;
     }
 
     private static boolean isModel(String model) {
@@ -170,6 +205,33 @@ public class SkinPreferences {
                     StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException ignored) {
             Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static void writeVerified(
+            Path path, Map<String, SkinPreference> preferenceSnapshot) throws IOException {
+        Path parent = path.toAbsolutePath().normalize().getParent();
+        if (parent == null) throw new IOException("Skin preferences have no parent directory");
+        Files.createDirectories(parent);
+
+        SkinPreferences document = new SkinPreferences();
+        document.preferences = new HashMap<>(preferenceSnapshot);
+        document.normalize();
+        byte[] encoded = GSON.toJson(document).getBytes(StandardCharsets.UTF_8);
+        if (encoded.length > MAX_FILE_BYTES) {
+            throw new IOException("Skin preferences exceed the size limit");
+        }
+
+        Path temporary = Files.createTempFile(parent, ".skin-preferences-", ".tmp");
+        try {
+            Files.write(temporary, encoded);
+            byte[] verified = BoundedFileReader.readBytes(temporary, MAX_FILE_BYTES);
+            if (!Arrays.equals(encoded, verified)) {
+                throw new IOException("Skin preferences temp-file verification failed");
+            }
+            atomicReplace(temporary, path.toAbsolutePath().normalize());
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 }

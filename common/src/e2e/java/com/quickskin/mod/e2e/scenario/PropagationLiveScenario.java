@@ -177,7 +177,7 @@ public final class PropagationLiveScenario implements Scenario {
         List<Step> steps = new ArrayList<>();
         steps.add(baseline(mc, v, role));
 
-        // 1. Speak first so the server marks B confirmed and relays A's live update to B.
+        // 1. Speak first so the exact session is ready and the server relays A's live update to B.
         steps.add(Step.of("confirm_self")
                 .action(() -> {
                     try {

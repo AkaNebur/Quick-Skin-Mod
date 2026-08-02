@@ -1,8 +1,8 @@
 name: Sync version branches
 
-# Shared changes land on master. Every release branch is discovered from the remote naming
-# contract; its own release matrix remains the only lane inventory. A clean merge is mechanical.
-# Claude is invoked only for a conflict, on this trusted master-push event.
+# Shared changes land on master. Each release branch is discovered from GitHub and keeps its own
+# matrix authoritative. The planning job has read-only GitHub access; if Claude is needed it can
+# only produce a bounded patch artifact. A separate deterministic writer validates and publishes it.
 on:
   push:
     branches:
@@ -15,10 +15,8 @@ on:
         type: string
 
 permissions:
-  actions: write
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
 
 concurrency:
   group: sync-version-branches
@@ -54,12 +52,18 @@ jobs:
           fi
           printf 'value=%s\n' "$value" >> "$GITHUB_OUTPUT"
 
-  prepare:
-    name: Port master to ${{ matrix.target }}
+  propose:
+    name: Prepare read-only port to ${{ matrix.target }}
     needs: discover
-    if: ${{ needs.discover.outputs.targets != '[]' }}
+    if: >-
+      always() &&
+      needs.discover.result == 'success' &&
+      needs.discover.outputs.targets != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -67,14 +71,14 @@ jobs:
         target: ${{ fromJSON(needs.discover.outputs.targets) }}
 
     steps:
-      - name: Check out the exact target branch
+      - name: Check out the exact target branch without credentials
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ matrix.target }}
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
-      - name: Prepare target-specific merge
+      - name: Prepare the deterministic merge
         id: merge
         shell: bash
         env:
@@ -82,48 +86,55 @@ jobs:
           TARGET_BRANCH: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git fetch --no-tags origin master
-          if git merge-base --is-ancestor origin/master HEAD; then
-            printf 'needed=false\n' >> "$GITHUB_OUTPUT"
-            printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
-            printf 'existing=false\n' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          python3 scripts/release/version_branches.py --target "$TARGET_BRANCH" > /dev/null
+          git fetch --no-tags origin "$GITHUB_SHA"
+          source_sha="$GITHUB_SHA"
+
           existing_branch="$(gh pr list --state open --base "$TARGET_BRANCH" --limit 100 \
             --json headRefName,labels \
             --jq '[.[] | select(.headRefName | startswith("automation/sync/")) | select([.labels[].name] | index("automated-version-sync"))][0].headRefName // ""')"
           if [[ -n "$existing_branch" ]]; then
             sync_branch="$existing_branch"
             git fetch --no-tags origin "$sync_branch"
-            git switch -C "$sync_branch" FETCH_HEAD
-            printf 'existing=true\n' >> "$GITHUB_OUTPUT"
+            git switch --detach FETCH_HEAD
+            existing=true
           else
             slug="${TARGET_BRANCH//[^A-Za-z0-9._-]/-}"
             sync_branch="automation/sync/${slug}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-            git switch -c "$sync_branch"
-            printf 'existing=false\n' >> "$GITHUB_OUTPUT"
+            existing=false
           fi
+          work_head_sha="$(git rev-parse HEAD)"
+
           printf 'branch=%s\n' "$sync_branch" >> "$GITHUB_OUTPUT"
-          if git merge-base --is-ancestor origin/master HEAD; then
+          printf 'existing=%s\n' "$existing" >> "$GITHUB_OUTPUT"
+          printf 'source_sha=%s\n' "$source_sha" >> "$GITHUB_OUTPUT"
+          printf 'work_head_sha=%s\n' "$work_head_sha" >> "$GITHUB_OUTPUT"
+
+          if git merge-base --is-ancestor "$source_sha" "$work_head_sha"; then
             printf 'needed=false\n' >> "$GITHUB_OUTPUT"
             printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
           set +e
-          git merge --no-ff --no-commit origin/master
+          git merge --no-ff --no-commit "$source_sha"
           merge_status=$?
           set -e
           printf 'needed=true\n' >> "$GITHUB_OUTPUT"
           if [[ $merge_status -eq 0 ]]; then
-            git commit -m "chore: sync master into $TARGET_BRANCH"
             printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
           else
+            conflicts="$(git diff --name-only --diff-filter=U \
+              | jq --raw-input --slurp --compact-output 'split("\n")[:-1]')"
+            [[ "$conflicts" != '[]' ]]
+            index_sha="$(git diff --cached --binary --full-index HEAD \
+              | sha256sum | cut -d ' ' -f 1)"
+            printf 'conflicts=%s\n' "$conflicts" >> "$GITHUB_OUTPUT"
+            printf 'index_sha=%s\n' "$index_sha" >> "$GITHUB_OUTPUT"
             printf 'conflicted=true\n' >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install JDKs for conflict repair
+      - name: Install all supported JDKs for conflict analysis
         if: steps.merge.outputs.conflicted == 'true'
         uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
         with:
@@ -133,7 +144,21 @@ jobs:
             21
             25
 
-      - name: Resolve port conflicts with Claude
+      - name: Install Node for the locked Claude CLI
+        if: steps.merge.outputs.conflicted == 'true'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+
+      - name: Install locked Claude Code
+        if: steps.merge.outputs.conflicted == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/claude-cli"
+          cp .github/claude/package.json .github/claude/package-lock.json \
+            "$RUNNER_TEMP/claude-cli/"
+          (cd "$RUNNER_TEMP/claude-cli" && npm ci)
+
+      - name: Resolve conflict contents without repository credentials
         if: steps.merge.outputs.conflicted == 'true'
         shell: bash
         env:
@@ -142,52 +167,217 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$CLAUDE_CODE_OAUTH_TOKEN"
-          npm install -g @anthropic-ai/claude-code@2.1.220
-          claude --print "Resolve the current Git merge conflicts while porting master into \
-          release branch $TARGET_BRANCH. Open AGENTS.md and read every @-imported Markdown file \
-          completely. Preserve the target branch's exact Minecraft version, loader pair, release \
-          matrix, overlays, metadata and Java level. Port shared behavior semantically through its \
-          era-specific adapters. Never edit generated or build output. Run the smallest relevant \
-          validation, do not commit or push, and leave no unmerged paths." --model claude-opus-5 \
+          "$RUNNER_TEMP/claude-cli/node_modules/.bin/claude" --print \
+            "Resolve only the currently unmerged file contents while porting master into release \
+            branch $TARGET_BRANCH. Open AGENTS.md and read every imported Markdown file completely. \
+            Preserve the branch's Minecraft version, loader pair, release matrix, overlays, metadata \
+            and Java level. Do not run git add, git commit, git push or gh; do not edit any path that \
+            was not already conflicted. Do not alter workflows, tests, matrices, guardrails or build \
+            configuration. Leave the resolved tracked files in the worktree for the deterministic \
+            patch packager." \
+            --model claude-opus-5 \
             --allowedTools Read,Edit,Write,Bash \
             --permission-mode acceptEdits
-          test -z "$(git diff --name-only --diff-filter=U)"
-          git diff --check
-          git add -A
-          git commit -m "chore: sync master into $TARGET_BRANCH"
 
-      - name: Validate the port before publishing it
-        if: steps.merge.outputs.needed == 'true'
+      - name: Enforce the AI conflict boundary
+        if: steps.merge.outputs.conflicted == 'true'
         shell: bash
+        env:
+          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+          EXPECTED_INDEX_SHA: ${{ steps.merge.outputs.index_sha }}
+          WORK_HEAD_SHA: ${{ steps.merge.outputs.work_head_sha }}
+          SOURCE_SHA: ${{ steps.merge.outputs.source_sha }}
         run: |
           set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$WORK_HEAD_SHA" ]]
+          [[ "$(git rev-parse MERGE_HEAD)" == "$SOURCE_SHA" ]]
+          jq -r '.[]' <<< "$CONFLICTS" > "$RUNNER_TEMP/conflicted-paths.txt"
+          git diff --name-only --diff-filter=U > "$RUNNER_TEMP/current-conflicts.txt"
+          diff -u "$RUNNER_TEMP/conflicted-paths.txt" "$RUNNER_TEMP/current-conflicts.txt"
+          actual_index_sha="$(git diff --cached --binary --full-index HEAD \
+            | sha256sum | cut -d ' ' -f 1)"
+          [[ "$actual_index_sha" == "$EXPECTED_INDEX_SHA" ]]
+          python3 scripts/ci/ai_patch_policy.py worktree \
+            --mode conflict \
+            --allowed-paths "$RUNNER_TEMP/conflicted-paths.txt"
+          mapfile -t conflict_paths < "$RUNNER_TEMP/conflicted-paths.txt"
+          git add -- "${conflict_paths[@]}"
+          test -z "$(git diff --name-only --diff-filter=U)"
+
+      - name: Package the proposed port
+        shell: bash
+        env:
+          CONFLICTED: ${{ steps.merge.outputs.conflicted }}
+          CONFLICTS: ${{ steps.merge.outputs.conflicts || '[]' }}
+          EXISTING: ${{ steps.merge.outputs.existing }}
+          NEEDED: ${{ steps.merge.outputs.needed }}
+          SOURCE_SHA: ${{ steps.merge.outputs.source_sha }}
+          SYNC_BRANCH: ${{ steps.merge.outputs.branch }}
+          TARGET_BRANCH: ${{ matrix.target }}
+          WORK_HEAD_SHA: ${{ steps.merge.outputs.work_head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$NEEDED" == true ]]; then
+            python3 scripts/ci/ai_patch_policy.py staged \
+              --mode port --write-patch version-port.patch
+          fi
+          jq -n \
+            --arg target "$TARGET_BRANCH" \
+            --arg branch "$SYNC_BRANCH" \
+            --arg work_head_sha "$WORK_HEAD_SHA" \
+            --arg source_sha "$SOURCE_SHA" \
+            --argjson conflicts "$CONFLICTS" \
+            --argjson needed "$NEEDED" \
+            --argjson conflicted "$CONFLICTED" \
+            --argjson existing "$EXISTING" \
+            '{target:$target,branch:$branch,work_head_sha:$work_head_sha,source_sha:$source_sha,needed:$needed,conflicted:$conflicted,conflicts:$conflicts,existing:$existing}' \
+            > version-port-plan.json
+
+      - name: Upload the read-only port proposal
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: version-port-${{ matrix.target }}
+          path: |
+            version-port-plan.json
+            version-port.patch
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Validate and publish port to ${{ matrix.target }}
+    needs:
+      - discover
+      - propose
+    if: >-
+      always() &&
+      needs.discover.result == 'success' &&
+      needs.discover.outputs.targets != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: write
+      issues: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        target: ${{ fromJSON(needs.discover.outputs.targets) }}
+
+    steps:
+      - name: Download the matching port proposal
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: version-port-${{ matrix.target }}
+          path: proposal
+
+      - name: Validate proposal identity
+        id: plan
+        shell: bash
+        env:
+          TARGET_BRANCH: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          jq -e \
+            --arg target "$TARGET_BRANCH" \
+            --arg source "$GITHUB_SHA" \
+            '.target == $target and .source_sha == $source and (.work_head_sha | test("^[0-9a-f]{40}$")) and (.branch | startswith("automation/sync/")) and (.conflicted | type == "boolean") and (.conflicts | type == "array")' \
+            proposal/version-port-plan.json > /dev/null
+          for key in branch conflicted existing needed source_sha work_head_sha; do
+            printf '%s=%s\n' "$key" "$(jq -r ".$key" proposal/version-port-plan.json)" \
+              >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Check out trusted controller policy
+        if: steps.plan.outputs.needed == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ steps.plan.outputs.source_sha }}
+          path: controller
+          persist-credentials: false
+
+      - name: Check out exact port base with writer credentials
+        if: steps.plan.outputs.needed == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ steps.plan.outputs.work_head_sha }}
+          fetch-depth: 0
+          path: port
+          persist-credentials: true
+
+      - name: Apply and deterministically validate the proposal
+        if: steps.plan.outputs.needed == 'true'
+        working-directory: port
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ steps.plan.outputs.branch }}
+          SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
+          TARGET_BRANCH: ${{ matrix.target }}
+          WORK_HEAD_SHA: ${{ steps.plan.outputs.work_head_sha }}
+        run: |
+          set -euo pipefail
+          if git fetch --no-tags origin "$HEAD_BRANCH"; then
+            [[ "$(git rev-parse FETCH_HEAD)" == "$WORK_HEAD_SHA" ]]
+          fi
+          [[ "$(git rev-parse HEAD)" == "$WORK_HEAD_SHA" ]]
+          git fetch --no-tags origin "$SOURCE_SHA"
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          if [[ "$(jq -r .conflicted ../proposal/version-port-plan.json)" == true ]]; then
+            jq -r '.conflicts[]' ../proposal/version-port-plan.json \
+              > "$RUNNER_TEMP/conflicted-paths.txt"
+            python3 ../controller/scripts/ci/ai_patch_policy.py paths \
+              --mode conflict --paths-file "$RUNNER_TEMP/conflicted-paths.txt"
+          fi
+          python3 ../controller/scripts/ci/ai_patch_policy.py patch \
+            --mode port --patch ../proposal/version-port.patch
+          git apply --check --index ../proposal/version-port.patch
+          git apply --index ../proposal/version-port.patch
+          if [[ "$(jq -r .conflicted ../proposal/version-port-plan.json)" == true ]]; then
+            python3 ../controller/scripts/ci/ai_patch_policy.py paths \
+              --mode conflict --paths-file "$RUNNER_TEMP/conflicted-paths.txt"
+          fi
+          python3 ../controller/scripts/ci/ai_patch_policy.py staged --mode port
+          git diff --cached --check
           python3 -m py_compile \
+            scripts/ci/ai_patch_policy.py \
+            scripts/release/github_governance.py \
+            scripts/release/github_release.py \
             scripts/release/matrix.py \
+            scripts/release/reconcile_publication.py \
+            scripts/release/release_identity.py \
             scripts/release/status_table.py \
             scripts/release/verify_release.py \
+            scripts/release/verify_reproducibility.py \
             scripts/release/version_branches.py
+          python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
           python3 -m unittest discover -s scripts/release/tests -p 'test_*.py' -v
           python3 scripts/release/matrix.py \
             --matrix release/release-matrix.json > /dev/null
-          git diff --check "origin/${{ matrix.target }}...HEAD"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          tree="$(git write-tree)"
+          commit="$(printf 'chore: sync master into %s\n' "$TARGET_BRANCH" \
+            | git commit-tree "$tree" -p "$WORK_HEAD_SHA" -p "$SOURCE_SHA")"
+          [[ "$(git rev-parse "${commit}^{tree}")" == "$tree" ]]
+          [[ "$(git rev-parse "${commit}^1")" == "$WORK_HEAD_SHA" ]]
+          [[ "$(git rev-parse "${commit}^2")" == "$SOURCE_SHA" ]]
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+        id: validated
 
-      - name: Push the isolated port branch
-        if: steps.merge.outputs.needed == 'true'
+      - name: Push the validated port and open or update its PR
+        if: steps.plan.outputs.needed == 'true'
+        working-directory: port
         shell: bash
         env:
-          SYNC_BRANCH: ${{ steps.merge.outputs.branch }}
-        run: git push origin "HEAD:refs/heads/$SYNC_BRANCH"
-
-      - name: Open the port PR and dispatch both gates
-        if: steps.merge.outputs.needed == 'true'
-        shell: bash
-        env:
+          EXISTING_PORT: ${{ steps.plan.outputs.existing }}
           GH_TOKEN: ${{ github.token }}
-          SYNC_BRANCH: ${{ steps.merge.outputs.branch }}
+          PORT_COMMIT: ${{ steps.validated.outputs.commit }}
+          SYNC_BRANCH: ${{ steps.plan.outputs.branch }}
           TARGET_BRANCH: ${{ matrix.target }}
-          EXISTING_PORT: ${{ steps.merge.outputs.existing }}
         run: |
           set -euo pipefail
+          git push origin "$PORT_COMMIT:refs/heads/$SYNC_BRANCH"
           gh label create automated-version-sync \
             --color 1D76DB \
             --description 'Trusted master-to-version synchronization' \

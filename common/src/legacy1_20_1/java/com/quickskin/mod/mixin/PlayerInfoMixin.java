@@ -63,7 +63,14 @@ public abstract class PlayerInfoMixin implements com.quickskin.mod.client.compat
     // Throttle logging: only log once per player per second to avoid spam
     private long lastLogTime = 0;
 
-    @Inject(method = "getSkinLocation", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "getSkinLocation",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$onGetSkinLocation(CallbackInfoReturnable<ResourceLocation> cir) {
         boolean deferring = CPMCompatIntegration.shouldDeferToCPM();
         long now2 = System.currentTimeMillis();
@@ -151,7 +158,14 @@ public abstract class PlayerInfoMixin implements com.quickskin.mod.client.compat
     /**
      * Inject into getModelName to override with QuickSkin model type
      */
-    @Inject(method = "getModelName", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "getModelName",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$onGetModelName(CallbackInfoReturnable<String> cir) {
         if (CPMCompatIntegration.shouldDeferToCPM()) return;
 
@@ -191,7 +205,14 @@ public abstract class PlayerInfoMixin implements com.quickskin.mod.client.compat
     /**
      * Inject into getCapeLocation to override with QuickSkin cape
      */
-    @Inject(method = "getCapeLocation", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "getCapeLocation",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$onGetCapeLocation(CallbackInfoReturnable<ResourceLocation> cir) {
         if (CPMCompatIntegration.shouldDeferToCPM()) return;
 

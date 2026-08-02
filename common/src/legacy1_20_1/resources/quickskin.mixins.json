@@ -12,15 +12,12 @@
     "MixinAbstractClientPlayer",
     "MixinSkinManager",
     "PanoramaRendererMixin",
-    "PreviewEquipmentMixin",
-    "compat.ReplayModCompatMixin",
-    "compat.PasConfiguratorMixin",
-    "compat.PasConfiguratorAccessor"
+    "PreviewEquipmentMixin"
   ],
   "mixins": [
   ],
   "injectors": {
-    "defaultRequire": 0
+    "defaultRequire": 1
   },
   "overwrite": {
     "conformVisibility": true

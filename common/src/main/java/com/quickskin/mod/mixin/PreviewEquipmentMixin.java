@@ -43,7 +43,10 @@ public class PreviewEquipmentMixin {
     @Inject(
             method = "getItemBySlot(Lnet/minecraft/world/entity/EquipmentSlot;)Lnet/minecraft/world/item/ItemStack;",
             at = @At("HEAD"),
-            cancellable = true)
+            cancellable = true,
+            require = 0,
+            expect = 1,
+            allow = 1)
     private void quickskin$suppressPreviewEquipment(EquipmentSlot slot,
                                                     CallbackInfoReturnable<ItemStack> cir) {
         if (PlayerModelRenderer.suppressesPreviewEquipment((Player) (Object) this, slot)) {
