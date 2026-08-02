@@ -125,4 +125,21 @@ class TextureTransferRateLimiterTest {
         assertTrue(limiter.allowAppearanceSnapshotRequest(player, firstConnection));
         assertTrue(limiter.allowAppearanceSnapshotRequest(player, replacementConnection));
     }
+
+    @Test
+    void helloAdmissionIsABoundedExactConnectionBudget() {
+        UUID player = UUID.randomUUID();
+        Object firstConnection = new Object();
+        Object replacementConnection = new Object();
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            assertTrue(limiter.allowProtocolHello(player, firstConnection));
+        }
+        assertFalse(limiter.allowProtocolHello(player, firstConnection));
+        assertTrue(limiter.allowProtocolHello(player, replacementConnection));
+
+        limiter.removeSession(player, firstConnection);
+        assertTrue(limiter.allowProtocolHello(player, firstConnection));
+        assertTrue(limiter.allowProtocolHello(player, replacementConnection));
+    }
 }

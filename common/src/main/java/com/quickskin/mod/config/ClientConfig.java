@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.BackgroundStyle;
+import com.quickskin.mod.common.data.ContentId;
 import com.quickskin.mod.common.data.SkinSortMode;
 import com.quickskin.mod.common.util.BoundedFileReader;
 import com.quickskin.mod.platform.PlatformHelper;
@@ -14,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -139,7 +141,7 @@ public class ClientConfig {
     /**
      * Save configuration to file
      */
-    public synchronized void save() {
+    public synchronized boolean save() {
         Path configPath = getConfigPath();
 
         try {
@@ -149,8 +151,10 @@ public class ClientConfig {
             normalize();
             String json = GSON.toJson(this);
             writeAtomically(configPath, json);
+            return true;
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Could not save client config {}", configPath, e);
+            return false;
         }
     }
 
@@ -334,18 +338,26 @@ public class ClientConfig {
     }
 
     private static void writeAtomically(Path target, String content) throws IOException {
-        Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+        Path parent = target.toAbsolutePath().normalize().getParent();
+        if (parent == null) throw new IOException("Client configuration has no parent directory");
+        Files.createDirectories(parent);
+        Path temporary = Files.createTempFile(parent, ".quickskin-client-", ".tmp");
         try {
             byte[] encoded = content.getBytes(StandardCharsets.UTF_8);
             if (encoded.length > MAX_CONFIG_BYTES) {
                 throw new IOException("Client configuration exceeds the size limit");
             }
             Files.write(temporary, encoded);
+            byte[] verified = BoundedFileReader.readBytes(temporary, MAX_CONFIG_BYTES);
+            if (!Arrays.equals(encoded, verified)) {
+                throw new IOException("Client configuration temp-file verification failed");
+            }
             try {
-                Files.move(temporary, target,
+                Files.move(temporary, target.toAbsolutePath().normalize(),
                         StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException ignored) {
-                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+                Files.move(temporary, target.toAbsolutePath().normalize(),
+                        StandardCopyOption.REPLACE_EXISTING);
             }
         } finally {
             Files.deleteIfExists(temporary);
@@ -354,12 +366,6 @@ public class ClientConfig {
 
     private static String validHashOrEmpty(String value) {
         if (value == null || value.isEmpty()) return "";
-        if (value.length() != 40) return "";
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            if (!((character >= '0' && character <= '9')
-                    || (character >= 'a' && character <= 'f'))) return "";
-        }
-        return value;
+        return ContentId.parse(value) != null ? value : "";
     }
 }

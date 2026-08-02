@@ -555,6 +555,9 @@ def client_command(
                 f"-Dquickskin.e2e.role={role}",
                 f"-Dquickskin.e2e.scenario={scenario}",
                 f"-Dquickskin.e2e.version={row['runtime_version']}",
+                # Exercise injector `expect` counts in packaged clients without making optional
+                # integrations fail-closed in ordinary production launches.
+                "-Dmixin.debug.countInjections=true",
                 "-Dfml.earlyprogresswindow=false",
             ],
         }

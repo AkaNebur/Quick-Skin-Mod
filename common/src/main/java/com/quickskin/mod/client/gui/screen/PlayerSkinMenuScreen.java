@@ -202,14 +202,14 @@ public class PlayerSkinMenuScreen extends Screen {
         }
 
         LocalAssetManager assets = LocalAssetManager.getInstance();
-        List<Path> directories = assets.getScannedDirectories();
-        ClientIoExecutor.supplyAsync(() -> LocalAssetFolderWatch.fingerprint(directories))
+        LocalAssetManager.ScanRequest scanRequest = assets.snapshotScanRequest();
+        ClientIoExecutor.supplyAsync(() -> LocalAssetFolderWatch.fingerprint(scanRequest.directories()))
                 .whenComplete((fingerprint, error) -> client.execute(() -> {
                     localAssetWatch.finishPoll();
                     if (error != null || fingerprint == null) {
                         return;
                     }
-                    if (assets.refreshIfChanged(fingerprint)) {
+                    if (assets.refreshIfChanged(scanRequest, fingerprint)) {
                         applyExternalSkinFolderChange();
                     }
                 }));
@@ -1642,7 +1642,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 LocalAssetManager.getInstance().reload();
 
                 // Get the metadata for the saved file
-                String hash = com.quickskin.mod.common.util.HashUtil.computeFileHash(skinPath);
+                String hash = com.quickskin.mod.common.util.HashUtil.computeFileContentId(skinPath);
                 if (hash != null) {
                     AssetMetadata metadata = LocalAssetManager.getInstance().getMetadata(hash);
 

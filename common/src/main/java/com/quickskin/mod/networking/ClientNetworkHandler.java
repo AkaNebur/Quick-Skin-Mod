@@ -9,6 +9,10 @@ import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.util.SafeImageReader;
 import com.quickskin.mod.common.event.InternalEventBus;
 import com.quickskin.mod.common.event.ServerConfigSyncEvent;
+import com.quickskin.mod.networking.protocol.ProtocolAcknowledgement;
+import com.quickskin.mod.networking.protocol.ProtocolCapability;
+import com.quickskin.mod.networking.protocol.ProtocolProfile;
+import com.quickskin.mod.networking.protocol.ProtocolSessions;
 //? if <1.21 {
 import com.quickskin.mod.networking.packets.PacketHelper;
 //?} else {
@@ -45,6 +49,36 @@ public class ClientNetworkHandler {
     private static long lastTransparencyReloadMillis;
     private static final long TRANSPARENCY_RELOAD_INTERVAL_MILLIS = 30_000L;
 
+    /** Accepts only an acknowledgement tied to this exact live connection and hello nonce. */
+    //? if <1.21 {
+    public static void handleProtocolAck(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        long nonce = buf.readLong();
+        ProtocolAcknowledgement acknowledgement = new ProtocolAcknowledgement(
+                buf.readBoolean(), buf.readInt(), buf.readLong(), buf.readInt(), buf.readInt());
+    //?} else {
+    public static void handleProtocolAck(
+            ProtocolAckPayload payload, NetworkManager.PacketContext context) {
+        long nonce = payload.nonce();
+        ProtocolAcknowledgement acknowledgement = payload.acknowledgement();
+    //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !ClientTextureIngressLimiter.getInstance().allowControlBytes(29)) return;
+        Object packetPlayer = context.getPlayer();
+        if (!(packetPlayer instanceof net.minecraft.client.player.LocalPlayer localPlayer)) return;
+        ProtocolProfile acceptedProfile = ProtocolSessions.getInstance().acceptClientAcknowledgement(
+                localPlayer.getUUID(), sourceConnection, nonce, acknowledgement);
+        if (acceptedProfile.negotiated()) {
+            context.queue(() -> {
+                if (!isCurrentConnection(sourceConnection)) return;
+                NetworkSyncService.getInstance().onProtocolAcknowledged(sourceConnection);
+            });
+        } else if (!"stale-protocol-ack".equals(acceptedProfile.reason())) {
+            LOGGER.warn("QuickSkin protocol negotiation failed: {}", acceptedProfile.reason());
+        }
+    }
+
     /**
      * Handles appearance sync from server
      */
@@ -60,16 +94,17 @@ public class ClientNetworkHandler {
     public static void handleSyncAppearance(SyncAppearancePayload payload, NetworkManager.PacketContext context) {
     //?}
         Object sourceConnection = packetConnectionIdentity(context);
-        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsWireMode(sourceConnection, false)) return;
         //? if <1.21 {
-        if (!NetworkSecurity.isValidLocalAppearanceId(skinId, "skin")
-                || !NetworkSecurity.isValidLocalAppearanceId(capeId, "cape")
+        if (!NetworkSecurity.isValidLegacyAppearanceId(skinId, "skin")
+                || !NetworkSecurity.isValidLegacyAppearanceId(capeId, "cape")
                 || !NetworkSecurity.isValidModel(model)
                 || !ClientTextureIngressLimiter.getInstance()
                         .allowControlBytes(controlBytes(skinId, capeId, model))) return;
         //?} else {
-        if (!NetworkSecurity.isValidLocalAppearanceId(payload.skinId(), "skin")
-                || !NetworkSecurity.isValidLocalAppearanceId(payload.capeId(), "cape")
+        if (!NetworkSecurity.isValidLegacyAppearanceId(payload.skinId(), "skin")
+                || !NetworkSecurity.isValidLegacyAppearanceId(payload.capeId(), "cape")
                 || !NetworkSecurity.isValidModel(payload.model())
                 || !ClientTextureIngressLimiter.getInstance().allowControlBytes(
                         controlBytes(payload.skinId(), payload.capeId(), payload.model()))) return;
@@ -77,12 +112,12 @@ public class ClientNetworkHandler {
         context.queue(() -> {
             if (!isCurrentConnection(sourceConnection)) return;
             //? if <1.21 {
-            if (!NetworkSecurity.isValidLocalAppearanceId(skinId, "skin")
-                    || !NetworkSecurity.isValidLocalAppearanceId(capeId, "cape")
+            if (!NetworkSecurity.isValidLegacyAppearanceId(skinId, "skin")
+                    || !NetworkSecurity.isValidLegacyAppearanceId(capeId, "cape")
                     || !NetworkSecurity.isValidModel(model)) return;
             //?} else {
-            if (!NetworkSecurity.isValidLocalAppearanceId(payload.skinId(), "skin")
-                    || !NetworkSecurity.isValidLocalAppearanceId(payload.capeId(), "cape")
+            if (!NetworkSecurity.isValidLegacyAppearanceId(payload.skinId(), "skin")
+                    || !NetworkSecurity.isValidLegacyAppearanceId(payload.capeId(), "cape")
                     || !NetworkSecurity.isValidModel(payload.model())) return;
             //?}
             //? if <1.21 {
@@ -117,6 +152,47 @@ public class ClientNetworkHandler {
         });
     }
 
+    //? if <1.21 {
+    public static void handleSyncAppearanceV2(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        UUID receivedPlayerId = PacketHelper.readPlayerId(buf);
+        String receivedSkinId = PacketHelper.readString(
+                buf, TextureTransferLimits.MAX_APPEARANCE_ID_BYTES);
+        String receivedCapeId = PacketHelper.readString(
+                buf, TextureTransferLimits.MAX_APPEARANCE_ID_BYTES);
+        String receivedModel = PacketHelper.readString(buf, TextureTransferLimits.MAX_MODEL_BYTES);
+    //?} else {
+    public static void handleSyncAppearanceV2(
+            SyncAppearanceV2Payload payload, NetworkManager.PacketContext context) {
+        UUID receivedPlayerId = payload.playerId();
+        String receivedSkinId = payload.skinId();
+        String receivedCapeId = payload.capeId();
+        String receivedModel = payload.model();
+    //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsWireMode(sourceConnection, true)
+                || !NetworkSecurity.isValidV2AppearanceId(receivedSkinId, "skin")
+                || !NetworkSecurity.isValidV2AppearanceId(receivedCapeId, "cape")
+                || !NetworkSecurity.isValidModel(receivedModel)
+                || !ClientTextureIngressLimiter.getInstance().allowControlBytes(
+                        controlBytes(receivedSkinId, receivedCapeId, receivedModel))) return;
+        context.queue(() -> {
+            if (!isCurrentConnection(sourceConnection)
+                    || !acceptsWireMode(sourceConnection, true)) return;
+            Minecraft minecraft = Minecraft.getInstance();
+            boolean ownPlayerUpdate = minecraft.player != null
+                    && receivedPlayerId.equals(minecraft.player.getUUID());
+            if (ownPlayerUpdate) {
+                NetworkSyncService.getInstance().confirmAppearance(
+                        receivedSkinId, receivedCapeId, receivedModel);
+                return;
+            }
+            PlayerAppearanceService.getInstance().applyLookFromNetwork(
+                    receivedPlayerId, receivedSkinId, receivedCapeId, receivedModel);
+        });
+    }
+
     /**
      * Handles texture data from server
      */
@@ -131,17 +207,18 @@ public class ClientNetworkHandler {
     public static void handleSendTexture(SendTexturePayload payload, NetworkManager.PacketContext context) {
     //?}
         Object sourceConnection = packetConnectionIdentity(context);
-        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsWireMode(sourceConnection, false)) return;
         //? if <1.21 {
         if (!NetworkSecurity.isValidTextureType(textureType)
-                || !NetworkSecurity.isValidContentId(hash)
+                || !NetworkSecurity.isValidLegacyContentId(hash)
                 || !ClientTextureIngressLimiter.getInstance().allowWireBytes(imageData.length)) return;
         String receivedTextureType = textureType;
         String receivedHash = hash;
         byte[] receivedImageData = imageData;
         //?} else {
         if (!NetworkSecurity.isValidTextureType(payload.textureType())
-                || !NetworkSecurity.isValidContentId(payload.hash())
+                || !NetworkSecurity.isValidLegacyContentId(payload.hash())
                 || !ClientTextureIngressLimiter.getInstance()
                         .allowWireBytes(payload.imageData().length)) return;
         String receivedTextureType = payload.textureType();
@@ -189,6 +266,70 @@ public class ClientNetworkHandler {
         });
     }
 
+    //? if <1.21 {
+    public static void handleSendTextureV2(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String receivedTextureType = PacketHelper.readString(
+                buf, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+        String receivedHash = PacketHelper.readString(
+                buf, TextureTransferLimits.MAX_CONTENT_ID_BYTES);
+        byte[] receivedImageData = PacketHelper.readByteArray(
+                buf, TextureTransferLimits.MAX_DIRECT_TEXTURE_BYTES);
+    //?} else {
+    public static void handleSendTextureV2(
+            SendTextureV2Payload payload, NetworkManager.PacketContext context) {
+        String receivedTextureType = payload.textureType();
+        String receivedHash = payload.contentId();
+        byte[] receivedImageData = payload.imageData();
+    //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        ProtocolProfile profile = ProtocolSessions.getInstance().clientProfile(sourceConnection);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsWireMode(sourceConnection, true)
+                || !NetworkSecurity.isValidTextureType(receivedTextureType)
+                || !NetworkSecurity.isValidStrongContentId(receivedHash)
+                || receivedImageData.length > profile.maximumTextureBytes()
+                || !ClientTextureIngressLimiter.getInstance()
+                        .allowWireBytes(receivedImageData.length)) return;
+        context.queue(() -> {
+            if (!isCurrentConnection(sourceConnection)
+                    || !acceptsWireMode(sourceConnection, true)) return;
+            var cache = com.quickskin.mod.client.storage.NetworkTextureCache.getInstance();
+            if (cache.containsTexture(receivedHash, receivedTextureType)) {
+                onTextureStored(receivedTextureType, receivedHash);
+                return;
+            }
+            if (!ClientTextureIngressLimiter.getInstance()
+                    .allowDecode(receivedImageData, receivedTextureType)) return;
+            long generation = cache.generation();
+            ClientIoExecutor.supplyAsync(() -> cache.prepareTextureIfCurrent(
+                            generation, receivedHash, receivedTextureType, receivedImageData))
+                    .whenComplete((prepared, error) -> {
+                        if (error != null) {
+                            LOGGER.warn("Unable to process v2 network texture {}", receivedHash, error);
+                        } else if (prepared != null) {
+                            Minecraft minecraft = Minecraft.getInstance();
+                            if (minecraft == null) {
+                                cache.discardPreparedTexture(prepared);
+                                return;
+                            }
+                            minecraft.execute(() -> {
+                                if (!isCurrentConnection(sourceConnection)
+                                        || !acceptsWireMode(sourceConnection, true)) {
+                                    cache.discardPreparedTexture(prepared);
+                                    return;
+                                }
+                                if (cache.commitPreparedTextureIfCurrent(
+                                        generation, receivedHash,
+                                        receivedTextureType, prepared)) {
+                                    onTextureStored(receivedTextureType, receivedHash);
+                                }
+                            });
+                        }
+                    });
+        });
+    }
+
     /**
      * Handles animation metadata from server
      */
@@ -207,12 +348,13 @@ public class ClientNetworkHandler {
         String receivedMetadataJson = payload.metadataJson();
         //?}
         Object sourceConnection = packetConnectionIdentity(context);
-        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsWireMode(sourceConnection, false)) return;
         ClientAnimationMetadataCache metadataCache = ClientAnimationMetadataCache.getInstance();
         NetworkSyncService syncService = NetworkSyncService.getInstance();
         boolean possibleUploadAck = syncService.hasPendingMetadata(
                 receivedHash, receivedMetadataJson);
-        if (!NetworkSecurity.isValidContentId(receivedHash)) return;
+        if (!NetworkSecurity.isValidLegacyContentId(receivedHash)) return;
         if (!ClientTextureIngressLimiter.getInstance().allowControlBytes(
                 receivedMetadataJson.getBytes(StandardCharsets.UTF_8).length)) return;
         AnimationMetadata receivedMetadata =
@@ -233,6 +375,54 @@ public class ClientNetworkHandler {
                 refreshPlayersUsingTexture(receivedHash);
             } catch (Exception e) {
                 LOGGER.warn("Unable to store network animation metadata", e);
+            }
+        });
+    }
+
+    //? if <1.21 {
+    public static void handleSendAnimationMetadataV2(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String receivedHash = PacketHelper.readString(
+                buf, TextureTransferLimits.MAX_CONTENT_ID_BYTES);
+        String receivedMetadataJson = PacketHelper.readString(
+                buf, TextureTransferLimits.MAX_JSON_BYTES);
+    //?} else {
+    public static void handleSendAnimationMetadataV2(
+            SendAnimationMetadataV2Payload payload, NetworkManager.PacketContext context) {
+        String receivedHash = payload.contentId();
+        String receivedMetadataJson = payload.metadataJson();
+    //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsWireMode(sourceConnection, true)
+                || !ProtocolSessions.getInstance().clientProfile(sourceConnection)
+                        .supports(ProtocolCapability.ANIMATION_METADATA)
+                || !NetworkSecurity.isValidStrongContentId(receivedHash)
+                || !ClientTextureIngressLimiter.getInstance().allowControlBytes(
+                        receivedMetadataJson.getBytes(StandardCharsets.UTF_8).length)) return;
+        ClientAnimationMetadataCache metadataCache = ClientAnimationMetadataCache.getInstance();
+        NetworkSyncService syncService = NetworkSyncService.getInstance();
+        boolean possibleUploadAck = syncService.hasPendingMetadata(
+                receivedHash, receivedMetadataJson);
+        AnimationMetadata receivedMetadata =
+                NetworkSecurity.parseAnimationMetadata(receivedMetadataJson);
+        if (receivedMetadata == null) return;
+        boolean exactReplay = metadataCache.matchesMetadata(receivedHash, receivedMetadata);
+        if (exactReplay && !possibleUploadAck) return;
+        context.queue(() -> {
+            if (!isCurrentConnection(sourceConnection)
+                    || !acceptsWireMode(sourceConnection, true)) return;
+            syncService.confirmMetadata(receivedHash, receivedMetadataJson);
+            if (metadataCache.matchesMetadata(receivedHash, receivedMetadata)) return;
+            try {
+                String animationId = "cape_" + receivedHash;
+                PENDING_NETWORK_ANIMATIONS.remove(animationId);
+                AnimatedTextureManager.getInstance().unregisterAnimation(animationId);
+                metadataCache.storeMetadata(receivedHash, receivedMetadata);
+                registerNetworkCapeAnimation(receivedHash, receivedMetadata);
+                refreshPlayersUsingTexture(receivedHash);
+            } catch (RuntimeException error) {
+                LOGGER.warn("Unable to store v2 network animation metadata", error);
             }
         });
     }
@@ -331,7 +521,8 @@ public class ClientNetworkHandler {
         String receivedConfigJson = payload.configJson();
         //?}
         Object sourceConnection = packetConnectionIdentity(context);
-        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsReadyMode(sourceConnection)) return;
         if (!ClientTextureIngressLimiter.getInstance().allowConfigPacket()
                 || !ClientTextureIngressLimiter.getInstance().allowControlBytes(
                 receivedConfigJson.getBytes(StandardCharsets.UTF_8).length)) return;
@@ -426,14 +617,15 @@ public class ClientNetworkHandler {
     public static void handleSendTextureChunk(SendTextureChunkPayload payload, NetworkManager.PacketContext context) {
     //?}
         Object sourceConnection = packetConnectionIdentity(context);
-        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsWireMode(sourceConnection, false)) return;
         //? if <1.21 {
         if (!NetworkSecurity.isValidTextureType(textureType)
-                || !NetworkSecurity.isValidContentId(hash)
+                || !NetworkSecurity.isValidLegacyContentId(hash)
                 || !ClientTextureIngressLimiter.getInstance().allowWireBytes(chunkData.length)) return;
         //?} else {
         if (!NetworkSecurity.isValidTextureType(payload.textureType())
-                || !NetworkSecurity.isValidContentId(payload.hash())
+                || !NetworkSecurity.isValidLegacyContentId(payload.hash())
                 || !ClientTextureIngressLimiter.getInstance()
                         .allowWireBytes(payload.chunkData().length)) return;
         //?}
@@ -459,6 +651,42 @@ public class ClientNetworkHandler {
         });
     }
 
+    //? if <1.21 {
+    public static void handleSendTextureChunkV2(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String receivedHash = buf.readUtf(TextureTransferLimits.MAX_CONTENT_ID_BYTES);
+        String receivedTextureType = buf.readUtf(TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+        int receivedChunkIndex = buf.readInt();
+        int receivedTotalChunks = buf.readInt();
+        byte[] receivedChunkData = buf.readByteArray(TextureTransferLimits.MAX_WIRE_CHUNK_BYTES);
+    //?} else {
+    public static void handleSendTextureChunkV2(
+            SendTextureChunkV2Payload payload, NetworkManager.PacketContext context) {
+        String receivedHash = payload.contentId();
+        String receivedTextureType = payload.textureType();
+        int receivedChunkIndex = payload.chunkIndex();
+        int receivedTotalChunks = payload.totalChunks();
+        byte[] receivedChunkData = payload.chunkData();
+    //?}
+        Object sourceConnection = packetConnectionIdentity(context);
+        ProtocolProfile profile = ProtocolSessions.getInstance().clientProfile(sourceConnection);
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsWireMode(sourceConnection, true)
+                || !NetworkSecurity.isValidTextureType(receivedTextureType)
+                || !NetworkSecurity.isValidStrongContentId(receivedHash)
+                || receivedChunkData.length > profile.maximumChunkBytes()
+                || !ClientTextureIngressLimiter.getInstance()
+                        .allowWireBytes(receivedChunkData.length)) return;
+        context.queue(() -> {
+            if (!isCurrentConnection(sourceConnection)
+                    || !acceptsWireMode(sourceConnection, true)) return;
+            com.quickskin.mod.client.storage.TextureChunkReceiver.getInstance().receiveChunk(
+                    receivedHash, receivedTextureType, receivedChunkIndex,
+                    receivedTotalChunks, receivedChunkData, sourceConnection,
+                    profile.maximumTextureBytes(), profile.maximumChunkBytes());
+        });
+    }
+
     /** Completes request bookkeeping and retries metadata that arrived before async decode. */
     public static void onTextureStored(String textureType, String hash) {
         if (!NetworkSecurity.isValidTextureType(textureType)
@@ -481,7 +709,8 @@ public class ClientNetworkHandler {
     public static void handleCooldownUpdate(CooldownUpdatePayload payload, NetworkManager.PacketContext context) {
     //?}
         Object sourceConnection = packetConnectionIdentity(context);
-        if (sourceConnection == null || !isCurrentConnection(sourceConnection)) return;
+        if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsReadyMode(sourceConnection)) return;
         if (!ClientTextureIngressLimiter.getInstance().allowControlBytes(Long.BYTES)) return;
         context.queue(() -> {
             if (!isCurrentConnection(sourceConnection)) return;
@@ -505,6 +734,7 @@ public class ClientNetworkHandler {
     //?}
         Object sourceConnection = packetConnectionIdentity(context);
         if (sourceConnection == null || !isCurrentConnection(sourceConnection)
+                || !acceptsReadyMode(sourceConnection)
                 || !ClientTextureIngressLimiter.getInstance()
                         .allowControlBytes(Long.BYTES)) return;
         context.queue(() -> {
@@ -572,6 +802,23 @@ public class ClientNetworkHandler {
 
     public static boolean isCurrentConnection(Object expectedConnection) {
         return expectedConnection != null && currentConnectionIdentity() == expectedConnection;
+    }
+
+    private static boolean acceptsWireMode(Object connection, boolean v2) {
+        ProtocolProfile profile = ProtocolSessions.getInstance().clientProfile(connection);
+        if (v2) {
+            return profile.negotiated()
+                    && profile.version() == 2
+                    && profile.supports(ProtocolCapability.SHA256_CONTENT_IDS);
+        }
+        return profile.mode() == ProtocolProfile.Mode.LEGACY_V1;
+    }
+
+    private static boolean acceptsReadyMode(Object connection) {
+        ProtocolProfile.Mode mode = ProtocolSessions.getInstance()
+                .clientProfile(connection).mode();
+        return mode == ProtocolProfile.Mode.LEGACY_V1
+                || mode == ProtocolProfile.Mode.NEGOTIATED;
     }
 
     private record PendingAnimation(Object token, Object connection, long generation) {

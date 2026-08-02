@@ -73,7 +73,7 @@ public class SkinImporter {
             assetManager.reload();
 
             // Get the metadata for the imported file
-            String hash = HashUtil.computeHash(processedImageBytes);
+            String hash = HashUtil.computeAssetContentId(processedImageBytes, "skin");
             if (hash != null) {
                 return assetManager.getMetadata(hash);
             }
@@ -104,7 +104,7 @@ public class SkinImporter {
             writeUnique(modelsDir, nameWithoutExt, ".cpmmodel", modelBytes);
             LocalAssetManager assetManager = LocalAssetManager.getInstance();
             assetManager.reload();
-            String hash = HashUtil.computeHash(modelBytes);
+            String hash = HashUtil.computeContentId(modelBytes);
             if (hash != null) {
                 return assetManager.getMetadata(hash);
             }

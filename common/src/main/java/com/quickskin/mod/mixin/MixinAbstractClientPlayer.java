@@ -41,7 +41,14 @@ public abstract class MixinAbstractClientPlayer {
      * Using @At("RETURN") allows us to get the vanilla/Essential skin first,
      * then modify it before returning to the caller.
      */
-    @Inject(method = "getSkin", at = @At("RETURN"), cancellable = true)
+    @Inject(
+            method = "getSkin",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$modifySkin(CallbackInfoReturnable<PlayerSkin> cir) {
         if (CPMCompatIntegration.shouldDeferToCPM()) return;
 

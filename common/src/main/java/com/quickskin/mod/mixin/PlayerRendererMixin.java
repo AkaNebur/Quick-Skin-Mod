@@ -45,7 +45,11 @@ public class PlayerRendererMixin {
 //?} else {
     @Inject(method = "getTextureLocation(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;)Lnet/minecraft/resources/Identifier;",
 //?}
-            at = @At("HEAD"), cancellable = true)
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1)
 //? if <1.21.11 {
     private void quickskin$overrideTextureLocation(AbstractClientPlayer player, CallbackInfoReturnable<ResourceLocation> cir) {
 //?} else {

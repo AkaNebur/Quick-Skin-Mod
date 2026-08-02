@@ -1,5 +1,6 @@
 package com.quickskin.mod.server.storage;
 
+import com.quickskin.mod.common.data.ContentId;
 import com.quickskin.mod.networking.NetworkSecurity;
 import com.quickskin.mod.networking.TextureTransferLimits;
 import com.quickskin.mod.common.util.BoundedFileReader;
@@ -86,6 +87,12 @@ public class ServerAnimationCache {
             LOGGER.warn("Rejected invalid animation metadata for {}", hash);
             return false;
         }
+        String primary = ServerTextureCache.getInstance().resolveContentId(hash);
+        if (primary == null) {
+            LOGGER.warn("Rejected animation metadata without a uniquely authenticated texture for {}", hash);
+            return false;
+        }
+        hash = primary;
         String existing = metadataCache.get(hash);
         String candidateIdentity = metadataIdentity(metadataJson);
         String claimedIdentity = metadataIdentities.get(hash);
@@ -144,13 +151,17 @@ public class ServerAnimationCache {
     public synchronized boolean isMetadataIdentityCompatible(String hash, String metadataJson) {
         if (!NetworkSecurity.isValidContentId(hash)
                 || !NetworkSecurity.isValidAnimationMetadata(metadataJson)) return false;
-        String identity = metadataIdentities.get(hash);
+        String primary = ServerTextureCache.getInstance().resolveContentId(hash);
+        if (primary == null) return false;
+        String identity = metadataIdentities.get(primary);
         return identity == null || identity.equals(metadataIdentity(metadataJson));
     }
 
     @Nullable
     public synchronized String getMetadata(String hash) {
-        return NetworkSecurity.isValidContentId(hash) ? metadataCache.get(hash) : null;
+        if (!NetworkSecurity.isValidContentId(hash)) return null;
+        String primary = ServerTextureCache.getInstance().resolveContentId(hash);
+        return primary == null ? null : metadataCache.get(primary);
     }
 
     /** Removes metadata whose backing cape blob was evicted or rejected. */
@@ -166,11 +177,16 @@ public class ServerAnimationCache {
 
     private void removeMetadataEntry(String hash) {
         if (!NetworkSecurity.isValidContentId(hash)) return;
-        String removed = metadataCache.remove(hash);
+        ContentId parsed = ContentId.parse(hash);
+        String primary = parsed != null && parsed.algorithm() == ContentId.Algorithm.SHA256
+                ? hash
+                : ServerTextureCache.getInstance().resolveContentId(hash);
+        if (primary == null) return;
+        String removed = metadataCache.remove(primary);
         if (removed != null) cachedBytes -= utf8Length(removed);
-        metadataAuthorities.remove(hash);
-        metadataIdentities.remove(hash);
-        deleteEntryFiles(hash);
+        metadataAuthorities.remove(primary);
+        metadataIdentities.remove(primary);
+        deleteEntryFiles(primary);
     }
 
     public synchronized void clear() {
@@ -273,7 +289,9 @@ public class ServerAnimationCache {
 
     private void loadCachedMetadata() {
         if (storageDirectory == null || !Files.isDirectory(storageDirectory, LinkOption.NOFOLLOW_LINKS)) return;
-        loadMetadataIdentities();
+        Map<String, String> legacyMigrations = new LinkedHashMap<>();
+        Map<String, Boolean> identityFromStrongSource = new LinkedHashMap<>();
+        loadMetadataIdentities(legacyMigrations, identityFromStrongSource);
         PriorityQueue<Path> newestFiles = new PriorityQueue<>(
                 Comparator.comparingLong(this::lastModified));
         try (Stream<Path> paths = Files.list(storageDirectory)) {
@@ -294,14 +312,22 @@ public class ServerAnimationCache {
         }
         List<Path> files = new ArrayList<>(newestFiles);
         files.sort(Comparator.comparingLong(this::lastModified));
-        files.forEach(this::loadMetadataFile);
+        files.forEach(path -> loadMetadataFile(path, legacyMigrations));
+        migrateLegacyMetadataEntries(legacyMigrations);
     }
 
-    private void loadMetadataFile(Path path) {
+    private void loadMetadataFile(
+            Path path, Map<String, String> legacyMigrations) {
         String fileName = path.getFileName().toString();
         String hash = fileName.substring(0, fileName.length() - ".json".length());
         if (!NetworkSecurity.isValidContentId(hash) || safeFile(hash) == null) {
             deleteFile(path);
+            return;
+        }
+        String primary = ServerTextureCache.getInstance().resolveContentId(hash);
+        if (primary == null) {
+            LOGGER.warn("Ignoring animation metadata without a unique texture alias {}", hash);
+            deleteEntryFiles(hash);
             return;
         }
         try {
@@ -317,49 +343,58 @@ public class ServerAnimationCache {
                 deleteDeliveryMetadata(hash);
                 return;
             }
-            if (!ServerTextureCache.getInstance().isRequestable(hash, "cape")) {
+            if (!ServerTextureCache.getInstance().isRequestable(primary, "cape")) {
                 LOGGER.warn("Ignoring orphaned animation metadata cache entry {}", hash);
                 deleteEntryFiles(hash);
                 return;
             }
             if (!ServerTextureCache.getInstance()
-                    .isAnimationMetadataCompatible(hash, metadata)) {
+                    .isAnimationMetadataCompatible(primary, metadata)) {
                 LOGGER.warn("Ignoring incompatible animation metadata cache entry {}", hash);
                 deleteDeliveryMetadata(hash);
                 return;
             }
             String identity = metadataIdentity(metadata);
-            String claimedIdentity = metadataIdentities.get(hash);
+            String claimedIdentity = metadataIdentities.get(primary);
             if (claimedIdentity != null && !claimedIdentity.equals(identity)) {
                 LOGGER.warn("Ignoring animation metadata that changed identity for {}", hash);
                 deleteFile(path);
                 return;
             }
             if (claimedIdentity == null) {
-                if (!saveIdentityToDisk(hash, identity)) return;
-                metadataIdentities.put(hash, identity);
+                if (!saveIdentityToDisk(primary, identity)) return;
+                metadataIdentities.put(primary, identity);
             }
-            String previous = metadataCache.put(hash, metadata);
+            String previous = metadataCache.put(primary, metadata);
             if (previous != null) cachedBytes -= utf8Length(previous);
             cachedBytes += utf8Length(metadata);
             UUID authority = readAuthority(hash);
-            if (authority != null) metadataAuthorities.put(hash, authority);
+            if (authority != null) {
+                if (primary.equals(hash)) metadataAuthorities.put(primary, authority);
+                else metadataAuthorities.putIfAbsent(primary, authority);
+            }
+            if (!primary.equals(hash)) legacyMigrations.put(hash, primary);
             evictToLimits();
         } catch (IOException e) {
             LOGGER.warn("Unable to load QuickSkin animation metadata {}", path, e);
         }
     }
 
-    private void loadMetadataIdentities() {
+    private void loadMetadataIdentities(
+            Map<String, String> legacyMigrations,
+            Map<String, Boolean> identityFromStrongSource) {
         try (Stream<Path> paths = Files.list(storageDirectory)) {
             paths.filter(path -> path.getFileName().toString().endsWith(".identity"))
                     .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                     .forEach(path -> {
                         String name = path.getFileName().toString();
                         String hash = name.substring(0, name.length() - ".identity".length());
-                        if (!NetworkSecurity.isValidContentId(hash)
-                                || !ServerTextureCache.getInstance().isRequestable(hash, "cape")) {
-                            deleteFile(path);
+                        String primary = NetworkSecurity.isValidContentId(hash)
+                                ? ServerTextureCache.getInstance().resolveContentId(hash)
+                                : null;
+                        if (primary == null
+                                || !ServerTextureCache.getInstance().isRequestable(primary, "cape")) {
+                            deleteEntryFiles(hash);
                             return;
                         }
                         try {
@@ -372,9 +407,26 @@ public class ServerAnimationCache {
                                 deleteFile(path);
                                 return;
                             }
-                            metadataIdentities.put(hash, identity);
+                            boolean strongSource = primary.equals(hash);
+                            String existing = metadataIdentities.get(primary);
+                            boolean existingFromStrong = identityFromStrongSource
+                                    .getOrDefault(primary, false);
+                            if (existing != null && !existing.equals(identity)
+                                    && existingFromStrong && !strongSource) {
+                                LOGGER.warn("Ignoring conflicting legacy animation identity {}", hash);
+                                deleteEntryFiles(hash);
+                                return;
+                            }
+                            if (existing == null || strongSource || !existingFromStrong) {
+                                metadataIdentities.put(primary, identity);
+                            }
+                            if (strongSource) identityFromStrongSource.put(primary, true);
                             UUID authority = readAuthority(hash);
-                            if (authority != null) metadataAuthorities.put(hash, authority);
+                            if (authority != null) {
+                                if (strongSource) metadataAuthorities.put(primary, authority);
+                                else metadataAuthorities.putIfAbsent(primary, authority);
+                            }
+                            if (!strongSource) legacyMigrations.put(hash, primary);
                         } catch (IOException exception) {
                             LOGGER.warn("Unable to load animation metadata identity {}", hash,
                                     exception);
@@ -383,6 +435,58 @@ public class ServerAnimationCache {
         } catch (IOException exception) {
             LOGGER.error("Unable to list QuickSkin animation identities {}", storageDirectory,
                     exception);
+        }
+    }
+
+    /**
+     * Copies a uniquely authenticated legacy metadata bundle to the SHA-256 primary and verifies
+     * every present component before deleting the SHA-1 files. Ambiguous aliases never enter this
+     * map, so their metadata cannot be attached to either colliding strong identity.
+     */
+    private void migrateLegacyMetadataEntries(Map<String, String> migrations) {
+        for (Map.Entry<String, String> migration : migrations.entrySet()) {
+            String legacy = migration.getKey();
+            String primary = migration.getValue();
+            String identity = metadataIdentities.get(primary);
+            if (identity == null || !saveIdentityToDisk(primary, identity)
+                    || !isPersistedText(safeIdentityFile(primary), identity, 64)) {
+                LOGGER.warn("Retaining legacy animation cache entry {} because identity migration "
+                        + "to {} could not be verified", legacy, primary);
+                continue;
+            }
+
+            UUID authority = metadataAuthorities.get(primary);
+            if (authority != null && (!saveAuthorityToDisk(primary, authority)
+                    || !isPersistedText(
+                            safeAuthorityFile(primary), authority.toString(), 64))) {
+                LOGGER.warn("Retaining legacy animation cache entry {} because authority migration "
+                        + "to {} could not be verified", legacy, primary);
+                continue;
+            }
+
+            String metadata = metadataCache.get(primary);
+            if (metadata != null && (!saveMetadataToDisk(primary, metadata)
+                    || !isPersistedText(
+                            safeFile(primary), metadata,
+                            TextureTransferLimits.MAX_JSON_BYTES))) {
+                LOGGER.warn("Retaining legacy animation cache entry {} because metadata migration "
+                        + "to {} could not be verified", legacy, primary);
+                continue;
+            }
+            deleteEntryFiles(legacy);
+        }
+    }
+
+    private boolean isPersistedText(@Nullable Path path, String expected, int maximumBytes) {
+        if (path == null || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return false;
+        try {
+            byte[] expectedBytes = expected.getBytes(StandardCharsets.UTF_8);
+            if (Files.size(path) != expectedBytes.length) return false;
+            return java.util.Arrays.equals(
+                    expectedBytes, BoundedFileReader.readBytes(path, maximumBytes));
+        } catch (IOException exception) {
+            LOGGER.warn("Unable to verify migrated animation cache file {}", path, exception);
+            return false;
         }
     }
 
