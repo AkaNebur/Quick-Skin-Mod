@@ -110,8 +110,14 @@ public class PlayerRendererMixin {
 //?}
             ),
             require = 0,
+//? if <1.21.11 {
+            // Vanilla requests one buffer for the arm and one for the sleeve.
+            expect = 2,
+            allow = 2
+//?} else {
             expect = 1,
             allow = 1
+//?}
     )
 //? if <1.21.11 {
     private VertexConsumer quickskin$redirectRenderHandBuffer(MultiBufferSource instance, RenderType renderType,

@@ -89,8 +89,9 @@ ALTERNATIVE_HOOKS = {
 
 # Audited vanilla bytecode multiplicities. The ItemInHand source contains Stonecutter branches:
 # pre-1.21.11 renderHand requests two buffers (arm + sleeve), while the new renderer submits one
-# model part. SkinManager 1.20.1 and 1.21.1 each have two RETURN opcodes in their target methods;
-# the later SkinManager branches retain a single RETURN.
+# model part. The NeoForge-specific arm renderer has the same pre-1.21.11 multiplicity.
+# SkinManager 1.20.1 and 1.21.1 each have two RETURN opcodes in their target methods; the later
+# SkinManager branches retain a single RETURN.
 INJECTION_COUNT_OVERRIDES = {
     (
         "main:com/quickskin/mod/mixin/ItemInHandRendererMixin.java",
@@ -107,6 +108,10 @@ INJECTION_COUNT_OVERRIDES = {
 }
 
 ACTIVE_LOADER_INJECTION_COUNT_OVERRIDES = {
+    (
+        "neoforge/src/main/java/com/quickskin/mod/neoforge/mixin/PlayerRendererMixin.java",
+        "quickskin$redirectRenderHandBuffer",
+    ): {1, 2},
     (
         "neoforge/src/main/java/com/quickskin/mod/neoforge/mixin/SkinManagerMixin.java",
         "quickskin$modifyInsecureSkinLegacy",
