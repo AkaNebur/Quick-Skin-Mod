@@ -33,6 +33,7 @@ repositories.withType<MavenArtifactRepository>().configureEach {
         repositoryHost == "maven.neoforged.net" -> content {
             includeGroupByRegex("net\\.neoforged(\\..*)?")
             includeGroupByRegex("cpw\\.mods(\\..*)?")
+            excludeGroupByRegex("net\\.neoforged\\.fancymodloader\\.[0-9a-f]{64}")
         }
         repositoryHost == "repo.maven.apache.org" -> content {
             excludeGroupByRegex("dev\\.architectury(\\..*)?")

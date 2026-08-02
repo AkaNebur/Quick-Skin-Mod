@@ -250,6 +250,7 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             'excludeGroup("loom")',
             'excludeGroup("net.minecraft")',
             'excludeGroupByRegex("net\\\\.minecraftforge\\\\.[0-9a-f]{64}")',
+            'excludeGroupByRegex("net\\\\.neoforged\\\\.fancymodloader\\\\.[0-9a-f]{64}")',
             'includeModule("org.lwjgl", "lwjgl-freetype")',
             'includeGroupByRegex("cpw\\\\.mods(\\\\..*)?")',
             "Unapproved remote dependency repository",
