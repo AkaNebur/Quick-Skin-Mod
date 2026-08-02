@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#111713">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="description" content="Versioned packaged-Minecraft E2E screenshots for Quick Skin.">
+  <title>Verified E2E · Quick Skin</title>
+  <link rel="icon" href="../assets/icon.png">
+  <link rel="stylesheet" href="../assets/styles.css">
+  <script src="../assets/gallery.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to evidence</a>
+  <header class="site-header">
+    <a class="brand" href="../" aria-label="Quick Skin home">
+      <img src="../assets/icon.png" width="40" height="40" alt="">
+      <span>Quick Skin</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a aria-current="page" href="./">E2E gallery</a>
+      <a href="https://github.com/AkaNebur/Quick-Skin-Mod/actions/workflows/on-demand-e2e.yml">Actions</a>
+    </nav>
+  </header>
+
+  <main id="main" class="gallery-main">
+    <section class="gallery-intro" aria-labelledby="gallery-title">
+      <p class="eyebrow">Packaged-runtime evidence</p>
+      <h1 id="gallery-title">See what passed.</h1>
+      <p>Browse every validated capture by version, or align the same semantic checkpoint across all supported Minecraft versions and loaders.</p>
+      <div id="release-summary" class="summary-strip" aria-live="polite"></div>
+    </section>
+
+    <section class="gallery-workspace" aria-labelledby="workspace-title">
+      <div class="workspace-heading">
+        <div>
+          <p class="eyebrow">Visual explorer</p>
+          <h2 id="workspace-title">Validated captures</h2>
+        </div>
+        <div class="view-switch" aria-label="Choose gallery view">
+          <button id="gallery-view-button" class="view-button is-active" type="button" aria-pressed="true">Gallery</button>
+          <button id="compare-view-button" class="view-button" type="button" aria-pressed="false">Compare versions</button>
+        </div>
+      </div>
+
+      <div id="gallery-view">
+        <div id="version-tabs" class="version-tabs" role="tablist" aria-label="Minecraft version"></div>
+        <form id="gallery-filters" class="filter-bar" aria-label="Filter captures">
+          <label>Loader
+            <select id="loader-filter"><option value="all">All loaders</option></select>
+          </label>
+          <label>Scenario
+            <select id="scenario-filter"><option value="all">All scenarios</option></select>
+          </label>
+          <label>Client role
+            <select id="role-filter"><option value="all">All clients</option></select>
+          </label>
+          <label class="search-label">Find a checkpoint
+            <input id="capture-search" type="search" placeholder="Cape, skin, title screen…" autocomplete="off">
+          </label>
+        </form>
+        <div id="version-panels"></div>
+      </div>
+
+      <div id="compare-view" hidden>
+        <div class="compare-controls">
+          <label>Checkpoint to align
+            <select id="capture-compare"></select>
+          </label>
+          <label>Loader
+            <select id="compare-loader"><option value="all">All loaders</option></select>
+          </label>
+        </div>
+        <p class="compare-note">A blank cell is explicit: no validated frame was published for that exact version/loader checkpoint.</p>
+        <div id="comparison-grid" class="comparison-grid"></div>
+      </div>
+
+      <p id="gallery-status" class="status-line" role="status">Loading validated evidence…</p>
+      <noscript><p class="notice">JavaScript is required for filtering and comparison. The evidence inventory remains available as <a href="gallery-data.json">JSON</a>.</p></noscript>
+    </section>
+
+    <section class="section methodology" aria-labelledby="method-title">
+      <div>
+        <p class="eyebrow">Evidence contract</p>
+        <h2 id="method-title">What this page does—and does not—claim</h2>
+      </div>
+      <div>
+        <p>The required E2E gate validates mod state, screenshot integrity and expected pixel changes. These images let humans compare the resulting UI and rendering across versions.</p>
+        <p>The AI visual review is advisory; it is not presented here as a release gate. Open a card’s source run for the complete GitHub Actions record.</p>
+        <p><a href="gallery-data.json">Download the machine-readable gallery inventory</a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Quick Skin · packaged E2E evidence</p>
+    <p><a href="../">Back to project home</a></p>
+  </footer>
+</body>
+</html>

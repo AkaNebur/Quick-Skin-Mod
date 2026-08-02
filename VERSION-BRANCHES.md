@@ -49,6 +49,12 @@ creation or deletion and periodically repairs missed events through one reusable
 it never pushes directly to `master`. Do not maintain a second version list inside that workflow
 or edit the generated table by hand.
 
+The marked branch-profile block is also generated. `scripts/release/branch_readme.py` describes
+`master` as the integration branch and derives each release branch's exact Minecraft version,
+loaders, Java target, locked runtime/API versions, and source overlays from that branch's matrix.
+The synchronizer regenerates and validates it after merging, so a release README cannot silently
+inherit another branch's badge or compatibility profile.
+
 If either gate fails, the trusted result workflow gives Claude one bounded repair attempt using the
 failed logs and evidence. Claude has no Git or GitHub write credentials and can only upload a
 path-policy-checked patch. A separate deterministic writer rechecks and commits that patch before
@@ -60,17 +66,51 @@ are skipped for forked pull requests; untrusted code never receives the Claude c
 
 ## Working locally
 
+The command examples in this section use a POSIX-compatible shell on macOS, Linux, or Git Bash.
+
 Compare only a release branch's compatibility delta:
 
 ```bash
-git diff master...forge-and-fabric-1.20.1
+release_branch="<release-branch>"
+git fetch origin
+git diff "origin/master...origin/$release_branch"
 ```
 
-Work on multiple versions without duplicating the Git object database:
+Do not switch an existing checkout away from the branch its owner is using. For read-only
+inspection, create a detached ephemeral worktree from the fetched remote branch:
 
 ```bash
-git worktree add ../quick-skin-1.20.1 forge-and-fabric-1.20.1
+qsm_worktree_root="$(mktemp -d "${TMPDIR:-/tmp}/quick-skin-worktree.XXXXXX")"
+qsm_worktree_path="$qsm_worktree_root/checkout"
+git worktree add --detach "$qsm_worktree_path" "origin/$release_branch"
 ```
 
-Each working tree contains a full checkout, but all worktrees share the repository's `.git` object
-store. Run only the matrix-declared Gradle and packaged-runtime lanes for that worktree.
+Keep a detached inspection worktree read-only. If the task turns into an edit, remove the clean
+inspection worktree and use the named topic-branch form below; do not commit on detached HEAD.
+
+For an edit, create a topic branch in the ephemeral worktree instead:
+
+```bash
+topic_branch="fix/short-description"
+qsm_worktree_root="$(mktemp -d "${TMPDIR:-/tmp}/quick-skin-worktree.XXXXXX")"
+qsm_worktree_path="$qsm_worktree_root/checkout"
+git worktree add -b "$topic_branch" "$qsm_worktree_path" "origin/$release_branch"
+```
+
+On entry, read that worktree's `AGENTS.md`, all of its imports, and
+`release/release-matrix.json`; branch instructions and source overlays may differ. Each worktree has
+a full checkout while sharing the repository's Git object database. Never run Gradle concurrently
+in multiple worktrees.
+
+Keep the worktree until every valuable change belongs to a named branch and is committed, pushed,
+or otherwise exported. A detached-HEAD commit alone is not preservation. Then verify that the
+worktree is clean and remove it without force:
+
+```bash
+git -C "$qsm_worktree_path" status --short
+git worktree remove "$qsm_worktree_path"
+rmdir "$qsm_worktree_root"
+```
+
+Stop if the status command prints anything or removal refuses. Never force-remove a dirty,
+unfamiliar, or user-owned worktree, and never develop directly on `automation/sync/*`.
