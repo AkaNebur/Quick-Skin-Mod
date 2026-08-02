@@ -36,12 +36,27 @@ public class TextureChunkReceiver {
     public synchronized void receiveChunk(
             String hash, String textureType, int chunkIndex, int totalChunks, byte[] chunkData,
             Object sourceConnection) {
+        receiveChunk(
+                hash, textureType, chunkIndex, totalChunks, chunkData, sourceConnection,
+                TextureTransferLimits.MAX_TEXTURE_BYTES,
+                TextureTransferLimits.MAX_WIRE_CHUNK_BYTES);
+    }
+
+    /** V2 entry point whose peer-advertised limits can only narrow local hard caps. */
+    public synchronized void receiveChunk(
+            String hash, String textureType, int chunkIndex, int totalChunks, byte[] chunkData,
+            Object sourceConnection, int maximumTextureBytes, int maximumChunkBytes) {
         if (!ClientNetworkHandler.isCurrentConnection(sourceConnection)) return;
         long now = System.currentTimeMillis();
         purgeExpired(now);
         if (!NetworkSecurity.isValidContentId(hash) || !NetworkSecurity.isValidTextureType(textureType)
                 || chunkData == null || chunkData.length == 0
-                || chunkData.length > TextureTransferLimits.MAX_WIRE_CHUNK_BYTES
+                || maximumTextureBytes < 1
+                || maximumTextureBytes > TextureTransferLimits.MAX_TEXTURE_BYTES
+                || maximumChunkBytes < 1
+                || maximumChunkBytes > TextureTransferLimits.MAX_WIRE_CHUNK_BYTES
+                || maximumChunkBytes > maximumTextureBytes
+                || chunkData.length > maximumChunkBytes
                 || totalChunks < 1 || totalChunks > TextureTransferLimits.MAX_CHUNKS
                 || chunkIndex < 0 || chunkIndex >= totalChunks) {
             return;
@@ -65,7 +80,7 @@ public class TextureChunkReceiver {
         }
 
         if (assembly.chunks[chunkIndex] != null) return;
-        if ((long) assembly.sizeBytes + chunkData.length > TextureTransferLimits.MAX_TEXTURE_BYTES
+        if ((long) assembly.sizeBytes + chunkData.length > maximumTextureBytes
                 || retainedBytes + chunkData.length > TextureTransferLimits.MAX_CLIENT_ASSEMBLY_BYTES) {
             remove(key, assembly);
             return;

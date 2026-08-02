@@ -1,9 +1,12 @@
 package com.quickskin.mod.networking;
 
 import com.quickskin.mod.common.data.PlayerAppearance;
+import com.quickskin.mod.config.ServerConfig;
 import com.quickskin.mod.networking.packets.PacketHelper;
+import com.quickskin.mod.networking.protocol.ProtocolOffer;
+import com.quickskin.mod.networking.protocol.ProtocolProfile;
+import com.quickskin.mod.networking.protocol.ProtocolSessions;
 import com.quickskin.mod.server.concurrent.ServerTextureIngressExecutor;
-import com.quickskin.mod.server.data.QuickSkinPlayerTracker;
 import com.quickskin.mod.server.data.ServerCooldownManager;
 import com.quickskin.mod.server.data.ServerAppearanceSyncCoordinator;
 import com.quickskin.mod.server.data.ServerPlayerAppearanceRepository;
@@ -49,32 +52,171 @@ public class ServerNetworkHandler {
      * Used to skip sending S2C packets to vanilla clients that don't have the mod.
      */
     private static boolean canReceiveQuickSkin(ServerPlayer player) {
-        return NetworkTransport.INSTANCE.canPlayerReceiveQuickSkin(player)
-                || QuickSkinPlayerTracker.getInstance().isConfirmed(player.getUUID());
+        return ProtocolNetwork.canReceive(player);
     }
 
-    /**
-     * Tracks that a player has QuickSkin installed (they sent us a C2S packet).
-     * On first confirmation, triggers full sync for the player.
-     */
-    private static void trackModPresence(ServerPlayer player) {
-        if (QuickSkinPlayerTracker.getInstance().markConfirmed(player.getUUID())) {
-            // Send all existing appearances to this newly confirmed player
-            sendAllAppearancesToPlayer(player);
-
-            // Send server config
-            sendServerConfigToPlayer(player);
-
-            // Send cooldown status if applicable
-            int cooldownSeconds = com.quickskin.mod.config.ServerConfig.getInstance().skinChangeCooldownSeconds;
-            if (cooldownSeconds > 0 && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())) {
-                long cooldownEndTime = ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID());
-                NetworkTransport.INSTANCE.sendCooldownToPlayer(player, cooldownEndTime);
-            }
-
-            // Broadcast this player's appearance to all other players
-            sendAppearanceToAllPlayers(player);
+    /** Completes bootstrap after the exact live connection selects a protocol schema. */
+    private static void onProtocolReady(ServerPlayer player) {
+        sendAllAppearancesToPlayer(player);
+        sendServerConfigToPlayer(player);
+        int cooldownSeconds = ServerConfig.getInstance().skinChangeCooldownSeconds;
+        if (cooldownSeconds > 0
+                && ServerCooldownManager.getInstance().isPlayerOnCooldown(player.getUUID())
+                && ProtocolNetwork.canReceiveCooldown(player)) {
+            NetworkTransport.INSTANCE.sendCooldownToPlayer(
+                    player,
+                    ServerCooldownManager.getInstance().getCooldownEndTime(player.getUUID()));
         }
+        sendAppearanceToAllPlayers(player);
+    }
+
+    private static boolean acceptLegacyPacket(
+            ServerPlayer player, NetworkManager.PacketContext context) {
+        ProtocolSessions.LegacyAdmission admission = ProtocolSessions.getInstance()
+                .acceptLegacyClient(player.getUUID(), player.connection);
+        if (admission.accepted() && admission.becameReady()) {
+            MinecraftServer server = player.server;
+            UUID playerId = player.getUUID();
+            Object connection = player.connection;
+            context.queue(() -> {
+                ServerPlayer active = activePlayer(server, playerId, connection);
+                if (active != null) onProtocolReady(active);
+            });
+        }
+        return admission.accepted();
+    }
+
+    private static boolean acceptSharedPacket(
+            ServerPlayer player, NetworkManager.PacketContext context) {
+        ProtocolProfile profile = ProtocolNetwork.profile(player);
+        return profile.negotiated() || acceptLegacyPacket(player, context);
+    }
+
+    public static void handleProtocolHello(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        long nonce = buf.readLong();
+        ProtocolOffer offer = new ProtocolOffer(
+                buf.readInt(), buf.readInt(), buf.readLong(), buf.readInt(), buf.readInt());
+        ServerPlayer sender = (ServerPlayer) context.getPlayer();
+        if (sender == null || nonce <= 0L) return;
+        MinecraftServer server = sender.server;
+        UUID playerId = sender.getUUID();
+        Object connection = sender.connection;
+        // The authenticated hello is the ACK-channel evidence here: Forge/Architectury 1.20.1
+        // can falsely report canPlayerReceive. Bound it before queueing instead of dropping v2.
+        if (!TextureTransferRateLimiter.getInstance()
+                .allowProtocolHello(playerId, connection)) return;
+        context.queue(() -> {
+            ServerPlayer player = activePlayer(server, playerId, connection);
+            if (player == null) return;
+            ProtocolSessions.ServerHelloResult result = ProtocolSessions.getInstance()
+                    .acceptServerHello(playerId, connection, nonce, offer);
+            if (result.shouldAcknowledge()) {
+                NetworkTransport.INSTANCE.sendProtocolAckToPlayer(
+                        player, result.nonce(), result.acknowledgement());
+            }
+            if (result.becameReady()) onProtocolReady(player);
+        });
+    }
+
+    public static void handleUpdateAppearanceV2(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        UUID playerId = PacketHelper.readPlayerId(buf);
+        String skinId = PacketHelper.readString(buf, TextureTransferLimits.MAX_APPEARANCE_ID_BYTES);
+        String capeId = PacketHelper.readString(buf, TextureTransferLimits.MAX_APPEARANCE_ID_BYTES);
+        String model = PacketHelper.readString(buf, TextureTransferLimits.MAX_MODEL_BYTES);
+        ServerPlayer sender = (ServerPlayer) context.getPlayer();
+        if (sender == null || !ProtocolNetwork.acceptsV2(sender)
+                || !sender.getUUID().equals(playerId)
+                || !NetworkSecurity.isValidV2AppearanceId(skinId, "skin")
+                || !NetworkSecurity.isValidV2AppearanceId(capeId, "cape")
+                || !NetworkSecurity.isValidModel(model)
+                || !TextureTransferRateLimiter.getInstance().allowStorageMutation(
+                        sender.getUUID(), sender.connection)) return;
+        MinecraftServer server = sender.server;
+        Object connection = sender.connection;
+        context.queue(() -> {
+            ServerPlayer player = activePlayer(server, playerId, connection);
+            if (player == null || !ProtocolNetwork.acceptsV2(player)) return;
+            acceptOrDeferAppearance(
+                    player,
+                    new ServerUploadCoordinator.PendingAppearance(skinId, capeId, model),
+                    true);
+        });
+    }
+
+    public static void handleRequestTextureV2(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        UUID playerId = PacketHelper.readPlayerId(buf);
+        String textureType = PacketHelper.readString(buf, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+        String contentId = PacketHelper.readString(buf, TextureTransferLimits.MAX_CONTENT_ID_BYTES);
+        ServerPlayer sender = (ServerPlayer) context.getPlayer();
+        if (sender == null || !ProtocolNetwork.acceptsV2(sender)
+                || !sender.getUUID().equals(playerId)
+                || !NetworkSecurity.isValidTextureType(textureType)
+                || !NetworkSecurity.isValidStrongContentId(contentId)
+                || !TextureTransferRateLimiter.getInstance().allowTextureRequest(
+                        sender.getUUID(), sender.connection)) return;
+        MinecraftServer server = sender.server;
+        Object connection = sender.connection;
+        context.queue(() -> {
+            ServerPlayer player = activePlayer(server, playerId, connection);
+            if (player == null || !ProtocolNetwork.acceptsV2(player)
+                    || !ServerTextureCache.getInstance().isRequestable(contentId, textureType)) return;
+            sendCachedTextureToClient(player, textureType, contentId);
+        });
+    }
+
+    public static void handleTextureChunkV2(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String contentId = PacketHelper.readString(buf, TextureTransferLimits.MAX_CONTENT_ID_BYTES);
+        String textureType = PacketHelper.readString(buf, TextureTransferLimits.MAX_TEXTURE_TYPE_BYTES);
+        int chunkIndex = buf.readInt();
+        int totalChunks = buf.readInt();
+        byte[] chunkData = PacketHelper.readByteArray(buf, TextureTransferLimits.MAX_WIRE_CHUNK_BYTES);
+        ServerPlayer sender = (ServerPlayer) context.getPlayer();
+        if (sender == null || !ProtocolNetwork.acceptsV2(sender)
+                || !NetworkSecurity.isValidTextureType(textureType)
+                || !NetworkSecurity.isValidStrongContentId(contentId)) return;
+        ProtocolProfile profile = ProtocolNetwork.profile(sender);
+        if (chunkData.length > profile.maximumChunkBytes()
+                || !TextureTransferRateLimiter.getInstance().allowUploadBytes(
+                        sender.getUUID(), sender.connection, chunkData.length)) return;
+        byte[] completeTexture = TextureChunkAssembler.getInstance().addChunk(
+                sender.getUUID(), sender.connection, textureType, contentId,
+                chunkIndex, totalChunks, chunkData,
+                profile.maximumTextureBytes(), profile.maximumChunkBytes());
+        if (completeTexture == null
+                || !reserveDecodedPixels(sender, textureType, completeTexture)
+                || !TextureTransferRateLimiter.getInstance().allowStorageMutation(
+                        sender.getUUID(), sender.connection)) return;
+        submitTextureUpload(
+                sender.server, sender.getUUID(), sender.connection,
+                contentId, textureType, completeTexture);
+    }
+
+    public static void handleUploadAnimationMetadataV2(
+            FriendlyByteBuf buf, NetworkManager.PacketContext context) {
+        String contentId = PacketHelper.readString(buf, TextureTransferLimits.MAX_CONTENT_ID_BYTES);
+        String metadataJson = PacketHelper.readString(buf, TextureTransferLimits.MAX_JSON_BYTES);
+        ServerPlayer sender = (ServerPlayer) context.getPlayer();
+        if (sender == null || !ProtocolNetwork.acceptsV2(sender)
+                || !ProtocolNetwork.profile(sender)
+                        .supports(com.quickskin.mod.networking.protocol.ProtocolCapability.ANIMATION_METADATA)
+                || !NetworkSecurity.isValidStrongContentId(contentId)
+                || !TextureTransferRateLimiter.getInstance().allowStorageMutation(
+                        sender.getUUID(), sender.connection)) return;
+        MinecraftServer server = sender.server;
+        UUID playerId = sender.getUUID();
+        Object connection = sender.connection;
+        context.queue(() -> {
+            ServerPlayer player = activePlayer(server, playerId, connection);
+            if (player == null || !ProtocolNetwork.acceptsV2(player)) return;
+            acceptOrDeferAnimationMetadata(
+                    player,
+                    new ServerUploadCoordinator.PendingMetadata(contentId, metadataJson),
+                    true);
+        });
     }
 
     /**
@@ -88,7 +230,8 @@ public class ServerNetworkHandler {
         byte[] imageData = PacketHelper.readByteArray(buf, TextureTransferLimits.MAX_DIRECT_TEXTURE_BYTES);
 
         ServerPlayer sender = (ServerPlayer) context.getPlayer();
-        if (sender == null || !sender.getUUID().equals(playerId)
+        if (sender == null || !acceptLegacyPacket(sender, context)
+                || !sender.getUUID().equals(playerId)
                 || !NetworkSecurity.isValidTextureType(textureType)
                 || !TextureTransferRateLimiter.getInstance().allowUploadBytes(
                         sender.getUUID(), sender.connection, imageData.length)
@@ -115,7 +258,10 @@ public class ServerNetworkHandler {
         String model = PacketHelper.readString(buf, TextureTransferLimits.MAX_MODEL_BYTES);
 
         ServerPlayer sender = (ServerPlayer) context.getPlayer();
-        if (sender == null || !sender.getUUID().equals(playerId)
+        if (sender == null || !acceptLegacyPacket(sender, context)
+                || !sender.getUUID().equals(playerId)
+                || !NetworkSecurity.isValidLegacyAppearanceId(skinId, "skin")
+                || !NetworkSecurity.isValidLegacyAppearanceId(capeId, "cape")
                 || !TextureTransferRateLimiter.getInstance().allowStorageMutation(
                         sender.getUUID(), sender.connection)) return;
         MinecraftServer server = sender.server;
@@ -127,8 +273,6 @@ public class ServerNetworkHandler {
             if (player == null || !player.getUUID().equals(playerId)) {
                 return;
             }
-
-            trackModPresence(player);
 
             acceptOrDeferAppearance(
                     player,
@@ -147,7 +291,8 @@ public class ServerNetworkHandler {
         String hash = PacketHelper.readString(buf, TextureTransferLimits.CONTENT_ID_LENGTH);
 
         ServerPlayer sender = (ServerPlayer) context.getPlayer();
-        if (sender == null || !sender.getUUID().equals(playerId)
+        if (sender == null || !acceptLegacyPacket(sender, context)
+                || !sender.getUUID().equals(playerId)
                 || !TextureTransferRateLimiter.getInstance().allowTextureRequest(
                         sender.getUUID(), sender.connection)) return;
         MinecraftServer server = sender.server;
@@ -160,10 +305,8 @@ public class ServerNetworkHandler {
                 return;
             }
 
-            trackModPresence(player);
-
             if (!NetworkSecurity.isValidTextureType(textureType)
-                    || !NetworkSecurity.isValidContentId(hash)
+                    || !NetworkSecurity.isValidLegacyContentId(hash)
                     || !ServerTextureCache.getInstance().isRequestable(hash, textureType)) return;
 
             // Phase 5: Load texture from server storage and send to client
@@ -183,9 +326,9 @@ public class ServerNetworkHandler {
         byte[] chunkData = PacketHelper.readByteArray(buf, TextureTransferLimits.MAX_WIRE_CHUNK_BYTES);
 
         ServerPlayer sender = (ServerPlayer) context.getPlayer();
-        if (sender == null
+        if (sender == null || !acceptLegacyPacket(sender, context)
                 || !NetworkSecurity.isValidTextureType(textureType)
-                || !NetworkSecurity.isValidContentId(hash)
+                || !NetworkSecurity.isValidLegacyContentId(hash)
                 || !TextureTransferRateLimiter.getInstance().allowUploadBytes(
                         sender.getUUID(), sender.connection, chunkData.length)) return;
 
@@ -213,7 +356,9 @@ public class ServerNetworkHandler {
         UUID playerId = buf.readUUID();
         long requestId = buf.readLong();
         ServerPlayer sender = (ServerPlayer) context.getPlayer();
-        if (sender == null || requestId <= 0L || !sender.getUUID().equals(playerId)
+        if (sender == null || !acceptSharedPacket(sender, context)
+                || !ProtocolNetwork.canReceiveAppearanceSnapshotComplete(sender)
+                || requestId <= 0L || !sender.getUUID().equals(playerId)
                 || !TextureTransferRateLimiter.getInstance()
                         .allowAppearanceSnapshotRequest(
                                 sender.getUUID(), sender.connection)) return;
@@ -222,7 +367,6 @@ public class ServerNetworkHandler {
         context.queue(() -> {
             ServerPlayer player = activePlayer(server, playerId, connection);
             if (player == null) return;
-            trackModPresence(player);
             APPEARANCE_COORDINATOR.requestSnapshot(
                     player.getUUID(), connection, requestId);
         });
@@ -324,7 +468,6 @@ public class ServerNetworkHandler {
             return;
         }
 
-        trackModPresence(player);
         try {
             if (prepared != null) {
                 try (prepared) {
@@ -353,7 +496,8 @@ public class ServerNetworkHandler {
         String metadataJson = PacketHelper.readString(buf, TextureTransferLimits.MAX_JSON_BYTES);
 
         ServerPlayer sender = (ServerPlayer) context.getPlayer();
-        if (sender == null
+        if (sender == null || !acceptLegacyPacket(sender, context)
+                || !NetworkSecurity.isValidLegacyContentId(hash)
                 || !TextureTransferRateLimiter.getInstance().allowStorageMutation(
                 sender.getUUID(), sender.connection)) return;
         MinecraftServer server = sender.server;
@@ -366,8 +510,6 @@ public class ServerNetworkHandler {
             if (player == null) {
                 return;
             }
-
-            trackModPresence(player);
 
             acceptOrDeferAnimationMetadata(
                     player,
@@ -384,7 +526,7 @@ public class ServerNetworkHandler {
         String key = PacketHelper.readString(buf, TextureTransferLimits.MAX_CONFIG_KEY_BYTES);
         boolean value = buf.readBoolean();
         ServerPlayer sender = (ServerPlayer) context.getPlayer();
-        if (sender == null
+        if (sender == null || !acceptSharedPacket(sender, context)
                 || !TextureTransferRateLimiter.getInstance().allowStorageMutation(
                         sender.getUUID(), sender.connection)) return;
         MinecraftServer server = sender.server;
@@ -397,8 +539,6 @@ public class ServerNetworkHandler {
             if (player == null) {
                 return;
             }
-
-            trackModPresence(player);
 
             // Check if player has admin permissions (operator level 2+)
             if (!player.hasPermissions(2)) {
@@ -459,24 +599,23 @@ public class ServerNetworkHandler {
                 LOGGER.warn("Skipping invalid stored appearance for {}", targetPlayerId);
                 return;
             }
-            // Send the appearance metadata
-            NetworkTransport.INSTANCE.sendAppearanceToPlayer(
+            if (!ProtocolNetwork.sendAppearance(
                     recipient,
                     targetPlayerId,
                     appearance.getSkinId(),
                     appearance.getCapeId(),
-                    appearance.getModel()
-            );
+                    appearance.getModel())) return;
 
             // Texture bytes are demand-driven: the appearance hash lets a cache-missing client
             // request only what it needs. Animation metadata is small and can accompany the hash.
             String capeId = appearance.getCapeId();
             if (capeId != null && capeId.startsWith("local_cape:")) {
                 String hash = capeId.substring("local_cape:".length());
-                String metadata = ServerAnimationCache.getInstance().getMetadata(hash);
+                String primary = ServerTextureCache.getInstance().resolveContentId(hash);
+                String metadata = primary == null ? null
+                        : ServerAnimationCache.getInstance().getMetadata(primary);
                 if (metadata != null) {
-                    NetworkTransport.INSTANCE.sendAnimationMetadataToPlayer(
-                            recipient, hash, metadata);
+                    ProtocolNetwork.sendAnimationMetadata(recipient, hash, metadata);
                 }
             }
 
@@ -511,8 +650,10 @@ public class ServerNetworkHandler {
     private static boolean sendCachedTextureToClient(
             ServerPlayer player, String textureType, String hash) {
         int size = ServerTextureCache.getInstance().getTextureSize(hash);
+        ProtocolProfile profile = ProtocolNetwork.profile(player);
         if (!canReceiveQuickSkin(player) || !NetworkSecurity.isValidTextureType(textureType)
-                || size <= 0 || size > TextureTransferLimits.MAX_TEXTURE_BYTES) return false;
+                || size <= 0 || size > profile.maximumTextureBytes()
+                || size > TextureTransferLimits.MAX_TEXTURE_BYTES) return false;
         TextureTransferRateLimiter.DownloadReservation downloadReservation =
                 TextureTransferRateLimiter.getInstance().reserveDownloadBytes(
                         player.getUUID(), player.connection, size);
@@ -533,7 +674,8 @@ public class ServerNetworkHandler {
             try {
                 byte[] textureData = ServerTextureCache.getInstance().getTexture(hash);
                 if (textureData != null && textureData.length == size) {
-                    response = prepareTextureResponse(textureData);
+                    response = prepareTextureResponse(
+                            textureData, profile.maximumChunkBytes());
                 }
             } catch (RuntimeException | LinkageError error) {
                 LOGGER.warn("Unable to prepare a requested texture response", error);
@@ -547,16 +689,20 @@ public class ServerNetworkHandler {
         return accepted;
     }
 
-    private static PreparedTextureResponse prepareTextureResponse(byte[] textureData) {
-        if (textureData.length <= TextureTransferLimits.MAX_DIRECT_TEXTURE_BYTES) {
+    private static PreparedTextureResponse prepareTextureResponse(
+            byte[] textureData, int maximumChunkBytes) {
+        int chunkBytes = Math.min(TextureTransferLimits.CHUNK_BYTES, maximumChunkBytes);
+        if (chunkBytes < 1) return null;
+        if (textureData.length <= TextureTransferLimits.MAX_DIRECT_TEXTURE_BYTES
+                && textureData.length <= maximumChunkBytes) {
             return new PreparedTextureResponse(textureData, null);
         }
-        int totalChunks = (textureData.length + TextureTransferLimits.CHUNK_BYTES - 1)
-                / TextureTransferLimits.CHUNK_BYTES;
+        int totalChunks = (textureData.length + chunkBytes - 1) / chunkBytes;
+        if (totalChunks < 1 || totalChunks > TextureTransferLimits.MAX_CHUNKS) return null;
         byte[][] chunks = new byte[totalChunks][];
         for (int index = 0; index < totalChunks; index++) {
-            int from = index * TextureTransferLimits.CHUNK_BYTES;
-            int to = Math.min(textureData.length, from + TextureTransferLimits.CHUNK_BYTES);
+            int from = index * chunkBytes;
+            int to = Math.min(textureData.length, from + chunkBytes);
             chunks[index] = Arrays.copyOfRange(textureData, from, to);
         }
         return new PreparedTextureResponse(null, chunks);
@@ -639,7 +785,7 @@ public class ServerNetworkHandler {
         for (ServerAppearanceSyncCoordinator.Action action : actions) {
             ServerPlayer recipient = activePlayer(
                     server, action.playerId(), action.connection());
-            if (recipient == null || !canReceiveQuickSkin(recipient)) {
+            if (recipient == null) {
                 APPEARANCE_COORDINATOR.cancelSession(
                         action.playerId(), action.connection());
                 continue;
@@ -647,8 +793,16 @@ public class ServerNetworkHandler {
             try {
                 if (action.type()
                         == ServerAppearanceSyncCoordinator.ActionType.APPEARANCE) {
+                    if (!canReceiveQuickSkin(recipient)) {
+                        APPEARANCE_COORDINATOR.cancelSession(
+                                action.playerId(), action.connection());
+                        continue;
+                    }
                     sendAppearanceToPlayer(recipient, action.targetPlayerId());
                 } else {
+                    if (!ProtocolNetwork.canReceiveAppearanceSnapshotComplete(recipient)) {
+                        continue;
+                    }
                     NetworkTransport.INSTANCE.sendAppearanceSnapshotCompleteToPlayer(
                             recipient, action.requestId());
                 }
@@ -702,13 +856,17 @@ public class ServerNetworkHandler {
     private static void sendPreparedTexturePacket(
             ServerPlayer player, PacedTextureResponse pending, byte[] packet) {
         if (pending.response.direct != null) {
-            NetworkTransport.INSTANCE.sendTextureToPlayer(
-                    player, pending.textureType, pending.hash, packet);
+            if (!ProtocolNetwork.sendTexture(
+                    player, pending.textureType, pending.hash, packet)) {
+                throw new IllegalStateException("Protocol profile cannot receive texture");
+            }
             return;
         }
-        NetworkTransport.INSTANCE.sendTextureChunkToPlayer(
+        if (!ProtocolNetwork.sendTextureChunk(
                 player, pending.hash, pending.textureType, pending.nextPacket,
-                pending.response.chunks.length, packet);
+                pending.response.chunks.length, packet)) {
+            throw new IllegalStateException("Protocol profile cannot receive texture chunk");
+        }
     }
 
     private static void releaseTextureResponse(
@@ -854,7 +1012,9 @@ public class ServerNetworkHandler {
             ServerCooldownManager.getInstance().recordSkinChange(playerId);
             long cooldownEndTime =
                     ServerCooldownManager.getInstance().getCooldownEndTime(playerId);
-            NetworkTransport.INSTANCE.sendCooldownToPlayer(player, cooldownEndTime);
+            if (ProtocolNetwork.canReceiveCooldown(player)) {
+                NetworkTransport.INSTANCE.sendCooldownToPlayer(player, cooldownEndTime);
+            }
         }
         // Peers receive only content hashes; cache misses use the texture request packet.
         broadcastAppearanceToPlayers(
@@ -884,26 +1044,28 @@ public class ServerNetworkHandler {
                     player.getUUID(), player.connection, metadata.hash());
         }
 
-        if (!ServerTextureCache.getInstance().isOwnedBy(
-                metadata.hash(), player.getUUID(), "cape")) {
+        String primary = ServerTextureCache.getInstance()
+                .resolveContentId(metadata.hash());
+        if (primary == null || !ServerTextureCache.getInstance().isOwnedBy(
+                primary, player.getUUID(), "cape")) {
             if (UPLOAD_COORDINATOR.deferMetadata(
                     player.getUUID(), player.connection, metadata)) return;
             LOGGER.warn("Rejected unauthorized animation metadata from {}", player.getUUID());
             return;
         }
         if (!ServerTextureCache.getInstance().isAnimationMetadataCompatible(
-                metadata.hash(), metadata.metadataJson())) {
+                primary, metadata.metadataJson())) {
             LOGGER.warn("Rejected animation metadata that does not match its PNG identity from {}",
                     player.getUUID());
             return;
         }
         if (!ServerAnimationCache.getInstance().storeMetadata(
-                metadata.hash(), metadata.metadataJson(), player.getUUID())) {
+                primary, metadata.metadataJson(), player.getUUID())) {
             LOGGER.warn("Rejected animation metadata storage from {}", player.getUUID());
             return;
         }
         broadcastAnimationMetadataToOtherPlayers(
-                player, metadata.hash(), metadata.metadataJson());
+                player, primary, metadata.metadataJson());
     }
 
     private static void retryDeferredPackets(
@@ -919,6 +1081,7 @@ public class ServerNetworkHandler {
     }
 
     public static void onPlayerDisconnected(UUID playerId, Object connection) {
+        ProtocolSessions.getInstance().removeServerSession(playerId, connection);
         APPEARANCE_COORDINATOR.cancelSession(playerId, connection);
         RESPONSE_COORDINATOR.cancelSession(playerId, connection);
         discardPacedTextureResponses(playerId, connection);
@@ -929,6 +1092,7 @@ public class ServerNetworkHandler {
     }
 
     public static void clearTransientNetworkState() {
+        ProtocolSessions.getInstance().clearServerSessions();
         APPEARANCE_COORDINATOR.cancelAll();
         RESPONSE_COORDINATOR.cancelAll();
         discardAllPacedTextureResponses();
@@ -948,8 +1112,7 @@ public class ServerNetworkHandler {
         // Echo the exact hash+JSON to acknowledge storage, and notify peers with the same packet.
         for (ServerPlayer recipient : player.server.getPlayerList().getPlayers()) {
             if (canReceiveQuickSkin(recipient)) {
-                NetworkTransport.INSTANCE.sendAnimationMetadataToPlayer(
-                        recipient, hash, metadataJson);
+                ProtocolNetwork.sendAnimationMetadata(recipient, hash, metadataJson);
             }
         }
 
@@ -960,7 +1123,7 @@ public class ServerNetworkHandler {
      * @param player The player to send config to
      */
     public static void sendServerConfigToPlayer(ServerPlayer player) {
-        if (!canReceiveQuickSkin(player)) {
+        if (!ProtocolNetwork.canReceiveServerConfig(player)) {
             return;
         }
         com.quickskin.mod.config.ServerConfig serverConfig = com.quickskin.mod.config.ServerConfig.getInstance();
@@ -981,7 +1144,7 @@ public class ServerNetworkHandler {
         // Send to all players that have QuickSkin (including the admin who made the change)
         // IMPORTANT: Create a fresh packet buffer for each player to avoid buffer exhaustion
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (canReceiveQuickSkin(player)) {
+            if (ProtocolNetwork.canReceiveServerConfig(player)) {
                 NetworkTransport.INSTANCE.sendServerConfigToPlayer(player, configJson);
             }
         }

@@ -14,6 +14,8 @@ contributing; submitting a pull request accepts its contribution terms.
 - [AGENTS.md](AGENTS.md) is an import-only manifest. Every `@path.md` listed there is part of the
   authoritative instruction set for coding assistants.
 - [VERSION-BRANCHES.md](VERSION-BRANCHES.md) explains how shared changes reach release branches.
+- [RELEASING.md](RELEASING.md) explains immutable publication and repository governance.
+- [DEPENDENCY-SECURITY.md](DEPENDENCY-SECURITY.md) explains repository routing, checksums, and locks.
 - [e2e/README.md](e2e/README.md) describes the packaged Minecraft tests used by CI.
 
 `CLAUDE.md` deliberately contains only `@AGENTS.md`, which in turn imports the focused files under
@@ -168,9 +170,14 @@ Run the repository-level checks before handing work off:
 ```bash
 git diff --check
 python -m py_compile \
+  scripts/release/github_governance.py \
+  scripts/release/github_release.py \
   scripts/release/matrix.py \
+  scripts/release/reconcile_publication.py \
+  scripts/release/release_identity.py \
   scripts/release/status_table.py \
   scripts/release/verify_release.py \
+  scripts/release/verify_reproducibility.py \
   scripts/release/version_branches.py \
   e2e/orchestrator.py \
   e2e/packaged_runtime.py \

@@ -17,6 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NetworkSecurityTest {
     private static final String CONTENT_ID = "0123456789abcdef0123456789abcdef01234567";
+    private static final String STRONG_CONTENT_ID =
+            "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     @TempDir
     Path temporaryDirectory;
@@ -24,10 +26,13 @@ class NetworkSecurityTest {
     @Test
     void validatesCanonicalBoundaryIdentifiers() {
         assertTrue(NetworkSecurity.isValidContentId(CONTENT_ID));
+        assertTrue(NetworkSecurity.isValidContentId(STRONG_CONTENT_ID));
         assertFalse(NetworkSecurity.isValidContentId(null));
         assertFalse(NetworkSecurity.isValidContentId(CONTENT_ID.substring(1)));
         assertFalse(NetworkSecurity.isValidContentId(CONTENT_ID.toUpperCase()));
         assertFalse(NetworkSecurity.isValidContentId("../" + CONTENT_ID.substring(3)));
+        assertFalse(NetworkSecurity.isValidContentId(STRONG_CONTENT_ID.toUpperCase()));
+        assertFalse(NetworkSecurity.isValidContentId(STRONG_CONTENT_ID.replace('-', ':')));
 
         assertTrue(NetworkSecurity.isValidTextureType("skin"));
         assertTrue(NetworkSecurity.isValidTextureType("cape"));
@@ -36,6 +41,8 @@ class NetworkSecurityTest {
 
         assertTrue(NetworkSecurity.isValidLocalAppearanceId("local_skin:" + CONTENT_ID, "skin"));
         assertTrue(NetworkSecurity.isValidLocalAppearanceId("local_cape:" + CONTENT_ID, "cape"));
+        assertTrue(NetworkSecurity.isValidLocalAppearanceId(
+                "local_skin:" + STRONG_CONTENT_ID, "skin"));
         assertFalse(NetworkSecurity.isValidLocalAppearanceId("local_skin:not-a-hash", "skin"));
         assertFalse(NetworkSecurity.isValidLocalAppearanceId("local_cape:not-a-hash", "cape"));
         assertFalse(NetworkSecurity.isValidLocalAppearanceId("local_skin:" + CONTENT_ID, "cape"));
@@ -54,6 +61,9 @@ class NetworkSecurityTest {
         assertEquals(
                 expected,
                 NetworkSecurity.resolveContained(temporaryDirectory, CONTENT_ID, ".png"));
+        assertEquals(
+                temporaryDirectory.toAbsolutePath().normalize().resolve(STRONG_CONTENT_ID + ".png"),
+                NetworkSecurity.resolveContained(temporaryDirectory, STRONG_CONTENT_ID, ".png"));
         assertNull(NetworkSecurity.resolveContained(temporaryDirectory, "../escape", ".png"));
         assertNull(NetworkSecurity.resolveContained(
                 temporaryDirectory, CONTENT_ID, "/../../escape.png"));

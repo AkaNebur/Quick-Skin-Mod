@@ -12,8 +12,14 @@ from typing import Any
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts" / "release"))
 
+from artifact_manifest import (  # noqa: E402
+    ArtifactManifestError,
+    current_git_commit,
+    load_artifact_manifest,
+)
 from matrix import MatrixError, load_matrix  # noqa: E402
 from packaged_runtime import run_packaged_row  # noqa: E402
+from release_identity import ReleaseIdentityError, derive as derive_release_identity  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,22 +94,28 @@ def scenarios_for(data: dict[str, Any], row: dict[str, Any], args: argparse.Name
     return scenarios
 
 
-def read_manifest(path: Path, expected_lane_count: int) -> dict[str, Any]:
+def read_manifest(
+    path: Path,
+    data: dict[str, Any],
+    matrix_path: Path,
+    repository: Path,
+    expected_mod_version: str,
+    expected_commit: str,
+    expected_release: dict[str, Any],
+) -> dict[str, Any]:
     try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"cannot read artifact manifest {path}: {exc}") from exc
-    if not isinstance(manifest, dict):
-        raise ValueError("artifact manifest root must be an object")
-    if (
-        manifest.get("schema_version") != 1
-        or manifest.get("lane_count") != expected_lane_count
-        or len(manifest.get("artifacts", [])) != expected_lane_count
-    ):
-        raise ValueError(
-            "artifact manifest must be schema 1 and match the release-matrix lane count"
+        return load_artifact_manifest(
+            path,
+            repository=repository,
+            matrix_path=matrix_path,
+            matrix=data,
+            stage=path.parent,
+            expected_mod_version=expected_mod_version,
+            expected_commit=expected_commit,
+            expected_release=expected_release,
         )
-    return manifest
+    except ArtifactManifestError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def manifest_hash(manifest: dict[str, Any] | None, node: str) -> str:
@@ -142,9 +154,19 @@ def main() -> int:
     output_root = absolute(args.output_root)
     try:
         data = load_matrix(matrix_path)
+        identity = derive_release_identity(matrix_path, data)
+        commit = current_git_commit(REPO)
         rows = select_rows(data, args)
         manifest = (
-            read_manifest(manifest_path, data["lane_count"])
+            read_manifest(
+                manifest_path,
+                data,
+                matrix_path,
+                REPO,
+                identity.mod_version,
+                commit,
+                identity.manifest(),
+            )
             if manifest_path.exists()
             else None
         )
@@ -206,7 +228,7 @@ def main() -> int:
         passed = sum(result["status"] == "pass" for result in results)
         print(f"{passed}/{len(results)} packaged runtime rows passed")
         return 0 if passed == len(results) else 1
-    except (MatrixError, ValueError, OSError) as exc:
+    except (ArtifactManifestError, MatrixError, ReleaseIdentityError, ValueError, OSError) as exc:
         print(f"E2E configuration failed: {exc}", file=sys.stderr)
         return 2
 

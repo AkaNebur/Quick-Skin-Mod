@@ -29,7 +29,14 @@ public class MixinAbstractClientPlayer {
      * With global mixin priority 2000 (higher than TLSkinCape's default 1000),
      * this ensures QuickSkin gets the final say on player skins.
      */
-    @Inject(method = "getSkinTextureLocation", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "getSkinTextureLocation",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$getSkinTextureLocation(CallbackInfoReturnable<ResourceLocation> cir) {
         if (CPMCompatIntegration.shouldDeferToCPM()) return;
 
@@ -65,7 +72,14 @@ public class MixinAbstractClientPlayer {
      * Intercept model name lookups to return QuickSkin's model type.
      * Works in tandem with skin texture override to ensure correct model rendering.
      */
-    @Inject(method = "getModelName", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "getModelName",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$getModelName(CallbackInfoReturnable<String> cir) {
         if (CPMCompatIntegration.shouldDeferToCPM()) return;
 
@@ -106,7 +120,14 @@ public class MixinAbstractClientPlayer {
     /**
      * Intercept cape texture lookups to return QuickSkin's cape if active.
      */
-    @Inject(method = "getCloakTextureLocation", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "getCloakTextureLocation",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$getCloakTextureLocation(CallbackInfoReturnable<ResourceLocation> cir) {
         if (CPMCompatIntegration.shouldDeferToCPM()) return;
 

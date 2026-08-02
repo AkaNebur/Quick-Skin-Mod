@@ -114,6 +114,10 @@ per Minecraft version. Git stores those branches as shared history plus their sm
 deltas; it does not duplicate unchanged source blobs. See [Version branches](VERSION-BRANCHES.md)
 for the naming, synchronization, AI-repair, and merge contract.
 
+Maintainer releases use one matrix-derived identity, exact-byte marketplace reconciliation,
+artifact attestations, and an immutable GitHub Release. The retry and governance procedure is in
+[Releasing Quick Skin](RELEASING.md).
+
 ## Historical documentation
 
 - [Migration oracle retirement](ORACLE-RETIREMENT.md) records the preservation tag and post-retirement source policy.

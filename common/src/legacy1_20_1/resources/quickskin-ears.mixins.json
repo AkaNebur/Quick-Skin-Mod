@@ -6,7 +6,10 @@
   "plugin": "com.quickskin.mod.mixin.compat.EarsMixinPlugin",
   "client": [
     "EarsLayerRendererMixin",
-    "EarsModMixin"
+    "EarsModMixin",
+    "ReplayModCompatMixin",
+    "PasConfiguratorMixin",
+    "PasConfiguratorAccessor"
   ],
   "injectors": {
     "defaultRequire": 0

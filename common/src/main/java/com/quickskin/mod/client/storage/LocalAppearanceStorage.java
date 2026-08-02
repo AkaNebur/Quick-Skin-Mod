@@ -3,6 +3,7 @@ package com.quickskin.mod.client.storage;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.common.data.ContentId;
 import com.quickskin.mod.common.util.BoundedFileReader;
 import com.quickskin.mod.networking.NetworkSecurity;
 import net.fabricmc.api.EnvType;
@@ -14,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -56,6 +58,8 @@ public class LocalAppearanceStorage {
     public static class PlayerPreferences {
         public String lastSkinId;
         public String lastModelType;
+        // Opaque legacy extension data. No current feature reads this map, so its key/value
+        // semantics are deliberately preserved instead of guessing which side is a content ID.
         public Map<String, String> favorites;
 
         public PlayerPreferences() {
@@ -110,6 +114,27 @@ public class LocalAppearanceStorage {
     }
 
     /**
+     * Migrates persisted last-used local skin IDs after the asset catalog authenticates aliases.
+     * Opaque favorites are retained byte-semantically until a versioned schema defines them.
+     */
+    public synchronized boolean migrateContentIds(Map<String, String> aliases) {
+        if (storageFile == null || aliases == null || aliases.isEmpty()
+                || !Files.isRegularFile(storageFile)) {
+            return false;
+        }
+        PreferencesData data = loadPreferencesData();
+        boolean changed = false;
+        for (PlayerPreferences preferences : data.players.values()) {
+            String migrated = aliases.get(preferences.lastSkinId);
+            if (isStrongMigration(preferences.lastSkinId, migrated)) {
+                preferences.lastSkinId = migrated;
+                changed = true;
+            }
+        }
+        return changed && savePreferencesData(data);
+    }
+
+    /**
      * Load all preferences from disk
      */
     private PreferencesData loadPreferencesData() {
@@ -139,12 +164,12 @@ public class LocalAppearanceStorage {
     /**
      * Save all preferences to disk
      */
-    private void savePreferencesData(PreferencesData data) {
+    private boolean savePreferencesData(PreferencesData data) {
         if (storageFile == null) {
-            return;
+            return false;
         }
 
-        Path temporary = storageFile.resolveSibling(storageFile.getFileName() + ".tmp");
+        Path temporary = null;
         try {
             normalize(data);
             Files.createDirectories(storageFile.getParent());
@@ -153,18 +178,28 @@ public class LocalAppearanceStorage {
             if (encoded.length > MAX_PREFERENCES_BYTES) {
                 QuickSkin.LOGGER.error("Refusing to save oversized local appearance preferences {}",
                         storageFile);
-                return;
+                return false;
             }
+            temporary = Files.createTempFile(
+                    storageFile.getParent(), ".quickskin-preferences-", ".tmp");
             Files.write(temporary, encoded);
+            byte[] verified = BoundedFileReader.readBytes(temporary, MAX_PREFERENCES_BYTES);
+            if (!Arrays.equals(encoded, verified)) {
+                throw new IOException("Local appearance temp-file verification failed");
+            }
             atomicReplace(temporary, storageFile);
+            return true;
         } catch (IOException e) {
             QuickSkin.LOGGER.error("Unable to save local appearance preferences {}", storageFile, e);
+            return false;
         } finally {
-            try {
-                Files.deleteIfExists(temporary);
-            } catch (IOException cleanupError) {
-                QuickSkin.LOGGER.debug("Unable to remove local appearance temp file {}",
-                        temporary, cleanupError);
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException cleanupError) {
+                    QuickSkin.LOGGER.debug("Unable to remove local appearance temp file {}",
+                            temporary, cleanupError);
+                }
             }
         }
     }
@@ -201,6 +236,13 @@ public class LocalAppearanceStorage {
         } catch (IllegalArgumentException exception) {
             return false;
         }
+    }
+
+    private static boolean isStrongMigration(String legacyValue, String strongValue) {
+        ContentId legacy = ContentId.parse(legacyValue);
+        ContentId strong = ContentId.parse(strongValue);
+        return legacy != null && legacy.algorithm() == ContentId.Algorithm.SHA1
+                && strong != null && strong.algorithm() == ContentId.Algorithm.SHA256;
     }
 
     private static void trimToSize(Map<?, ?> map, int maximumSize) {

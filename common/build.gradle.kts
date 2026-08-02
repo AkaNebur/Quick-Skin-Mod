@@ -88,6 +88,7 @@ extensions.configure<ArchitectPluginExtension>("architectury") {
 repositories {
     mavenCentral()
 }
+apply(from = rootProject.file("gradle/repository-policy.gradle.kts"))
 
 val sourceOverlays = releaseMatrix["source_overlays"] as Map<*, *>
 val commonOverlayRoutes = sourceOverlays["common"] as Map<*, *>

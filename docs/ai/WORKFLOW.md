@@ -74,9 +74,15 @@ Also run:
 ```powershell
 git diff --check
 python -m py_compile scripts/release/matrix.py scripts/release/verify_release.py `
-  scripts/release/status_table.py scripts/release/version_branches.py e2e/orchestrator.py `
+  scripts/release/generate_sbom.py `
+  scripts/release/github_governance.py scripts/release/github_release.py `
+  scripts/release/reconcile_publication.py `
+  scripts/release/release_identity.py scripts/release/status_table.py `
+  scripts/release/verify_reproducibility.py `
+  scripts/release/version_branches.py scripts/ci/ai_patch_policy.py e2e/orchestrator.py `
   e2e/packaged_runtime.py e2e/visual_review.py
 python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
+python -m unittest discover -s scripts/ci/tests -p "test_*.py" -v
 ```
 
 Packaged Minecraft runtime scenarios require a display and the Java 17 toolchain. Use Xvfb on
@@ -86,8 +92,9 @@ development runs for packaged-JAR E2E evidence. Gradle and Stonecutter must them
 JDK 21 or newer; shared CI installs JDK 17, JDK 21, and JDK 25 so each version branch can select
 its matrix-declared toolchain.
 
-When release determinism is in scope, rebuild `buildAllLanes buildAllE2EHarnesses` with
-`--rerun-tasks` and compare both production and both harness SHA-256 values with the first build.
+Release automation always rebuilds `buildAllLanes buildAllE2EHarnesses` with `--rerun-tasks` and
+requires every production and harness SHA-256 to equal the first build. When determinism is in
+scope locally, use `scripts/release/verify_reproducibility.py` against the first staged manifest.
 
 ## Documentation maintenance
 
@@ -96,6 +103,8 @@ When release determinism is in scope, rebuild `buildAllLanes buildAllE2EHarnesse
 - Keep oracle preservation and post-retirement resource routing in `ORACLE-RETIREMENT.md`.
 - Keep packaged-runtime behavior in `e2e/README.md`.
 - Keep the synchronization and thin-branch contract in `VERSION-BRANCHES.md`.
+- Keep immutable release identity, retry semantics, provenance, and protected-environment operation
+  in `RELEASING.md`.
 - Keep the generated README status block aligned through `scripts/release/status_table.py`; never
   hand-maintain its version rows.
 - Keep the newcomer and AI-assisted contribution path in `CONTRIBUTING.md`, and keep
