@@ -79,3 +79,53 @@ After that tested port merges, the controller dispatches a lightweight run of th
 the final release branch. That run does not launch Minecraft: it verifies the successful source
 run and requires the final merge commit to have exactly the tested Git tree. This is the evidence
 shown by each branch-specific Packaged E2E badge in the root README.
+
+## Public visual evidence
+
+The architectural rationale, evaluated alternatives, and external precedents are recorded in
+[ADR 0002](../docs/architecture/decisions/0002-publish-curated-e2e-evidence-with-github-pages.md).
+
+The required runtime does not treat a filename as screenshot identity. Each validated capture has
+the semantic key `<artifact>/<scenario>/<client-role>/<step>`, and
+[`visual-catalog.json`](visual-catalog.json) supplies its stable title, expectation, and advisory
+review tier. `result.json` remains authoritative for the screenshot path, status, SHA-256,
+dimensions, and before/after pixel metrics. The catalog and the runtime screenshot-step contract
+must have exact test-enforced coverage.
+
+`visual_review_workflow.js` is an optional manual Workflow adapter, not the GitHub Actions entry
+point. It consumes the generated manifest and emits the same exact verdict-array contract as
+`check_visual_review.py`; keep that adapter and the CI prompt/checker schema aligned.
+
+After a successful full run on a release branch—or after its exact-tree attestation—the advisory
+`prepare-pages-evidence` job downloads the original packaged artifacts and creates
+`pages-e2e-<branch>`. That 90-day artifact contains only catalogued PNGs plus a validated manifest;
+logs, caches, crash reports, Minecraft directories, and AI-authored HTML are never copied.
+
+The `Project site` workflow executes only the protected generator from `master`. It discovers
+release branches from GitHub, accepts the newest public artifact whose workflow branch and SHA
+equal each current branch head, authenticates both recorded Actions runs, validates the exact
+curated tree and every path/hash/dimension/catalog identity, rechecks all
+heads, and publishes the complete site as one atomic GitHub Pages artifact. A missing, stale, or
+invalid version aborts the new deployment so the previous site remains available. Pages and the AI
+vision pass stay advisory; neither is added to the protected Build or Packaged E2E checks.
+After a successful deployment, the workflow rolls each already validated bundle into a protected
+90-day cache. A monthly Pages run validates and refreshes those caches, so an unchanged release
+branch does not need to relaunch Minecraft merely to keep its public proof available.
+
+Run the focused contracts in the project Python environment (CI installs the Linux renderer from
+the hash-locked `scripts/pages/requirements.txt`):
+
+```bash
+python -m unittest \
+  scripts.release.tests.test_visual_evidence \
+  scripts.release.tests.test_pages_site -v
+```
+
+The Pages build hash-locks the same Pillow version as packaged E2E. Protected `master` code
+decodes every PNG, recalculates its pixel metrics and required comparisons, and only then creates
+bounded WebP images. The gallery inventory distinguishes the source PNG hash and dimensions from
+the published derivative hash and dimensions; derivative URLs are content-addressed by their own
+SHA-256. For a local dependency-free fixture output, call
+`scripts/pages/build_site.py --copy-images` with one or more already prepared branch bundles, then
+serve the resulting directory over HTTP; the static JavaScript deliberately fetches its JSON
+inventories rather than embedding untrusted data in HTML.

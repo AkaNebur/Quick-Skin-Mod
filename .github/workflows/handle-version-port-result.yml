@@ -269,6 +269,7 @@ jobs:
           git diff --cached --check
           python3 -m py_compile \
             scripts/ci/ai_patch_policy.py \
+            scripts/release/branch_readme.py \
             scripts/release/github_governance.py \
             scripts/release/github_release.py \
             scripts/release/matrix.py \
