@@ -342,9 +342,10 @@ public class SkinManagerMixin {
             at = @At("RETURN"),
             cancellable = true,
             require = 1,
-            expect = 1,
-            allow = 1)
-    private void quickskin$modifyInsecureSkin(GameProfile profile, CallbackInfoReturnable<PlayerSkin> cir) {
+            // Minecraft 1.21.1 has two RETURN opcodes in getInsecureSkin; both must be wrapped.
+            expect = 2,
+            allow = 2)
+    private void quickskin$modifyInsecureSkinLegacy(GameProfile profile, CallbackInfoReturnable<PlayerSkin> cir) {
         UUID uuid = profile.getId();
 //?} else if <26.2 {
     @Inject(

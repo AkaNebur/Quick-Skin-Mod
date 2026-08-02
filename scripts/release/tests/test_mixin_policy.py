@@ -89,7 +89,8 @@ ALTERNATIVE_HOOKS = {
 
 # Audited vanilla bytecode multiplicities. The ItemInHand source contains Stonecutter branches:
 # pre-1.21.11 renderHand requests two buffers (arm + sleeve), while the new renderer submits one
-# model part. SkinManager 1.20.1 has two RETURN opcodes in its one target method.
+# model part. SkinManager 1.20.1 and 1.21.1 each have two RETURN opcodes in their target methods;
+# the later SkinManager branches retain a single RETURN.
 INJECTION_COUNT_OVERRIDES = {
     (
         "main:com/quickskin/mod/mixin/ItemInHandRendererMixin.java",
@@ -98,6 +99,17 @@ INJECTION_COUNT_OVERRIDES = {
     (
         "overlay:com/quickskin/mod/mixin/MixinSkinManager.java",
         "quickskin$overrideSkinInfo",
+    ): {2},
+    (
+        "main:com/quickskin/mod/mixin/SkinManagerMixin.java",
+        "quickskin$modifyInsecureSkinLegacy",
+    ): {2},
+}
+
+ACTIVE_LOADER_INJECTION_COUNT_OVERRIDES = {
+    (
+        "neoforge/src/main/java/com/quickskin/mod/neoforge/mixin/SkinManagerMixin.java",
+        "quickskin$modifyInsecureSkinLegacy",
     ): {2},
 }
 
@@ -295,10 +307,13 @@ class MixinPolicyTest(unittest.TestCase):
                         "$redirect" in handler_name
                         or handler_name == "quickskin$suppressPreviewEquipment"
                     ) else 1
+                    expected_counts = ACTIVE_LOADER_INJECTION_COUNT_OVERRIDES.get(
+                        (relative(source_path), handler_name), {1}
+                    )
                     with self.subTest(source=relative(source_path), handler=handler_name):
                         self.assertEqual(assignment_values(context, "require"), {expected_require})
-                        self.assertEqual(assignment_values(context, "expect"), {1})
-                        self.assertEqual(assignment_values(context, "allow"), {1})
+                        self.assertEqual(assignment_values(context, "expect"), expected_counts)
+                        self.assertEqual(assignment_values(context, "allow"), expected_counts)
 
 
 if __name__ == "__main__":
