@@ -87,6 +87,10 @@ class WorkflowSecurityTest(unittest.TestCase):
         )
         self.assertLess(propose.index(identity), propose.index(merge))
 
+    def test_port_publisher_requires_a_complete_proposal(self) -> None:
+        publish = job_block("sync-version-branches.yml", "publish")
+        self.assertIn("needs.propose.result == 'success'", publish)
+
     def test_credentialed_writers_do_not_receive_claude_credentials(self) -> None:
         for workflow, job in (
             ("sync-version-branches.yml", "publish"),

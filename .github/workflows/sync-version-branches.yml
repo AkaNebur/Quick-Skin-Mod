@@ -253,6 +253,7 @@ jobs:
     if: >-
       always() &&
       needs.discover.result == 'success' &&
+      needs.propose.result == 'success' &&
       needs.discover.outputs.targets != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
