@@ -52,9 +52,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * This catches ALL skin lookups including those by mods like Essential that bypass
  * AbstractClientPlayer.getSkin() and PlayerRenderer.getTextureLocation() entirely.
  *
- * Two injection points:
- * - getInsecureSkin(GameProfile) — synchronous, used by vanilla code paths
- * - getOrLoad(GameProfile) — async (CompletableFuture), used by Essential's FallbackPlayer on 1.20.2+
+ * Two injection points, whose names and return types changed in 1.21.11:
+ * - getInsecureSkin / createLookup — synchronous lookup construction
+ * - getOrLoad / get — async loading
  *
  * Essential for MC >= 1.20.2 uses FallbackPlayer which calls getOrLoad() directly,
  * bypassing getInsecureSkin(). The getOrLoad mixin wraps the future with thenApply
@@ -72,7 +72,7 @@ public class SkinManagerMixin {
 
     /**
      * Shared helper that applies QuickSkin overrides to a PlayerSkin.
-     * Used by both getInsecureSkin and getOrLoad mixin handlers.
+     * Used by both synchronous and asynchronous lookup mixin handlers.
      */
     @Unique
     private static PlayerSkin quickskin$applyOverrides(PlayerSkin original, UUID uuid, String profileName) {
@@ -258,8 +258,8 @@ public class SkinManagerMixin {
     }
 
     /**
-     * Intercept createLookup (26.2 synchronous path; renamed from getInsecureSkin).
-     * In 26.2 SkinManager.createLookup(GameProfile, boolean) returns a Supplier&lt;PlayerSkin&gt; instead of
+     * Intercept the synchronous lookup path. In 1.21.11,
+     * SkinManager.createLookup(GameProfile, boolean) returns a Supplier&lt;PlayerSkin&gt; instead of
      * a resolved PlayerSkin, so we wrap the supplier to apply QuickSkin overrides on resolution.
      */
 //? if <1.21.11 {
@@ -347,38 +347,22 @@ public class SkinManagerMixin {
     )
     private void quickskin$modifyInsecureSkin(GameProfile profile, CallbackInfoReturnable<PlayerSkin> cir) {
         UUID uuid = profile.getId();
-//?} else if <26.2 {
-    @Inject(
-            method = "getInsecureSkin",
-            at = @At("RETURN"),
-            cancellable = true,
-            require = 1,
-            expect = 1,
-            allow = 1
-    )
-    private void quickskin$modifyInsecureSkin(GameProfile profile, CallbackInfoReturnable<PlayerSkin> cir) {
-        UUID uuid = profile.id();
 //?} else {
     @Inject(
             method = "createLookup",
             at = @At("RETURN"),
             cancellable = true,
             require = 1,
-            expect = 1,
-            allow = 1
+            expect = 3,
+            allow = 3
     )
-    private void quickskin$modifyInsecureSkin(GameProfile profile, boolean secure, CallbackInfoReturnable<java.util.function.Supplier<PlayerSkin>> cir) {
+    private void quickskin$modifyCreateLookup(GameProfile profile, boolean secure, CallbackInfoReturnable<java.util.function.Supplier<PlayerSkin>> cir) {
         UUID uuid = profile.id();
 //?}
         if (uuid == null) return;
 
 //? if <1.21.11 {
         PlayerSkin result = quickskin$applyOverrides(cir.getReturnValue(), uuid, profile.getName());
-        if (result != cir.getReturnValue()) {
-            cir.setReturnValue(result);
-        }
-//?} else if <26.2 {
-        PlayerSkin result = quickskin$applyOverrides(cir.getReturnValue(), uuid, profile.name());
         if (result != cir.getReturnValue()) {
             cir.setReturnValue(result);
         }
@@ -391,7 +375,7 @@ public class SkinManagerMixin {
     }
 
     /**
-     * Intercept getOrLoad (async path returning CompletableFuture).
+     * Intercept the async loading path returning a CompletableFuture.
      *
      * Essential for MC >= 1.20.2 uses FallbackPlayer which calls getOrLoad() directly,
      * bypassing getInsecureSkin(). We wrap the returned future with thenApply to apply
@@ -408,27 +392,16 @@ public class SkinManagerMixin {
     )
     private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<PlayerSkin>> cir) {
         UUID uuid = profile.getId();
-//?} else if <26.2 {
-    @Inject(
-            method = "getOrLoad",
-            at = @At("RETURN"),
-            cancellable = true,
-            require = 1,
-            expect = 1,
-            allow = 1
-    )
-    private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
-        UUID uuid = profile.id();
 //?} else {
     @Inject(
             method = "get",
             at = @At("RETURN"),
             cancellable = true,
             require = 1,
-            expect = 1,
-            allow = 1
+            expect = 2,
+            allow = 2
     )
-    private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
+    private void quickskin$modifyGet(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
         UUID uuid = profile.id();
 //?}
         if (uuid == null) return;

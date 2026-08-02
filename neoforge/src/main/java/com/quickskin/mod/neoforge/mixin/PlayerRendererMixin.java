@@ -1,7 +1,7 @@
 package com.quickskin.mod.neoforge.mixin;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-//? if <26.2 {
+//? if <1.21.11 {
 import com.mojang.blaze3d.vertex.VertexConsumer;
 //?} else {
 //?}
@@ -17,14 +17,6 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.resources.ResourceLocation;
-//?} else if <26.2 {
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
-import net.minecraft.client.renderer.entity.player.AvatarRenderer;
-import net.minecraft.client.renderer.entity.state.AvatarRenderState;
-import net.minecraft.resources.Identifier;
-import net.minecraft.world.entity.Entity;
 //?} else {
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -48,7 +40,7 @@ import java.util.UUID;
 /**
  * NeoForge-specific mixin to enable transparent arm rendering in first-person view.
  *
- * In 26.2 the immediate MultiBufferSource was removed and AvatarRenderer.renderHand submits the arm
+ * In 1.21.11 the immediate MultiBufferSource was removed and AvatarRenderer.renderHand submits the arm
  * via SubmitNodeCollector.submitModelPart(...). We redirect that submit to force entityTranslucent
  * when the player's skin has transparent pixels (mirrors the common ItemInHandRendererMixin).
  */
@@ -96,14 +88,14 @@ public class PlayerRendererMixin {
      * when the player's skin has transparent pixels.
      */
     @Redirect(
-//? if <26.2 {
+//? if <1.21.11 {
             method = "renderHand",
 //?} else {
             method = "renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/Identifier;Lnet/minecraft/client/model/geom/ModelPart;Z)V",
 //?}
             at = @At(
                     value = "INVOKE",
-//? if <26.2 {
+//? if <1.21.11 {
                     target = "Lnet/minecraft/client/renderer/MultiBufferSource;getBuffer(Lnet/minecraft/client/renderer/RenderType;)Lcom/mojang/blaze3d/vertex/VertexConsumer;"
 //?} else {
                     target = "Lnet/minecraft/client/renderer/SubmitNodeCollector;submitModelPart(Lnet/minecraft/client/model/geom/ModelPart;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/rendertype/RenderType;IILnet/minecraft/client/renderer/texture/TextureAtlasSprite;)V"
@@ -132,11 +124,6 @@ public class PlayerRendererMixin {
         if (ClientConfig.getInstance().shouldDisableSkinTransparency()) {
             return instance.getBuffer(renderType);
         }
-//?} else if <26.2 {
-    private VertexConsumer quickskin$redirectRenderHandBuffer(MultiBufferSource instance, RenderType renderType,
-                                                              PoseStack poseStack, MultiBufferSource buffer, int packedLight, Identifier skinTexture, ModelPart arm, boolean isSleeve) {
-        if (CPMCompatIntegration.shouldDeferToCPM()) return instance.getBuffer(renderType);
-        if (CPMCompatIntegration.isCPMActivelyRendering()) return instance.getBuffer(renderType);
 //?} else {
     private void quickskin$redirectSubmitModelPart(SubmitNodeCollector collector, ModelPart part,
                                                     PoseStack poseStack, RenderType renderType,
@@ -153,17 +140,6 @@ public class PlayerRendererMixin {
 
 //? if <1.21.11 {
         ResourceLocation skinTexture = player.getSkin().texture();
-        if (skinTexture == null) {
-            return instance.getBuffer(renderType);
-        }
-
-        // Determine if the skin needs a translucent render type
-//?} else if <26.2 {
-        // Check if transparency is disabled globally by config
-        if (ClientConfig.getInstance().shouldDisableSkinTransparency()) {
-            return instance.getBuffer(renderType);
-        }
-
         if (skinTexture == null) {
             return instance.getBuffer(renderType);
         }
@@ -193,10 +169,6 @@ public class PlayerRendererMixin {
             // The vanilla method calls getBuffer for both the solid arm and the translucent sleeve.
             // By forcing entityTranslucent here, we correctly render the arm with transparency.
             return instance.getBuffer(RenderType.entityTranslucent(skinTexture));
-//?} else if <26.2 {
-            // The vanilla method calls getBuffer for both the solid arm and the translucent sleeve.
-            // By forcing entityTranslucent here, we correctly render the arm with transparency.
-            return instance.getBuffer(RenderTypes.entityTranslucent(skinTexture));
 //?} else {
             RenderType translucentType = RenderTypes.entityTranslucent(skinTexture);
             collector.submitModelPart(part, poseStack, translucentType, packedLight, overlay, sprite);
@@ -204,7 +176,7 @@ public class PlayerRendererMixin {
             collector.submitModelPart(part, poseStack, renderType, packedLight, overlay, sprite);
 //?}
         }
-//? if <26.2 {
+//? if <1.21.11 {
 
         // If no transparency is needed, use the original render type provided by the vanilla method.
         return instance.getBuffer(renderType);
