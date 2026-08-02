@@ -87,6 +87,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/release/version_branches.py --target "$TARGET_BRANCH" > /dev/null
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git fetch --no-tags origin "$GITHUB_SHA"
           source_sha="$GITHUB_SHA"
 
