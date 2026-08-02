@@ -24,7 +24,10 @@ public abstract class CpmRenderDepthMixin {
                     shift = At.Shift.AFTER,
                     remap = false
             ),
+            // Legacy and modern CPM call different bind methods. Neither alternative can carry
+            // expect=1 independently because one is deliberately absent in every CPM era.
             require = 0,
+            allow = 1,
             remap = false
     )
     private void quickskin$cpmLegacyPlayerRenderStart(CallbackInfo ci) {
@@ -40,6 +43,7 @@ public abstract class CpmRenderDepthMixin {
                     remap = false
             ),
             require = 0,
+            allow = 1,
             remap = false
     )
     private void quickskin$cpmModernPlayerRenderStart(CallbackInfo ci) {
@@ -55,18 +59,34 @@ public abstract class CpmRenderDepthMixin {
                     remap = false
             ),
             require = 0,
+            expect = 1,
+            allow = 1,
             remap = false
     )
     private void quickskin$cpmHandRenderStart(CallbackInfo ci) {
         CPMCompatIntegration.onCpmRenderStart();
     }
 
-    @Inject(method = "playerRenderPost", at = @At("HEAD"), require = 0, remap = false)
+    @Inject(
+            method = "playerRenderPost",
+            at = @At("HEAD"),
+            require = 0,
+            expect = 1,
+            allow = 1,
+            remap = false
+    )
     private void quickskin$cpmPlayerRenderEnd(CallbackInfo ci) {
         CPMCompatIntegration.onCpmRenderEnd();
     }
 
-    @Inject(method = "renderHandPost", at = @At("HEAD"), require = 0, remap = false)
+    @Inject(
+            method = "renderHandPost",
+            at = @At("HEAD"),
+            require = 0,
+            expect = 1,
+            allow = 1,
+            remap = false
+    )
     private void quickskin$cpmHandRenderEnd(CallbackInfo ci) {
         CPMCompatIntegration.onCpmRenderEnd();
     }

@@ -45,7 +45,14 @@ public abstract class PlayerInfoMixin {
     @Unique
     private String quickskin$cachedModelName = null;
 
-    @Inject(method = "getSkin", at = @At("TAIL"), cancellable = true)
+    @Inject(
+            method = "getSkin",
+            at = @At("TAIL"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$overrideSkinTail(CallbackInfoReturnable<PlayerSkin> cir) {
         if (CPMCompatIntegration.shouldDeferToCPM()) return;
 

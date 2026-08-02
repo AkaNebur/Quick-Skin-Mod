@@ -37,7 +37,10 @@ public class CapeLayerMixin {
 
     @Inject(method = "submit(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/client/renderer/entity/state/AvatarRenderState;FF)V",
             at = @At("HEAD"),
-            cancellable = true)
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1)
     private void quickskin$renderCustomCape(PoseStack poseStack, SubmitNodeCollector buffer, int packedLight,
                                             AvatarRenderState renderState, float yRot, float xRot,
                                             CallbackInfo ci) {

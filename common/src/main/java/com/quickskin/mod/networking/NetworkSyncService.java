@@ -5,6 +5,9 @@ import com.quickskin.mod.client.concurrent.ClientIoExecutor;
 import com.quickskin.mod.client.services.LocalAssetManager;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.util.HashUtil;
+import com.quickskin.mod.networking.protocol.ProtocolCapability;
+import com.quickskin.mod.networking.protocol.ProtocolProfile;
+import com.quickskin.mod.networking.protocol.ProtocolSessions;
 //? if >=1.21 {
 import com.quickskin.mod.networking.payloads.*;
 //?}
@@ -38,6 +41,8 @@ public class NetworkSyncService {
     private static final long MAX_RETRY_MILLIS = 65_000L;
     private static final int MAX_SESSION_CONFIRMATIONS = 512;
     private static final long SNAPSHOT_REQUEST_RETRY_MILLIS = 15_000L;
+    private static final long PROTOCOL_HELLO_RETRY_MILLIS = 3_000L;
+    private static final int MAX_PROTOCOL_HELLO_ATTEMPTS = 5;
 
     private final AtomicLong syncSequence = new AtomicLong();
     private final AtomicLong snapshotRequestSequence = new AtomicLong();
@@ -57,6 +62,11 @@ public class NetworkSyncService {
     private Object snapshotConnection;
     private long snapshotRequestId;
     private long snapshotRetryAtMillis;
+    private UUID protocolPlayerId;
+    private Object protocolConnection;
+    private ProtocolSessions.ClientHello protocolHello;
+    private int protocolHelloAttempts;
+    private long protocolHelloRetryAtMillis;
 
     private NetworkSyncService() {
     }
@@ -72,6 +82,22 @@ public class NetworkSyncService {
     public synchronized void beginAppearanceSnapshotRequest(
             UUID playerId, Object connection) {
         if (playerId == null || connection == null) return;
+        //? if <1.21 {
+        boolean helloAvailable = NetworkTransport.INSTANCE.canServerReceiveProtocolHello();
+        boolean legacyAvailable = NetworkTransport.INSTANCE.canServerReceiveLegacyProtocol();
+        //?} else {
+        boolean helloAvailable = NetworkTransport.INSTANCE.canServerReceive(ProtocolHelloPayload.TYPE);
+        boolean legacyAvailable = NetworkTransport.INSTANCE.canServerReceive(UpdateAppearancePayload.TYPE)
+                && NetworkTransport.INSTANCE.canServerReceive(RequestTexturePayload.TYPE);
+        //?}
+        ProtocolSessions.ClientHello hello = ProtocolSessions.getInstance().beginClientSession(
+                playerId, connection, helloAvailable, legacyAvailable);
+        protocolPlayerId = playerId;
+        protocolConnection = connection;
+        protocolHello = hello != null && hello.sendHello() ? hello : null;
+        protocolHelloAttempts = 0;
+        protocolHelloRetryAtMillis = 0L;
+        tickProtocolHandshake();
         long requestId = snapshotRequestSequence.incrementAndGet();
         if (requestId <= 0L) {
             snapshotRequestSequence.set(1L);
@@ -81,6 +107,16 @@ public class NetworkSyncService {
         snapshotConnection = connection;
         snapshotRequestId = requestId;
         snapshotRetryAtMillis = 0L;
+    }
+
+    /** Makes pending bootstrap work eligible after the exact connection negotiates v2. */
+    public synchronized void onProtocolAcknowledged(Object connection) {
+        if (connection == protocolConnection && isCurrentConnection(connection)) {
+            protocolHello = null;
+            protocolHelloAttempts = 0;
+            protocolHelloRetryAtMillis = 0L;
+            snapshotRetryAtMillis = 0L;
+        }
     }
 
     /**
@@ -105,29 +141,23 @@ public class NetworkSyncService {
             return;
         }
 
-        //? if <1.21 {
-        if (mc.getConnection() == null) {
-        //?} else {
-        // Check if server supports QuickSkin packets
-        if (!NetworkTransport.INSTANCE.canServerReceive(UpdateAppearancePayload.TYPE)) {
-        //?}
-            return;
-        }
-        //? if >=1.21 {
-        boolean hasLocalTexture = (skinId != null && skinId.startsWith("local_skin:"))
-                || (capeId != null && capeId.startsWith("local_cape:"));
-        if (hasLocalTexture
-                && !NetworkTransport.INSTANCE.canServerReceive(TextureChunkPayload.TYPE)) return;
-        //?}
         Object sourceConnection = mc.getConnection();
         if (sourceConnection == null) return;
+        ProtocolProfile protocolProfile =
+                ProtocolSessions.getInstance().clientProfile(sourceConnection);
+        if (!isUsableProfile(protocolProfile)) return;
+        //? if >=1.21 {
+        if (protocolProfile.negotiated()
+                && (!NetworkTransport.INSTANCE.canServerReceive(UpdateAppearanceV2Payload.TYPE)
+                || !NetworkTransport.INSTANCE.canServerReceive(TextureChunkV2Payload.TYPE))) return;
+        //?}
         long token = syncSequence.incrementAndGet();
         String safeSkinId = skinId != null ? skinId : "";
         String safeCapeId = capeId != null ? capeId : "";
         String safeModel = model != null ? model : "classic";
         DesiredSync desired = new DesiredSync(
                 token, sourceConnection, playerId,
-                safeSkinId, safeCapeId, safeModel);
+                safeSkinId, safeCapeId, safeModel, protocolProfile);
         synchronized (this) {
             latestDesired = desired;
             awaitingAcknowledgement = null;
@@ -144,7 +174,7 @@ public class NetworkSyncService {
         preparingToken = desired.token;
         ClientIoExecutor.supplyAsync(() -> prepareSync(
                 desired.token, desired.sourceConnection, desired.playerId,
-                desired.skinId, desired.capeId, desired.model))
+                desired.skinId, desired.capeId, desired.model, desired.protocolProfile))
                 .whenComplete((prepared, error) -> {
                     if (error != null) {
                         QuickSkin.LOGGER.warn("Unable to prepare appearance network sync", error);
@@ -169,7 +199,8 @@ public class NetworkSyncService {
 
     private PreparedSync prepareSync(
             long token, Object sourceConnection, UUID playerId,
-            String skinId, String capeId, String model) {
+            String skinId, String capeId, String model,
+            ProtocolProfile protocolProfile) {
         if (syncSequence.get() != token || !isCurrentConnection(sourceConnection)) return null;
         List<PreparedUpload> uploads = new ArrayList<>(2);
         String serverSkinId = skinId;
@@ -179,7 +210,7 @@ public class NetworkSyncService {
 
         if (skinId.startsWith("local_skin:")) {
             PreparedUpload upload = prepareUpload(
-                    skinId.substring("local_skin:".length()), "skin");
+                    skinId.substring("local_skin:".length()), "skin", protocolProfile);
             if (upload == null) return null;
             serverSkinId = "local_skin:" + upload.networkHash;
             if (!upload.alreadySent) uploads.add(upload);
@@ -187,13 +218,14 @@ public class NetworkSyncService {
         if (syncSequence.get() != token || !isCurrentConnection(sourceConnection)) return null;
         if (capeId.startsWith("local_cape:")) {
             String localHash = capeId.substring("local_cape:".length());
-            PreparedUpload upload = prepareUpload(localHash, "cape");
+            PreparedUpload upload = prepareUpload(localHash, "cape", protocolProfile);
             if (upload == null) return null;
             serverCapeId = "local_cape:" + upload.networkHash;
             if (!upload.alreadySent) uploads.add(upload);
             AnimationMetadata animation =
                     LocalAssetManager.getInstance().getAnimationMetadata(localHash);
-            if (animation != null) {
+            if (animation != null && (!protocolProfile.negotiated()
+                    || protocolProfile.supports(ProtocolCapability.ANIMATION_METADATA))) {
                 String json = animation.toJson();
                 if (NetworkSecurity.isValidAnimationMetadata(json)) {
                     expectedMetadata = new PreparedMetadata(upload.networkHash, json);
@@ -207,38 +239,49 @@ public class NetworkSyncService {
         if (syncSequence.get() != token || !isCurrentConnection(sourceConnection)) return null;
         return new PreparedSync(
                 token, sourceConnection, playerId, serverSkinId, serverCapeId,
-                model, uploads, metadata, expectedMetadata);
+                model, uploads, metadata, expectedMetadata, protocolProfile);
     }
 
-    private PreparedUpload prepareUpload(String localHash, String textureType) {
+    private PreparedUpload prepareUpload(
+            String localHash, String textureType, ProtocolProfile protocolProfile) {
         UploadKey key = new UploadKey(localHash, textureType);
         // Recompute canonical bytes before trusting session state: animated timing is embedded in
         // the PNG identity and can change while the local source hash remains stable.
         byte[] textureData = LocalAssetManager.getInstance()
                 .loadCanonicalTexture(localHash, textureType);
         if (textureData == null) return null;
-        String networkHash = HashUtil.computeHash(textureData);
-        if (!NetworkSecurity.isValidContentId(networkHash)) return null;
+        if (textureData.length > protocolProfile.maximumTextureBytes()) return null;
+        String networkHash = protocolProfile.negotiated()
+                ? HashUtil.computeContentId(textureData)
+                : HashUtil.computeHash(textureData);
+        if (protocolProfile.negotiated()
+                ? !NetworkSecurity.isValidStrongContentId(networkHash)
+                : !NetworkSecurity.isValidLegacyContentId(networkHash)) return null;
         String confirmedHash = confirmedUploadHashes.get(key);
         if (networkHash.equals(confirmedHash)) {
-            return new PreparedUpload(key, networkHash, textureType, new byte[0][], true);
+            return new PreparedUpload(
+                    key, networkHash, textureType, new byte[0][], true, protocolProfile);
         }
         if (confirmedHash != null) confirmedUploadHashes.remove(key, confirmedHash);
         SentUpload sent = sentUploadHashes.get(key);
         if (sent != null && networkHash.equals(sent.networkHash)
                 && System.currentTimeMillis() - sent.sentAtMillis < IN_FLIGHT_TTL_MILLIS) {
-            return new PreparedUpload(key, networkHash, textureType, new byte[0][], true);
+            return new PreparedUpload(
+                    key, networkHash, textureType, new byte[0][], true, protocolProfile);
         }
         if (sent != null) sentUploadHashes.remove(key, sent);
-        int totalChunks = (textureData.length + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE;
+        int chunkSize = Math.min(MAX_CHUNK_SIZE, protocolProfile.maximumChunkBytes());
+        if (chunkSize < 1) return null;
+        int totalChunks = (textureData.length + chunkSize - 1) / chunkSize;
         if (totalChunks < 1 || totalChunks > TextureTransferLimits.MAX_CHUNKS) return null;
         byte[][] chunks = new byte[totalChunks][];
         for (int index = 0; index < totalChunks; index++) {
-            int offset = index * MAX_CHUNK_SIZE;
-            int length = Math.min(MAX_CHUNK_SIZE, textureData.length - offset);
+            int offset = index * chunkSize;
+            int length = Math.min(chunkSize, textureData.length - offset);
             chunks[index] = java.util.Arrays.copyOfRange(textureData, offset, offset + length);
         }
-        return new PreparedUpload(key, networkHash, textureType, chunks, false);
+        return new PreparedUpload(
+                key, networkHash, textureType, chunks, false, protocolProfile);
     }
 
     private synchronized void enqueuePreparedSync(PreparedSync prepared) {
@@ -250,6 +293,7 @@ public class NetworkSyncService {
 
     /** Emits a bounded number of already-prepared packets from the client tick. */
     public synchronized void tick() {
+        tickProtocolHandshake();
         tickAppearanceSnapshotRequest();
         retryIfDue();
         if (activeSync == null) {
@@ -313,7 +357,7 @@ public class NetworkSyncService {
                     && !isRecentMetadataSend(
                             sync.metadata.networkHash, sync.metadata.json)) {
                 try {
-                    sendAnimationMetadata(sync.metadata);
+                    sendAnimationMetadata(sync.metadata, sync.protocolProfile);
                 } catch (RuntimeException | LinkageError error) {
                     QuickSkin.LOGGER.warn("Unable to send animation metadata", error);
                     activeSync = null;
@@ -336,10 +380,49 @@ public class NetworkSyncService {
         activeSync = null;
     }
 
+    private void tickProtocolHandshake() {
+        ProtocolSessions.ClientHello hello = protocolHello;
+        if (hello == null || protocolConnection == null
+                || !isCurrentConnection(protocolConnection)) return;
+        ProtocolProfile profile = ProtocolSessions.getInstance()
+                .clientProfile(protocolConnection);
+        if (profile.mode() != ProtocolProfile.Mode.LOCAL_ONLY) {
+            protocolHello = null;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (protocolHelloAttempts >= MAX_PROTOCOL_HELLO_ATTEMPTS
+                || now < protocolHelloRetryAtMillis) return;
+        try {
+            //? if <1.21 {
+            NetworkTransport.INSTANCE.sendProtocolHelloToServer(hello.nonce(), hello.offer());
+            //?} else {
+            NetworkTransport.INSTANCE.sendToServer(
+                    new ProtocolHelloPayload(hello.nonce(), hello.offer()));
+            //?}
+        } catch (RuntimeException | LinkageError error) {
+            QuickSkin.LOGGER.debug("Unable to send QuickSkin protocol hello", error);
+        }
+        protocolHelloAttempts++;
+        protocolHelloRetryAtMillis = now + PROTOCOL_HELLO_RETRY_MILLIS;
+    }
+
     private void tickAppearanceSnapshotRequest() {
         if (snapshotRequestId <= 0L || snapshotPlayerId == null
                 || snapshotConnection == null) return;
         if (!isCurrentConnection(snapshotConnection)) {
+            clearAppearanceSnapshotRequest();
+            return;
+        }
+        ProtocolProfile profile =
+                ProtocolSessions.getInstance().clientProfile(snapshotConnection);
+        if (!isUsableProfile(profile)) {
+            snapshotRetryAtMillis = System.currentTimeMillis()
+                    + SNAPSHOT_REQUEST_RETRY_MILLIS;
+            return;
+        }
+        if (profile.negotiated()
+                && !profile.supports(ProtocolCapability.APPEARANCE_SNAPSHOT_ACK)) {
             clearAppearanceSnapshotRequest();
             return;
         }
@@ -441,6 +524,18 @@ public class NetworkSyncService {
 
     private void sendTextureChunk(
             PreparedUpload upload, int chunkIndex, byte[] chunk) {
+        if (upload.protocolProfile.negotiated()) {
+            //? if <1.21 {
+            NetworkTransport.INSTANCE.sendTextureChunkV2ToServer(
+                    upload.networkHash, upload.textureType,
+                    chunkIndex, upload.chunks.length, chunk);
+            //?} else {
+            NetworkTransport.INSTANCE.sendToServer(new TextureChunkV2Payload(
+                    upload.networkHash, upload.textureType,
+                    chunkIndex, upload.chunks.length, chunk));
+            //?}
+            return;
+        }
         //? if <1.21 {
         NetworkTransport.INSTANCE.sendTextureChunkToServer(
                 upload.networkHash, upload.textureType, chunkIndex, upload.chunks.length, chunk);
@@ -451,7 +546,18 @@ public class NetworkSyncService {
         //?}
     }
 
-    private void sendAnimationMetadata(PreparedMetadata metadata) {
+    private void sendAnimationMetadata(
+            PreparedMetadata metadata, ProtocolProfile protocolProfile) {
+        if (protocolProfile.negotiated()) {
+            //? if <1.21 {
+            NetworkTransport.INSTANCE.sendAnimationMetadataV2ToServer(
+                    metadata.networkHash, metadata.json);
+            //?} else {
+            NetworkTransport.INSTANCE.sendToServer(new UploadAnimationMetadataV2Payload(
+                    metadata.networkHash, metadata.json));
+            //?}
+            return;
+        }
         //? if <1.21 {
         NetworkTransport.INSTANCE.sendAnimationMetadataToServer(
                 metadata.networkHash, metadata.json);
@@ -462,6 +568,16 @@ public class NetworkSyncService {
     }
 
     private void sendAppearance(PreparedSync sync) {
+        if (sync.protocolProfile.negotiated()) {
+            //? if <1.21 {
+            NetworkTransport.INSTANCE.sendAppearanceV2ToServer(
+                    sync.playerId, sync.serverSkinId, sync.serverCapeId, sync.model);
+            //?} else {
+            NetworkTransport.INSTANCE.sendToServer(new UpdateAppearanceV2Payload(
+                    sync.playerId, sync.serverSkinId, sync.serverCapeId, sync.model));
+            //?}
+            return;
+        }
         //? if <1.21 {
         NetworkTransport.INSTANCE.sendAppearanceToServer(
                 sync.playerId, sync.serverSkinId, sync.serverCapeId, sync.model);
@@ -475,6 +591,14 @@ public class NetworkSyncService {
         Minecraft minecraft = Minecraft.getInstance();
         return expectedConnection != null && minecraft != null
                 && minecraft.getConnection() == expectedConnection;
+    }
+
+    private boolean isUsableProfile(ProtocolProfile profile) {
+        return profile != null && (profile.mode() == ProtocolProfile.Mode.LEGACY_V1
+                || (profile.negotiated()
+                && profile.version() == 2
+                && profile.supports(ProtocolCapability.SHA256_CONTENT_IDS)
+                && profile.supports(ProtocolCapability.CHUNKED_TEXTURE_TRANSFER)));
     }
 
     /** Confirms uploads only after the server echoes an appearance it actually authorized. */
@@ -586,6 +710,13 @@ public class NetworkSyncService {
         sentUploadHashes.clear();
         confirmedMetadata.clear();
         sentMetadata.clear();
+        ProtocolSessions.getInstance().clearClientSession(
+                protocolPlayerId, protocolConnection);
+        protocolPlayerId = null;
+        protocolConnection = null;
+        protocolHello = null;
+        protocolHelloAttempts = 0;
+        protocolHelloRetryAtMillis = 0L;
         clearAppearanceSnapshotRequest();
     }
 
@@ -604,15 +735,18 @@ public class NetworkSyncService {
         private final String textureType;
         private final byte[][] chunks;
         private final boolean alreadySent;
+        private final ProtocolProfile protocolProfile;
 
         private PreparedUpload(
                 UploadKey key, String networkHash, String textureType,
-                byte[][] chunks, boolean alreadySent) {
+                byte[][] chunks, boolean alreadySent,
+                ProtocolProfile protocolProfile) {
             this.key = key;
             this.networkHash = networkHash;
             this.textureType = textureType;
             this.chunks = chunks;
             this.alreadySent = alreadySent;
+            this.protocolProfile = protocolProfile;
         }
     }
 
@@ -625,7 +759,8 @@ public class NetworkSyncService {
             UUID playerId,
             String skinId,
             String capeId,
-            String model) {
+            String model,
+            ProtocolProfile protocolProfile) {
     }
 
     private static final class AwaitingAcknowledgement {
@@ -661,6 +796,7 @@ public class NetworkSyncService {
         private final List<PreparedUpload> uploads;
         private final PreparedMetadata metadata;
         private final PreparedMetadata expectedMetadata;
+        private final ProtocolProfile protocolProfile;
         private int uploadIndex;
         private int chunkIndex;
         private boolean metadataHandled;
@@ -670,7 +806,8 @@ public class NetworkSyncService {
                 long token, Object sourceConnection, UUID playerId,
                 String serverSkinId, String serverCapeId, String model,
                 List<PreparedUpload> uploads, PreparedMetadata metadata,
-                PreparedMetadata expectedMetadata) {
+                PreparedMetadata expectedMetadata,
+                ProtocolProfile protocolProfile) {
             this.token = token;
             this.sourceConnection = sourceConnection;
             this.playerId = playerId;
@@ -680,6 +817,7 @@ public class NetworkSyncService {
             this.uploads = List.copyOf(uploads);
             this.metadata = metadata;
             this.expectedMetadata = expectedMetadata;
+            this.protocolProfile = protocolProfile;
         }
     }
 
@@ -702,9 +840,24 @@ public class NetworkSyncService {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        if (mc.getConnection() == null) {
+        Object connection = mc.getConnection();
+        if (connection == null) return;
+        ProtocolProfile profile = ProtocolSessions.getInstance().clientProfile(connection);
+        if (!isUsableProfile(profile)) return;
+
+        if (profile.negotiated()) {
+            if (!NetworkSecurity.isValidStrongContentId(hash)) return;
+            //? if <1.21 {
+            NetworkTransport.INSTANCE.requestTextureV2FromServer(
+                    playerId, textureType, hash);
+            //?} else {
+            if (!NetworkTransport.INSTANCE.canServerReceive(RequestTextureV2Payload.TYPE)) return;
+            NetworkTransport.INSTANCE.sendToServer(
+                    new RequestTextureV2Payload(playerId, textureType, hash));
+            //?}
             return;
         }
+        if (!NetworkSecurity.isValidLegacyContentId(hash)) return;
 
         //? if <1.21 {
         NetworkTransport.INSTANCE.requestTextureFromServer(playerId, textureType, hash);

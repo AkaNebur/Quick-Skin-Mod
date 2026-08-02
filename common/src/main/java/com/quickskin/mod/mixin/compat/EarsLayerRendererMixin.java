@@ -22,7 +22,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "com.unascribed.ears.EarsLayerRenderer")
 public class EarsLayerRendererMixin {
 
-    @Inject(method = "getEarsFeatures", at = @At("RETURN"), cancellable = true, remap = false)
+    @Inject(
+            method = "getEarsFeatures",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 0,
+            expect = 1,
+            allow = 1,
+            remap = false
+    )
     private static void quickskin$getEarsFeatures(AbstractClientPlayer peer, CallbackInfoReturnable<Object> cir) {
         if (EarsCompatIntegration.isDisabledResult(cir.getReturnValue())) {
             //? if <1.21 {
