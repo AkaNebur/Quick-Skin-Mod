@@ -79,8 +79,14 @@ jobs:
 
       - name: Validate generated documentation and repository tooling
         run: |
+          python3 scripts/release/branch_readme.py \
+            --matrix release/release-matrix.json \
+            --readme "$RUNNER_TEMP/generated-README.md" \
+            --profile-branch master \
+            --check
           python3 -m py_compile \
             scripts/ci/ai_patch_policy.py \
+            scripts/release/branch_readme.py \
             scripts/release/github_governance.py \
             scripts/release/github_release.py \
             scripts/release/matrix.py \

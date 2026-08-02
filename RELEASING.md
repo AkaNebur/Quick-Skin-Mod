@@ -105,3 +105,26 @@ python scripts/release/github_governance.py apply \
 The helper enables immutable releases, creates no-bypass branch and tag rulesets, requires PRs and
 strict stable checks, blocks deletion and force-pushes, and configures the human-reviewed `release`
 environment. It never deletes unknown rulesets or deployment policies.
+
+## GitHub Pages activation
+
+The project site is a separate advisory publication and is not part of release governance or the
+required branch checks. After `.github/workflows/pages.yml`, `site/`, and the evidence tooling have
+reached `master` and every release branch, an administrator performs the one-time repository setup:
+
+1. Open **Settings → Environments**, create `github-pages`, choose **Selected branches and tags**
+   for deployment branches, and allow only the `master` branch. This environment rule is the
+   non-bypassable boundary that prevents a manually dispatched workflow from another ref from
+   receiving `pages: write`.
+2. Open **Settings → Pages** and set **Build and deployment → Source** to **GitHub Actions**.
+3. Run `Project site` manually from `master` after every release branch has produced an exact-head
+   `pages-e2e-<branch>` artifact.
+
+The expected project URL is <https://akanebur.github.io/Quick-Skin-Mod/>. Later successful
+release-branch Packaged E2E runs wake the site workflow automatically. The workflow executes the
+generator from protected `master`, validates all current release heads, and deploys through the
+`github-pages` environment. If Pages is not enabled or any branch lacks current evidence, the
+workflow fails without replacing the previously deployed site.
+Successful deployments refresh a protected cache of each exact-head evidence bundle. The monthly
+Pages schedule revalidates and rolls those caches forward without rerunning packaged Minecraft;
+an updated branch still requires a new exact-head E2E/attestation artifact before it can appear.

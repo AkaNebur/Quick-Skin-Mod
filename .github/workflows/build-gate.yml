@@ -80,6 +80,13 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install hash-locked Pages image dependency
+        run: >-
+          python -m pip install
+          --only-binary=:all:
+          --require-hashes
+          --requirement scripts/pages/requirements.txt
+
       - name: Configure Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
         with:
@@ -88,9 +95,45 @@ jobs:
       - name: Validate central matrix
         run: python scripts/release/matrix.py --matrix release/release-matrix.json > /dev/null
 
+      - name: Validate branch-specific README profile
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$BASE_REF" ]]; then
+            profile_branch="$BASE_REF"
+          elif [[ "$REF_NAME" == master || "$REF_NAME" == automation/refresh-release-status ]]; then
+            profile_branch=master
+          elif python3 scripts/release/version_branches.py \
+              --target "$REF_NAME" > /dev/null 2>&1; then
+            profile_branch="$REF_NAME"
+          elif [[ "$REF_NAME" == automation/sync/* ]]; then
+            profile_branch="${REF_NAME#automation/sync/}"
+            profile_branch="${profile_branch%%/*}"
+            python3 scripts/release/version_branches.py \
+              --target "$profile_branch" > /dev/null
+          elif python3 scripts/release/branch_readme.py \
+              --matrix release/release-matrix.json \
+              --readme README.md \
+              --profile-branch master \
+              --check 2> /dev/null; then
+            exit 0
+          else
+            profile_branch="$(jq -er '.project.release_branch' \
+              release/release-matrix.json)"
+          fi
+          python3 scripts/release/branch_readme.py \
+            --matrix release/release-matrix.json \
+            --readme README.md \
+            --profile-branch "$profile_branch" \
+            --check
+
       - name: Validate release tooling and repository policy
         run: |
           python -m py_compile \
+            scripts/release/branch_readme.py \
             scripts/release/matrix.py \
             scripts/release/github_governance.py \
             scripts/release/github_release.py \
@@ -100,10 +143,15 @@ jobs:
             scripts/release/verify_release.py \
             scripts/release/verify_reproducibility.py \
             scripts/release/version_branches.py \
+            scripts/pages/evidence.py \
+            scripts/pages/build_site.py \
             scripts/ci/ai_patch_policy.py \
             e2e/orchestrator.py \
             e2e/packaged_runtime.py \
+            e2e/visual_evidence.py \
             e2e/visual_review.py
+          node --check site/assets/site.js
+          node --check site/assets/gallery.js
           python -m unittest discover -s scripts/release/tests -p 'test_*.py' -v
           python -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
 
