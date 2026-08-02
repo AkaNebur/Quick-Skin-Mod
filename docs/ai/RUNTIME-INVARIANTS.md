@@ -91,3 +91,32 @@ This file is part of the repository-wide instruction set imported by `AGENTS.md`
   normal skin/cape path when an optional mod or API is absent.
 - Compatibility failures must degrade locally; they must not break base mod initialization or
   dedicated-server startup.
+
+## Public E2E evidence
+
+- A public screenshot is valid only when a successful packaged `result.json` references it and its
+  recorded SHA-256 and dimensions match the PNG. Do not infer scenario, role, or step from a
+  filename, and do not let sets or duplicate labels collapse two frames into false coverage.
+- `e2e/visual-catalog.json` and `EXPECTED_SCREENSHOT_STEPS` must cover exactly the same semantic
+  checkpoints. Add or remove a capture in both places and update its expectation in the same
+  change.
+- The current catalog is deliberately a cross-version parity contract: every supported loader and
+  version publishes every checkpoint. Do not add a version-only capture without first extending
+  the catalog schema and protected validator with explicit applicability rules.
+- Public evidence is bound to source run/branch/SHA and final run/branch/SHA. Pages may select a
+  bundle only when its authenticated originating target run and manifest both match the current
+  release-branch head; a later protected Pages run may only roll that already validated bundle
+  into cache.
+- Discovery records one protected `master` SHA for the Pages run. Every collection and render job
+  checks out that exact implementation revision; an advancing `master` may affect only a later run.
+- Treat downloaded artifacts and their JSON as untrusted. Require the exact curated tree, exact
+  schemas, complete catalog and comparison products, canonical identities, one loader per branch
+  loader, and one JAR digest per artifact. Reject traversal, symlinks, unknown catalog entries,
+  duplicate identities, non-pass lanes, stale SHAs, invalid PNGs, arbitrary nested fields, and
+  size-limit violations. Protected rendering must decode and recompute screenshot/comparison pixel
+  metrics before publishing. Presentation code must use escaped/text DOM APIs and local assets.
+- Optimized gallery images are derivatives, not the source proof. Publish separate source and
+  derivative hashes/dimensions, and content-address each public image URL with the bytes actually
+  served.
+- Pages is an advisory, atomic publication surface. Failure must preserve the previous site and
+  must not weaken or replace the required Build and Packaged E2E gates.

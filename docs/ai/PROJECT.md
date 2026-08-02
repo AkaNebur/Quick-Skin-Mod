@@ -12,7 +12,9 @@ repository root.
   request, including an AI-assisted workflow.
 - `README.md` is for users and builders; focused architecture documents own their subjects.
 - `RELEASING.md` owns immutable identity, publication, recovery, provenance, and GitHub governance.
-- [`docs/architecture/decisions/`](../architecture/decisions/0001-postpone-1-21-release-train-consolidation.md)
+- `e2e/README.md`, `e2e/visual-catalog.json`, and `scripts/pages/` own public visual-evidence
+  identity, validation, rendering, and GitHub Pages publication.
+- [`docs/architecture/decisions/`](../architecture/decisions/README.md)
   records evidence-backed architectural decisions that must survive individual worktrees.
 
 Do not put operational rules directly in `AGENTS.md` or `CLAUDE.md`, and do not create another root
@@ -65,8 +67,19 @@ immutable workflow and governance activation contract.
 - The marked README release-status table is generated from discovered release branches and each
   branch's matrix. Its workflow updates one idempotent automation PR and never pushes directly to
   `master`. Do not edit its rows manually or add a branch/version list to its workflow.
+- Each successful release-branch E2E tree may produce one curated `pages-e2e-<branch>` artifact.
+  The Pages workflow must discover the same release branches, require evidence for every exact
+  current head, render with protected `master` code, and deploy the whole site atomically. Never
+  introduce a second version list, publish logs/crash reports, or make Pages a protected release
+  check.
 - Shared behavior changes start on `master`. A version-only fix starts on its release branch and
   must be reflected in canonical `master` sources when the same behavior applies elsewhere.
+- A shared change is not repository-wide delivery merely because it reached `master`. The
+  synchronizer must create one port PR for every discovered release branch; each PR must pass its
+  exact-head Build and Packaged E2E gates, merge into its target, and receive successful final
+  exact-tree attestations. Until that is true for every target, report the outstanding ports rather
+  than calling the change delivered everywhere. Name every intentional branch exclusion in the
+  issue or source pull request; never let an omitted port become an implicit support policy.
 
 ## Task routing
 

@@ -2,12 +2,13 @@
 //
 // Run with:  Workflow({ scriptPath: "<repo>/e2e/visual_review_workflow.js", args: <manifest> })
 // where <manifest> is the JSON array produced by `python3 e2e/visual_review.py [--all]`
-// (items: {path, label, kind, expectation}). The expectations live in visual_review.py (single
-// source of truth) and are passed through per item — this script does not duplicate them.
+// (items: {path, label, capture_id, kind, expectation}). Expectations live in visual-catalog.json and
+// are passed through per item — this script does not duplicate them.
 //
 // One vision agent per screenshot opens the image (Read tool) and checks it against its expectation;
 // any frame it flags (mismatch or anomaly) is re-examined by an independent skeptic before it is
-// reported, to suppress false positives. Returns { reviewed, cleanCount, flaggedCount, flagged, clean }.
+// reported, to suppress false positives. Returns the same exact verdict array accepted by
+// check_visual_review.py: {label, matches, visible, anomalies, defect} for every input frame.
 
 export const meta = {
   name: 'e2e-visual-review',
@@ -72,24 +73,23 @@ const results = await pipeline(
   }
 )
 
-const clean = []
-const flagged = []
+const verdicts = []
 for (const r of results) {
-  if (!r || !r.v) { flagged.push({ label: r && r.it ? r.it.label : '?', error: 'no review returned' }); continue }
+  if (!r || !r.v) throw new Error(`no review returned for ${r && r.it ? r.it.label : '?'}`)
   const isFlagged = r.v.matches === false || (r.v.anomalies && r.v.anomalies.length > 0)
-  if (!isFlagged) {
-    clean.push({ label: r.it.label, visible: r.v.visible })
-  } else {
-    flagged.push({
-      label: r.it.label,
-      visible: r.v.visible,
-      matches: r.v.matches,
-      anomalies: r.v.anomalies,
-      confidence: r.v.confidence,
-      verify: r.verify || null,
-    })
+  const defect = isFlagged && (!r.verify || r.verify.realProblem)
+  const anomalies = defect ? [...r.v.anomalies] : []
+  if (defect && anomalies.length === 0) {
+    anomalies.push(r.verify && r.verify.note ? r.verify.note : 'The frame did not match its expectation.')
   }
+  verdicts.push({
+    label: r.it.label,
+    matches: !defect,
+    visible: r.v.visible,
+    anomalies,
+    defect,
+  })
 }
 
-log(`clean: ${clean.length} | flagged: ${flagged.length}`)
-return { reviewed: results.length, cleanCount: clean.length, flaggedCount: flagged.length, flagged, clean }
+log(`clean: ${verdicts.filter(v => !v.defect).length} | flagged: ${verdicts.filter(v => v.defect).length}`)
+return verdicts

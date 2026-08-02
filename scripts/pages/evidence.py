@@ -1,0 +1,860 @@
+#!/usr/bin/env python3
+"""Prepare and validate the small, public subset of packaged-E2E evidence."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import re
+import shutil
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "e2e"))
+sys.path.insert(0, str(REPO / "scripts" / "release"))
+
+from packaged_runtime import DISTINCT_SCREENSHOT_PAIRS  # noqa: E402
+from version_branches import parse_version_branch  # noqa: E402
+from visual_evidence import (  # noqa: E402
+    DEFAULT_CATALOG,
+    SAFE_ID,
+    SHA256,
+    VisualEvidenceError,
+    collect_evidence,
+    load_catalog,
+    png_dimensions,
+    reject_symlinks,
+    sha256_file,
+    validate_comparison_metrics,
+    validate_screenshot_metrics,
+)
+
+
+SCHEMA_VERSION = 1
+COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+MAX_FRAMES = 1000
+MAX_MANIFEST_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
+MAX_TOTAL_IMAGE_BYTES = 1024 * 1024 * 1024
+MAX_IMAGE_PIXELS = 50_000_000
+MANIFEST_FIELDS = frozenset(
+    {"schema_version", "repository", "release", "provenance", "lanes", "frames", "comparisons"}
+)
+RELEASE_FIELDS = frozenset({"branch", "version", "artifacts", "scenarios"})
+LANE_FIELDS = frozenset(
+    {
+        "lane_id",
+        "artifact_node",
+        "version",
+        "loader",
+        "scenario",
+        "jar_sha256",
+        "status",
+        "roles",
+        "elapsed_s",
+    }
+)
+PUBLIC_FRAME_FIELDS = frozenset(
+    {
+        "frame_id",
+        "capture_id",
+        "capture_order",
+        "title",
+        "expectation",
+        "review_tier",
+        "artifact_node",
+        "version",
+        "loader",
+        "scenario",
+        "role",
+        "step",
+        "file_sha256",
+        "width",
+        "height",
+        "pixel_validation",
+        "asset",
+    }
+)
+COMPARISON_FIELDS = frozenset(
+    {
+        "comparison_id",
+        "artifact_node",
+        "version",
+        "loader",
+        "scenario",
+        "role",
+        "first_frame_id",
+        "second_frame_id",
+        "pixel_validation",
+    }
+)
+
+
+class PublicEvidenceError(ValueError):
+    pass
+
+
+def _read_json(path: Path, label: str) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PublicEvidenceError(f"cannot read {label} {path}: {exc}") from exc
+
+
+def _text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise PublicEvidenceError(f"{label} must be a non-empty string")
+    return value.strip()
+
+
+def _sha(value: Any, label: str) -> str:
+    text = _text(value, label)
+    if not COMMIT_SHA.fullmatch(text):
+        raise PublicEvidenceError(f"{label} must be a lowercase 40-character commit SHA")
+    return text
+
+
+def _run_id(value: Any, label: str) -> str:
+    text = str(value)
+    if not text.isdigit() or int(text) <= 0:
+        raise PublicEvidenceError(f"{label} must be a positive Actions run ID")
+    return text
+
+
+def _timestamp(value: Any, label: str) -> str:
+    text = _text(value, label)
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise PublicEvidenceError(f"{label} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise PublicEvidenceError(f"{label} must include a timezone")
+    return text
+
+
+def _branch(value: Any, label: str, *, release: bool = False) -> str:
+    text = _text(value, label)
+    if not BRANCH.fullmatch(text) or ".." in text or text.endswith("/"):
+        raise PublicEvidenceError(f"{label} is not a safe branch name: {text!r}")
+    if release and parse_version_branch(text) is None:
+        raise PublicEvidenceError(f"{label} is not a release branch: {text!r}")
+    return text
+
+
+def load_matrix_inventory(path: Path, target_branch: str) -> dict[str, Any]:
+    matrix = _read_json(path, "release matrix")
+    if not isinstance(matrix, dict) or matrix.get("schema_version") != 2:
+        raise PublicEvidenceError("release matrix schema_version must be 2")
+    project = matrix.get("project")
+    if not isinstance(project, dict) or project.get("release_branch") != target_branch:
+        raise PublicEvidenceError(
+            "release matrix project.release_branch must equal the public target branch"
+        )
+    artifacts = matrix.get("artifacts")
+    runtimes = matrix.get("runtimes")
+    scenarios = matrix.get("pr_scenarios")
+    if not isinstance(artifacts, list) or not artifacts:
+        raise PublicEvidenceError("release matrix artifacts must be non-empty")
+    if not isinstance(runtimes, list) or not runtimes:
+        raise PublicEvidenceError("release matrix runtimes must be non-empty")
+    if not isinstance(scenarios, list) or not scenarios or any(
+        not isinstance(item, str) or not item for item in scenarios
+    ):
+        raise PublicEvidenceError("release matrix pr_scenarios must be non-empty strings")
+    if len(set(scenarios)) != len(scenarios):
+        raise PublicEvidenceError("release matrix pr_scenarios contains duplicates")
+
+    artifact_rows: list[dict[str, str]] = []
+    artifact_ids: set[str] = set()
+    for index, artifact in enumerate(artifacts):
+        if not isinstance(artifact, dict):
+            raise PublicEvidenceError(f"release matrix artifact {index} must be an object")
+        node = _text(artifact.get("artifact_node"), f"artifact {index}.artifact_node")
+        version = _text(artifact.get("artifact_version"), f"artifact {index}.artifact_version")
+        loader = _text(artifact.get("loader"), f"artifact {index}.loader")
+        if node in artifact_ids:
+            raise PublicEvidenceError(f"duplicate release artifact {node!r}")
+        artifact_ids.add(node)
+        artifact_rows.append({"artifact_node": node, "version": version, "loader": loader})
+
+    runtime_rows: list[dict[str, str]] = []
+    runtime_ids: set[str] = set()
+    for index, runtime in enumerate(runtimes):
+        if not isinstance(runtime, dict):
+            raise PublicEvidenceError(f"release matrix runtime {index} must be an object")
+        row = {
+            "artifact_node": _text(
+                runtime.get("artifact_node"), f"runtime {index}.artifact_node"
+            ),
+            "version": _text(
+                runtime.get("runtime_version"), f"runtime {index}.runtime_version"
+            ),
+            "loader": _text(runtime.get("loader"), f"runtime {index}.loader"),
+        }
+        if row["artifact_node"] in runtime_ids:
+            raise PublicEvidenceError(f"duplicate runtime row {row['artifact_node']!r}")
+        runtime_ids.add(row["artifact_node"])
+        runtime_rows.append(row)
+    if artifact_ids != runtime_ids:
+        raise PublicEvidenceError("release matrix artifacts and runtimes disagree")
+    by_artifact = {row["artifact_node"]: row for row in artifact_rows}
+    for runtime in runtime_rows:
+        artifact = by_artifact[runtime["artifact_node"]]
+        if (runtime["version"], runtime["loader"]) != (
+            artifact["version"],
+            artifact["loader"],
+        ):
+            raise PublicEvidenceError(
+                f"artifact/runtime identity mismatch for {runtime['artifact_node']}"
+            )
+    versions = {row["version"] for row in runtime_rows}
+    parsed = parse_version_branch(target_branch)
+    runtime_loaders = [row["loader"] for row in runtime_rows]
+    loaders = set(runtime_loaders)
+    if (
+        parsed is None
+        or versions != {parsed.version}
+        or loaders != set(parsed.loaders)
+        or len(runtime_loaders) != len(loaders)
+    ):
+        raise PublicEvidenceError(
+            "target branch identity and runtime inventory disagree: "
+            f"{target_branch}, versions={sorted(versions)}, loaders={sorted(loaders)}"
+        )
+    return {
+        "version": parsed.version,
+        "artifacts": sorted(artifact_rows, key=lambda row: (row["loader"], row["artifact_node"])),
+        "runtimes": sorted(runtime_rows, key=lambda row: (row["loader"], row["artifact_node"])),
+        "scenarios": list(scenarios),
+    }
+
+
+def prepare(
+    *,
+    e2e_root: Path,
+    matrix_path: Path,
+    catalog_path: Path,
+    output_root: Path,
+    repository: str,
+    source_run_id: str,
+    source_branch: str,
+    source_sha: str,
+    source_created_at: str,
+    target_run_id: str,
+    target_branch: str,
+    target_sha: str,
+    target_created_at: str,
+) -> Path:
+    if not REPOSITORY.fullmatch(repository):
+        raise PublicEvidenceError(f"invalid owner/repository identity {repository!r}")
+    source_run_id = _run_id(source_run_id, "source_run_id")
+    target_run_id = _run_id(target_run_id, "target_run_id")
+    source_branch = _branch(source_branch, "source_branch")
+    target_branch = _branch(target_branch, "target_branch", release=True)
+    source_sha = _sha(source_sha, "source_sha")
+    target_sha = _sha(target_sha, "target_sha")
+    source_created_at = _timestamp(source_created_at, "source_created_at")
+    target_created_at = _timestamp(target_created_at, "target_created_at")
+    inventory = load_matrix_inventory(matrix_path, target_branch)
+    catalog = load_catalog(catalog_path)
+    try:
+        lanes, frames, comparisons = collect_evidence(e2e_root, catalog)
+    except VisualEvidenceError as exc:
+        raise PublicEvidenceError(str(exc)) from exc
+
+    expected_results = {
+        (runtime["artifact_node"], runtime["version"], runtime["loader"], scenario)
+        for runtime in inventory["runtimes"]
+        for scenario in inventory["scenarios"]
+    }
+    actual_results = {
+        (lane["artifact_node"], lane["version"], lane["loader"], lane["scenario"])
+        for lane in lanes
+    }
+    if actual_results != expected_results:
+        raise PublicEvidenceError(
+            "packaged evidence does not cover the exact matrix/scenario product: "
+            f"missing={sorted(expected_results - actual_results)}, "
+            f"extra={sorted(actual_results - expected_results)}"
+        )
+    for lane in lanes:
+        if not any(frame["frame_id"].startswith(lane["lane_id"] + "/") for frame in frames):
+            raise PublicEvidenceError(f"packaged lane has no catalogued frames: {lane['lane_id']}")
+
+    bundle = output_root.resolve() / target_branch
+    if bundle.exists():
+        raise PublicEvidenceError(f"refusing to replace existing public evidence bundle {bundle}")
+    images = bundle / "images"
+    images.mkdir(parents=True)
+    public_frames: list[dict[str, Any]] = []
+    for frame in frames:
+        source = Path(frame["source_path"])
+        asset = f"images/{frame['file_sha256']}.png"
+        destination = bundle / asset
+        if destination.exists():
+            if sha256_file(destination) != frame["file_sha256"]:
+                raise PublicEvidenceError(f"public image digest collision at {destination}")
+        else:
+            shutil.copyfile(source, destination)
+        public = {key: frame[key] for key in PUBLIC_FRAME_FIELDS - {"asset"}}
+        public["asset"] = asset
+        public_frames.append(public)
+
+    manifest = {
+        "schema_version": SCHEMA_VERSION,
+        "repository": repository,
+        "release": {
+            "branch": target_branch,
+            "version": inventory["version"],
+            "artifacts": inventory["artifacts"],
+            "scenarios": inventory["scenarios"],
+        },
+        "provenance": {
+            "source": {
+                "run_id": source_run_id,
+                "run_url": f"https://github.com/{repository}/actions/runs/{source_run_id}",
+                "branch": source_branch,
+                "sha": source_sha,
+                "created_at": source_created_at,
+            },
+            "target": {
+                "run_id": target_run_id,
+                "run_url": f"https://github.com/{repository}/actions/runs/{target_run_id}",
+                "branch": target_branch,
+                "sha": target_sha,
+                "created_at": target_created_at,
+            },
+        },
+        "lanes": lanes,
+        "frames": public_frames,
+        "comparisons": comparisons,
+    }
+    (bundle / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    validate_bundle(
+        output_root.resolve(),
+        target_branch,
+        expected_repository=repository,
+        expected_source_run_id=source_run_id,
+        expected_target_run_id=target_run_id,
+        expected_target_sha=target_sha,
+        catalog_path=catalog_path,
+    )
+    return bundle
+
+
+def validate_bundle(
+    evidence_root: Path,
+    branch: str,
+    *,
+    only_branch: bool = False,
+    expected_repository: str | None = None,
+    expected_source_run_id: str | None = None,
+    expected_target_run_id: str | None = None,
+    expected_target_sha: str | None = None,
+    catalog_path: Path = DEFAULT_CATALOG,
+) -> dict[str, Any]:
+    branch = _branch(branch, "branch", release=True)
+    root = evidence_root.resolve()
+    if not root.is_dir():
+        raise PublicEvidenceError(f"evidence root does not exist: {root}")
+    if only_branch:
+        try:
+            actual_root_entries = {path.name for path in root.iterdir()}
+        except OSError as exc:
+            raise PublicEvidenceError(f"cannot inspect evidence root {root}: {exc}") from exc
+        if actual_root_entries != {branch}:
+            raise PublicEvidenceError(
+                "single-branch evidence root mismatch: "
+                f"missing={sorted({branch} - actual_root_entries)}, "
+                f"extra={sorted(actual_root_entries - {branch})}"
+            )
+    raw_bundle = root / branch
+    try:
+        reject_symlinks(raw_bundle, root, "evidence bundle")
+    except VisualEvidenceError as exc:
+        raise PublicEvidenceError(str(exc)) from exc
+    bundle = raw_bundle.resolve()
+    if bundle.parent != root or not bundle.is_dir():
+        raise PublicEvidenceError(f"missing or escaping evidence bundle for {branch}")
+    try:
+        reject_symlinks(bundle / "manifest.json", bundle, "evidence manifest")
+    except VisualEvidenceError as exc:
+        raise PublicEvidenceError(str(exc)) from exc
+    manifest_path = bundle / "manifest.json"
+    try:
+        manifest_size = manifest_path.stat().st_size
+    except OSError as exc:
+        raise PublicEvidenceError(f"cannot stat public evidence manifest: {exc}") from exc
+    if manifest_size <= 0 or manifest_size > MAX_MANIFEST_BYTES:
+        raise PublicEvidenceError("public evidence manifest exceeds its size limit")
+    manifest = _read_json(manifest_path, "public evidence manifest")
+    if (
+        not isinstance(manifest, dict)
+        or set(manifest) != MANIFEST_FIELDS
+        or manifest.get("schema_version") != SCHEMA_VERSION
+    ):
+        raise PublicEvidenceError("public evidence schema_version must be 1")
+    repository = _text(manifest.get("repository"), "manifest.repository")
+    if not REPOSITORY.fullmatch(repository):
+        raise PublicEvidenceError("manifest.repository is invalid")
+    if expected_repository is not None and repository != expected_repository:
+        raise PublicEvidenceError(
+            f"evidence repository mismatch: {repository!r} != {expected_repository!r}"
+        )
+    release = manifest.get("release")
+    if (
+        not isinstance(release, dict)
+        or set(release) != RELEASE_FIELDS
+        or release.get("branch") != branch
+    ):
+        raise PublicEvidenceError("evidence release branch mismatch")
+    parsed = parse_version_branch(branch)
+    if parsed is None or release.get("version") != parsed.version:
+        raise PublicEvidenceError("evidence release version does not match its branch")
+    scenarios = release.get("scenarios")
+    artifacts = release.get("artifacts")
+    if (
+        not isinstance(scenarios, list)
+        or not scenarios
+        or any(not isinstance(item, str) or not item for item in scenarios)
+        or len(set(scenarios)) != len(scenarios)
+    ):
+        raise PublicEvidenceError("evidence release scenarios are invalid")
+    if not isinstance(artifacts, list) or not artifacts:
+        raise PublicEvidenceError("evidence release artifacts are invalid")
+    artifact_ids: set[str] = set()
+    artifact_by_node: dict[str, dict[str, str]] = {}
+    for artifact in artifacts:
+        if not isinstance(artifact, dict) or set(artifact) != {
+            "artifact_node",
+            "version",
+            "loader",
+        }:
+            raise PublicEvidenceError("evidence release artifact has invalid fields")
+        node = _text(artifact["artifact_node"], "release artifact_node")
+        version = _text(artifact["version"], "release artifact version")
+        loader = _text(artifact["loader"], "release artifact loader")
+        if (
+            node in artifact_ids
+            or not SAFE_ID.fullmatch(node)
+            or version != parsed.version
+            or loader not in {"fabric", "forge", "neoforge"}
+        ):
+            raise PublicEvidenceError("evidence release artifacts contain duplicates or wrong versions")
+        artifact_ids.add(node)
+        artifact_by_node[node] = {
+            "artifact_node": node,
+            "version": version,
+            "loader": loader,
+        }
+    artifact_loaders = [artifact["loader"] for artifact in artifact_by_node.values()]
+    if (
+        set(parsed.loaders) != set(artifact_loaders)
+        or len(artifact_loaders) != len(set(artifact_loaders))
+    ):
+        raise PublicEvidenceError("evidence loaders do not match the release branch name")
+
+    catalog = load_catalog(catalog_path)
+    catalog_scenarios = {capture["scenario"] for capture in catalog.captures}
+    if set(scenarios) != catalog_scenarios:
+        raise PublicEvidenceError(
+            "evidence scenarios disagree with the protected visual catalog: "
+            f"missing={sorted(catalog_scenarios - set(scenarios))}, "
+            f"extra={sorted(set(scenarios) - catalog_scenarios)}"
+        )
+
+    provenance = manifest.get("provenance")
+    if not isinstance(provenance, dict) or set(provenance) != {"source", "target"}:
+        raise PublicEvidenceError("evidence provenance is invalid")
+    for name in ("source", "target"):
+        record = provenance[name]
+        if not isinstance(record, dict) or set(record) != {
+            "run_id",
+            "run_url",
+            "branch",
+            "sha",
+            "created_at",
+        }:
+            raise PublicEvidenceError(f"evidence provenance.{name} fields are invalid")
+        run_id = _run_id(record["run_id"], f"provenance.{name}.run_id")
+        expected_url = f"https://github.com/{repository}/actions/runs/{run_id}"
+        if record["run_url"] != expected_url:
+            raise PublicEvidenceError(f"evidence provenance.{name}.run_url is invalid")
+        _branch(record["branch"], f"provenance.{name}.branch", release=name == "target")
+        _sha(record["sha"], f"provenance.{name}.sha")
+        _timestamp(record["created_at"], f"provenance.{name}.created_at")
+        expected_run_id = (
+            expected_source_run_id if name == "source" else expected_target_run_id
+        )
+        if expected_run_id is not None and run_id != _run_id(
+            expected_run_id, f"expected_{name}_run_id"
+        ):
+            raise PublicEvidenceError(f"evidence provenance.{name}.run_id mismatch")
+    target = provenance["target"]
+    if target["branch"] != branch:
+        raise PublicEvidenceError("evidence target branch mismatch")
+    if expected_target_sha is not None and target["sha"] != expected_target_sha:
+        raise PublicEvidenceError(
+            f"evidence target SHA mismatch: {target['sha']} != {expected_target_sha}"
+        )
+
+    lanes = manifest.get("lanes")
+    frames = manifest.get("frames")
+    comparisons = manifest.get("comparisons")
+    if not isinstance(lanes, list) or not lanes:
+        raise PublicEvidenceError("evidence lanes must be non-empty")
+    if not isinstance(frames, list) or not frames or len(frames) > MAX_FRAMES:
+        raise PublicEvidenceError("evidence frames must be non-empty and within the public limit")
+    if not isinstance(comparisons, list):
+        raise PublicEvidenceError("evidence comparisons must be an array")
+
+    expected_lane_ids = {
+        f"{artifact['artifact_node']}/{scenario}"
+        for artifact in artifacts
+        for scenario in scenarios
+    }
+    lane_ids: set[str] = set()
+    lane_by_id: dict[str, dict[str, Any]] = {}
+    jar_sha256_by_artifact: dict[str, str] = {}
+    for lane in lanes:
+        if (
+            not isinstance(lane, dict)
+            or set(lane) != LANE_FIELDS
+            or lane.get("status") != "pass"
+        ):
+            raise PublicEvidenceError("public evidence contains an invalid or non-pass lane")
+        lane_id = _text(lane.get("lane_id"), "lane.lane_id")
+        if lane_id in lane_ids:
+            raise PublicEvidenceError(f"duplicate public evidence lane {lane_id!r}")
+        artifact_node = _text(lane.get("artifact_node"), "lane.artifact_node")
+        scenario = _text(lane.get("scenario"), "lane.scenario")
+        artifact = artifact_by_node.get(artifact_node)
+        if (
+            artifact is None
+            or scenario not in scenarios
+            or lane_id != f"{artifact_node}/{scenario}"
+            or lane.get("version") != artifact["version"]
+            or lane.get("loader") != artifact["loader"]
+        ):
+            raise PublicEvidenceError(f"public evidence lane identity mismatch: {lane_id!r}")
+        jar_sha256 = lane.get("jar_sha256")
+        if not isinstance(jar_sha256, str) or not SHA256.fullmatch(jar_sha256):
+            raise PublicEvidenceError(f"public evidence lane has invalid JAR digest: {lane_id!r}")
+        previous_jar_sha256 = jar_sha256_by_artifact.setdefault(artifact_node, jar_sha256)
+        if previous_jar_sha256 != jar_sha256:
+            raise PublicEvidenceError(
+                f"public evidence scenarios used different JARs for {artifact_node!r}"
+            )
+        expected_roles = sorted(
+            {
+                capture["role"]
+                for capture in catalog.captures
+                if capture["scenario"] == scenario
+            }
+        )
+        if lane.get("roles") != expected_roles:
+            raise PublicEvidenceError(f"public evidence lane has invalid role coverage: {lane_id!r}")
+        elapsed = lane.get("elapsed_s")
+        if (
+            isinstance(elapsed, bool)
+            or not isinstance(elapsed, (int, float))
+            or not math.isfinite(elapsed)
+            or elapsed < 0
+        ):
+            raise PublicEvidenceError(f"public evidence lane has invalid elapsed time: {lane_id!r}")
+        lane_ids.add(lane_id)
+        lane_by_id[lane_id] = lane
+    if lane_ids != expected_lane_ids:
+        raise PublicEvidenceError(
+            f"public evidence lanes disagree with release inventory: "
+            f"missing={sorted(expected_lane_ids - lane_ids)}, "
+            f"extra={sorted(lane_ids - expected_lane_ids)}"
+        )
+
+    expected_frame_ids = {
+        f"{artifact['artifact_node']}/{capture['scenario']}/{capture['role']}/{capture['step']}"
+        for artifact in artifacts
+        for capture in catalog.captures
+    }
+    if len(expected_frame_ids) > MAX_FRAMES:
+        raise PublicEvidenceError("protected visual catalog exceeds the public frame limit")
+    frame_ids: set[str] = set()
+    frame_by_id: dict[str, dict[str, Any]] = {}
+    expected_assets: set[str] = set()
+    validated_assets: dict[str, tuple[int, int]] = {}
+    total_bytes = 0
+    frames_per_lane = {lane_id: 0 for lane_id in lane_ids}
+    for frame in frames:
+        if not isinstance(frame, dict) or set(frame) != PUBLIC_FRAME_FIELDS:
+            raise PublicEvidenceError("public frame is invalid or leaks a source path")
+        frame_id = _text(frame.get("frame_id"), "frame.frame_id")
+        if frame_id in frame_ids:
+            raise PublicEvidenceError(f"duplicate public frame {frame_id!r}")
+        frame_ids.add(frame_id)
+        artifact_node = _text(frame.get("artifact_node"), "frame.artifact_node")
+        scenario = _text(frame.get("scenario"), "frame.scenario")
+        role = _text(frame.get("role"), "frame.role")
+        step = _text(frame.get("step"), "frame.step")
+        lane_id = f"{artifact_node}/{scenario}"
+        canonical_frame_id = f"{artifact_node}/{scenario}/{role}/{step}"
+        if lane_id not in frames_per_lane or frame_id != canonical_frame_id:
+            raise PublicEvidenceError(f"public frame has invalid lane identity {frame_id!r}")
+        lane = lane_by_id[lane_id]
+        if any(
+            frame.get(field) != lane[field]
+            for field in ("artifact_node", "version", "loader", "scenario")
+        ):
+            raise PublicEvidenceError(f"public frame metadata disagrees with its lane: {frame_id}")
+        frames_per_lane[lane_id] += 1
+        key = (scenario, role, step)
+        capture = catalog.by_key.get(key)
+        if capture is None or any(
+            frame.get(field) != capture[field]
+            for field in ("capture_id", "title", "expectation", "review_tier")
+        ):
+            raise PublicEvidenceError(f"public frame disagrees with visual catalog: {frame_id}")
+        capture_order = frame.get("capture_order")
+        if (
+            isinstance(capture_order, bool)
+            or not isinstance(capture_order, int)
+            or capture_order != catalog.captures.index(capture)
+        ):
+            raise PublicEvidenceError(f"public frame has invalid catalog order: {frame_id}")
+        file_sha256 = frame.get("file_sha256")
+        asset = frame.get("asset")
+        if not isinstance(file_sha256, str) or not SHA256.fullmatch(file_sha256):
+            raise PublicEvidenceError(f"public frame has invalid digest: {frame_id}")
+        if asset != f"images/{file_sha256}.png":
+            raise PublicEvidenceError(f"public frame has invalid asset path: {frame_id}")
+        try:
+            pixel_validation = validate_screenshot_metrics(
+                frame.get("pixel_validation"), f"public frame metrics for {frame_id}"
+            )
+        except VisualEvidenceError as exc:
+            raise PublicEvidenceError(str(exc)) from exc
+        if (
+            pixel_validation != frame.get("pixel_validation")
+            or pixel_validation["file_sha256"] != file_sha256
+            or pixel_validation["width"] != frame.get("width")
+            or pixel_validation["height"] != frame.get("height")
+        ):
+            raise PublicEvidenceError(f"public frame pixel metadata mismatch: {frame_id}")
+        expected_assets.add(asset)
+        dimensions = validated_assets.get(asset)
+        if dimensions is None:
+            raw_image = bundle / asset
+            try:
+                reject_symlinks(raw_image, bundle, "public frame asset")
+            except VisualEvidenceError as exc:
+                raise PublicEvidenceError(str(exc)) from exc
+            image = raw_image.resolve()
+            images_root = (bundle / "images").resolve()
+            if image.parent != images_root or not image.is_file():
+                raise PublicEvidenceError(f"public frame asset escapes or is missing: {asset}")
+            size = image.stat().st_size
+            if size <= 0 or size > MAX_IMAGE_BYTES:
+                raise PublicEvidenceError(f"public frame asset exceeds its size limit: {asset}")
+            total_bytes += size
+            if sha256_file(image) != file_sha256:
+                raise PublicEvidenceError(f"public frame asset digest mismatch: {asset}")
+            dimensions = png_dimensions(image)
+            if dimensions[0] < 640 or dimensions[1] < 360:
+                raise PublicEvidenceError(
+                    f"public frame asset is below the E2E resolution floor: {asset}"
+                )
+            if dimensions[0] * dimensions[1] > MAX_IMAGE_PIXELS:
+                raise PublicEvidenceError(f"public frame asset exceeds pixel limit: {asset}")
+            validated_assets[asset] = dimensions
+        if dimensions != (frame.get("width"), frame.get("height")):
+            raise PublicEvidenceError(f"public frame asset dimensions mismatch: {asset}")
+        frame_by_id[frame_id] = frame
+    if total_bytes > MAX_TOTAL_IMAGE_BYTES:
+        raise PublicEvidenceError("public evidence exceeds the total image byte limit")
+    if frame_ids != expected_frame_ids:
+        raise PublicEvidenceError(
+            "public evidence frames disagree with the protected visual catalog: "
+            f"missing={sorted(expected_frame_ids - frame_ids)}, "
+            f"extra={sorted(frame_ids - expected_frame_ids)}"
+        )
+    actual_assets = {
+        path.relative_to(bundle).as_posix()
+        for path in (bundle / "images").iterdir()
+        if path.is_file()
+    }
+    if actual_assets != expected_assets:
+        raise PublicEvidenceError(
+            f"public evidence image inventory mismatch: "
+            f"missing={sorted(expected_assets - actual_assets)}, "
+            f"extra={sorted(actual_assets - expected_assets)}"
+        )
+    expected_tree = {"manifest.json", "images", *expected_assets}
+    actual_tree: set[str] = set()
+    for path in bundle.rglob("*"):
+        relative = path.relative_to(bundle).as_posix()
+        if path.is_symlink():
+            raise PublicEvidenceError(f"public evidence contains a symlink: {relative}")
+        actual_tree.add(relative)
+    if actual_tree != expected_tree:
+        raise PublicEvidenceError(
+            "public evidence bundle contains unexpected or missing entries: "
+            f"missing={sorted(expected_tree - actual_tree)}, "
+            f"extra={sorted(actual_tree - expected_tree)}"
+        )
+
+    expected_comparisons: dict[str, dict[str, Any]] = {}
+    for artifact in artifacts:
+        artifact_node = artifact["artifact_node"]
+        for (scenario, role), pairs in DISTINCT_SCREENSHOT_PAIRS.items():
+            if scenario not in scenarios:
+                continue
+            for pair in pairs:
+                first_step, second_step, required_change = pair[:3]
+                comparison_id = (
+                    f"{artifact_node}/{scenario}/{role}/{first_step}->{second_step}"
+                )
+                expected_comparisons[comparison_id] = {
+                    "first_frame_id": f"{artifact_node}/{scenario}/{role}/{first_step}",
+                    "second_frame_id": f"{artifact_node}/{scenario}/{role}/{second_step}",
+                    "required_changed_fraction": required_change,
+                    "region": list(pair[3]) if len(pair) == 4 else None,
+                }
+
+    comparison_ids: set[str] = set()
+    for comparison in comparisons:
+        if not isinstance(comparison, dict) or set(comparison) != COMPARISON_FIELDS:
+            raise PublicEvidenceError("public comparison must be an object")
+        comparison_id = _text(comparison.get("comparison_id"), "comparison.comparison_id")
+        if comparison_id in comparison_ids:
+            raise PublicEvidenceError(f"duplicate public comparison {comparison_id!r}")
+        comparison_ids.add(comparison_id)
+        expected = expected_comparisons.get(comparison_id)
+        if expected is None:
+            raise PublicEvidenceError(f"public comparison is not in the protected contract: {comparison_id}")
+        first = comparison.get("first_frame_id")
+        second = comparison.get("second_frame_id")
+        if (
+            first == second
+            or first not in frame_ids
+            or second not in frame_ids
+            or first != expected["first_frame_id"]
+            or second != expected["second_frame_id"]
+        ):
+            raise PublicEvidenceError(f"public comparison has invalid endpoints: {comparison_id}")
+        first_frame = frame_by_id[first]
+        second_frame = frame_by_id[second]
+        if any(
+            first_frame[field] != second_frame[field]
+            for field in ("artifact_node", "version", "loader", "scenario", "role")
+        ) or any(
+            comparison.get(field) != first_frame[field]
+            for field in ("artifact_node", "version", "loader", "scenario", "role")
+        ):
+            raise PublicEvidenceError(f"public comparison identity mismatch: {comparison_id}")
+        canonical_id = (
+            f"{first_frame['artifact_node']}/{first_frame['scenario']}/{first_frame['role']}/"
+            f"{first_frame['step']}->{second_frame['step']}"
+        )
+        if comparison_id != canonical_id:
+            raise PublicEvidenceError(f"public comparison has a fabricated identity: {comparison_id}")
+        try:
+            metrics = validate_comparison_metrics(
+                comparison.get("pixel_validation"),
+                f"public comparison metrics for {comparison_id}",
+            )
+        except VisualEvidenceError as exc:
+            raise PublicEvidenceError(str(exc)) from exc
+        if metrics != comparison.get("pixel_validation"):
+            raise PublicEvidenceError(f"public comparison metrics are not canonical: {comparison_id}")
+        if metrics["required_changed_fraction"] != expected["required_changed_fraction"]:
+            raise PublicEvidenceError(f"public comparison threshold drifted: {comparison_id}")
+        if metrics.get("region") != expected["region"]:
+            raise PublicEvidenceError(f"public comparison region drifted: {comparison_id}")
+    if comparison_ids != set(expected_comparisons):
+        raise PublicEvidenceError(
+            "public comparisons disagree with the protected runtime contract: "
+            f"missing={sorted(set(expected_comparisons) - comparison_ids)}, "
+            f"extra={sorted(comparison_ids - set(expected_comparisons))}"
+        )
+    return manifest
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    prepare_parser = subparsers.add_parser("prepare")
+    prepare_parser.add_argument("--e2e-root", type=Path, required=True)
+    prepare_parser.add_argument("--matrix", type=Path, default=REPO / "release/release-matrix.json")
+    prepare_parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
+    prepare_parser.add_argument("--output", type=Path, required=True)
+    prepare_parser.add_argument("--repository", required=True)
+    prepare_parser.add_argument("--source-run-id", required=True)
+    prepare_parser.add_argument("--source-branch", required=True)
+    prepare_parser.add_argument("--source-sha", required=True)
+    prepare_parser.add_argument("--source-created-at", required=True)
+    prepare_parser.add_argument("--target-run-id", required=True)
+    prepare_parser.add_argument("--target-branch", required=True)
+    prepare_parser.add_argument("--target-sha", required=True)
+    prepare_parser.add_argument("--target-created-at", required=True)
+
+    validate_parser = subparsers.add_parser("validate")
+    validate_parser.add_argument("--evidence-root", type=Path, required=True)
+    validate_parser.add_argument("--branch", required=True)
+    validate_parser.add_argument("--only-branch", action="store_true")
+    validate_parser.add_argument("--repository")
+    validate_parser.add_argument("--source-run-id")
+    validate_parser.add_argument("--target-run-id")
+    validate_parser.add_argument("--target-sha")
+    validate_parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    try:
+        if args.command == "prepare":
+            bundle = prepare(
+                e2e_root=args.e2e_root,
+                matrix_path=args.matrix,
+                catalog_path=args.catalog,
+                output_root=args.output,
+                repository=args.repository,
+                source_run_id=args.source_run_id,
+                source_branch=args.source_branch,
+                source_sha=args.source_sha,
+                source_created_at=args.source_created_at,
+                target_run_id=args.target_run_id,
+                target_branch=args.target_branch,
+                target_sha=args.target_sha,
+                target_created_at=args.target_created_at,
+            )
+            print(bundle)
+        else:
+            validate_bundle(
+                args.evidence_root,
+                args.branch,
+                only_branch=args.only_branch,
+                expected_repository=args.repository,
+                expected_source_run_id=args.source_run_id,
+                expected_target_run_id=args.target_run_id,
+                expected_target_sha=args.target_sha,
+                catalog_path=args.catalog,
+            )
+            print(f"validated public E2E evidence for {args.branch}")
+        return 0
+    except (PublicEvidenceError, VisualEvidenceError) as exc:
+        print(f"public evidence error: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
