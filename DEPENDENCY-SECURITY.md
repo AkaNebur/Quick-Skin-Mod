@@ -53,14 +53,15 @@ reason. Exactly four trusted-artifact rules cover those local outputs:
 |---|---|---|
 | `^remapped[.].+$` | any | Loom-remapped mod/API modules |
 | `^loom$` | `^mappings$` | Loom layered mappings |
-| `^net[.]minecraft$` | merged Minecraft/Forge names only | Loom merged game modules |
-| `^net[.]minecraftforge[.][0-9a-f]{64}$` | `^fmlloader$` | Loom transformed Forge loader |
+| `^net[.]minecraft$` | merged Minecraft/NeoForge names only | Loom merged game modules |
+| `^net[.]neoforged[.]fancymodloader[.][0-9a-f]{64}$` | `^loader$` | Loom transformed NeoForge loader |
 
 This is not permission to trust similarly named downloads. The project repository policy excludes
-all four namespaces from Maven Central and excludes the transformed Forge namespace from Forge's
-remote repository; other approved remote repositories have positive group allowlists that cannot
-match them. Only Loom's local file repositories can supply these coordinates. The original Loom,
-Minecraft, loader, API, mappings source, and transform-tool inputs remain SHA-256 verified.
+all four namespaces from Maven Central and excludes the transformed loader namespace from
+NeoForge's remote repository; other approved remote repositories have positive group allowlists
+that cannot match them. Only Loom's local file repositories can supply these coordinates. The
+original Loom, Minecraft, loader, API, mappings source, and transform-tool inputs remain SHA-256
+verified.
 
 Gradle dependency verification does not cover the wrapper download or arbitrary downloads made
 outside Gradle's dependency engine. The wrapper has its separate checksum. Packaged-E2E installer
