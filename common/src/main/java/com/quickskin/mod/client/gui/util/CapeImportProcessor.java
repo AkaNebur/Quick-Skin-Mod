@@ -376,9 +376,9 @@ public final class CapeImportProcessor {
             throw new IOException("Cape animation metadata is invalid");
         }
         requireDirectory(metadataDirectory);
-        String hash = HashUtil.computeAssetHash(
+        String hash = HashUtil.computeAssetContentId(
                 BoundedFileReader.readBytes(savedCape, (int) MAX_SOURCE_BYTES), "cape");
-        if (hash == null || !hash.matches("[0-9a-f]{40}")) {
+        if (!NetworkSecurity.isValidStrongContentId(hash)) {
             throw new IOException("Could not compute cape content hash");
         }
         Path root = metadataDirectory.toAbsolutePath().normalize();

@@ -4,6 +4,16 @@
 
 ### Added
 
+- Added an application-level v2 networking handshake with explicit capabilities, exact-connection
+  session identity, bounded replays, and a compatible legacy-v1 fallback.
+- Added canonical SHA-256 content identifiers for local catalogs, persisted preferences, wire
+  traffic, and server caches while retaining type-scoped authenticated SHA-1 migration aliases.
+- Added deterministic CycloneDX 1.6 SBOM generation, artifact attestations, double-build
+  reproducibility checks, and recoverable GitHub/Modrinth/CurseForge publication receipts.
+- Added strict Gradle dependency verification, selective dependency locking, repository content
+  filters, and reviewed Dependabot update pull requests.
+- Added declarative GitHub ruleset/release-environment governance with a fail-closed readiness
+  audit, plus a documented 1.21 release-train consolidation experiment.
 - Restored `.cpmmodel` discovery, import, preview, selection, and CPM lifecycle integration on both
   Minecraft 1.21.1 loader lanes.
 - Restored optional 3D Skin Layers preview integration for the supported 1.21.1 render path.
@@ -14,6 +24,19 @@
 
 ### Changed
 
+- Bounded upload, cache, decode, executor, protocol-control, and local-asset refresh work; stale
+  connection and scan results can no longer mutate a replacement session or newer catalog.
+- Split required and optional Mixin failure policies, declared injection-count expectations, and
+  enabled packaged-runtime application-count diagnostics.
+- Isolated AI-assisted CI steps as read-only patch producers; deterministic jobs now revalidate and
+  apply only narrow allowlisted changes without sharing model credentials.
+- Made release tags and marketplace versions include the Minecraft era, and bound every publish to
+  the exact branch head, changelog version, staged bytes, checksums, SBOM, and immutable release.
+- Unified release, SBOM, reproducibility, and packaged-E2E artifact validation behind one strict
+  schema-2 manifest contract with contained paths and byte-level digest verification.
+- Made the exact negotiated connection profile authoritative for mandatory S2C channels, avoiding
+  false-negative Forge loader probes while keeping pre-classification and optional channels
+  fail-closed.
 - Consolidated active development into one Stonecutter-managed source tree with narrow era overlays.
 - Made the release matrix the source of truth for artifact paths, runtime coordinates, metadata ranges, and marketplace versions.
 - Corrected loader metadata ranges, project links, and the All Rights Reserved license declaration.

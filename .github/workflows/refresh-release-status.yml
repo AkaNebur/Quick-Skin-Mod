@@ -1,7 +1,8 @@
 name: Refresh release status table
 
 # The README status inventory is generated from live release branches and the matrix committed to
-# each branch. Branch create/delete events keep it current; the schedule repairs missed events.
+# each branch. Branch events keep it current; the schedule repairs missed events. Changes travel
+# through one reusable automation PR so master can remain PR-only with no workflow bypass.
 on:
   create:
   delete:
@@ -10,7 +11,9 @@ on:
     - cron: "23 4 * * 1"
 
 permissions:
+  actions: write
   contents: write
+  pull-requests: write
 
 concurrency:
   group: refresh-release-status
@@ -56,7 +59,8 @@ jobs:
           done < <(jq -r '.[]' <<< "$branches")
           printf 'value=%s\n' "$branches" >> "$GITHUB_OUTPUT"
 
-      - name: Regenerate the marked README block
+      - name: Generate the deterministic README candidate
+        id: candidate
         shell: bash
         env:
           BRANCHES: ${{ steps.branches.outputs.value }}
@@ -66,30 +70,92 @@ jobs:
             | python3 scripts/release/status_table.py \
                 --repository "$GITHUB_REPOSITORY" \
                 --readme README.md \
-                --write
+            > "$RUNNER_TEMP/generated-README.md"
+          if cmp --silent README.md "$RUNNER_TEMP/generated-README.md"; then
+            printf 'changed=false\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'changed=true\n' >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Validate generated documentation and release tooling
+      - name: Validate generated documentation and repository tooling
         run: |
-          git diff --check
           python3 -m py_compile \
+            scripts/ci/ai_patch_policy.py \
+            scripts/release/github_governance.py \
+            scripts/release/github_release.py \
             scripts/release/matrix.py \
+            scripts/release/reconcile_publication.py \
+            scripts/release/release_identity.py \
             scripts/release/status_table.py \
+            scripts/release/verify_release.py \
+            scripts/release/verify_reproducibility.py \
             scripts/release/version_branches.py
+          python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
           python3 -m unittest discover \
             -s scripts/release/tests -p 'test_*.py' -v
 
-      - name: Commit a changed table
+      - name: Update the automation branch and PR
+        if: steps.candidate.outputs.changed == 'true'
         shell: bash
+        env:
+          AUTOMATION_BRANCH: automation/refresh-release-status
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if git diff --quiet -- README.md; then
-            echo 'Release status table is already current.'
-            exit 0
-          fi
+          base_sha="$(git rev-parse HEAD)"
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add README.md
-          git diff --cached --check
-          git commit -m 'docs: refresh release status table'
-          git pull --rebase origin master
-          git push origin HEAD:master
+
+          if git fetch --no-tags origin "$AUTOMATION_BRANCH"; then
+            previous_head="$(git rev-parse FETCH_HEAD)"
+            git switch --detach "$previous_head"
+            set +e
+            git merge --no-edit "$base_sha"
+            merge_status=$?
+            set -e
+            if [[ $merge_status -ne 0 ]]; then
+              conflicts="$(git diff --name-only --diff-filter=U)"
+              [[ "$conflicts" == README.md ]]
+              cp "$RUNNER_TEMP/generated-README.md" README.md
+              git add README.md
+              git commit --no-edit
+            fi
+          else
+            previous_head=''
+          fi
+
+          if [[ -z "$previous_head" ]]; then
+            git switch --detach "$base_sha"
+          fi
+          cp "$RUNNER_TEMP/generated-README.md" README.md
+          git diff --check
+          if ! git diff --quiet -- README.md; then
+            git add README.md
+            git diff --cached --check
+            git commit -m 'docs: refresh release status table'
+          fi
+          cmp --silent README.md "$RUNNER_TEMP/generated-README.md"
+          changed_paths="$(git diff --name-only "$base_sha" HEAD)"
+          [[ "$changed_paths" == README.md ]]
+
+          head_sha="$(git rev-parse HEAD)"
+          updated=false
+          if [[ -z "$previous_head" || "$head_sha" != "$previous_head" ]]; then
+            git push origin "HEAD:refs/heads/$AUTOMATION_BRANCH"
+            updated=true
+          fi
+
+          pr_url="$(gh pr list --state open --base master --head "$AUTOMATION_BRANCH" \
+            --json url --jq '.[0].url // ""')"
+          if [[ -z "$pr_url" ]]; then
+            pr_url="$(gh pr create \
+              --base master \
+              --head "$AUTOMATION_BRANCH" \
+              --title 'docs: refresh release status table' \
+              --body 'Automated deterministic refresh generated from the live version branches and each branch-owned release matrix.')"
+          fi
+          if [[ "$updated" == true ]]; then
+            gh workflow run build-gate.yml --ref "$AUTOMATION_BRANCH"
+            gh workflow run on-demand-e2e.yml --ref "$AUTOMATION_BRANCH"
+          fi
+          printf 'Release status PR: %s\n' "$pr_url"

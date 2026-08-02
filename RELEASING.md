@@ -1,0 +1,107 @@
+# Releasing Quick Skin
+
+Quick Skin publishes one immutable release identity for every branch-owned Minecraft era. The
+identity is derived from the exact Minecraft versions in `release/release-matrix.json` and the
+logical `mod_version`; it is not typed independently into a workflow. For this branch the identity
+is `mc1.21.1-v3.0.0`, and the matrix binds it to `fabric-and-neoforge-1.21.1`.
+
+## Preconditions
+
+Before creating a release tag:
+
+1. land the version, matrix, source, and workflow changes through reviewed PRs, and replace the
+   current changelog heading's `unreleased` marker with its ISO release date;
+2. let both required checks, `Build and verify` and `Packaged E2E gate`, pass on the exact release
+   branch head;
+3. confirm the working tree is clean and the branch head has not moved;
+4. run the release workflow manually from that exact branch if a validation-only rehearsal is
+   useful; `workflow_dispatch` never publishes;
+5. derive and inspect the only accepted identity:
+
+   ```bash
+   python scripts/release/release_identity.py
+   ```
+
+The release workflow rejects a stale checkout, a tag with another name, a commit that is not the
+exact configured release-branch head, and a manual run from another branch.
+
+## Publish
+
+Create the derived tag at the already-tested release-branch head and push only that new tag. Do not
+move, reuse, or delete a release tag.
+
+```bash
+git fetch origin --tags
+git switch fabric-and-neoforge-1.21.1
+git pull --ff-only origin fabric-and-neoforge-1.21.1
+python scripts/release/release_identity.py
+git tag --sign mc1.21.1-v3.0.0
+git push origin refs/tags/mc1.21.1-v3.0.0
+```
+
+Replace the example identity and branch with the exact values printed from that branch. The
+protected `release` environment requires a human approval before publication jobs receive their
+credentials.
+
+The workflow then performs this fixed sequence:
+
+1. build production and packaged-E2E JARs twice from the tagged commit and require identical
+   SHA-256 bytes for every production and harness JAR;
+2. record source identity plus SHA-1, SHA-256, and SHA-512 for every production artifact, then
+   generate a deterministic CycloneDX SBOM from those records, the matrix, each lane's strict
+   `shadowBundle` lock, and the matching SHA-256 entries in Gradle verification metadata;
+3. attest the production JARs twice with the same pinned GitHub action: once for build provenance
+   and once with the exact staged CycloneDX document as the SBOM predicate;
+4. run all matrix-declared packaged Minecraft scenarios against those staged bytes;
+5. create or reconcile an exact draft GitHub Release without overwriting assets;
+6. publish every artifact independently to Modrinth and CurseForge, reconciling the remote
+   publication ID, filename, size, and supported hash before and after each upload;
+7. publish the GitHub Release only after every marketplace row is verified.
+
+The GitHub Release contains the production JARs, `artifacts.json`, `quick-skin.cdx.json`, and
+deterministic `SHA256SUMS`. The artifact manifest binds the SBOM's path, size, and SHA-256;
+`--verify-staged` regenerates it and requires byte-for-byte equality before any publication step.
+Published releases are immutable at the repository level.
+
+## Recovery and verification
+
+Publication is retryable, not rollback-based. If a marketplace or GitHub API fails, rerun the
+failed workflow from GitHub Actions. Exact existing uploads are accepted; missing uploads resume;
+an identity or byte conflict fails closed. Never delete the tag or release, use an asset-clobber
+flag, or invent a second version ID to hide a partial release. A genuine byte conflict requires a
+new logical version and therefore a new immutable identity.
+
+Downloaders can verify checksums with `SHA256SUMS`. Maintainers can additionally verify GitHub's
+provenance for a downloaded JAR:
+
+```bash
+gh attestation verify "Quick Skin - Fabric - 1.21.1-3.0.0.jar" \
+  --repo AkaNebur/Quick-Skin-Mod
+```
+
+Publication receipts and packaged-runtime evidence remain attached to the workflow run for audit
+and incident analysis.
+
+## Repository governance rollout
+
+The intended rulesets and protected release environment live in
+`release/github-governance.json`. The helper is read-only by default:
+
+```bash
+python scripts/release/github_governance.py audit
+python scripts/release/github_governance.py readiness
+```
+
+`readiness` checks the live default branch and every matching release branch. It must pass before
+activation so a required status check cannot strand an older branch whose base workflow does not
+yet define that check. Once all workflow changes have propagated, an administrator can converge
+the declared state explicitly:
+
+```bash
+python scripts/release/github_governance.py apply \
+  --confirm AkaNebur/Quick-Skin-Mod
+```
+
+The helper enables immutable releases, creates no-bypass branch and tag rulesets, requires PRs and
+strict stable checks, blocks deletion and force-pushes, and configures the human-reviewed `release`
+environment. It never deletes unknown rulesets or deployment policies.

@@ -26,7 +26,13 @@ public abstract class MixinAbstractClientPlayer {
     @Unique
     private static boolean quickskin$fieldSearched = false;
 
-    @Inject(method = "getSkin", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "getSkin",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1)
     private void quickskin$overrideSkinAtHead(CallbackInfoReturnable<PlayerSkin> cir) {
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
         if (service == null) {

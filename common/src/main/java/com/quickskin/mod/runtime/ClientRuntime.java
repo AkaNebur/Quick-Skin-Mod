@@ -92,8 +92,8 @@ public final class ClientRuntime implements AutoCloseable {
         Objects.requireNonNull(configDirectory, "configDirectory");
 
         ClientConfig.getInstance();
-        assetManager.init();
         appearanceStorage.init(configDirectory);
+        assetManager.init();
         storesInitialized = true;
     }
 

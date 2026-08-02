@@ -1,0 +1,52 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      day: monday
+      time: "05:17"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: monthly
+      day: monday
+      time: "05:27"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - build
+    groups:
+      gradle-production:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /.github/claude
+    schedule:
+      interval: monthly
+      day: monday
+      time: "05:37"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 2
+    versioning-strategy: increase
+    labels:
+      - dependencies
+      - ci
+    groups:
+      claude-cli:
+        patterns:
+          - "*"
