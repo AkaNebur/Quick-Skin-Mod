@@ -17,13 +17,10 @@ fix the canonical source or an active `legacy*` overlay; do not copy an oracle t
 ## Live resource routing after retirement
 
 No `src/v*` content remains. Canonical resources live in each module's `src/main/resources` tree.
-The only era-specific resource overrides are the small mixin configurations beside their active
-Java overlays:
+The active `common/src/legacy1_21_11` overlay is Java-only, so this branch has no era-specific
+resource overrides.
 
-- `common/src/legacy1_21_1/resources`: the 1.21.1 common mixin list.
-- `neoforge/src/legacy1_21_1/resources`: the 1.21.1 NeoForge mixin list.
-
-Gradle consolidates canonical resources with those explicitly matrix-routed overrides. Fabric
+Gradle consumes the canonical resources for every active module. Fabric
 metadata is normalized from one canonical `fabric.mod.json`; NeoForge metadata is normalized from
 its canonical TOML using release-matrix loader and dependency ranges. FML
 `pack.mcmeta` values are also normalized from explicit per-artifact matrix fields, preserving the

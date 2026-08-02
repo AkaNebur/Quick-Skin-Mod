@@ -5,8 +5,8 @@
 ### Added
 
 - Restored `.cpmmodel` discovery, import, preview, selection, and CPM lifecycle integration on both
-  Minecraft 1.21.1 loader lanes.
-- Restored optional 3D Skin Layers preview integration for the supported 1.21.1 render path.
+  Minecraft 1.21.11 loader lanes.
+- Restored optional 3D Skin Layers preview integration for the supported 1.21.11 render path.
 - Added packaged-artifact E2E coverage for the two release files and their two exact runtime
   combinations.
 - Skin and cape menus now pick up files copied into `quickskin/uploads/` from outside the game, without a client restart.
@@ -17,7 +17,7 @@
 - Consolidated active development into one Stonecutter-managed source tree with narrow era overlays.
 - Made the release matrix the source of truth for artifact paths, runtime coordinates, metadata ranges, and marketplace versions.
 - Corrected loader metadata ranges, project links, and the All Rights Reserved license declaration.
-- Isolated the active Minecraft 1.21.1 Fabric and NeoForge release lanes on their own thin branch.
+- Isolated the active Minecraft 1.21.11 Fabric and NeoForge release lanes on their own thin branch.
 
 ## 2.6.2.5
 

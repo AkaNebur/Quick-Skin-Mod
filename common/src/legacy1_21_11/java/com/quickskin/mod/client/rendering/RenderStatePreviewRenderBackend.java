@@ -1,12 +1,9 @@
 package com.quickskin.mod.client.rendering;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.GuiGraphics;
 
-/** Minecraft 1.21.1 immediate preview backend. */
-@Environment(EnvType.CLIENT)
-public final class ImmediatePreviewRenderBackend implements PreviewRenderBackend {
+/** Direct 1.21.11 GUI render-state preview submission backend. */
+public final class RenderStatePreviewRenderBackend implements PreviewRenderBackend {
     @Override
     public void renderPlayerModel(
             GuiGraphics graphics,

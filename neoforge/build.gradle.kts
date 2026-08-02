@@ -66,9 +66,7 @@ check(actualLegacyDirectories == declaredLegacyDirectories) {
     "NeoForge legacy source roots disagree with routing: declared=$declaredLegacyDirectories, " +
         "actual=$actualLegacyDirectories"
 }
-val canonicalOnlyByVersion = mapOf(
-    "1.21.1" to setOf("com/quickskin/mod/neoforge/mixin/GuiSkinRendererMixin.java"),
-)
+val canonicalOnlyByVersion = emptyMap<String, Set<String>>()
 check(canonicalOnlyByVersion.keys == declaredLegacyVersions) {
     "NeoForge canonical exclusions must cover exactly the matrix-declared overlay versions"
 }
