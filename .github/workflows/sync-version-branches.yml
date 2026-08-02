@@ -330,6 +330,20 @@ jobs:
           path: port
           persist-credentials: true
 
+      - name: Install Python
+        if: steps.plan.outputs.needed == 'true'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Install hash-locked Pages image dependency
+        if: steps.plan.outputs.needed == 'true'
+        run: >-
+          python -m pip install
+          --only-binary=:all:
+          --require-hashes
+          --requirement controller/scripts/pages/requirements.txt
+
       - name: Apply and deterministically validate the proposal
         if: steps.plan.outputs.needed == 'true'
         working-directory: port
