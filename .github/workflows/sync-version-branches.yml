@@ -181,10 +181,11 @@ jobs:
             "Resolve only the currently unmerged file contents while porting master into release \
             branch $TARGET_BRANCH. Open AGENTS.md and read every imported Markdown file completely. \
             Preserve the branch's Minecraft version, loader pair, release matrix, overlays, metadata \
-            and Java level. Do not run git add, git commit, git push or gh; do not edit any path that \
-            was not already conflicted. Do not alter workflows, tests, matrices, guardrails or build \
-            configuration. Leave the resolved tracked files in the worktree for the deterministic \
-            patch packager." \
+            and Java level. If README.md conflicts, retain either no branch-profile markers or one \
+            complete marker pair; a deterministic post-merge step will render the target profile. \
+            Do not run git add, git commit, git push or gh; do not edit any path that was not already \
+            conflicted. Do not alter workflows, tests, matrices, guardrails or build configuration. \
+            Leave the resolved tracked files in the worktree for the deterministic patch packager." \
             --model claude-opus-5 \
             --allowedTools Read,Edit,Write,Bash \
             --permission-mode acceptEdits
@@ -228,6 +229,18 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$NEEDED" == true ]]; then
+            python3 scripts/release/branch_readme.py \
+              --matrix release/release-matrix.json \
+              --readme README.md \
+              --profile-branch "$TARGET_BRANCH" \
+              --bootstrap \
+              --write
+            git add -- README.md
+            python3 scripts/release/branch_readme.py \
+              --matrix release/release-matrix.json \
+              --readme README.md \
+              --profile-branch "$TARGET_BRANCH" \
+              --check
             python3 scripts/ci/ai_patch_policy.py staged \
               --mode port --write-patch version-port.patch
           fi
@@ -344,6 +357,11 @@ jobs:
             --mode port --patch ../proposal/version-port.patch
           git apply --check --index ../proposal/version-port.patch
           git apply --index ../proposal/version-port.patch
+          python3 scripts/release/branch_readme.py \
+            --matrix release/release-matrix.json \
+            --readme README.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --check
           if [[ "$(jq -r .conflicted ../proposal/version-port-plan.json)" == true ]]; then
             python3 ../controller/scripts/ci/ai_patch_policy.py paths \
               --mode conflict --paths-file "$RUNNER_TEMP/conflicted-paths.txt"
@@ -352,6 +370,7 @@ jobs:
           git diff --cached --check
           python3 -m py_compile \
             scripts/ci/ai_patch_policy.py \
+            scripts/release/branch_readme.py \
             scripts/release/github_governance.py \
             scripts/release/github_release.py \
             scripts/release/matrix.py \
