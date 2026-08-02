@@ -27,7 +27,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ClientPacketListener.class)
 public class ReplayModCompatMixin {
 
-    @Inject(method = "handleCustomPayload(Lnet/minecraft/network/protocol/game/ClientboundCustomPayloadPacket;)V", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "handleCustomPayload(Lnet/minecraft/network/protocol/game/ClientboundCustomPayloadPacket;)V",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 0,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$interceptReplayPackets(ClientboundCustomPayloadPacket packet, CallbackInfo ci) {
         ResourceLocation id = packet.getIdentifier();
 

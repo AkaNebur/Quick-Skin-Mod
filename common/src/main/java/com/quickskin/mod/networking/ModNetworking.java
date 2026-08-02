@@ -80,6 +80,23 @@ public class ModNetworking implements NetworkTransport {
                 ServerNetworkHandler::handleUpdateServerConfig
         );
 
+        NetworkManager.registerReceiver(
+                NetworkManager.c2s(), ProtocolHelloPayload.TYPE,
+                ProtocolHelloPayload.CODEC, ServerNetworkHandler::handleProtocolHello);
+        NetworkManager.registerReceiver(
+                NetworkManager.c2s(), UpdateAppearanceV2Payload.TYPE,
+                UpdateAppearanceV2Payload.CODEC, ServerNetworkHandler::handleUpdateAppearanceV2);
+        NetworkManager.registerReceiver(
+                NetworkManager.c2s(), RequestTextureV2Payload.TYPE,
+                RequestTextureV2Payload.CODEC, ServerNetworkHandler::handleRequestTextureV2);
+        NetworkManager.registerReceiver(
+                NetworkManager.c2s(), TextureChunkV2Payload.TYPE,
+                TextureChunkV2Payload.CODEC, ServerNetworkHandler::handleTextureChunkV2);
+        NetworkManager.registerReceiver(
+                NetworkManager.c2s(), UploadAnimationMetadataV2Payload.TYPE,
+                UploadAnimationMetadataV2Payload.CODEC,
+                ServerNetworkHandler::handleUploadAnimationMetadataV2);
+
         // Register S2C (Server to Client) payload types ONLY on servers (not clients)
         // On clients, ClientNetworking.registerReceiver() handles both type and handler registration
         // This prevents duplicate registration errors on clients
@@ -95,6 +112,13 @@ public class ModNetworking implements NetworkTransport {
             NetworkManager.registerS2CPayloadType(
                     AppearanceSnapshotCompletePayload.TYPE,
                     AppearanceSnapshotCompletePayload.CODEC);
+            NetworkManager.registerS2CPayloadType(ProtocolAckPayload.TYPE, ProtocolAckPayload.CODEC);
+            NetworkManager.registerS2CPayloadType(SyncAppearanceV2Payload.TYPE, SyncAppearanceV2Payload.CODEC);
+            NetworkManager.registerS2CPayloadType(SendTextureV2Payload.TYPE, SendTextureV2Payload.CODEC);
+            NetworkManager.registerS2CPayloadType(
+                    SendTextureChunkV2Payload.TYPE, SendTextureChunkV2Payload.CODEC);
+            NetworkManager.registerS2CPayloadType(
+                    SendAnimationMetadataV2Payload.TYPE, SendAnimationMetadataV2Payload.CODEC);
         }
     }
 

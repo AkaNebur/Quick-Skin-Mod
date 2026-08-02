@@ -34,7 +34,14 @@ public class MixinSkinManager {
 
     private static final Logger CPMLOG = LoggerFactory.getLogger("QuickSkin-CPM");
 
-    @Inject(method = "registerSkins", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "registerSkins",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 0,
+            expect = 1,
+            allow = 1
+    )
     private void quickskin$wrapRegisterSkins(
             GameProfile profile,
             SkinManager.SkinTextureCallback callback,
@@ -179,7 +186,15 @@ public class MixinSkinManager {
      * cache and extracts the embedded CPM 3D model. By replacing the entry with our skin,
      * CPM reads our skin file (which has no CPM model) instead of the Mojang skin.
      */
-    @Inject(method = "getInsecureSkinInformation", at = @At("RETURN"), cancellable = true)
+    @Inject(
+            method = "getInsecureSkinInformation",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 0,
+            // 1.20.1 has two bytecode RETURN sites in this one target method.
+            expect = 2,
+            allow = 2
+    )
     private void quickskin$overrideSkinInfo(
             GameProfile profile,
             CallbackInfoReturnable<Map<MinecraftProfileTexture.Type, MinecraftProfileTexture>> cir) {

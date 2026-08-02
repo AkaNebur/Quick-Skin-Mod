@@ -23,9 +23,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class PanoramaRendererMixin {
 
 //? if <26.1.2 {
-    @Inject(method = "render", at = @At("HEAD"))
+    @Inject(method = "render", at = @At("HEAD"), require = 0, expect = 1, allow = 1)
 //?} else {
-    @Inject(method = "extractRenderState", at = @At("HEAD"))
+    @Inject(method = "extractRenderState", at = @At("HEAD"), require = 0, expect = 1, allow = 1)
 //?}
     private void quickskin$syncPanoramaTime(CallbackInfo ci) {
         // Sync this panorama's time to the global time before rendering

@@ -1,0 +1,88 @@
+# Dependency security policy
+
+Quick Skin treats build plugins and dependencies as executable supply-chain inputs.
+`gradle.properties` explicitly selects Gradle's strict verification mode; do not pass
+`--dependency-verification lenient` or `off` in development, CI, or release automation.
+
+## Enforcement layers
+
+- `gradle/wrapper/gradle-wrapper.properties` pins the Gradle distribution with SHA-256, and the
+  repository also records the wrapper JAR and distribution checksums.
+- `settings.gradle.kts` routes plugin groups only to their expected Fabric, Architectury, Mojang,
+  Forge, NeoForge, Kikugie, Maven Central, or Gradle Plugin Portal repositories. Central and the
+  Plugin Portal explicitly reject ecosystem groups owned by the specialist repositories.
+- `gradle/repository-policy.gradle.kts` applies to every buildable common/loader node. It limits
+  each remote repository to its owned groups, rejects unknown remote hosts, and prevents generated
+  Loom namespaces from ever resolving over the network.
+- `gradle/verification-metadata.xml` verifies both artifacts and Maven/Gradle metadata with
+  SHA-256. It covers settings and build plugins plus the resolvable common, test, Fabric, Forge,
+  Minecraft, mappings, transform, runtime, native, and E2E classpaths for the active 1.20.1 graph.
+- `gradle/dependency-locks/` strictly locks only `shadowBundle`, the external graph physically
+  embedded in each release JAR. Locking Loom's generated configurations is deliberately avoided;
+  their external inputs remain pinned by coordinate-specific verification metadata.
+- `scripts/release/generate_sbom.py` converts that exact per-lane embedded graph into one
+  deterministic CycloneDX document. Every production JAR is represented by its staged hashes and
+  depends only on coordinates present in its strict lock; every listed library carries the exact
+  upstream JAR SHA-256 from verification metadata. A missing lane, lock, component, JAR checksum,
+  or manifest binding stops staging and all later publication jobs.
+
+## Offline CycloneDX validation boundary
+
+The current SBOM validator deliberately checks the deterministic CycloneDX 1.6 subset emitted by
+Quick Skin; it is not a complete implementation of the upstream JSON Schema. Release staging still
+fails closed on the local matrix, manifest identity, dependency locks, verification checksums, and
+the actual staged JAR and SBOM bytes, and it never downloads a schema while publishing.
+
+Complete schema validation should be added only as an offline, reviewable input: vendor the exact
+CycloneDX 1.6 schema and every referenced schema, record their reviewed SHA-256 values, pin and
+verify the validator dependency like the rest of the build graph, and configure its resolver to
+reject all network URLs. The release gate must fail if a vendored checksum, reference, or validation
+result disagrees; fetching a newer schema at runtime is not an acceptable fallback.
+
+## Narrow local-output exception
+
+Loom exposes some generated outputs through file-backed Maven repositories. Their JAR byte layout
+is not portable across clean worktrees, even when their external inputs and coordinates are the
+same, so recording their generated SHA-256 values would make a clean build fail for the wrong
+reason. Exactly four trusted-artifact rules cover those local outputs:
+
+| Group rule | Name rule | Owner |
+|---|---|---|
+| `^remapped[.].+$` | any | Loom-remapped mod/API modules |
+| `^loom$` | `^mappings$` | Loom layered mappings |
+| `^net[.]minecraft$` | merged Minecraft/Forge names only | Loom merged game modules |
+| `^net[.]minecraftforge[.][0-9a-f]{64}$` | `^fmlloader$` | Loom transformed Forge loader |
+
+This is not permission to trust similarly named downloads. The project repository policy excludes
+all four namespaces from Maven Central and excludes the transformed Forge namespace from Forge's
+remote repository; other approved remote repositories have positive group allowlists that cannot
+match them. Only Loom's local file repositories can supply these coordinates. The original Loom,
+Minecraft, loader, API, mappings source, and transform-tool inputs remain SHA-256 verified.
+
+Gradle dependency verification does not cover the wrapper download or arbitrary downloads made
+outside Gradle's dependency engine. The wrapper has its separate checksum. Packaged-E2E installer
+downloads are independently pinned in `release/release-matrix.json`. Any new custom downloader must
+add its own reviewed checksum before it is allowed in CI or release paths.
+
+## Updating dependencies
+
+Start from a trusted checkout and intentionally change the declared version first. Then regenerate
+the active graph and selective locks in one serialized invocation:
+
+```bash
+./gradlew --no-daemon --no-parallel \
+  --write-verification-metadata sha256 --write-locks \
+  :common:1.20.1:dependencies \
+  :fabric:1.20.1:dependencies \
+  :forge:1.20.1:dependencies
+```
+
+Review every metadata and lockfile diff. Confirm new coordinates are expected, compare critical
+checksums with an independent publisher source when one exists, remove obsolete components, and
+never add a broad trusted group to make a failure disappear. `origin="Generated by Gradle"` is an
+honest bootstrap marker, not proof of publisher authenticity; repository routing and human review
+remain part of the trust decision.
+
+Run the policy regression tests and then the proportional Gradle build gate in strict mode. A
+dependency-verification failure after an unrelated change is a security review event, not a cache
+problem to bypass.

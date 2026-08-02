@@ -1,15 +1,23 @@
 package com.quickskin.mod.client.util;
 
 import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.util.BoundedFileReader;
+import com.quickskin.mod.common.util.SafeImageReader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.User;
 import net.minecraft.network.chat.Component;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -18,6 +26,8 @@ import java.util.UUID;
  */
 public class MojangSkinUploader {
     private static final String UPLOAD_URL = "https://api.minecraftservices.com/minecraft/profile/skins";
+    static final int MAX_SKIN_BYTES = (int) SafeImageReader.MAX_ENCODED_BYTES;
+    static final int MAX_ERROR_BODY_BYTES = 64 * 1024;
 
     public static class UploadResult {
         public final boolean success;
@@ -49,7 +59,7 @@ public class MojangSkinUploader {
             }
 
             // Read skin file
-            byte[] skinData = Files.readAllBytes(metadata.path());
+            byte[] skinData = readSkinData(metadata.path());
 
             // Determine skin variant
             String variant = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null) ? "slim" : "classic";
@@ -115,17 +125,27 @@ public class MojangSkinUploader {
         }
     }
 
-    private static String readErrorStream(HttpURLConnection connection) {
-        try (InputStream errorStream = connection.getErrorStream()) {
-            if (errorStream == null) return Component.translatable("quickskin.error.unknown").getString();
+    static byte[] readSkinData(Path path) throws IOException {
+        return BoundedFileReader.readBytes(path, MAX_SKIN_BYTES);
+    }
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(errorStream, StandardCharsets.UTF_8));
+    static String readErrorBody(InputStream errorStream) throws IOException {
+        byte[] body = BoundedFileReader.readBytes(errorStream, MAX_ERROR_BODY_BYTES);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new ByteArrayInputStream(body), StandardCharsets.UTF_8))) {
             StringBuilder response = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {
                 response.append(line);
             }
             return response.toString();
+        }
+    }
+
+    private static String readErrorStream(HttpURLConnection connection) {
+        try (InputStream errorStream = connection.getErrorStream()) {
+            if (errorStream == null) return Component.translatable("quickskin.error.unknown").getString();
+            return readErrorBody(errorStream);
         } catch (IOException e) {
             return Component.translatable("quickskin.error.read_error_message").getString();
         }

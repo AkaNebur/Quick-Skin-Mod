@@ -16,19 +16,31 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from artifact_manifest import (
+    ArtifactManifestError,
+    load_artifact_manifest,
+    validate_artifact_manifest,
+    validate_manifest_location,
+)
+from generate_sbom import SbomError, stage_sbom, verify_staged_sbom
 from matrix import MatrixError, load_matrix
+from release_identity import ReleaseIdentityError, derive as derive_release_identity
 
 
 class VerificationError(RuntimeError):
     pass
 
 
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
+def file_digest(path: Path, algorithm: str) -> str:
+    digest = hashlib.new(algorithm)
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def sha256(path: Path) -> str:
+    return file_digest(path, "sha256")
 
 
 def read_gradle_properties(path: Path) -> dict[str, str]:
@@ -281,7 +293,9 @@ def verify_jar(
     return {
         "filename": path.name,
         "bytes": path.stat().st_size,
+        "sha1": file_digest(path, "sha1"),
         "sha256": sha256(path),
+        "sha512": file_digest(path, "sha512"),
     }
 
 
@@ -377,12 +391,15 @@ def build_manifest(
     repo: Path,
     matrix_path: Path,
     stage: Path,
+    manifest_path: Path,
     mod_version: str,
     data: dict[str, Any],
 ) -> dict[str, Any]:
+    validate_manifest_location(manifest_path, stage)
     files_dir = stage / "files"
     harness_dir = stage / "harness"
-    for directory in (files_dir, harness_dir):
+    sbom_dir = stage / "sbom"
+    for directory in (files_dir, harness_dir, sbom_dir):
         if directory.exists():
             shutil.rmtree(directory)
 
@@ -414,84 +431,75 @@ def build_manifest(
         len({record["sha256"] for record in records}) == lane_count,
         "production jar hashes are not unique",
     )
-    return {
-        "schema_version": 1,
+    release = derive_release_identity(matrix_path, data).manifest()
+    commit = git_commit(repo)
+    manifest = {
+        "schema_version": 2,
         "matrix": matrix_path.relative_to(repo).as_posix(),
         "matrix_sha256": sha256(matrix_path),
         "lane_count": lane_count,
         "mod_version": mod_version,
-        "git_commit": git_commit(repo),
+        "git_commit": commit,
+        "release": release,
         "artifacts": records,
     }
+    validate_artifact_manifest(
+        manifest,
+        repository=repo,
+        matrix_path=matrix_path,
+        matrix=data,
+        stage=stage,
+        expected_mod_version=mod_version,
+        expected_commit=commit,
+        expected_release=release,
+        require_sbom=False,
+    )
+    manifest["sbom"] = stage_sbom(repo, matrix_path, stage, data, manifest)
+    validate_artifact_manifest(
+        manifest,
+        repository=repo,
+        matrix_path=matrix_path,
+        matrix=data,
+        stage=stage,
+        expected_mod_version=mod_version,
+        expected_commit=commit,
+        expected_release=release,
+    )
+    return manifest
 
 
 def verify_staged_manifest(
+    repo: Path,
     stage: Path,
+    manifest_path: Path,
     manifest: dict[str, Any],
     data: dict[str, Any],
     matrix_path: Path,
     mod_version: str,
     expected_commit: str | None,
 ) -> None:
-    require(manifest.get("schema_version") == 1, "unsupported artifact manifest schema")
-    require(manifest.get("lane_count") == data["lane_count"], "artifact manifest lane count mismatch")
-    require(
-        matrix_path.is_file() and manifest.get("matrix_sha256") == sha256(matrix_path),
-        "artifact manifest release-matrix hash mismatch",
-    )
-    require(manifest.get("mod_version") == mod_version, "artifact manifest version mismatch")
-    require(manifest.get("git_commit") == expected_commit, "artifact manifest commit mismatch")
-    records = manifest.get("artifacts", [])
-    require(
-        isinstance(records, list)
-        and len(records) == data["lane_count"]
-        and all(isinstance(record, dict) for record in records),
-        f"artifact manifest must contain lane_count={data['lane_count']} object records",
+    validate_manifest_location(manifest_path, stage)
+    release = derive_release_identity(matrix_path, data).manifest()
+    record_by_node = validate_artifact_manifest(
+        manifest,
+        repository=repo,
+        matrix_path=matrix_path,
+        matrix=data,
+        stage=stage,
+        expected_mod_version=mod_version,
+        expected_commit=expected_commit,
+        expected_release=release,
     )
     artifact_by_node = {artifact["artifact_node"]: artifact for artifact in data["artifacts"]}
-    require(
-        {record.get("artifact_node") for record in records} == set(artifact_by_node),
-        "artifact manifest node inventory disagrees with release matrix",
-    )
-
-    def staged_path(relative: Any, label: str) -> Path:
-        require(isinstance(relative, str) and relative, f"{label} path is missing")
-        resolved = (stage / relative).resolve()
-        require(stage == resolved or stage in resolved.parents, f"{label} escapes stage: {relative}")
-        return resolved
-
-    for record in records:
-        artifact = artifact_by_node[record["artifact_node"]]
+    for node, artifact in artifact_by_node.items():
+        record = record_by_node[node]
         harness_record = record.get("harness")
-        require(isinstance(harness_record, dict), f"missing harness record for {record['artifact_node']}")
-        expected_jar_name = Path(resolve_template(artifact["jar"], mod_version)).name
-        expected_harness_name = Path(resolve_template(artifact["harness_jar"], mod_version)).name
-        require(record.get("path") == f"files/{expected_jar_name}", "staged production path mismatch")
-        require(
-            harness_record.get("path") == f"harness/{expected_harness_name}",
-            "staged harness path mismatch",
-        )
-        require(record.get("loader") == artifact["loader"], "staged loader identity mismatch")
-        require(
-            record.get("artifact_version") == artifact["artifact_version"],
-            "staged artifact version mismatch",
-        )
-        require(record.get("game_versions") == artifact["game_versions"], "staged game versions mismatch")
-        jar = staged_path(record["path"], "production artifact")
-        harness = staged_path(harness_record["path"], "E2E harness")
-        require(jar.is_file(), f"staged artifact missing: {jar}")
-        require(harness.is_file(), f"staged harness missing: {harness}")
-        verified = verify_jar(jar, artifact, data["project"], mod_version)
-        harness_verified = verify_harness(harness, artifact)
-        require(verified["filename"] == record.get("filename"), f"staged filename mismatch: {jar.name}")
-        require(verified["bytes"] == record.get("bytes"), f"staged byte count mismatch: {jar.name}")
-        require(verified["sha256"] == record.get("sha256"), f"staged artifact hash mismatch: {jar.name}")
-        require(
-            harness_verified["filename"] == harness_record.get("filename")
-            and harness_verified["bytes"] == harness_record.get("bytes")
-            and harness_verified["sha256"] == harness_record.get("sha256"),
-            f"staged harness hash mismatch: {harness.name}",
-        )
+        require(isinstance(harness_record, dict), f"missing harness record for {node}")
+        jar = stage / record["path"]
+        harness = stage / harness_record["path"]
+        verify_jar(jar, artifact, data["project"], mod_version)
+        verify_harness(harness, artifact)
+    verify_staged_sbom(repo, matrix_path, stage, data, manifest)
 
 
 def main() -> int:
@@ -524,20 +532,55 @@ def main() -> int:
                 f"checkout commit {current_commit!r} does not equal GITHUB_SHA {github_commit!r}",
             )
         if args.verify_staged:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            require(isinstance(manifest, dict), "artifact manifest root must be an object")
-            verify_staged_manifest(stage, manifest, data, matrix_path, mod_version, current_commit)
+            release = derive_release_identity(matrix_path, data).manifest()
+            manifest = load_artifact_manifest(
+                manifest_path,
+                repository=repo,
+                matrix_path=matrix_path,
+                matrix=data,
+                stage=stage,
+                expected_mod_version=mod_version,
+                expected_commit=current_commit,
+                expected_release=release,
+            )
+            verify_staged_manifest(
+                repo,
+                stage,
+                manifest_path,
+                manifest,
+                data,
+                matrix_path,
+                mod_version,
+                current_commit,
+            )
             print(
                 f"Verified {data['lane_count']} staged production jars and "
-                f"{data['lane_count']} packaged E2E harnesses in {stage}"
+                f"{data['lane_count']} packaged E2E harnesses plus the CycloneDX SBOM in {stage}"
             )
             return 0
 
-        manifest = build_manifest(repo, matrix_path, stage, mod_version, data)
+        manifest = build_manifest(repo, matrix_path, stage, manifest_path, mod_version, data)
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        verify_staged_manifest(stage, manifest, data, matrix_path, mod_version, current_commit)
-    except (MatrixError, VerificationError, OSError, json.JSONDecodeError) as exc:
+        verify_staged_manifest(
+            repo,
+            stage,
+            manifest_path,
+            manifest,
+            data,
+            matrix_path,
+            mod_version,
+            current_commit,
+        )
+    except (
+        ArtifactManifestError,
+        MatrixError,
+        ReleaseIdentityError,
+        SbomError,
+        VerificationError,
+        OSError,
+        json.JSONDecodeError,
+    ) as exc:
         print(f"release verification failed: {exc}", file=sys.stderr)
         return 1
 

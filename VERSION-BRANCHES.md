@@ -45,12 +45,15 @@ for a duplicate build or E2E run.
 
 The marked release-status table in `README.md` is generated from live remote release branches and
 the authoritative matrix stored in each one. `Refresh release status table` updates it on branch
-creation or deletion and periodically repairs missed events. Do not maintain a second version list
-inside that workflow or edit the generated table by hand.
+creation or deletion and periodically repairs missed events through one reusable automation PR;
+it never pushes directly to `master`. Do not maintain a second version list inside that workflow
+or edit the generated table by hand.
 
 If either gate fails, the trusted result workflow gives Claude one bounded repair attempt using the
-failed logs and evidence. It redispatches both gates for the new commit. A second failure leaves the
-PR open rather than weakening tests or looping indefinitely.
+failed logs and evidence. Claude has no Git or GitHub write credentials and can only upload a
+path-policy-checked patch. A separate deterministic writer rechecks and commits that patch before
+redispatching both gates. A second failure leaves the PR open rather than weakening tests or
+looping indefinitely.
 
 External pull requests still run both workflows normally. AI steps that require repository secrets
 are skipped for forked pull requests; untrusted code never receives the Claude credential.
