@@ -78,11 +78,11 @@ class WorkflowSecurityTest(unittest.TestCase):
 
     def test_read_only_port_can_start_a_local_merge(self) -> None:
         propose = job_block("sync-version-branches.yml", "propose")
-        identity = "git config user.name github-actions[bot]"
+        identity = 'git config user.name "github-actions[bot]"'
         merge = 'git merge --no-ff --no-commit "$source_sha"'
         self.assertIn(identity, propose)
         self.assertIn(
-            "git config user.email 41898282+github-actions[bot]@users.noreply.github.com",
+            'git config user.email "41898282+github-actions[bot]@users.noreply.github.com"',
             propose,
         )
         self.assertLess(propose.index(identity), propose.index(merge))

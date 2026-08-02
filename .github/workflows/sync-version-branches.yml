@@ -87,8 +87,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/release/version_branches.py --target "$TARGET_BRANCH" > /dev/null
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch --no-tags origin "$GITHUB_SHA"
           source_sha="$GITHUB_SHA"
 
@@ -357,8 +357,8 @@ jobs:
           python3 -m unittest discover -s scripts/release/tests -p 'test_*.py' -v
           python3 scripts/release/matrix.py \
             --matrix release/release-matrix.json > /dev/null
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           tree="$(git write-tree)"
           commit="$(printf 'chore: sync master into %s\n' "$TARGET_BRANCH" \
             | git commit-tree "$tree" -p "$WORK_HEAD_SHA" -p "$SOURCE_SHA")"
