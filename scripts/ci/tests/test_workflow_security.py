@@ -133,6 +133,26 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn("--profile-branch master", workflow)
         self.assertNotIn("git push origin HEAD:master", workflow)
 
+    def test_release_test_jobs_install_locked_pages_dependency(self) -> None:
+        for workflow, job in (
+            ("build-gate.yml", "build"),
+            ("refresh-release-status.yml", "refresh"),
+            ("sync-version-branches.yml", "publish"),
+            ("handle-version-port-result.yml", "apply-repair"),
+        ):
+            with self.subTest(workflow=workflow, job=job):
+                block = job_block(workflow, job)
+                install = block.index("scripts/pages/requirements.txt")
+                tests = block.index("scripts/release/tests")
+                self.assertIn("--only-binary=:all:", block)
+                self.assertIn("--require-hashes", block)
+                self.assertLess(install, tests)
+        sync_publish = job_block("sync-version-branches.yml", "publish")
+        self.assertIn(
+            "--requirement controller/scripts/pages/requirements.txt",
+            sync_publish,
+        )
+
     def test_build_gate_checks_the_actual_branch_readme_profile(self) -> None:
         build = job_block("build-gate.yml", "build")
 
