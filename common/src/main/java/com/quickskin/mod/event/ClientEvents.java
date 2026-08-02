@@ -951,7 +951,8 @@ public class ClientEvents {
                 return;
             }
 
-            String finalHash = com.quickskin.mod.common.util.HashUtil.computeHash(processedImageBytes);
+            String finalHash = com.quickskin.mod.common.util.HashUtil.computeAssetContentId(
+                    processedImageBytes, "skin");
             if (finalHash == null) {
                 return;
             }

@@ -7,6 +7,8 @@ name: Packaged E2E
 # events created with GITHUB_TOKEN do not recursively trigger ordinary pull-request workflows.
 on:
   pull_request:
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       attest_run_id:
@@ -102,15 +104,18 @@ jobs:
           --manifest build/release/artifacts.json
           --stage build/release
 
-      - name: Resolve native-anchor matrix
+      - name: Resolve authoritative E2E matrix
         id: matrix
         shell: bash
+        env:
+          MATRIX_KIND: ${{ github.event_name == 'schedule' && 'native-anchors' || 'pr-anchors' }}
         run: |
           set -euo pipefail
           matrix="$(python scripts/release/matrix.py \
             --matrix release/release-matrix.json \
-            --kind native-anchors)"
+            --kind "$MATRIX_KIND")"
           python -c 'import json,sys; value=json.loads(sys.argv[1]); assert value' "$matrix"
+          printf 'coverage matrix: %s\n' "$MATRIX_KIND"
           printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
 
       - name: Upload immutable E2E input bundle
@@ -223,9 +228,32 @@ jobs:
           compression-level: 6
           retention-days: 1
 
+  required-gate:
+    name: Packaged E2E gate
+    needs:
+      - build
+      - e2e
+    if: >-
+      always() &&
+      (github.event_name != 'workflow_dispatch' || inputs.attest_run_id == '')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Require build and packaged behavior
+        shell: bash
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RESULT" == success ]]
+          [[ "$E2E_RESULT" == success ]]
+
   visual-review:
-    name: AI visual review
+    name: AI visual review (advisory)
     needs: e2e
+    continue-on-error: true
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
@@ -257,10 +285,18 @@ jobs:
           python3 e2e/visual_review.py > visual-review-manifest.json
           python3 -c "import json;print('frames to review:', len(json.load(open('visual-review-manifest.json'))))"
 
-      # Driven through the Claude Code CLI rather than claude-code-action, which rejects
-      # several of the event types this repository actually runs on.
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code@2.1.220
+      # The tracked npm lock fixes both the CLI and its platform-specific binary by integrity.
+      - name: Install Node for the locked Claude CLI
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+
+      - name: Install locked Claude Code
+        run: |
+          mkdir -p "$RUNNER_TEMP/claude-cli"
+          cp .github/claude/package.json .github/claude/package-lock.json \
+            "$RUNNER_TEMP/claude-cli/"
+          (cd "$RUNNER_TEMP/claude-cli" && npm ci)
 
       # The programmatic E2E assertions verify mod state and pixel deltas. This step is the
       # only thing in the pipeline that judges whether a frame shows what it should.
@@ -268,12 +304,13 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          claude --print "$(cat e2e/visual_review_prompt.md)" \
+          "$RUNNER_TEMP/claude-cli/node_modules/.bin/claude" \
+            --print "$(cat e2e/visual_review_prompt.md)" \
             --model claude-opus-5 \
             --allowedTools Read,Write \
             --permission-mode acceptEdits
 
-      - name: Gate on the review
+      - name: Check the advisory review
         run: |
           python3 e2e/check_visual_review.py \
             --report visual-review-report.json \
@@ -310,8 +347,7 @@ jobs:
   notify-version-port:
     name: Notify version port controller
     needs:
-      - build
-      - e2e
+      - required-gate
       - visual-review
     if: >-
       always() &&
@@ -327,18 +363,14 @@ jobs:
       - name: Dispatch the settled E2E result
         shell: bash
         env:
-          BUILD_RESULT: ${{ needs.build.result }}
-          E2E_RESULT: ${{ needs.e2e.result }}
-          VISUAL_RESULT: ${{ needs.visual-review.result }}
+          GATE_RESULT: ${{ needs.required-gate.result }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           conclusion=success
-          for result in "$BUILD_RESULT" "$E2E_RESULT" "$VISUAL_RESULT"; do
-            if [[ "$result" != success ]]; then
-              conclusion=failure
-            fi
-          done
+          if [[ "$GATE_RESULT" != success ]]; then
+            conclusion=failure
+          fi
           jq -n \
             --arg gate on-demand-e2e.yml \
             --arg conclusion "$conclusion" \

@@ -42,13 +42,35 @@ public class TextureChunkAssembler {
             int chunkIndex,
             int totalChunks,
             byte[] chunkData) {
+        return addChunk(
+                playerId, session, textureType, hash, chunkIndex, totalChunks, chunkData,
+                TextureTransferLimits.MAX_TEXTURE_BYTES,
+                TextureTransferLimits.MAX_WIRE_CHUNK_BYTES);
+    }
+
+    /** V2 entry point whose negotiated limits may only narrow the hard local caps. */
+    public synchronized byte @Nullable [] addChunk(
+            UUID playerId,
+            Object session,
+            String textureType,
+            String hash,
+            int chunkIndex,
+            int totalChunks,
+            byte[] chunkData,
+            int maximumTextureBytes,
+            int maximumChunkBytes) {
         long now = System.currentTimeMillis();
         purgeExpired(now);
 
         if (playerId == null || session == null || !NetworkSecurity.isValidTextureType(textureType)
                 || !NetworkSecurity.isValidContentId(hash) || chunkData == null
                 || chunkData.length == 0
-                || chunkData.length > TextureTransferLimits.MAX_WIRE_CHUNK_BYTES
+                || maximumTextureBytes < 1
+                || maximumTextureBytes > TextureTransferLimits.MAX_TEXTURE_BYTES
+                || maximumChunkBytes < 1
+                || maximumChunkBytes > TextureTransferLimits.MAX_WIRE_CHUNK_BYTES
+                || maximumChunkBytes > maximumTextureBytes
+                || chunkData.length > maximumChunkBytes
                 || totalChunks < 1 || totalChunks > TextureTransferLimits.MAX_CHUNKS
                 || chunkIndex < 0 || chunkIndex >= totalChunks) {
             return null;
@@ -72,7 +94,7 @@ public class TextureChunkAssembler {
             return null;
         }
         long playerBytes = retainedBytesFor(playerId);
-        if ((long) assembly.sizeBytes + chunkData.length > TextureTransferLimits.MAX_TEXTURE_BYTES
+        if ((long) assembly.sizeBytes + chunkData.length > maximumTextureBytes
                 || retainedBytes + chunkData.length > TextureTransferLimits.MAX_SERVER_ASSEMBLY_BYTES
                 || playerBytes + chunkData.length > TextureTransferLimits.MAX_ASSEMBLY_BYTES_PER_PLAYER) {
             removeAssembly(key, assembly);

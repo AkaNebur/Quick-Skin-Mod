@@ -44,6 +44,11 @@ class PngAnimationIdentityTest {
         byte[] source = png();
         assertEquals(HashUtil.computeHash(source), HashUtil.computeAssetHash(source, "skin"));
         assertNotEquals(HashUtil.computeHash(source), HashUtil.computeAssetHash(source, "cape"));
+        assertEquals(HashUtil.computeContentId(source),
+                HashUtil.computeAssetContentId(source, "skin"));
+        assertNotEquals(HashUtil.computeContentId(source),
+                HashUtil.computeAssetContentId(source, "cape"));
+        assertTrue(HashUtil.computeAssetContentId(source, "cape").startsWith("sha256-"));
     }
 
     private static String metadata(int delay) {

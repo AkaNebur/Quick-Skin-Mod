@@ -1,12 +1,80 @@
 pluginManagement {
     repositories {
-        maven("https://maven.fabricmc.net/")
-        maven("https://maven.architectury.dev/")
-        maven("https://files.minecraftforge.net/maven/")
-        maven("https://maven.neoforged.net/releases")
-        maven("https://maven.kikugie.dev/releases")
-        mavenCentral()
-        gradlePluginPortal()
+        maven("https://maven.fabricmc.net/") {
+            name = "FabricPluginRepository"
+            mavenContent { releasesOnly() }
+            content {
+                includeGroupByRegex("net\\.fabricmc(\\..*)?")
+            }
+        }
+        maven("https://maven.architectury.dev/") {
+            name = "ArchitecturyPluginRepository"
+            mavenContent { releasesOnly() }
+            content {
+                includeGroupByRegex("dev\\.architectury(\\..*)?")
+                includeGroup("architectury-plugin")
+                includeGroup("com.github.architectury")
+            }
+        }
+        maven("https://libraries.minecraft.net/") {
+            name = "MojangPluginRepository"
+            mavenContent { releasesOnly() }
+            content {
+                includeGroupByRegex("com\\.mojang(\\..*)?")
+            }
+        }
+        maven("https://maven.minecraftforge.net/") {
+            name = "ForgePluginRepository"
+            mavenContent { releasesOnly() }
+            content {
+                includeGroupByRegex("net\\.minecraftforge(\\..*)?")
+                includeGroupByRegex("de\\.oceanlabs\\.mcp(\\..*)?")
+                includeGroupByRegex("org\\.spongepowered(\\..*)?")
+                excludeGroupByRegex("net\\.minecraftforge\\.[0-9a-f]{64}")
+            }
+        }
+        maven("https://maven.neoforged.net/releases") {
+            name = "NeoForgePluginRepository"
+            mavenContent { releasesOnly() }
+            content {
+                includeGroupByRegex("net\\.neoforged(\\..*)?")
+            }
+        }
+        maven("https://maven.kikugie.dev/releases") {
+            name = "KikugiePluginRepository"
+            mavenContent { releasesOnly() }
+            content {
+                includeGroupByRegex("dev\\.kikugie(\\..*)?")
+            }
+        }
+        mavenCentral {
+            content {
+                excludeGroupByRegex("net\\.fabricmc(\\..*)?")
+                excludeGroupByRegex("dev\\.architectury(\\..*)?")
+                excludeGroup("architectury-plugin")
+                excludeGroup("com.github.architectury")
+                excludeGroupByRegex("com\\.mojang(\\..*)?")
+                excludeGroupByRegex("net\\.minecraftforge(\\..*)?")
+                excludeGroupByRegex("de\\.oceanlabs\\.mcp(\\..*)?")
+                excludeGroupByRegex("org\\.spongepowered(\\..*)?")
+                excludeGroupByRegex("net\\.neoforged(\\..*)?")
+                excludeGroupByRegex("dev\\.kikugie(\\..*)?")
+            }
+        }
+        gradlePluginPortal {
+            content {
+                excludeGroupByRegex("net\\.fabricmc(\\..*)?")
+                excludeGroupByRegex("dev\\.architectury(\\..*)?")
+                excludeGroup("architectury-plugin")
+                excludeGroup("com.github.architectury")
+                excludeGroupByRegex("com\\.mojang(\\..*)?")
+                excludeGroupByRegex("net\\.minecraftforge(\\..*)?")
+                excludeGroupByRegex("de\\.oceanlabs\\.mcp(\\..*)?")
+                excludeGroupByRegex("org\\.spongepowered(\\..*)?")
+                excludeGroupByRegex("net\\.neoforged(\\..*)?")
+                excludeGroupByRegex("dev\\.kikugie(\\..*)?")
+            }
+        }
     }
 }
 

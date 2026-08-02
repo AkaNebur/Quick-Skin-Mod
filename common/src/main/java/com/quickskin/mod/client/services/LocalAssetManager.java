@@ -3,6 +3,8 @@ package com.quickskin.mod.client.services;
 import com.quickskin.mod.QuickSkin;
 import com.quickskin.mod.common.data.AnimationMetadata;
 import com.quickskin.mod.common.data.AssetMetadata;
+import com.quickskin.mod.common.data.ContentId;
+import com.quickskin.mod.common.data.LegacyContentAliasIndex;
 import com.quickskin.mod.common.data.SkinPreferences;
 import com.quickskin.mod.common.data.SkinResolution;
 import com.quickskin.mod.common.data.SkinSortMode;
@@ -58,13 +60,17 @@ public class LocalAssetManager {
     private static final int MAX_ANIMATION_FRAMES = 256;
     private static final int MAX_SCAN_CANDIDATES = 4096;
     private static final int MAX_SCAN_DEPTH = 32;
+    private static final int MAX_LEGACY_ALIASES_PER_ASSET = 4;
 
     private static LocalAssetManager instance;
 
-    // Asset discovery
-    private final Map<String, AssetMetadata> metadataCache = new ConcurrentHashMap<>();
-    private final Map<String, Path> hashToSourcePath = new ConcurrentHashMap<>();
-    private final Map<String, String> legacyCapeHashAliases = new ConcurrentHashMap<>();
+    // Asset discovery. Readers observe one immutable catalog generation instead of the transient
+    // clear-and-repopulate states produced by a rescan.
+    private volatile CatalogSnapshot catalog = CatalogSnapshot.empty();
+
+    // Invalidates directory fingerprints captured before a catalog mutation or lifecycle reset.
+    // Access is guarded by this manager's monitor.
+    private long scanEpoch;
 
     // Texture registration
 //? if <1.21.11 {
@@ -88,7 +94,7 @@ public class LocalAssetManager {
     private Path capesDirectory;
     private Path cacheDirectory;
 
-    // Folder fingerprint as of the last completed scan; drives refreshIfChanged(long).
+    // Folder fingerprint as of the last completed scan; drives token-checked refreshes.
     private volatile long lastScanFingerprint;
 
     // Per-skin preferences
@@ -104,6 +110,170 @@ public class LocalAssetManager {
         INVALID_NAME,
         IO_ERROR,
         NOT_FOUND
+    }
+
+    /**
+     * Immutable input captured before a metadata-only folder walk leaves the render thread.
+     * The owner and epoch are intentionally opaque: callers can carry the request back, but cannot
+     * make an old result current again.
+     */
+    public static final class ScanRequest {
+        private final LocalAssetManager owner;
+        private final long epoch;
+        private final boolean initialized;
+        private final List<Path> directories;
+
+        ScanRequest(
+                LocalAssetManager owner,
+                long epoch,
+                boolean initialized,
+                List<Path> directories
+        ) {
+            this.owner = Objects.requireNonNull(owner, "owner");
+            this.epoch = epoch;
+            this.initialized = initialized;
+            this.directories = List.copyOf(directories);
+        }
+
+        public List<Path> directories() {
+            return directories;
+        }
+    }
+
+    /** One atomically published, internally immutable view of the local asset catalog. */
+    static final class CatalogSnapshot {
+        private static final CatalogSnapshot EMPTY =
+                new CatalogSnapshot(Map.of(), Map.of(), Map.of());
+
+        private final Map<String, AssetMetadata> metadata;
+        private final Map<String, Path> sourcePaths;
+        private final Map<String, String> legacyAliases;
+
+        private CatalogSnapshot(
+                Map<String, AssetMetadata> metadata,
+                Map<String, Path> sourcePaths,
+                Map<String, String> legacyAliases
+        ) {
+            Map<String, AssetMetadata> metadataCopy = Map.copyOf(metadata);
+            Map<String, Path> sourcePathCopy = Map.copyOf(sourcePaths);
+            Map<String, String> aliasCopy = Map.copyOf(legacyAliases);
+            if (!metadataCopy.keySet().equals(sourcePathCopy.keySet())) {
+                throw new IllegalArgumentException("Local asset catalog indexes disagree");
+            }
+            for (String primary : metadataCopy.keySet()) {
+                ContentId parsed = ContentId.parse(primary);
+                if (parsed == null || parsed.algorithm() != ContentId.Algorithm.SHA256) {
+                    throw new IllegalArgumentException("Local catalog primary is not SHA-256");
+                }
+            }
+            for (Map.Entry<String, String> alias : aliasCopy.entrySet()) {
+                ContentId legacy = ContentId.parse(alias.getKey());
+                ContentId strong = ContentId.parse(alias.getValue());
+                if (legacy == null || legacy.algorithm() != ContentId.Algorithm.SHA1
+                        || strong == null || strong.algorithm() != ContentId.Algorithm.SHA256
+                        || !metadataCopy.containsKey(alias.getValue())) {
+                    throw new IllegalArgumentException("Invalid local content alias");
+                }
+            }
+            this.metadata = metadataCopy;
+            this.sourcePaths = sourcePathCopy;
+            this.legacyAliases = aliasCopy;
+        }
+
+        static CatalogSnapshot empty() {
+            return EMPTY;
+        }
+
+        static CatalogSnapshot copyOf(
+                Map<String, AssetMetadata> metadata,
+                Map<String, Path> sourcePaths
+        ) {
+            return copyOf(metadata, sourcePaths, Map.of());
+        }
+
+        static CatalogSnapshot copyOf(
+                Map<String, AssetMetadata> metadata,
+                Map<String, Path> sourcePaths,
+                Map<String, String> legacyAliases
+        ) {
+            return metadata.isEmpty() && sourcePaths.isEmpty() && legacyAliases.isEmpty()
+                    ? EMPTY
+                    : new CatalogSnapshot(metadata, sourcePaths, legacyAliases);
+        }
+
+        Map<String, AssetMetadata> metadata() {
+            return metadata;
+        }
+
+        Map<String, Path> sourcePaths() {
+            return sourcePaths;
+        }
+
+        Map<String, String> legacyAliases() {
+            return legacyAliases;
+        }
+
+        String resolve(String contentId) {
+            ContentId parsed = ContentId.parse(contentId);
+            if (parsed == null) return null;
+            if (parsed.algorithm() == ContentId.Algorithm.SHA256) {
+                return metadata.containsKey(contentId) ? contentId : null;
+            }
+            return legacyAliases.get(contentId);
+        }
+
+        CatalogSnapshot with(String hash, AssetMetadata assetMetadata, Path sourcePath) {
+            Map<String, AssetMetadata> nextMetadata = new HashMap<>(metadata);
+            Map<String, Path> nextSourcePaths = new HashMap<>(sourcePaths);
+            nextMetadata.put(hash, assetMetadata);
+            nextSourcePaths.put(hash, sourcePath);
+            return copyOf(nextMetadata, nextSourcePaths, legacyAliases);
+        }
+
+        CatalogSnapshot without(String hash) {
+            Map<String, AssetMetadata> nextMetadata = new HashMap<>(metadata);
+            Map<String, Path> nextSourcePaths = new HashMap<>(sourcePaths);
+            nextMetadata.remove(hash);
+            nextSourcePaths.remove(hash);
+            Map<String, String> nextAliases = new HashMap<>(legacyAliases);
+            nextAliases.entrySet().removeIf(entry -> hash.equals(entry.getValue()));
+            return copyOf(nextMetadata, nextSourcePaths, nextAliases);
+        }
+    }
+
+    /** Mutable state owned by one synchronous scan and frozen exactly once at commit. */
+    private static final class CatalogBuilder {
+        private final Map<String, AssetMetadata> metadata = new HashMap<>();
+        private final Map<String, Path> sourcePaths = new HashMap<>();
+        private final LegacyContentAliasIndex aliases = new LegacyContentAliasIndex(
+                MAX_SCAN_CANDIDATES * 3, MAX_LEGACY_ALIASES_PER_ASSET);
+        private final LegacyContentAliasIndex capePreflightAliases = new LegacyContentAliasIndex(
+                MAX_SCAN_CANDIDATES, 2);
+
+        private void put(AssetMetadata assetMetadata, Path sourcePath) {
+            if (!aliases.register(assetMetadata.hash(), List.of())) return;
+            metadata.put(assetMetadata.hash(), assetMetadata);
+            sourcePaths.put(assetMetadata.hash(), sourcePath);
+        }
+
+        private void registerAliases(String primary, String... legacyAliases) {
+            aliases.register(primary, Arrays.asList(legacyAliases));
+        }
+
+        private void registerCapePreflight(String primary, String... legacyAliases) {
+            capePreflightAliases.register(primary, Arrays.asList(legacyAliases));
+        }
+
+        private boolean isAuthorizedCapeAlias(String alias, String initialPrimary) {
+            return capePreflightAliases.resolvesTo(alias, initialPrimary);
+        }
+
+        private CatalogSnapshot freeze() {
+            Map<String, String> filteredAliases = new HashMap<>(aliases.uniqueAliases());
+            filteredAliases.entrySet().removeIf(
+                    entry -> !metadata.containsKey(entry.getValue()));
+            return CatalogSnapshot.copyOf(metadata, sourcePaths, filteredAliases);
+        }
     }
 
     private LocalAssetManager() {
@@ -147,25 +317,38 @@ public class LocalAssetManager {
      * Scan filesystem for skins and capes, build metadata cache
      */
     public synchronized void discoverLocalAssets() {
-        metadataCache.clear();
-        hashToSourcePath.clear();
-        legacyCapeHashAliases.clear();
+        if (skinsDirectory == null || capesDirectory == null || cacheDirectory == null) {
+            return;
+        }
+        invalidatePendingScans();
+        CatalogBuilder scanned = new CatalogBuilder();
 
         // Scan skins directory
-        scanDirectory(skinsDirectory, "skin");
+        scanDirectory(skinsDirectory, "skin", scanned);
 
         // Scan capes directory
-        scanDirectory(capesDirectory, "cape");
+        scanDirectory(capesDirectory, "cape", scanned);
 
         // CPM is optional: do not even expose model files when the mod is absent.
         if (com.quickskin.mod.client.compat.CPMCompatIntegration.isAvailable()) {
             com.quickskin.mod.client.compat.CpmModelWorkflow.reconcilePendingSkinModeReset();
-            scanCpmModels();
+            scanCpmModels(scanned);
         } else {
             com.quickskin.mod.client.compat.CpmModelWorkflow.sanitizeUnavailableState();
         }
+
+        // Publish both indexes together. Readers keep seeing the previous complete catalog until
+        // this single volatile write, even if the disk scan is slow or skips an invalid entry.
+        CatalogSnapshot completed = scanned.freeze();
+        catalog = completed;
         com.quickskin.mod.client.compat.CpmModelWorkflow.sanitizeMissingActiveModel();
-        LocalCapeHashMigration.migrate(legacyCapeHashAliases);
+        migrateLegacyCacheFiles(completed);
+        LocalContentIdMigration.migrate(
+                aliasesForType(completed, "skin"),
+                aliasesForType(completed, "cape"),
+                aliasesForType(completed, "cpmmodel"),
+                skinPreferences,
+                preferencesFile);
 
         // Recorded last: processPngAsset may rewrite oversized files, which changes their own
         // size/mtime. Fingerprinting before the scan would leave the folder permanently "dirty".
@@ -176,7 +359,7 @@ public class LocalAssetManager {
     /**
      * Scan CPM's player_models directory for .cpmmodel files
      */
-    private void scanCpmModels() {
+    private void scanCpmModels(CatalogBuilder scanned) {
         Path modelsDir = com.quickskin.mod.client.compat.CPMCompatIntegration.getCPMModelsDirectory();
         if (!Files.exists(modelsDir)) return;
 
@@ -192,8 +375,9 @@ public class LocalAssetManager {
 
                 try {
                     byte[] modelBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
-                    String hash = HashUtil.computeHash(modelBytes);
-                    if (hash == null) continue;
+                    String legacyHash = HashUtil.computeHash(modelBytes);
+                    String hash = HashUtil.computeContentId(modelBytes);
+                    if (hash == null || legacyHash == null) continue;
 
                     // Parse the .cpmmodel to get its name
                     var info = com.quickskin.mod.client.compat.CPMCompatIntegration.parseCpmModelInfo(path);
@@ -203,15 +387,14 @@ public class LocalAssetManager {
                     long lastModifiedTime = Files.getLastModifiedTime(path).toMillis();
 
                     AssetMetadata metadata = AssetMetadata.forCpmModel(hash, friendlyName, path, fileSize, lastModifiedTime);
-                    metadataCache.put(hash, metadata);
-                    hashToSourcePath.put(hash, path);
+                    scanned.registerAliases(hash, legacyHash);
+                    scanned.put(metadata, path);
 
                     // Cache icon PNG bytes if available
                     if (info != null && info.iconPngBytes != null && info.iconPngBytes.length <= MAX_ASSET_BYTES
                             && SafeImageReader.readPng(info.iconPngBytes) != null) {
-                        Path iconPath = cacheDirectory.resolve("cpm_icons").resolve(hash + ".png");
-                        Files.createDirectories(iconPath.getParent());
-                        Files.write(iconPath, info.iconPngBytes);
+                        writeVerifiedPngCache(
+                                cacheDirectory.resolve("cpm_icons"), hash, info.iconPngBytes);
                     }
                 } catch (Exception e) {
                     // Skip invalid files
@@ -230,7 +413,7 @@ public class LocalAssetManager {
      * Scan directory for PNG and GIF files and process them
      * @return Number of assets found
      */
-    private int scanDirectory(Path directory, String type) {
+    private int scanDirectory(Path directory, String type, CatalogBuilder scanned) {
         if (!Files.exists(directory)) {
             return 0;
         }
@@ -243,32 +426,33 @@ public class LocalAssetManager {
             if (candidates.size() == MAX_SCAN_CANDIDATES) {
                 QuickSkin.LOGGER.warn("Local asset scan reached the {} file cap in {}", MAX_SCAN_CANDIDATES, directory);
             }
+            if ("cape".equals(type)) {
+                preflightCapeAliases(candidates, scanned);
+            }
             for (Path path : candidates) {
                 String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
 
                 // Process PNG files
                 if (fileName.endsWith(".png")) {
-                    AssetMetadata metadata = processPngAsset(path, type);
+                    AssetMetadata metadata = processPngAsset(path, type, scanned);
                     if (metadata != null) {
-                        metadataCache.put(metadata.hash(), metadata);
-                        hashToSourcePath.put(metadata.hash(), path);
+                        scanned.put(metadata, path);
                         count++;
                     }
                 }
                 // Process GIF files (animated capes only)
                 else if (fileName.endsWith(".gif") && "cape".equals(type)) {
-                    AssetMetadata metadata = processGifAsset(path);
+                    AssetMetadata metadata = processGifAsset(path, scanned);
                     if (metadata != null) {
-                        metadataCache.put(metadata.hash(), metadata);
 //? if <1.21 {
-                        hashToSourcePath.put(metadata.hash(), path);
+                        scanned.put(metadata, path);
 //?} else {
                         // Point to the cached PNG atlas so loadTexture/getSourceImage get the
                         // full multi-frame image. ImageIO.read of a .gif only returns the first
                         // frame, so the atlas path is what downstream consumers actually need.
                         // Fall back to the .gif path if the atlas wasn't written (shouldn't happen).
                         Path cachedAtlas = cacheDirectory.resolve("animated_capes").resolve(metadata.hash() + ".png");
-                        hashToSourcePath.put(metadata.hash(), Files.exists(cachedAtlas) ? cachedAtlas : path);
+                        scanned.put(metadata, Files.exists(cachedAtlas) ? cachedAtlas : path);
 //?}
                         count++;
                     }
@@ -284,7 +468,7 @@ public class LocalAssetManager {
     }
 
     /** Scan CPM's recursive player_models tree for standalone model files. */
-    private void scanCpmModels() {
+    private void scanCpmModels(CatalogBuilder scanned) {
         Path modelsDirectory = com.quickskin.mod.client.compat.CPMCompatIntegration
                 .getCPMModelsDirectory();
         if (!Files.isDirectory(modelsDirectory)) {
@@ -303,7 +487,7 @@ public class LocalAssetManager {
                     continue;
                 }
                 try {
-                    scanCpmModel(path, fileName);
+                    scanCpmModel(path, fileName, scanned);
                 } catch (IOException | RuntimeException ignored) {
                     // Skip only the unreadable candidate and continue the recursive scan.
                     QuickSkin.LOGGER.debug("Skipping invalid CPM model {}", path, ignored);
@@ -315,10 +499,11 @@ public class LocalAssetManager {
         }
     }
 
-    private void scanCpmModel(Path path, String fileName) throws IOException {
+    private void scanCpmModel(Path path, String fileName, CatalogBuilder scanned) throws IOException {
         byte[] modelBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
-        String hash = HashUtil.computeHash(modelBytes);
-        if (hash == null) {
+        String legacyHash = HashUtil.computeHash(modelBytes);
+        String hash = HashUtil.computeContentId(modelBytes);
+        if (hash == null || legacyHash == null) {
             return;
         }
 
@@ -335,30 +520,53 @@ public class LocalAssetManager {
                 modelBytes.length,
                 Files.getLastModifiedTime(path).toMillis()
         );
-        metadataCache.put(hash, metadata);
-        hashToSourcePath.put(hash, path);
+        scanned.registerAliases(hash, legacyHash);
+        scanned.put(metadata, path);
 
         if (info != null && info.iconPngBytes != null && info.iconPngBytes.length <= MAX_ASSET_BYTES
                 && SafeImageReader.readPng(info.iconPngBytes) != null) {
-            Path iconPath = getCpmIconPath(hash);
-            Files.createDirectories(iconPath.getParent());
-            Files.write(iconPath, info.iconPngBytes);
+            writeVerifiedPngCache(
+                    cacheDirectory.resolve("cpm_icons"), hash, info.iconPngBytes);
         }
 //?}
     }
 
     /**
+     * Authenticates every historical cape name before any candidate is allowed to consume a
+     * SHA-1-keyed metadata sidecar. This first pass is what makes collision rejection independent
+     * of filesystem iteration order.
+     */
+    private void preflightCapeAliases(List<Path> candidates, CatalogBuilder scanned) {
+        for (Path path : candidates) {
+            String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
+            if (!fileName.endsWith(".png") && !fileName.endsWith(".gif")) continue;
+            try {
+                byte[] sourceBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
+                String primary = HashUtil.computeAssetContentId(sourceBytes, "cape");
+                String rawLegacy = HashUtil.computeHash(sourceBytes);
+                String roleLegacy = HashUtil.computeAssetHash(sourceBytes, "cape");
+                if (primary != null && rawLegacy != null && roleLegacy != null) {
+                    scanned.registerCapePreflight(primary, rawLegacy, roleLegacy);
+                }
+            } catch (IOException | RuntimeException ignored) {
+                // The normal scan will reject the unreadable candidate as well.
+            }
+        }
+    }
+
+    /**
      * Process PNG asset and create metadata
      */
-    private AssetMetadata processPngAsset(Path path, String type) {
+    private AssetMetadata processPngAsset(Path path, String type, CatalogBuilder scanned) {
         try {
             byte[] sourceBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
-            String legacyHash = HashUtil.computeHash(sourceBytes);
-            String hash = HashUtil.computeAssetHash(sourceBytes, type);
-            if (hash == null || legacyHash == null) {
+            String rawLegacyHash = HashUtil.computeHash(sourceBytes);
+            String roleLegacyHash = HashUtil.computeAssetHash(sourceBytes, type);
+            String hash = HashUtil.computeAssetContentId(sourceBytes, type);
+            if (hash == null || rawLegacyHash == null || roleLegacyHash == null) {
                 return null;
             }
-            if ("cape".equals(type)) legacyCapeHashAliases.put(legacyHash, hash);
+            String initialStrongHash = hash;
 
             // F9: read image once upfront, use for both metadata synthesis and dimension check.
             BufferedImage image = SafeImageReader.readPng(sourceBytes);
@@ -369,8 +577,13 @@ public class LocalAssetManager {
             AnimationMetadata animMeta = null;
             if ("cape".equals(type)) {
                 animMeta = readAnimationMetadataFile(hash);
-                if (animMeta == null && !hash.equals(legacyHash)) {
-                    animMeta = readAnimationMetadataFile(legacyHash);
+                if (animMeta == null
+                        && scanned.isAuthorizedCapeAlias(roleLegacyHash, initialStrongHash)) {
+                    animMeta = readAnimationMetadataFile(roleLegacyHash);
+                }
+                if (animMeta == null && !roleLegacyHash.equals(rawLegacyHash)
+                        && scanned.isAuthorizedCapeAlias(rawLegacyHash, initialStrongHash)) {
+                    animMeta = readAnimationMetadataFile(rawLegacyHash);
                 }
                 if (animMeta == null) {
 //? if <1.21 {
@@ -480,19 +693,27 @@ public class LocalAssetManager {
                 }
             }
 
-            String originalHash = hash;
             byte[] finalBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
-            String finalLegacyHash = HashUtil.computeHash(finalBytes);
-            hash = HashUtil.computeAssetHash(finalBytes, type);
-            if (!NetworkSecurity.isValidContentId(hash)
-                    || !NetworkSecurity.isValidContentId(finalLegacyHash)) return null;
-            if ("cape".equals(type)) {
-                legacyCapeHashAliases.put(legacyHash, hash);
-                legacyCapeHashAliases.put(finalLegacyHash, hash);
-            }
+            String finalRawLegacyHash = HashUtil.computeHash(finalBytes);
+            String finalRoleLegacyHash = HashUtil.computeAssetHash(finalBytes, type);
+            hash = HashUtil.computeAssetContentId(finalBytes, type);
+            ContentId parsedStrong = ContentId.parse(hash);
+            if (parsedStrong == null || parsedStrong.algorithm() != ContentId.Algorithm.SHA256
+                    || !NetworkSecurity.isValidLegacyContentId(finalRawLegacyHash)
+                    || !NetworkSecurity.isValidLegacyContentId(finalRoleLegacyHash)) return null;
+            scanned.registerAliases(hash,
+                    rawLegacyHash, roleLegacyHash, finalRawLegacyHash, finalRoleLegacyHash);
             if (animMeta != null) {
                 writeAnimationMetadataFile(hash, animMeta);
-                if (!originalHash.equals(hash)) deleteAnimationMetadataFile(originalHash);
+                if (!initialStrongHash.equals(hash)) {
+                    migrateVerifiedCacheFile(
+                            cacheDirectory,
+                            initialStrongHash,
+                            hash,
+                            ".json",
+                            com.quickskin.mod.networking.TextureTransferLimits.MAX_JSON_BYTES,
+                            LocalAssetManager::isValidAnimationMetadataBytes);
+                }
             }
 
             // Get friendly name (filename without extension)
@@ -526,7 +747,7 @@ public class LocalAssetManager {
      * Process GIF asset (animated cape) and create metadata
      * Loads GIF frames directly using STB Image
      */
-    private AssetMetadata processGifAsset(Path path) {
+    private AssetMetadata processGifAsset(Path path, CatalogBuilder scanned) {
         com.quickskin.mod.common.util.StbGifLoader.GifLoadResult result = null;
         try {
             byte[] sourceBytes = BoundedFileReader.readBytes(path, MAX_ASSET_BYTES);
@@ -539,12 +760,13 @@ public class LocalAssetManager {
             // Compute hash of original GIF
 //?} else {
 //?}
-            String legacyHash = HashUtil.computeHash(sourceBytes);
-            String hash = HashUtil.computeAssetHash(sourceBytes, "cape");
-            if (hash == null || legacyHash == null) {
+            String rawLegacyHash = HashUtil.computeHash(sourceBytes);
+            String roleLegacyHash = HashUtil.computeAssetHash(sourceBytes, "cape");
+            String hash = HashUtil.computeAssetContentId(sourceBytes, "cape");
+            if (hash == null || rawLegacyHash == null || roleLegacyHash == null) {
                 return null;
             }
-            legacyCapeHashAliases.put(legacyHash, hash);
+            scanned.registerAliases(hash, rawLegacyHash, roleLegacyHash);
 //? if <1.21 {
 //?} else {
 
@@ -553,21 +775,6 @@ public class LocalAssetManager {
             Path cachedAtlasFast = NetworkSecurity.resolveContained(
                     cacheDirectory.resolve("animated_capes"), hash, ".png");
             AnimationMetadata cachedMeta = readAnimationMetadataFile(hash);
-            if (!hash.equals(legacyHash) && cachedAtlasFast != null) {
-                Path legacyAtlas = NetworkSecurity.resolveContained(
-                        cacheDirectory.resolve("animated_capes"), legacyHash, ".png");
-                AnimationMetadata legacyMeta = readAnimationMetadataFile(legacyHash);
-                if (cachedMeta == null && legacyMeta != null) {
-                    cachedMeta = legacyMeta;
-                    writeAnimationMetadataFile(hash, legacyMeta);
-                }
-                if (!Files.exists(cachedAtlasFast) && legacyAtlas != null
-                        && !Files.isSymbolicLink(legacyAtlas)
-                        && Files.isRegularFile(legacyAtlas)) {
-                    Files.createDirectories(cachedAtlasFast.getParent());
-                    Files.copy(legacyAtlas, cachedAtlasFast, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
             if (cachedAtlasFast != null && !Files.isSymbolicLink(cachedAtlasFast)
                     && Files.exists(cachedAtlasFast) && cachedMeta != null) {
                 try {
@@ -725,11 +932,14 @@ public class LocalAssetManager {
      */
     public AnimationMetadata getAnimationMetadata(String hash) {
         if (!NetworkSecurity.isValidContentId(hash)) return null;
-        AssetMetadata assetMeta = getMetadata(hash);
+        CatalogSnapshot snapshot = catalog;
+        String primary = snapshot.resolve(hash);
+        if (primary == null) return null;
+        AssetMetadata assetMeta = snapshot.metadata().get(primary);
         if (assetMeta == null || !assetMeta.isAnimated()) {
             return null;
         }
-        return readAnimationMetadataFile(hash);
+        return readAnimationMetadataFile(primary);
     }
 
     @Nullable
@@ -755,22 +965,171 @@ public class LocalAssetManager {
         if (!NetworkSecurity.isValidAnimationMetadata(json)) throw new IOException("Invalid animation metadata");
         Path metadataPath = NetworkSecurity.resolveContained(cacheDirectory, hash, ".json");
         if (metadataPath == null || Files.isSymbolicLink(metadataPath)) throw new IOException("Unsafe metadata path");
-        Files.writeString(metadataPath, json);
+        writeVerifiedCacheFile(
+                cacheDirectory,
+                metadataPath,
+                json.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                com.quickskin.mod.networking.TextureTransferLimits.MAX_JSON_BYTES,
+                LocalAssetManager::isValidAnimationMetadataBytes);
     }
 
-    private void deleteAnimationMetadataFile(String hash) throws IOException {
-        Path metadataPath = NetworkSecurity.resolveContained(cacheDirectory, hash, ".json");
-        if (metadataPath != null && !Files.isSymbolicLink(metadataPath)) Files.deleteIfExists(metadataPath);
+    /** Migrates only aliases that survived the complete scan as globally unambiguous. */
+    private void migrateLegacyCacheFiles(CatalogSnapshot snapshot) {
+        for (Map.Entry<String, String> alias : snapshot.legacyAliases().entrySet()) {
+            AssetMetadata metadata = snapshot.metadata().get(alias.getValue());
+            if (metadata == null) continue;
+            if (metadata.isCape()) {
+                migrateVerifiedCacheFile(
+                        cacheDirectory,
+                        alias.getKey(),
+                        alias.getValue(),
+                        ".json",
+                        com.quickskin.mod.networking.TextureTransferLimits.MAX_JSON_BYTES,
+                        LocalAssetManager::isValidAnimationMetadataBytes);
+                migrateVerifiedCacheFile(
+                        cacheDirectory.resolve("animated_capes"),
+                        alias.getKey(),
+                        alias.getValue(),
+                        ".png",
+                        MAX_ASSET_BYTES,
+                        LocalAssetManager::isValidPngBytes);
+            } else if (metadata.isCpmModel()) {
+                migrateVerifiedCacheFile(
+                        cacheDirectory.resolve("cpm_icons"),
+                        alias.getKey(),
+                        alias.getValue(),
+                        ".png",
+                        MAX_ASSET_BYTES,
+                        LocalAssetManager::isValidPngBytes);
+            }
+        }
+    }
+
+    private static Map<String, String> aliasesForType(
+            CatalogSnapshot snapshot, String assetType) {
+        Map<String, String> result = new HashMap<>();
+        for (Map.Entry<String, String> alias : snapshot.legacyAliases().entrySet()) {
+            AssetMetadata metadata = snapshot.metadata().get(alias.getValue());
+            if (metadata != null && assetType.equals(metadata.type())) {
+                result.put(alias.getKey(), alias.getValue());
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private void migrateVerifiedCacheFile(
+            Path root,
+            String legacyId,
+            String strongId,
+            String suffix,
+            int maximumBytes,
+            java.util.function.Predicate<byte[]> validator
+    ) {
+        Path legacyPath = NetworkSecurity.resolveContained(root, legacyId, suffix);
+        Path strongPath = NetworkSecurity.resolveContained(root, strongId, suffix);
+        if (legacyPath == null || strongPath == null || legacyPath.equals(strongPath)
+                || Files.isSymbolicLink(legacyPath) || !Files.isRegularFile(legacyPath)) {
+            return;
+        }
+        try {
+            byte[] legacyBytes = BoundedFileReader.readBytes(legacyPath, maximumBytes);
+            if (!validator.test(legacyBytes)) return;
+
+            if (Files.exists(strongPath)) {
+                if (Files.isSymbolicLink(strongPath) || !Files.isRegularFile(strongPath)) return;
+                byte[] strongBytes = BoundedFileReader.readBytes(strongPath, maximumBytes);
+                if (!validator.test(strongBytes) || !Arrays.equals(legacyBytes, strongBytes)) {
+                    // Both files may carry user-relevant state. A mismatch is not evidence that
+                    // either side is disposable, so retain the legacy file for manual recovery.
+                    return;
+                }
+            } else {
+                writeVerifiedCacheFile(
+                        root, strongPath, legacyBytes, maximumBytes, validator);
+                byte[] committed = BoundedFileReader.readBytes(strongPath, maximumBytes);
+                if (!validator.test(committed) || !Arrays.equals(legacyBytes, committed)) return;
+            }
+
+            // The strong destination is now an independently verified byte-for-byte copy.
+            Files.deleteIfExists(legacyPath);
+        } catch (IOException | RuntimeException error) {
+            QuickSkin.LOGGER.debug(
+                    "Retaining legacy local cache entry {} after migration failure",
+                    legacyPath, error);
+        }
+    }
+
+    private void writeVerifiedPngCache(Path root, String contentId, byte[] pngBytes)
+            throws IOException {
+        Path target = NetworkSecurity.resolveContained(root, contentId, ".png");
+        if (target == null) throw new IOException("Unsafe PNG cache path");
+        writeVerifiedCacheFile(
+                root, target, pngBytes, MAX_ASSET_BYTES, LocalAssetManager::isValidPngBytes);
+    }
+
+    private void writeVerifiedCacheFile(
+            Path root,
+            Path target,
+            byte[] bytes,
+            int maximumBytes,
+            java.util.function.Predicate<byte[]> validator
+    ) throws IOException {
+        if (bytes == null || bytes.length > maximumBytes || !validator.test(bytes)) {
+            throw new IOException("Invalid local cache content");
+        }
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        Path normalizedTarget = target.toAbsolutePath().normalize();
+        if (!normalizedTarget.startsWith(normalizedRoot) || Files.isSymbolicLink(normalizedRoot)
+                || Files.isSymbolicLink(normalizedTarget)) {
+            throw new IOException("Unsafe local cache destination");
+        }
+        Files.createDirectories(normalizedRoot);
+        Path temporary = Files.createTempFile(normalizedRoot, ".quickskin-cache-", ".tmp");
+        try {
+            Files.write(temporary, bytes);
+            byte[] verified = BoundedFileReader.readBytes(temporary, maximumBytes);
+            if (!validator.test(verified) || !Arrays.equals(bytes, verified)) {
+                throw new IOException("Local cache temp-file verification failed");
+            }
+            atomicReplaceCache(temporary, normalizedTarget);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static boolean isValidPngBytes(byte[] bytes) {
+        if (bytes == null) return false;
+        try {
+            return SafeImageReader.readPng(bytes) != null;
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isValidAnimationMetadataBytes(byte[] bytes) {
+        if (bytes == null) return false;
+        String json = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        return NetworkSecurity.isValidAnimationMetadata(json);
+    }
+
+    private static void atomicReplaceCache(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target,
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     /**
      * Get all assets of a specific type
      */
     public List<AssetMetadata> getAssetsByType(String type) {
-        String playerOwnSkinHash = ClientConfig.getInstance().playerOwnSkinHash;
+        CatalogSnapshot snapshot = catalog;
+        String playerOwnSkinHash = snapshot.resolve(ClientConfig.getInstance().playerOwnSkinHash);
         SkinSortMode sortMode = ClientConfig.getInstance().getSkinSortMode();
 
-        return metadataCache.values().stream()
+        return snapshot.metadata().values().stream()
                 .filter(meta -> type.equals(meta.type()))
                 .sorted(getSortComparator(sortMode, playerOwnSkinHash))
                 .toList();
@@ -797,9 +1156,10 @@ public class LocalAssetManager {
 
     /** Get all selectable skin entries, including optional CPM models. */
     public List<AssetMetadata> getAllSkins() {
-        String playerOwnSkinHash = ClientConfig.getInstance().playerOwnSkinHash;
+        CatalogSnapshot snapshot = catalog;
+        String playerOwnSkinHash = snapshot.resolve(ClientConfig.getInstance().playerOwnSkinHash);
         SkinSortMode sortMode = ClientConfig.getInstance().getSkinSortMode();
-        return metadataCache.values().stream()
+        return snapshot.metadata().values().stream()
 //? if <1.21.11 {
                 .filter(meta -> "skin".equals(meta.type()) || "cpmmodel".equals(meta.type()))
 //?} else {
@@ -814,7 +1174,9 @@ public class LocalAssetManager {
      */
     public AssetMetadata getMetadata(String hash) {
         if (!NetworkSecurity.isValidContentId(hash)) return null;
-        return metadataCache.get(hash);
+        CatalogSnapshot snapshot = catalog;
+        String primary = snapshot.resolve(hash);
+        return primary == null ? null : snapshot.metadata().get(primary);
     }
 
     /**
@@ -822,7 +1184,9 @@ public class LocalAssetManager {
      */
     public Path getSourcePath(String hash) {
         if (!NetworkSecurity.isValidContentId(hash)) return null;
-        return hashToSourcePath.get(hash);
+        CatalogSnapshot snapshot = catalog;
+        String primary = snapshot.resolve(hash);
+        return primary == null ? null : snapshot.sourcePaths().get(primary);
     }
 
     /**
@@ -831,7 +1195,10 @@ public class LocalAssetManager {
      */
     public byte[] loadTexture(String hash, TextureQuality quality) {
         if (!NetworkSecurity.isValidContentId(hash) || quality == null) return null;
-        Path sourcePath = hashToSourcePath.get(hash);
+        CatalogSnapshot snapshot = catalog;
+        String primary = snapshot.resolve(hash);
+        if (primary == null) return null;
+        Path sourcePath = snapshot.sourcePaths().get(primary);
         if (sourcePath == null || !Files.exists(sourcePath)) {
             return null;
         }
@@ -841,7 +1208,7 @@ public class LocalAssetManager {
         Path readPath = sourcePath;
         if (sourcePath.toString().toLowerCase(Locale.ROOT).endsWith(".gif")) {
             Path cachedAtlas = NetworkSecurity.resolveContained(
-                    cacheDirectory.resolve("animated_capes"), hash, ".png");
+                    cacheDirectory.resolve("animated_capes"), primary, ".png");
             if (cachedAtlas != null && !Files.isSymbolicLink(cachedAtlas) && Files.exists(cachedAtlas)) {
                 readPath = cachedAtlas;
             }
@@ -869,7 +1236,7 @@ public class LocalAssetManager {
 //?} else {
             byte[] sourceBytes = BoundedFileReader.readBytes(sourcePath, MAX_ASSET_BYTES);
 //?}
-            AssetMetadata metadata = getMetadata(hash);
+            AssetMetadata metadata = snapshot.metadata().get(primary);
             boolean isSkin = metadata != null && "skin".equals(metadata.type());
             boolean shouldRemoveTransparency = isSkin &&
                     com.quickskin.mod.config.ClientConfig.getInstance().shouldDisableSkinTransparency();
@@ -878,7 +1245,7 @@ public class LocalAssetManager {
 
             // Canonical full-quality bytes need no decode/re-encode when presentation policy is off.
             if (quality == TextureQuality.FULL && !shouldRemoveTransparency
-                    && hash.equals(HashUtil.computeAssetHash(
+                    && primary.equals(HashUtil.computeAssetContentId(
                             sourceBytes, metadata != null ? metadata.type() : null))) {
                 return sourceBytes;
             }
@@ -922,16 +1289,19 @@ public class LocalAssetManager {
     public byte @Nullable [] loadCanonicalTexture(String hash, String textureType) {
         if (!NetworkSecurity.isValidContentId(hash)
                 || !NetworkSecurity.isValidTextureType(textureType)) return null;
-        AssetMetadata metadata = getMetadata(hash);
+        CatalogSnapshot snapshot = catalog;
+        String primary = snapshot.resolve(hash);
+        if (primary == null) return null;
+        AssetMetadata metadata = snapshot.metadata().get(primary);
         if (metadata == null || !textureType.equals(metadata.type())) return null;
-        Path sourcePath = hashToSourcePath.get(hash);
+        Path sourcePath = snapshot.sourcePaths().get(primary);
         if (sourcePath == null) return null;
 //? if <1.21.11 {
         Path readPath = sourcePath;
         if (metadata.isAnimated()
                 && sourcePath.toString().toLowerCase(Locale.ROOT).endsWith(".gif")) {
             readPath = NetworkSecurity.resolveContained(
-                    cacheDirectory.resolve("animated_capes"), hash, ".png");
+                    cacheDirectory.resolve("animated_capes"), primary, ".png");
         }
         if (readPath == null || Files.isSymbolicLink(readPath)) return null;
 //?} else {
@@ -942,20 +1312,20 @@ public class LocalAssetManager {
 //?} else {
             byte[] sourceBytes = BoundedFileReader.readBytes(sourcePath, MAX_ASSET_BYTES);
 //?}
-            if ((!metadata.isAnimated() && !hash.equals(
-                    HashUtil.computeAssetHash(sourceBytes, textureType)))
+            if ((!metadata.isAnimated() && !primary.equals(
+                    HashUtil.computeAssetContentId(sourceBytes, textureType)))
                     || NetworkSecurity.getTexturePixelCount(sourceBytes, textureType) < 1) return null;
             // One full bounded decode is the authoritative on-disk tamper/integrity check.
             SafeImageReader.readPng(sourceBytes);
             if ("cape".equals(textureType) && metadata.isAnimated()) {
-                AnimationMetadata animation = getAnimationMetadata(hash);
+                AnimationMetadata animation = getAnimationMetadata(primary);
                 if (animation == null) return null;
                 sourceBytes = com.quickskin.mod.common.util.PngAnimationIdentity
                         .attach(sourceBytes, animation.toJson());
             }
             return sourceBytes;
         } catch (IOException | RuntimeException error) {
-            QuickSkin.LOGGER.warn("Unable to load canonical {} texture {}", textureType, hash, error);
+            QuickSkin.LOGGER.warn("Unable to load canonical {} texture {}", textureType, primary, error);
             return null;
         }
     }
@@ -963,14 +1333,15 @@ public class LocalAssetManager {
 //? if <1.21.11 {
 //?} else {
     private Path getCpmIconPath(String hash) {
-        return cacheDirectory.resolve("cpm_icons").resolve(hash + ".png");
+        return NetworkSecurity.resolveContained(cacheDirectory.resolve("cpm_icons"), hash, ".png");
     }
 
 //?}
     private byte[] loadCpmModelIcon(String hash) {
 //? if <1.21.11 {
-        Path iconPath = cacheDirectory.resolve("cpm_icons").resolve(hash + ".png");
-        if (Files.exists(iconPath)) {
+        Path iconPath = NetworkSecurity.resolveContained(
+                cacheDirectory.resolve("cpm_icons"), hash, ".png");
+        if (iconPath != null && !Files.isSymbolicLink(iconPath) && Files.exists(iconPath)) {
             try {
                 return BoundedFileReader.readBytes(iconPath, MAX_ASSET_BYTES);
             } catch (IOException e) {
@@ -978,7 +1349,7 @@ public class LocalAssetManager {
             }
 //?} else {
         Path iconPath = getCpmIconPath(hash);
-        if (!Files.exists(iconPath)) {
+        if (iconPath == null || Files.isSymbolicLink(iconPath) || !Files.exists(iconPath)) {
             return null;
 //?}
         }
@@ -996,14 +1367,17 @@ public class LocalAssetManager {
     /**
      * Delete local asset
      */
-    public boolean deleteAsset(String hash) {
+    public synchronized boolean deleteAsset(String hash) {
         if (!NetworkSecurity.isValidContentId(hash)) return false;
-        AssetMetadata metadata = metadataCache.get(hash);
+        CatalogSnapshot snapshot = catalog;
+        String primary = snapshot.resolve(hash);
+        if (primary == null) return false;
+        AssetMetadata metadata = snapshot.metadata().get(primary);
         if (metadata == null) {
             return false;
         }
 
-        Path path = hashToSourcePath.get(hash);
+        Path path = snapshot.sourcePaths().get(primary);
         if (path == null || !Files.exists(path)) {
             return false;
         }
@@ -1011,22 +1385,22 @@ public class LocalAssetManager {
         try {
             Files.delete(path);
             if (metadata.isSkin()) {
-                com.quickskin.mod.client.compat.CPMCompatIntegration.evictHttpTextureCache(hash);
+                com.quickskin.mod.client.compat.CPMCompatIntegration.evictHttpTextureCache(primary);
             }
             if (metadata.isCpmModel()) {
                 com.quickskin.mod.client.compat.CpmModelWorkflow.onModelDeleted(metadata);
             }
-            metadataCache.remove(hash);
-            hashToSourcePath.remove(hash);
+            catalog = snapshot.without(primary);
+            invalidatePendingScans();
 //? if <1.21 {
 //?} else {
-            sourceImageCache.remove(hash);
+            sourceImageCache.remove(primary);
 //?}
 
 //? if <1.21.11 {
-            Map<TextureQuality, ResourceLocation> registeredTextures = textureRegistry.remove(hash);
+            Map<TextureQuality, ResourceLocation> registeredTextures = textureRegistry.remove(primary);
 //?} else {
-            Map<TextureQuality, Identifier> registeredTextures = textureRegistry.remove(hash);
+            Map<TextureQuality, Identifier> registeredTextures = textureRegistry.remove(primary);
 //?}
             if (registeredTextures != null) {
 //? if <1.21.11 {
@@ -1044,18 +1418,19 @@ public class LocalAssetManager {
             if (metadata.isCpmModel()) {
                 try {
 //? if <1.21.11 {
-                    Files.deleteIfExists(cacheDirectory.resolve("cpm_icons").resolve(hash + ".png"));
+                    Files.deleteIfExists(NetworkSecurity.resolveContained(
+                            cacheDirectory.resolve("cpm_icons"), primary, ".png"));
 //?} else {
-                    Files.deleteIfExists(getCpmIconPath(hash));
+                    Files.deleteIfExists(getCpmIconPath(primary));
 //?}
                 } catch (IOException ignored) {
-                    QuickSkin.LOGGER.warn("Unable to delete CPM icon for {}", hash, ignored);
+                    QuickSkin.LOGGER.warn("Unable to delete CPM icon for {}", primary, ignored);
                 }
             }
 
             // Also remove preferences for this skin
             if (skinPreferences != null) {
-                skinPreferences.remove(hash);
+                skinPreferences.remove(primary);
                 savePreferences();
             }
             return true;
@@ -1070,7 +1445,7 @@ public class LocalAssetManager {
      * @param newFriendlyName The new friendly name (without extension)
      * @return RenameResult indicating success or failure reason
      */
-    public RenameResult renameLocalAsset(String hash, String newFriendlyName) {
+    public synchronized RenameResult renameLocalAsset(String hash, String newFriendlyName) {
         if (!NetworkSecurity.isValidContentId(hash)) return RenameResult.NOT_FOUND;
         // Validate the new name
         if (newFriendlyName == null || newFriendlyName.trim().isEmpty()) {
@@ -1084,13 +1459,16 @@ public class LocalAssetManager {
         }
 
         // Get the metadata for this asset
-        AssetMetadata metadata = metadataCache.get(hash);
+        CatalogSnapshot snapshot = catalog;
+        String primary = snapshot.resolve(hash);
+        if (primary == null) return RenameResult.NOT_FOUND;
+        AssetMetadata metadata = snapshot.metadata().get(primary);
         if (metadata == null) {
             return RenameResult.NOT_FOUND;
         }
 
         // Get the current file path
-        Path currentPath = hashToSourcePath.get(hash);
+        Path currentPath = snapshot.sourcePaths().get(primary);
         if (currentPath == null || !Files.exists(currentPath)) {
             return RenameResult.NOT_FOUND;
         }
@@ -1158,10 +1536,11 @@ public class LocalAssetManager {
                 );
             }
 
-            metadataCache.put(hash, updatedMetadata);
-            hashToSourcePath.put(hash, newPath);
+            catalog = snapshot.with(primary, updatedMetadata, newPath);
+            invalidatePendingScans();
             if (updatedMetadata.isCpmModel()
-                    && hash.equals(ClientConfig.getInstance().activeCpmModelHash)) {
+                    && primary.equals(catalog.resolve(
+                            ClientConfig.getInstance().activeCpmModelHash))) {
                 com.quickskin.mod.client.compat.CpmModelWorkflow.activateModel(updatedMetadata);
             }
 
@@ -1187,9 +1566,22 @@ public class LocalAssetManager {
     /**
      * Folders whose contents feed {@link #discoverLocalAssets()}.
      *
-     * <p>Only reads immutable path state, so callers may fingerprint the result off-thread.
+     * <p>The returned list is immutable. Asynchronous callers should use
+     * {@link #snapshotScanRequest()} so the matching epoch travels back with the fingerprint.
      */
-    public List<Path> getScannedDirectories() {
+    public synchronized List<Path> getScannedDirectories() {
+        return scannedDirectoriesSnapshot();
+    }
+
+    /**
+     * Captures the immutable directory list and catalog epoch for one asynchronous folder poll.
+     */
+    public synchronized ScanRequest snapshotScanRequest() {
+        boolean initialized = skinsDirectory != null && capesDirectory != null && cacheDirectory != null;
+        return new ScanRequest(this, scanEpoch, initialized, scannedDirectoriesSnapshot());
+    }
+
+    private List<Path> scannedDirectoriesSnapshot() {
         if (skinsDirectory == null) {
             // Before init() there is nothing to watch, and the optional CPM probe must not run.
             return List.of();
@@ -1203,33 +1595,53 @@ public class LocalAssetManager {
                     com.quickskin.mod.client.compat.CPMCompatIntegration.getCPMModelsDirectory();
             if (modelsDirectory != null) directories.add(modelsDirectory);
         }
-        return directories;
+        return List.copyOf(directories);
     }
 
     /**
      * Rebuild the catalog only when the upload folders changed since the last completed scan.
      *
      * <p>Lets a screen poll for files copied in from outside the game without paying for a full
-     * rescan every time. Compute {@code observedFingerprint} with
-     * {@link LocalAssetFolderWatch#fingerprint(List)} off-thread, then call this on the render
-     * thread: the rebuild itself stays where every other rescan already runs, so a concurrent
+     * rescan every time. Compute {@code observedFingerprint} from {@link ScanRequest#directories()}
+     * off-thread, then carry the same request back to this method on the render thread. A request
+     * captured before a newer scan, mutation, or lifecycle reset is rejected before it can mutate
+     * the catalog. The rebuild itself stays where every other rescan already runs, so a concurrent
      * {@code getTextureLocation} never blocks on a background scan holding this monitor.
      *
      * @return {@code true} when a rescan ran and the caller should refresh its view
      */
-    public synchronized boolean refreshIfChanged(long observedFingerprint) {
-        if (skinsDirectory == null || observedFingerprint == lastScanFingerprint) {
+    public synchronized boolean refreshIfChanged(
+            ScanRequest request,
+            long observedFingerprint
+    ) {
+        if (!isCurrentScanRequest(request)
+                || !request.initialized
+                || observedFingerprint == lastScanFingerprint) {
             return false;
         }
         discoverLocalAssets();
         return true;
     }
 
+    /** Package-private regression seam for epoch behavior without touching Minecraft state. */
+    synchronized boolean isCurrentScanRequest(ScanRequest request) {
+        return request != null && request.owner == this && request.epoch == scanEpoch;
+    }
+
+    /** Invalidates folder-walk results captured before the current lifecycle/catalog state. */
+    synchronized void invalidatePendingScans() {
+        scanEpoch++;
+    }
+
     /**
      * Clear texture cache to force re-registration with new settings
      * Call this when transparency settings change
      */
-    public void clearTextureCache() {
+    public synchronized void clearTextureCache() {
+        // ClientRuntime invokes this during every session reset. Invalidate folder walks before
+        // touching Minecraft state so even a partial cleanup cannot accept an old async result.
+        invalidatePendingScans();
+
         // Unregister all textures from Minecraft's texture manager
         Minecraft mc = Minecraft.getInstance();
 //? if <1.21.11 {
@@ -1307,11 +1719,13 @@ public class LocalAssetManager {
     public synchronized Identifier getTextureLocation(String hash, TextureQuality quality) {
 //?}
         if (!NetworkSecurity.isValidContentId(hash) || quality == null) return null;
+        String primary = catalog.resolve(hash);
+        if (primary == null) return null;
         // Check if already registered
 //? if <1.21.11 {
-        Map<TextureQuality, ResourceLocation> qualityMap = textureRegistry.get(hash);
+        Map<TextureQuality, ResourceLocation> qualityMap = textureRegistry.get(primary);
 //?} else {
-        Map<TextureQuality, Identifier> qualityMap = textureRegistry.get(hash);
+        Map<TextureQuality, Identifier> qualityMap = textureRegistry.get(primary);
 //?}
         if (qualityMap != null && qualityMap.containsKey(quality)) {
             return qualityMap.get(quality);
@@ -1319,19 +1733,19 @@ public class LocalAssetManager {
 
 //? if <1.21.11 {
         // For cpmmodel entries, load the cached icon PNG
-        AssetMetadata meta = getMetadata(hash);
+        AssetMetadata meta = getMetadata(primary);
         byte[] textureData;
         if (meta != null && meta.isCpmModel()) {
-            textureData = loadCpmModelIcon(hash);
+            textureData = loadCpmModelIcon(primary);
         } else {
-            textureData = loadTexture(hash, quality);
+            textureData = loadTexture(primary, quality);
         }
 //?} else {
         // CPM files are not images; their separately cached embedded icon is.
-        AssetMetadata metadata = getMetadata(hash);
+        AssetMetadata metadata = getMetadata(primary);
         byte[] textureData = metadata != null && metadata.isCpmModel()
-                ? loadCpmModelIcon(hash)
-                : loadTexture(hash, quality);
+                ? loadCpmModelIcon(primary)
+                : loadTexture(primary, quality);
 //?}
         if (textureData == null) {
             return null;
@@ -1389,7 +1803,7 @@ public class LocalAssetManager {
 //? if <1.21.11 {
             dynamicTexture = new DynamicTexture(nativeImage);
 //?} else {
-            dynamicTexture = new DynamicTexture(() -> "quickskin_local_" + hash, nativeImage);
+            dynamicTexture = new DynamicTexture(() -> "quickskin_local_" + primary, nativeImage);
 //?}
 
             // Register with texture manager
@@ -1401,7 +1815,7 @@ public class LocalAssetManager {
             location = Identifier.fromNamespaceAndPath(
 //?}
                     QuickSkin.MOD_ID,
-                    "local/" + hash + "_" + quality.name().toLowerCase(Locale.ROOT)
+                    "local/" + primary + "_" + quality.name().toLowerCase(Locale.ROOT)
             );
 
             Minecraft.getInstance().getTextureManager().register(location, dynamicTexture);
@@ -1425,12 +1839,12 @@ public class LocalAssetManager {
             }
             // Parse Ears features from the original unprocessed image (preserving alpha for Alfalfa data)
 //? if <1.21.11 {
-            AssetMetadata metadata = getMetadata(hash);
+            AssetMetadata metadata = getMetadata(primary);
 //?} else {
 //?}
             if (metadata != null && "skin".equals(metadata.type())
                     && com.quickskin.mod.client.compat.EarsCompatIntegration.isAvailable()) {
-                BufferedImage originalImage = getSourceImage(hash);
+                BufferedImage originalImage = getSourceImage(primary);
                 if (originalImage != null) {
                     com.quickskin.mod.client.compat.EarsCompatIntegration.parseAndStoreFeatures(location, originalImage);
                 }
@@ -1438,7 +1852,7 @@ public class LocalAssetManager {
 
             // Cache in registry
             com.quickskin.mod.common.util.TextureAlphaDetector.cacheTransparencyResult(location, hasAlpha);
-            qualityMap = textureRegistry.computeIfAbsent(hash, k -> new ConcurrentHashMap<>());
+            qualityMap = textureRegistry.computeIfAbsent(primary, k -> new ConcurrentHashMap<>());
             qualityMap.put(quality, location);
 
             committed = true;
@@ -1458,7 +1872,7 @@ public class LocalAssetManager {
                     try {
                         dynamicTexture.close();
                     } catch (RuntimeException ignored) {
-                        QuickSkin.LOGGER.debug("Unable to close failed local texture {}", hash, ignored);
+                        QuickSkin.LOGGER.debug("Unable to close failed local texture {}", primary, ignored);
                     }
                 } else if (nativeImage != null) {
                     nativeImage.close();
@@ -1470,19 +1884,21 @@ public class LocalAssetManager {
     @Nullable
     public BufferedImage getSourceImage(String hash) {
         if (!NetworkSecurity.isValidContentId(hash)) return null;
+        String primary = catalog.resolve(hash);
+        if (primary == null) return null;
 //? if <1.21 {
-        Path sourcePath = getSourcePath(hash);
+        Path sourcePath = getSourcePath(primary);
 
         // For GIF source files, always use the cached PNG atlas
         // (ImageIO.read on .gif only returns the first frame, not the full strip)
         if (sourcePath != null && sourcePath.toString().toLowerCase(Locale.ROOT).endsWith(".gif")) {
             Path cachedAtlas = NetworkSecurity.resolveContained(
-                    cacheDirectory.resolve("animated_capes"), hash, ".png");
+                    cacheDirectory.resolve("animated_capes"), primary, ".png");
             if (cachedAtlas != null && !Files.isSymbolicLink(cachedAtlas) && Files.exists(cachedAtlas)) {
                 sourcePath = cachedAtlas;
 //?} else {
         // F8: SoftReference cache — GC reclaims under memory pressure.
-        SoftReference<BufferedImage> ref = sourceImageCache.get(hash);
+        SoftReference<BufferedImage> ref = sourceImageCache.get(primary);
         if (ref != null) {
             BufferedImage cached = ref.get();
             if (cached != null) {
@@ -1491,17 +1907,17 @@ public class LocalAssetManager {
             }
 //? if <1.21 {
 //?} else {
-            sourceImageCache.remove(hash, ref);
+            sourceImageCache.remove(primary, ref);
 //?}
         }
 //? if <1.21 {
 //?} else {
-        Path sourcePath = getSourcePath(hash);
+        Path sourcePath = getSourcePath(primary);
 //?}
         if (sourcePath == null) {
             // Also check cache for animated capes converted from GIFs
             Path cachedAtlas = NetworkSecurity.resolveContained(
-                    cacheDirectory.resolve("animated_capes"), hash, ".png");
+                    cacheDirectory.resolve("animated_capes"), primary, ".png");
             if (cachedAtlas != null && !Files.isSymbolicLink(cachedAtlas) && Files.exists(cachedAtlas)) {
                 sourcePath = cachedAtlas;
             } else {
@@ -1514,7 +1930,7 @@ public class LocalAssetManager {
 //?} else {
             BufferedImage decoded = SafeImageReader.readPng(sourcePath);
             if (decoded != null) {
-                sourceImageCache.put(hash, new SoftReference<>(decoded));
+                sourceImageCache.put(primary, new SoftReference<>(decoded));
             }
             return decoded;
 //?}
@@ -1582,10 +1998,12 @@ public class LocalAssetManager {
      */
     public String getSkinModelPreference(String hash) {
         if (!NetworkSecurity.isValidContentId(hash)) return "auto";
+        String primary = catalog.resolve(hash);
+        if (primary == null) return "auto";
         if (skinPreferences == null) {
             return "auto";
         }
-        return skinPreferences.getModelType(hash);
+        return skinPreferences.getModelType(primary);
     }
 
     /**
@@ -1595,8 +2013,10 @@ public class LocalAssetManager {
      */
     public void setSkinModelPreference(String hash, String modelType) {
         if (!NetworkSecurity.isValidContentId(hash)) return;
+        String primary = catalog.resolve(hash);
+        if (primary == null) return;
         if (skinPreferences != null) {
-            skinPreferences.setModelType(hash, modelType);
+            skinPreferences.setModelType(primary, modelType);
             savePreferences();
         }
     }

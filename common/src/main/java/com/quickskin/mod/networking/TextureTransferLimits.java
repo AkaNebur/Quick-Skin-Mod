@@ -7,7 +7,10 @@ package com.quickskin.mod.networking;
  * accepted at one boundary cannot exceed a later boundary.</p>
  */
 public final class TextureTransferLimits {
+    /** Fixed width of the historical v1 bare SHA-1 wire field. */
     public static final int CONTENT_ID_LENGTH = 40;
+    /** Maximum UTF-8 width of a canonical content ID ({@code sha256-<64 hex>}). */
+    public static final int MAX_CONTENT_ID_BYTES = 71;
     public static final int MAX_TEXTURE_TYPE_BYTES = 4;
     public static final int MAX_APPEARANCE_ID_BYTES = 256;
     public static final int MAX_MODEL_BYTES = 16;

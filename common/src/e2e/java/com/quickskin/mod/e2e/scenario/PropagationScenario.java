@@ -39,8 +39,8 @@ import java.util.UUID;
  * <h3>Observer (B)</h3>
  * <ol>
  *   <li><b>confirm_self</b> — sends one C2S packet ({@code syncAppearance(B,"","","classic")}) so the
- *       server marks B "confirmed" ({@code QuickSkinPlayerTracker}); only then does the server relay
- *       other players' appearances to B (and it back-fills A's already-applied look immediately).</li>
+ *       server confirms the exact connection's negotiated or legacy protocol session; only then
+ *       does it relay other players' appearances to B (and back-fill A's applied look).</li>
  *   <li><b>await_propagation</b> — waits (tick timeout, never wall-clock) until B has received A's
  *       appearance + texture bytes and the render path resolves to the network location.</li>
  *   <li><b>observe_a</b> — frames A in B's camera and screenshots it, re-asserting the full check.</li>
@@ -144,7 +144,7 @@ public final class PropagationScenario implements Scenario {
         List<Step> steps = new ArrayList<>();
         steps.add(baseline(mc, v, role));
 
-        // 1. Speak first so the server marks B confirmed and relays/back-fills A's appearance to B.
+        // 1. Speak first so the exact session is ready and the server relays/back-fills A to B.
         steps.add(Step.of("confirm_self")
                 .action(() -> {
                     try {
