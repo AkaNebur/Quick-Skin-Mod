@@ -107,6 +107,13 @@ This file is part of the repository-wide instruction set imported by `AGENTS.md`
   bundle only when its authenticated originating target run and manifest both match the current
   release-branch head; a later protected Pages run may only roll that already validated bundle
   into cache.
+- Retention is current-state, not longitudinal history. Keep exactly one durable Pages cache per
+  release branch. Treat `pages-e2e-<branch>` as a short-lived handoff and retire only the exact
+  consumed handoff plus caches older than the successful replacement. Rotation happens in a
+  separate protected workflow after the owning Pages run is `completed/success`; it must recheck
+  run provenance, the release head, replacement artifact identity, and every deletion ID. A failed
+  E2E, deployment, validation, or rotation must preserve the previous usable cache, and a delayed
+  rotation must never delete a concurrent newer generation.
 - Discovery records one protected `master` SHA for the Pages run. Every collection and render job
   checks out that exact implementation revision; an advancing `master` may affect only a later run.
 - Treat downloaded artifacts and their JSON as untrusted. Require the exact curated tree, exact

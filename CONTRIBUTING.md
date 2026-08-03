@@ -206,6 +206,8 @@ python -m py_compile \
   scripts/release/version_branches.py \
   scripts/pages/evidence.py \
   scripts/pages/build_site.py \
+  scripts/pages/select_artifact.py \
+  scripts/pages/rotate_artifacts.py \
   e2e/orchestrator.py \
   e2e/packaged_runtime.py \
   e2e/visual_evidence.py \
