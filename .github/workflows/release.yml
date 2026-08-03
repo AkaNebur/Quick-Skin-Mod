@@ -77,6 +77,10 @@ jobs:
 
       - name: Configure Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          # The stable branch build gate owns cache writes. A tagged release may wait for an
+          # environment approval, so it restores that cache without creating a tag-scoped copy.
+          cache-read-only: true
 
       - name: Validate requested release identity
         id: release
@@ -180,7 +184,7 @@ jobs:
             **/build/test-results/
             **/build/*.log
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 1
 
   runtime-behavior:
     name: ${{ matrix.id }} - packaged release behavior
@@ -281,7 +285,7 @@ jobs:
             e2e-out/profiles/**/crash-reports/**
           if-no-files-found: warn
           compression-level: 6
-          retention-days: 90
+          retention-days: 1
 
   stage-github-release:
     name: Stage exact GitHub Release assets
@@ -436,7 +440,7 @@ jobs:
           name: publication-${{ matrix.id }}
           path: build/publication/${{ matrix.id }}.json
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 1
 
   publish-github-release:
     name: Publish immutable GitHub Release
