@@ -1,0 +1,121 @@
+name: Rotate project site evidence
+
+# A Pages run is not a safe replacement until its owner has reached completed/success. This
+# follow-up workflow promotes that successful generation to the only durable cache per branch,
+# then retires the superseded cache and the exact E2E handoff that was consumed.
+on:
+  workflow_run:
+    workflows:
+      - Project site
+    types:
+      - completed
+    branches:
+      - master
+
+permissions: {}
+
+concurrency:
+  group: quick-skin-pages-evidence-rotation
+  cancel-in-progress: false
+
+jobs:
+  rotate:
+    name: Keep one gallery generation per release branch
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      # Validate the wake-up event before checking out or executing any repository code. A Pages
+      # workflow manually dispatched from another ref must never turn its ref into privileged code.
+      - name: Authenticate the successful protected Pages run
+        id: trigger
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$TRIGGER_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$TRIGGER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          run_json="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$TRIGGER_RUN_ID")"
+          workflow_id="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/pages.yml" --jq .id)"
+          rotation_sha="$(gh api \
+            "repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha)"
+          [[ "$rotation_sha" =~ ^[0-9a-f]{40}$ ]]
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg sha "$TRIGGER_SHA" \
+            --argjson run_id "$TRIGGER_RUN_ID" \
+            --argjson workflow_id "$workflow_id" \
+            '.id == $run_id and .workflow_id == $workflow_id and
+             .status == "completed" and .conclusion == "success" and
+             (.event == "schedule" or .event == "workflow_dispatch" or
+              .event == "workflow_run") and
+             .head_branch == "master" and .head_sha == $sha and
+             .path == ".github/workflows/pages.yml" and
+             .head_repository.full_name == $repository' \
+            <<< "$run_json" > /dev/null
+
+          artifacts="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$TRIGGER_RUN_ID/artifacts?per_page=100")"
+          cache_count="$(jq --argjson run_id "$TRIGGER_RUN_ID" \
+            '[.[].artifacts[] | select(
+              (.expired | not) and .workflow_run.id == $run_id and
+              (.name | startswith("pages-cache-"))
+            )] | length' <<< "$artifacts")"
+          printf 'eligible=%s\n' "$([[ "$cache_count" -gt 0 ]] && echo true || echo false)" \
+            >> "$GITHUB_OUTPUT"
+          printf 'run_id=%s\n' "$TRIGGER_RUN_ID" >> "$GITHUB_OUTPUT"
+          printf 'pages_sha=%s\n' "$TRIGGER_SHA" >> "$GITHUB_OUTPUT"
+          printf 'rotation_sha=%s\n' "$rotation_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the exact protected rotation implementation
+        if: steps.trigger.outputs.eligible == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ steps.trigger.outputs.rotation_sha }}
+          persist-credentials: false
+
+      - name: Install Python
+        if: steps.trigger.outputs.eligible == 'true'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Install the hash-locked evidence validator dependency
+        if: steps.trigger.outputs.eligible == 'true'
+        run: >-
+          python -m pip install
+          --only-binary=:all:
+          --require-hashes
+          --requirement scripts/pages/requirements.txt
+
+      - name: Download only the cache generation owned by the successful Pages run
+        if: steps.trigger.outputs.eligible == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: pages-cache-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/pages-cache
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.trigger.outputs.run_id }}
+          digest-mismatch: error
+
+      - name: Rotate the exact validated generation by artifact ID
+        if: steps.trigger.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/pages/rotate_artifacts.py
+          --evidence-root "$RUNNER_TEMP/pages-cache"
+          --repository "$GITHUB_REPOSITORY"
+          --pages-run-id "${{ steps.trigger.outputs.run_id }}"
+          --pages-run-sha "${{ steps.trigger.outputs.pages_sha }}"
