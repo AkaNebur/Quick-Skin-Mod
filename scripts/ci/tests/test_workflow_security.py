@@ -8,6 +8,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 WORKFLOWS = ROOT / ".github" / "workflows"
+UPLOAD_ARTIFACT_USE = re.compile(
+    r"^\s+(?:-\s+)?uses:\s+actions/upload-artifact@\S+"
+)
+
+
+def workflow_paths() -> list[Path]:
+    return sorted((*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")))
 
 
 def job_block(workflow: str, job: str) -> str:
@@ -18,6 +25,52 @@ def job_block(workflow: str, job: str) -> str:
     if match is None:
         raise AssertionError(f"missing job {job} in {workflow}")
     return match.group(0)
+
+
+def upload_artifact_steps() -> list[tuple[str, str, str]]:
+    """Return every named workflow step that uploads an Actions artifact."""
+
+    uploads: list[tuple[str, str, str]] = []
+    for workflow in workflow_paths():
+        lines = workflow.read_text(encoding="utf-8").splitlines()
+        for uses_index, line in enumerate(lines):
+            if UPLOAD_ARTIFACT_USE.match(line) is None:
+                continue
+            uses_indent = len(line) - len(line.lstrip())
+            step_index: int | None = None
+            step_name: str | None = None
+            for candidate_index in range(uses_index, -1, -1):
+                candidate = lines[candidate_index]
+                candidate_indent = len(candidate) - len(candidate.lstrip())
+                if candidate_indent == uses_indent - 2 and candidate.lstrip().startswith(
+                    "- name:"
+                ):
+                    step_index = candidate_index
+                    step_name = candidate.lstrip()[len("- name:") :].strip()
+                    break
+                if candidate_indent < uses_indent - 2 and candidate.strip():
+                    break
+            if step_index is None or not step_name:
+                raise AssertionError(
+                    f"upload-artifact step at {workflow.name}:{uses_index + 1} "
+                    "must have a non-empty name"
+                )
+
+            step_indent = uses_indent - 2
+            end_index = len(lines)
+            for candidate_index in range(uses_index + 1, len(lines)):
+                candidate = lines[candidate_index]
+                candidate_indent = len(candidate) - len(candidate.lstrip())
+                if candidate_indent == step_indent and candidate.lstrip().startswith("- "):
+                    end_index = candidate_index
+                    break
+                if candidate.strip() and candidate_indent < step_indent:
+                    end_index = candidate_index
+                    break
+            uploads.append(
+                (workflow.name, step_name, "\n".join(lines[step_index:end_index]))
+            )
+    return uploads
 
 
 class WorkflowSecurityTest(unittest.TestCase):
@@ -38,6 +91,93 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn("github.event_name == 'schedule'", workflow)
         self.assertIn("'native-anchors' || 'pr-anchors'", workflow)
         self.assertIn('--kind "$MATRIX_KIND"', workflow)
+
+    def test_upload_artifact_retention_is_bounded_with_two_named_exceptions(
+        self,
+    ) -> None:
+        uploads = upload_artifact_steps()
+        raw_upload_count = sum(
+            sum(
+                UPLOAD_ARTIFACT_USE.match(line) is not None
+                for line in workflow.read_text(encoding="utf-8").splitlines()
+            )
+            for workflow in workflow_paths()
+        )
+        self.assertEqual(len(uploads), raw_upload_count)
+
+        long_lived = {
+            (
+                "pages.yml",
+                "Roll the protected evidence cache forward",
+                "${{ steps.cache.outputs.name }}",
+            ),
+            (
+                "release.yml",
+                "Upload immutable release bundle",
+                "release-${{ steps.release.outputs.release_id }}",
+            ),
+        }
+        observed_long_lived: set[tuple[str, str, str]] = set()
+        for workflow, step_name, block in uploads:
+            uses_line = next(
+                line
+                for line in block.splitlines()
+                if "actions/upload-artifact@" in line
+            )
+            input_indent = " " * (len(uses_line) - len(uses_line.lstrip()) + 2)
+            artifact_names = re.findall(
+                rf"(?m)^{re.escape(input_indent)}name:[ \t]*(.+?)[ \t]*$", block
+            )
+            retention_values = re.findall(
+                rf"(?m)^{re.escape(input_indent)}retention-days:[ \t]*(.+?)[ \t]*$",
+                block,
+            )
+            with self.subTest(workflow=workflow, step=step_name):
+                self.assertEqual(len(artifact_names), 1)
+                self.assertEqual(len(retention_values), 1)
+                identity = (workflow, step_name, artifact_names[0])
+                expected_retention = "90" if identity in long_lived else "1"
+                self.assertEqual(retention_values[0], expected_retention)
+                if retention_values[0] == "90":
+                    observed_long_lived.add(identity)
+        self.assertEqual(observed_long_lived, long_lived)
+
+    def test_gradle_cache_writes_are_limited_to_protected_stable_builds(self) -> None:
+        build = job_block("build-gate.yml", "build")
+        e2e = job_block("on-demand-e2e.yml", "build")
+        release = job_block("release.yml", "build")
+        policy = (ROOT / "scripts" / "ci" / "gradle_cache_policy.py").read_text(
+            encoding="utf-8"
+        )
+
+        setup_count = sum(
+            workflow.read_text(encoding="utf-8").count("gradle/actions/setup-gradle@")
+            for workflow in WORKFLOWS.glob("*.yml")
+        )
+        self.assertEqual(setup_count, 3)
+        self.assertIn("scripts/ci/gradle_cache_policy.py", build)
+        self.assertIn("--matrix release/release-matrix.json", build)
+        self.assertIn('--event-name "$GITHUB_EVENT_NAME"', build)
+        self.assertIn('--ref-name "$GITHUB_REF_NAME"', build)
+        self.assertIn("REF_PROTECTED: ${{ github.ref_protected }}", build)
+        self.assertIn("REF_TYPE: ${{ github.ref_type }}", build)
+        self.assertIn('--ref-type "$REF_TYPE"', build)
+        self.assertIn('--ref-protected "$REF_PROTECTED"', build)
+        self.assertIn(
+            "cache-read-only: ${{ steps.gradle-cache.outputs.read_only }}", build
+        )
+        self.assertIn("cache-cleanup: on-success", build)
+        for workflow, block in (("on-demand-e2e.yml", e2e), ("release.yml", release)):
+            with self.subTest(workflow=workflow):
+                self.assertEqual(block.count("gradle/actions/setup-gradle@"), 1)
+                self.assertEqual(block.count("cache-read-only: true"), 1)
+                self.assertNotIn("gradle_cache_policy.py", block)
+
+        self.assertIn('WRITER_EVENTS = frozenset({"push", "workflow_dispatch"})', policy)
+        self.assertIn("event_name not in WRITER_EVENTS", policy)
+        self.assertIn('or ref_type != "branch"', policy)
+        self.assertIn("or not ref_protected", policy)
+        self.assertIn('return ref_name not in {"master", release_branch}', policy)
 
     def test_visual_review_is_advisory_and_not_a_port_gate(self) -> None:
         visual = job_block("on-demand-e2e.yml", "visual-review")
@@ -119,6 +259,9 @@ class WorkflowSecurityTest(unittest.TestCase):
         workflow = (WORKFLOWS / "rotate-pages-evidence.yml").read_text(encoding="utf-8")
         rotate = job_block("rotate-pages-evidence.yml", "rotate")
         handoff = job_block("on-demand-e2e.yml", "prepare-pages-evidence")
+        rotator = (ROOT / "scripts" / "pages" / "rotate_artifacts.py").read_text(
+            encoding="utf-8"
+        )
 
         self.assertIn("permissions: {}", workflow)
         self.assertIn("workflows:\n      - Project site", workflow)
@@ -154,6 +297,52 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertNotIn("actions: write", handoff)
         self.assertIn("pages-e2e-${{ github.ref_name }}", handoff)
         self.assertIn("retention-days: 1", handoff)
+        self.assertIn('expected_names = {"github-pages"}', rotator)
+        self.assertIn(
+            'f"collected-pages-{generation.branch}" for generation in generations',
+            rotator,
+        )
+        self.assertIn("for artifact in (*old_caches, *handoffs):", rotator)
+        self.assertIn("retire_pages_run_transients(", rotator)
+        self.assertIn("api.get_artifact(artifact.artifact_id)", rotator)
+        self.assertIn("api.delete_artifact(artifact.artifact_id)", rotator)
+
+    def test_orphaned_branch_caches_are_pruned_by_exact_id_from_protected_code(
+        self,
+    ) -> None:
+        workflow = (WORKFLOWS / "prune-actions-caches.yml").read_text(
+            encoding="utf-8"
+        )
+        prune = job_block("prune-actions-caches.yml", "prune")
+        implementation = (
+            ROOT / "scripts" / "ci" / "prune_actions_caches.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("permissions: {}", workflow)
+        self.assertIn("schedule:", workflow)
+        self.assertRegex(workflow, r'cron: "\d+ \d+ \* \* \*"')
+        self.assertIn("github.event_name == 'schedule'", prune)
+        self.assertIn("actions: write", prune)
+        self.assertIn("contents: read", prune)
+        self.assertIn("[[ \"$GITHUB_REF\" == refs/heads/master ]]", prune)
+        self.assertIn(".default_branch == \"master\"", prune)
+        self.assertIn('"repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha', prune)
+        self.assertIn("ref: ${{ steps.trusted.outputs.implementation_sha }}", prune)
+        self.assertIn("persist-credentials: false", prune)
+        self.assertIn("scripts/ci/prune_actions_caches.py", prune)
+        self.assertIn("--expected-default-branch master", prune)
+        self.assertIn("--apply", prune)
+        self.assertNotIn("release-matrix", prune)
+
+        self.assertIn('BRANCH_REF_PREFIX = "refs/heads/"', implementation)
+        self.assertIn("cache.branch not in existing_branches", implementation)
+        self.assertIn("cache.branch not in active_run_branches", implementation)
+        self.assertIn("candidates, deferred = _bounded_batch(", implementation)
+        self.assertIn("current = api.get_cache(cache)", implementation)
+        self.assertIn("if api.branch_has_active_run(branch):", implementation)
+        self.assertIn("if api.branch_exists(branch):", implementation)
+        self.assertIn("api.delete_cache(cache.cache_id)", implementation)
+        self.assertIn('f"/actions/caches/{cache_id}"', implementation)
 
     def test_pages_actions_use_reviewed_immutable_versions(self) -> None:
         workflow = (WORKFLOWS / "pages.yml").read_text(encoding="utf-8")
