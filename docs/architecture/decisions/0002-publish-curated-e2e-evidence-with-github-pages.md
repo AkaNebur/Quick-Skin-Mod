@@ -58,10 +58,15 @@ Publish one static project site through a custom GitHub Pages workflow:
 6. After a successful deployment, retain exactly one validated exact-head cache per release branch
    and refresh unchanged evidence monthly. Rotation runs only after the owning Pages workflow is
    `completed/success`: validate the replacement and current release head again, then delete caches
-   older than that replacement and the exact handoff it consumed. Preserve a concurrent newer
-   handoff and preserve the previous cache whenever E2E, deployment, validation, or rotation fails.
-   A changed release branch still requires new exact-head evidence; Pages never relaunches
-   Minecraft merely to refresh presentation.
+   older than that replacement and the exact handoff it consumed. The same authenticated promotion
+   retires by immutable artifact ID the successful Pages run's fan-in and deploy artifacts. Raw
+   packaged-E2E proof instead expires after one day so a concurrent branch attestation can finish
+   consuming it. Preserve a concurrent newer handoff and preserve the previous cache whenever E2E,
+   deployment, validation, or rotation fails. Separately, a protected scheduled sweep discovers
+   live branches and deletes by exact cache ID only Actions caches scoped to branch refs that no
+   longer exist. It does not treat non-branch refs or branches with active runs as orphans. A changed
+   release branch still requires new exact-head evidence; Pages never relaunches Minecraft merely
+   to refresh presentation.
 7. Publish bounded WebP derivatives for browsing while recording source-PNG and published-image
    hashes and dimensions separately. Content-address public image URLs by the bytes actually
    served.
@@ -95,9 +100,11 @@ tests, and every affected release branch together.
 
 Publication fails closed when any release head lacks current evidence, while the previous atomic
 deployment remains available. The site does not create a second supported-version list. Artifact
-storage is bounded to one durable gallery generation per release branch; handoffs overlap only
-until their successful deployment has been promoted. GitHub Pages limits and artifact retention
-must still be monitored as the number of versions or captures grows.
+storage is bounded to one durable gallery generation per release branch; handoffs, fan-in, and
+deploy artifacts overlap only until their successful deployment has been promoted. Raw E2E proof
+may overlap for its one-day consumer-safety window. Ordinary Actions uploads expire after one day.
+GitHub Pages limits and artifact retention must still be monitored as the number of versions or
+captures grows.
 
 Repository activation is deliberately separate from accepting this decision: the implementation
 must first reach `master` and the release branches, after which an administrator enables GitHub

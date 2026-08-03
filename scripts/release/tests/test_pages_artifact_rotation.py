@@ -18,9 +18,11 @@ from rotate_artifacts import (  # noqa: E402
     GitHubApi,
     RotationError,
     load_generations,
+    retire_pages_run_transients,
     rotate_branch,
     select_consumed_handoffs,
     select_old_caches,
+    select_pages_run_transients,
 )
 from select_artifact import select_source  # noqa: E402
 
@@ -82,20 +84,32 @@ class FakeApi:
         keep: Artifact,
         inventories: dict[str, list[Artifact]],
         runs: dict[int, dict[str, Any]],
+        run_artifacts: dict[int, list[Artifact]] | None = None,
         branch_sha: str = TARGET_SHA,
         missing_on_delete: set[int] | None = None,
+        artifact_overrides: dict[int, Artifact] | None = None,
     ) -> None:
         self.keep = keep
         self.inventories = inventories
         self.runs = runs
+        self.run_artifacts = run_artifacts or {}
         self.branch_sha = branch_sha
         self.missing_on_delete = missing_on_delete or set()
         self.deleted: list[int] = []
+        self.artifacts_by_id = {
+            item.artifact_id: item
+            for item in (
+                [keep]
+                + [item for values in inventories.values() for item in values]
+                + [item for values in self.run_artifacts.values() for item in values]
+            )
+        }
+        self.artifacts_by_id.update(artifact_overrides or {})
 
     def get_artifact(self, artifact_id: int) -> Artifact:
-        if artifact_id != self.keep.artifact_id:
+        if artifact_id not in self.artifacts_by_id:
             raise AssertionError(f"unexpected artifact lookup {artifact_id}")
-        return self.keep
+        return self.artifacts_by_id[artifact_id]
 
     def list_artifacts(self, name: str) -> list[Artifact]:
         return list(self.inventories.get(name, []))
@@ -110,7 +124,7 @@ class FakeApi:
         return list(by_id.values())
 
     def list_artifacts_for_run(self, run_id: int) -> list[Artifact]:
-        raise AssertionError("not used by rotate_branch")
+        return list(self.run_artifacts.get(run_id, []))
 
     def get_run(self, run_id: int) -> dict[str, Any]:
         return self.runs[run_id]
@@ -281,6 +295,60 @@ class PagesArtifactRotationTest(unittest.TestCase):
             keep=self.keep,
         )
         self.assertEqual(selected, [consumed])
+
+    def test_pages_selector_is_bounded_to_current_run_and_release_inventory(self) -> None:
+        expected = [
+            artifact(
+                300,
+                f"collected-pages-{BRANCH}",
+                "2026-08-03T11:30:00Z",
+                run_id=900,
+                head_branch="master",
+                head_sha=PAGES_SHA,
+            ),
+            artifact(
+                301,
+                "github-pages",
+                "2026-08-03T11:40:00Z",
+                run_id=900,
+                head_branch="master",
+                head_sha=PAGES_SHA,
+            ),
+        ]
+        excluded = [
+            self.keep,
+            artifact(
+                302,
+                "collected-pages-forge-and-fabric-9.9.9",
+                "2026-08-03T11:30:00Z",
+                run_id=900,
+                head_branch="master",
+                head_sha=PAGES_SHA,
+            ),
+            artifact(
+                303,
+                "github-pages",
+                "2026-08-03T11:30:00Z",
+                run_id=899,
+                head_branch="master",
+                head_sha=PAGES_SHA,
+            ),
+            artifact(
+                304,
+                f"collected-pages-{BRANCH}",
+                "2026-08-03T11:30:00Z",
+                run_id=900,
+                head_branch="master",
+                head_sha=OLD_PAGES_SHA,
+            ),
+        ]
+        selected = select_pages_run_transients(
+            [*excluded, *reversed(expected)],
+            generations=[self.generation],
+            pages_run_id=900,
+            pages_run_sha=PAGES_SHA,
+        )
+        self.assertEqual(selected, expected)
 
     def test_source_selection_prefers_cache_newer_than_consumed_handoff(self) -> None:
         handoff = artifact(
@@ -471,6 +539,14 @@ class PagesArtifactRotationTest(unittest.TestCase):
             head_branch=BRANCH,
             head_sha=TARGET_SHA,
         )
+        raw_source = artifact(
+            120,
+            "packaged-e2e-fabric-client",
+            "2026-08-03T10:30:00Z",
+            run_id=750,
+            head_branch=f"automation/sync/{BRANCH}/run-1",
+            head_sha="d" * 40,
+        )
         api = FakeApi(
             keep=self.keep,
             inventories={
@@ -500,6 +576,9 @@ class PagesArtifactRotationTest(unittest.TestCase):
                     sha=PAGES_SHA,
                 ),
             },
+            # Raw proof may still be consumed by a concurrent attestation and is left to its
+            # one-day retention policy rather than Pages promotion.
+            run_artifacts={750: [raw_source]},
         )
         deleted = rotate_branch(
             api,
@@ -511,6 +590,7 @@ class PagesArtifactRotationTest(unittest.TestCase):
         )
         self.assertEqual(deleted, [100, 110])
         self.assertEqual(api.deleted, [100, 110])
+        self.assertNotIn(raw_source.artifact_id, api.deleted)
 
     def test_rotation_is_a_noop_if_the_release_head_changed(self) -> None:
         api = FakeApi(
@@ -571,7 +651,95 @@ class PagesArtifactRotationTest(unittest.TestCase):
             pages_run_sha=PAGES_SHA,
             delete_delay_seconds=0,
         )
-        self.assertEqual(deleted, [100])
+        self.assertEqual(deleted, [])
+
+    def test_pages_run_transients_retire_only_after_every_keep_is_revalidated(self) -> None:
+        collected = artifact(
+            300,
+            f"collected-pages-{BRANCH}",
+            "2026-08-03T11:30:00Z",
+            run_id=900,
+            head_branch="master",
+            head_sha=PAGES_SHA,
+        )
+        deploy = artifact(
+            301,
+            "github-pages",
+            "2026-08-03T11:40:00Z",
+            run_id=900,
+            head_branch="master",
+            head_sha=PAGES_SHA,
+        )
+        trigger_artifacts = [self.keep, collected, deploy]
+        api = FakeApi(
+            keep=self.keep,
+            inventories={},
+            runs={
+                900: run(
+                    900,
+                    workflow=".github/workflows/pages.yml",
+                    event="workflow_dispatch",
+                    branch="master",
+                    sha=PAGES_SHA,
+                )
+            },
+            run_artifacts={900: trigger_artifacts},
+        )
+        deleted = retire_pages_run_transients(
+            api,
+            generations=[self.generation],
+            trigger_artifacts=trigger_artifacts,
+            repository=REPOSITORY,
+            pages_run_id=900,
+            pages_run_sha=PAGES_SHA,
+            delete_delay_seconds=0,
+        )
+        self.assertEqual(deleted, [300, 301])
+        self.assertEqual(api.deleted, [300, 301])
+
+    def test_artifact_identity_change_fails_closed_before_delete(self) -> None:
+        collected = artifact(
+            300,
+            f"collected-pages-{BRANCH}",
+            "2026-08-03T11:30:00Z",
+            run_id=900,
+            head_branch="master",
+            head_sha=PAGES_SHA,
+        )
+        changed = artifact(
+            300,
+            "github-pages",
+            "2026-08-03T11:30:00Z",
+            run_id=900,
+            head_branch="master",
+            head_sha=PAGES_SHA,
+        )
+        api = FakeApi(
+            keep=self.keep,
+            inventories={},
+            runs={
+                900: run(
+                    900,
+                    workflow=".github/workflows/pages.yml",
+                    event="workflow_dispatch",
+                    branch="master",
+                    sha=PAGES_SHA,
+                )
+            },
+            run_artifacts={900: [self.keep, collected]},
+            artifact_overrides={300: changed},
+        )
+        with self.assertRaisesRegex(RotationError, "artifact changed"):
+            retire_pages_run_transients(
+                api,
+                generations=[self.generation],
+                trigger_artifacts=[self.keep, collected],
+                repository=REPOSITORY,
+                pages_run_id=900,
+                pages_run_sha=PAGES_SHA,
+                delete_delay_seconds=0,
+            )
+        self.assertEqual(api.deleted, [])
 
     def test_wrong_owner_workflow_fails_closed_before_any_delete(self) -> None:
         old_cache = artifact(
