@@ -35,7 +35,10 @@ exact target. It discovers remote release branches from the naming contract, the
 GitHub deliberately suppresses recursive workflow events produced with `GITHUB_TOKEN`, which is
 why the gates are explicitly dispatched instead of relying on the PR-opened event. Each gate emits
 a trusted `repository_dispatch` after it settles, avoiding both a suppressed `workflow_run` chain
-and an idle polling runner per version branch.
+and an idle polling runner per version branch. Once both run records, the exact PR head, its base,
+and ancestry have been reverified, the controller publishes the stable `Build and verify` and
+`Packaged E2E gate` commit-status contexts on that same head. This narrowly bridges the explicit
+runs into the release-branch ruleset; it cannot attest another commit or replace either gate.
 
 The final attestations do not compile the mod or launch Minecraft again. Each one verifies through
 the GitHub API that its original trusted run completed successfully, that the tested automation
