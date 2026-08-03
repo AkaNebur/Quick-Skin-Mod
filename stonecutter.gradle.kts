@@ -29,6 +29,9 @@ val releaseLaneCount = (releaseMatrix["lane_count"] as? Number)?.toInt()
     ?: error("Missing lane_count in $releaseMatrixFile")
 val unitTestVersion = releaseMatrix["unit_test_version"]?.toString()
     ?: error("Missing unit_test_version in $releaseMatrixFile")
+val releaseVersions = releaseArtifacts
+    .map { it["artifact_version"].toString() }
+    .distinct()
 check(releaseArtifacts.size == releaseLaneCount) {
     "Release artifact inventory has ${releaseArtifacts.size} rows; expected lane_count=$releaseLaneCount"
 }
@@ -104,16 +107,22 @@ val testStableLane = tasks.register("testStableLane") {
     dependsOn(":common:$unitTestVersion:test")
 }
 
+val testAllCommonLanes = tasks.register("testAllCommonLanes") {
+    group = "verification"
+    description = "Runs loader-independent JUnit tests against every supported common node."
+    dependsOn(releaseVersions.map { version -> ":common:$version:test" })
+}
+
 tasks.register("check") {
     group = "verification"
     description = "Runs the central lane and loader-independent verification suite."
-    dependsOn(validateReleaseLaneInventory, testStableLane)
+    dependsOn(validateReleaseLaneInventory, testAllCommonLanes)
 }
 
 tasks.register("buildAllLanes") {
     group = "build"
     description = "Builds all $releaseLaneCount production artifacts from the release matrix."
-    dependsOn(validateReleaseLaneInventory, testStableLane, releaseArtifactTasks)
+    dependsOn(validateReleaseLaneInventory, testAllCommonLanes, releaseArtifactTasks)
 }
 
 tasks.register("buildAllE2EHarnesses") {
