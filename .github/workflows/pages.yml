@@ -113,68 +113,11 @@ jobs:
         env:
           BRANCH: ${{ matrix.branch }}
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          python3 scripts/release/version_branches.py --target "$BRANCH" > /dev/null
-          current_sha="$(gh api \
-            "repos/$GITHUB_REPOSITORY/branches/$BRANCH" --jq .commit.sha)"
-          primary_name="pages-e2e-$BRANCH"
-          primary_artifacts="$(gh api \
-            "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$primary_name&per_page=100")"
-          run_id=''
-          artifact_name="$primary_name"
-          while IFS= read -r candidate_run_id; do
-            candidate_run="$(gh api \
-              "repos/$GITHUB_REPOSITORY/actions/runs/$candidate_run_id")"
-            if jq -e \
-                --arg branch "$BRANCH" \
-                --arg sha "$current_sha" \
-                '.status == "completed" and .conclusion == "success" and
-                 .event == "workflow_dispatch" and .head_branch == $branch and
-                 .head_sha == $sha and
-                 .path == ".github/workflows/on-demand-e2e.yml" and
-                 .head_repository.full_name == env.GITHUB_REPOSITORY' \
-                <<< "$candidate_run" > /dev/null; then
-              run_id="$candidate_run_id"
-              break
-            fi
-          done < <(jq -r \
-            --arg branch "$BRANCH" \
-            --arg sha "$current_sha" \
-            '[.artifacts[] | select(
-              (.expired | not) and
-              .workflow_run.head_branch == $branch and
-              .workflow_run.head_sha == $sha
-            )] | sort_by(.created_at) | reverse[] | .workflow_run.id' \
-            <<< "$primary_artifacts")
-
-          if [[ -z "$run_id" ]]; then
-            artifact_name="pages-cache-$BRANCH"
-            cached_artifacts="$(gh api \
-              "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$artifact_name&per_page=100")"
-            while IFS= read -r candidate_run_id; do
-              candidate_run="$(gh api \
-                "repos/$GITHUB_REPOSITORY/actions/runs/$candidate_run_id")"
-              if jq -e \
-                  '.status == "completed" and .conclusion == "success" and
-                   (.event == "schedule" or .event == "workflow_dispatch" or
-                    .event == "workflow_run") and
-                   .head_branch == "master" and
-                   .path == ".github/workflows/pages.yml" and
-                   .head_repository.full_name == env.GITHUB_REPOSITORY' \
-                  <<< "$candidate_run" > /dev/null; then
-                run_id="$candidate_run_id"
-                break
-              fi
-            done < <(jq -r \
-              '[.artifacts[] | select(.expired | not)] |
-               sort_by(.created_at) | reverse[] | .workflow_run.id' \
-              <<< "$cached_artifacts")
-          fi
-          test -n "$run_id"
-          printf 'name=%s\n' "$artifact_name" >> "$GITHUB_OUTPUT"
-          printf 'run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
-          printf 'sha=%s\n' "$current_sha" >> "$GITHUB_OUTPUT"
+        run: >-
+          python3 scripts/pages/select_artifact.py
+          --repository "$GITHUB_REPOSITORY"
+          --branch "$BRANCH"
+          --github-output "$GITHUB_OUTPUT"
 
       - name: Download the digest-checked branch artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -364,7 +307,8 @@ jobs:
 
     steps:
       # Only a completely successful deploy reaches this job, so future selectors may require the
-      # cache artifact's owning Pages run to have a successful final conclusion.
+      # cache artifact's owning Pages run to have a successful final conclusion. A separate
+      # workflow rotates generations only after this complete Pages run reaches success.
       - name: Download the branch bundle validated in this Pages run
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -372,10 +316,24 @@ jobs:
           path: public-evidence
           digest-mismatch: error
 
+      - name: Bind the rolling cache to its exact release head
+        id: cache
+        shell: bash
+        env:
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          set -euo pipefail
+          manifest="public-evidence/$BRANCH/manifest.json"
+          manifest_branch="$(jq -er .release.branch "$manifest")"
+          target_sha="$(jq -er .provenance.target.sha "$manifest")"
+          [[ "$manifest_branch" == "$BRANCH" ]]
+          [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'name=pages-cache-%s--%s\n' "$BRANCH" "$target_sha" >> "$GITHUB_OUTPUT"
+
       - name: Roll the protected evidence cache forward
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pages-cache-${{ matrix.branch }}
+          name: ${{ steps.cache.outputs.name }}
           path: public-evidence/
           if-no-files-found: error
           compression-level: 6
