@@ -465,6 +465,25 @@ class WorkflowSecurityTest(unittest.TestCase):
             with self.subTest(required=required):
                 self.assertIn(required, merge)
 
+    def test_version_port_merge_bridges_verified_runs_to_required_statuses(self) -> None:
+        merge = job_block("handle-version-port-result.yml", "merge")
+        governance = json.loads(
+            (ROOT / "release" / "github-governance.json").read_text(encoding="utf-8")
+        )
+
+        self.assertIn("statuses: write", merge)
+        self.assertIn('repos/$GITHUB_REPOSITORY/statuses/$head_sha', merge)
+        self.assertIn("$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run_id", merge)
+        for context in governance["required_checks"]:
+            with self.subTest(context=context):
+                self.assertIn(f'"{context}"', merge)
+
+        revalidation = merge.index('git merge-base --is-ancestor "$base_sha" "$head_sha"')
+        publish = merge.index("publish_required_status()")
+        merge_pr = merge.index('gh pr merge "$pr_number"')
+        self.assertLess(revalidation, publish)
+        self.assertLess(publish, merge_pr)
+
     def test_credentialed_writers_do_not_receive_claude_credentials(self) -> None:
         for workflow, job in (
             ("sync-version-branches.yml", "publish"),
