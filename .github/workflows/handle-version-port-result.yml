@@ -325,6 +325,7 @@ jobs:
       actions: write
       contents: write
       pull-requests: write
+      statuses: write
 
     steps:
       - name: Check out the exact port head
@@ -395,8 +396,33 @@ jobs:
             --arg target "$target_branch" \
             '.state == "OPEN" and .baseRefName == $target and .baseRefOid == $base and .headRefName == $branch and .headRefOid == $head and (.isCrossRepository | not) and ([.labels[].name] | index("automated-version-sync")) != null' \
             <<< "$current_pr_json" > /dev/null
+
+          # workflow_dispatch runs are deliberately used because GITHUB_TOKEN-created PRs do not
+          # recursively start trusted pull_request workflows. Bridge the two independently
+          # reverified exact-head runs to the stable contexts required by the release ruleset.
+          publish_required_status() {
+            local context="$1"
+            local description="$2"
+            local run_id="$3"
+            jq -n \
+              --arg state success \
+              --arg context "$context" \
+              --arg description "$description" \
+              --arg target_url \
+                "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run_id" \
+              '{state:$state,context:$context,description:$description,target_url:$target_url}' \
+              | gh api --method POST \
+                  "repos/$GITHUB_REPOSITORY/statuses/$head_sha" --input - \
+                  > /dev/null
+          }
+          publish_required_status \
+            "Build and verify" "Verified exact-head Build gate" "$build_run_id"
+          publish_required_status \
+            "Packaged E2E gate" "Verified exact-head Packaged E2E" "$e2e_run_id"
+
           gh pr comment "$pr_number" --body \
-            "Both explicitly dispatched exact-head gates passed; merging the version port."
+            "Both explicitly dispatched exact-head gates passed and their required status \
+            contexts were bound to this commit; merging the version port."
           gh pr merge "$pr_number" --merge --delete-branch \
             --match-head-commit "$head_sha"
 

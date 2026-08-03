@@ -2,7 +2,8 @@ name: Rotate project site evidence
 
 # A Pages run is not a safe replacement until its owner has reached completed/success. This
 # follow-up workflow promotes that successful generation to the only durable cache per branch,
-# then retires the superseded cache and the exact E2E handoff that was consumed.
+# then retires the superseded cache, the exact E2E handoff that was consumed, and this Pages run's
+# fan-in/deploy artifacts. Raw E2E proof remains available for concurrent attestations for one day.
 on:
   workflow_run:
     workflows:
