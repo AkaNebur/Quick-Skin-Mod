@@ -187,6 +187,33 @@ def select_consumed_handoffs(
     )
 
 
+def select_pages_run_transients(
+    artifacts: list[Artifact],
+    *,
+    generations: list[BranchGeneration],
+    pages_run_id: int,
+    pages_run_sha: str,
+) -> list[Artifact]:
+    """Select fan-in/deploy artifacts made redundant by the successful Pages caches."""
+
+    expected_names = {"github-pages"}
+    expected_names.update(
+        f"collected-pages-{generation.branch}" for generation in generations
+    )
+    return sorted(
+        (
+            artifact
+            for artifact in artifacts
+            if not artifact.expired
+            and artifact.name in expected_names
+            and artifact.run_id == pages_run_id
+            and artifact.head_branch == "master"
+            and artifact.head_sha == pages_run_sha
+        ),
+        key=lambda artifact: artifact.order,
+    )
+
+
 class GitHubApi:
     def __init__(self, *, repository: str, token: str, api_url: str) -> None:
         self.repository = repository
@@ -336,6 +363,26 @@ def _validate_keep(
     )
 
 
+def _delete_exact_artifact(api: ArtifactApi, artifact: Artifact) -> bool:
+    """Delete one immutable snapshot entry, treating a concurrent 404 as success."""
+
+    try:
+        current = api.get_artifact(artifact.artifact_id)
+    except ApiError as exc:
+        if exc.status == 404:
+            return False
+        raise
+    if current != artifact or current.expired:
+        raise RotationError(f"artifact changed before deletion: {artifact.artifact_id}")
+    try:
+        api.delete_artifact(artifact.artifact_id)
+    except ApiError as exc:
+        if exc.status == 404:
+            return False
+        raise
+    return True
+
+
 def rotate_branch(
     api: ArtifactApi,
     generation: BranchGeneration,
@@ -372,7 +419,6 @@ def rotate_branch(
         target_sha=generation.target_sha,
         keep=generation.keep,
     )
-
     for artifact in old_caches:
         _validate_run(
             api.get_run(artifact.run_id),
@@ -393,7 +439,6 @@ def rotate_branch(
             events=frozenset({"workflow_dispatch"}),
             require_success=True,
         )
-
     deleted: list[int] = []
     for artifact in (*old_caches, *handoffs):
         _validate_keep(
@@ -403,12 +448,41 @@ def rotate_branch(
             pages_run_id=pages_run_id,
             pages_run_sha=pages_run_sha,
         )
-        try:
-            api.delete_artifact(artifact.artifact_id)
-        except ApiError as exc:
-            if exc.status != 404:
-                raise
-        deleted.append(artifact.artifact_id)
+        if _delete_exact_artifact(api, artifact):
+            deleted.append(artifact.artifact_id)
+        if delete_delay_seconds:
+            time.sleep(delete_delay_seconds)
+    return deleted
+
+
+def retire_pages_run_transients(
+    api: ArtifactApi,
+    *,
+    generations: list[BranchGeneration],
+    trigger_artifacts: list[Artifact],
+    repository: str,
+    pages_run_id: int,
+    pages_run_sha: str,
+    delete_delay_seconds: float,
+) -> list[int]:
+    transients = select_pages_run_transients(
+        trigger_artifacts,
+        generations=generations,
+        pages_run_id=pages_run_id,
+        pages_run_sha=pages_run_sha,
+    )
+    deleted: list[int] = []
+    for artifact in transients:
+        for generation in generations:
+            _validate_keep(
+                api,
+                generation,
+                repository=repository,
+                pages_run_id=pages_run_id,
+                pages_run_sha=pages_run_sha,
+            )
+        if _delete_exact_artifact(api, artifact):
+            deleted.append(artifact.artifact_id)
         if delete_delay_seconds:
             time.sleep(delete_delay_seconds)
     return deleted
@@ -544,7 +618,24 @@ def main(argv: list[str] | None = None) -> int:
                 pages_run_sha=pages_run_sha,
                 delete_delay_seconds=args.delete_delay_seconds,
             )
-        print(json.dumps({"deleted_artifact_ids": summary}, sort_keys=True))
+        pages_run_deleted = retire_pages_run_transients(
+            api,
+            generations=generations,
+            trigger_artifacts=trigger_artifacts,
+            repository=repository,
+            pages_run_id=pages_run_id,
+            pages_run_sha=pages_run_sha,
+            delete_delay_seconds=args.delete_delay_seconds,
+        )
+        print(
+            json.dumps(
+                {
+                    "deleted_artifact_ids": summary,
+                    "deleted_pages_run_artifact_ids": pages_run_deleted,
+                },
+                sort_keys=True,
+            )
+        )
         return 0
     except (RotationError, PublicEvidenceError) as exc:
         print(f"Pages evidence rotation error: {exc}", file=sys.stderr)

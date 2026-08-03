@@ -80,7 +80,14 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
   caches, then selects the newest valid source. A branch-only cache name is migration fallback only.
 - `scripts/pages/rotate_artifacts.py` owns post-deployment retention. It may delete only exact
   Actions artifact IDs whose protected run provenance, branch, SHA, age, and successful replacement
-  have all been revalidated; it never implements screenshot or version discovery itself.
+  have all been revalidated, including Pages-run intermediates; it never implements screenshot or
+  version discovery itself. Raw E2E artifacts remain retention-bound inputs for concurrent
+  attestations and are outside rotation ownership.
+- `scripts/ci/gradle_cache_policy.py` is the fail-closed writer policy for Gradle state. It permits
+  writes only from protected stable refs; packaged E2E and release jobs remain read-only.
+- `scripts/ci/prune_actions_caches.py` owns orphan-cache hygiene. It discovers branches and active
+  runs from GitHub, revalidates each immutable cache entry and missing branch, and deletes only by
+  exact cache ID under bounded automatic limits.
 - `scripts/pages/build_site.py` combines exact branch bundles and renders the tracked assets under
   `site/`. `site/` contains presentation code, not a support/version inventory; supported versions
   always come from validated evidence discovered from release branches.

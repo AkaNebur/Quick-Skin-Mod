@@ -74,6 +74,20 @@ immutable workflow and governance activation contract.
   replace the branch's single rolling cache and retire older caches plus the consumed handoff.
   Never delete the fallback before its replacement succeeds, introduce a second version list,
   publish logs/crash reports, or make Pages a protected release check.
+- Actions artifacts are handoffs, not an archive. Every ordinary upload is retained for one day;
+  the only longer-lived uploads are the SHA-bound Pages cache and the immutable
+  `release-<release-id>` bundle, both retained for 90 days. The release bundle spans protected
+  environment approvals and provides bounded recovery for an interrupted publication. After a
+  successful Pages replacement, protected rotation deletes by exact artifact ID the superseded
+  cache, consumed `pages-e2e-<branch>` handoff, Pages fan-in artifacts, and deploy artifact. Raw
+  packaged-E2E proof retains its one-day window because a concurrent branch attestation may still
+  consume it. A protected schedule also deletes by exact cache ID Actions caches scoped to branch
+  refs that no longer exist; it discovers live branches directly and must never infer a
+  supported-version inventory.
+- Build gate owns Gradle cache writes, and only a trusted push or manual Build run on `master` or
+  the matrix's canonical release branch may write. Pull requests and ephemeral branches are
+  read-only; Packaged E2E and Release always restore the cache read-only so they cannot create one
+  immutable cache generation per run or tag.
 - Shared behavior changes start on `master`. A version-only fix starts on its release branch and
   must be reflected in canonical `master` sources when the same behavior applies elsewhere.
 - A shared change is not repository-wide delivery merely because it reached `master`. The

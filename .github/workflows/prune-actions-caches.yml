@@ -1,0 +1,95 @@
+name: Prune orphaned Actions caches
+
+# Cache entries scoped to deleted work branches cannot help a future build. Reconcile the whole
+# repository after a branch deletion and once per day; a replaced pending run is harmless because
+# every invocation rediscovers every orphan rather than acting only on the triggering branch.
+on:
+  schedule:
+    - cron: "29 9 * * *"
+  delete:
+
+permissions: {}
+
+concurrency:
+  group: quick-skin-actions-cache-pruning
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Delete caches owned by absent branches
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'delete' && github.event.ref_type == 'branch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      # schedule and delete load this workflow from the default branch. Authenticate the live run
+      # before checking out or executing any repository file, then pin that checkout to the current
+      # protected master SHA rather than trusting mutable event fields.
+      - name: Authenticate protected cleanup implementation
+        id: trusted
+        shell: bash
+        env:
+          DELETED_REF: ${{ github.event.ref }}
+          DELETED_REF_TYPE: ${{ github.event.ref_type }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_REF" == refs/heads/master ]]
+
+          case "$GITHUB_EVENT_NAME" in
+            schedule)
+              ;;
+            delete)
+              [[ "$DELETED_REF_TYPE" == branch ]]
+              [[ -n "$DELETED_REF" && "$DELETED_REF" != *$'\n'* ]]
+              ;;
+            *)
+              exit 2
+              ;;
+          esac
+
+          repository_json="$(gh api "repos/$GITHUB_REPOSITORY")"
+          jq -e '.default_branch == "master"' <<< "$repository_json" > /dev/null
+
+          run_json="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")"
+          jq -e \
+            --arg event "$GITHUB_EVENT_NAME" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg sha "$GITHUB_SHA" \
+            --argjson run_id "$GITHUB_RUN_ID" \
+            '.id == $run_id and .event == $event and
+             .path == ".github/workflows/prune-actions-caches.yml" and
+             .head_branch == "master" and .head_sha == $sha and
+             .head_repository.full_name == $repository' \
+            <<< "$run_json" > /dev/null
+
+          implementation_sha="$(gh api \
+            "repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha)"
+          [[ "$implementation_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'implementation_sha=%s\n' "$implementation_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the exact protected cleanup implementation
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ steps.trusted.outputs.implementation_sha }}
+          persist-credentials: false
+
+      - name: Prune only caches whose branch is absent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 scripts/ci/prune_actions_caches.py
+          --repository "$GITHUB_REPOSITORY"
+          --expected-default-branch master
+          --apply
+          --max-delete-count 75
+          --max-delete-bytes 10737418240
+          --delete-delay-seconds 1
