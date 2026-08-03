@@ -455,7 +455,9 @@ jobs:
           path: public-evidence/
           if-no-files-found: error
           compression-level: 6
-          retention-days: 90
+          # This is an atomic handoff. A successful protected Pages run promotes it to the one
+          # rolling cache for this branch, then the rotation workflow deletes the consumed copy.
+          retention-days: 1
 
   notify-version-port:
     name: Notify version port controller

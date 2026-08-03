@@ -67,11 +67,13 @@ immutable workflow and governance activation contract.
 - The marked README release-status table is generated from discovered release branches and each
   branch's matrix. Its workflow updates one idempotent automation PR and never pushes directly to
   `master`. Do not edit its rows manually or add a branch/version list to its workflow.
-- Each successful release-branch E2E tree may produce one curated `pages-e2e-<branch>` artifact.
-  The Pages workflow must discover the same release branches, require evidence for every exact
-  current head, render with protected `master` code, and deploy the whole site atomically. Never
-  introduce a second version list, publish logs/crash reports, or make Pages a protected release
-  check.
+- Each successful release-branch E2E tree may produce one transient curated
+  `pages-e2e-<branch>` handoff. The Pages workflow must discover the same release branches, require
+  evidence for every exact current head, render with protected `master` code, and deploy the whole
+  site atomically. Only after that Pages run reaches `completed/success` may protected automation
+  replace the branch's single rolling cache and retire older caches plus the consumed handoff.
+  Never delete the fallback before its replacement succeeds, introduce a second version list,
+  publish logs/crash reports, or make Pages a protected release check.
 - Shared behavior changes start on `master`. A version-only fix starts on its release branch and
   must be reflected in canonical `master` sources when the same behavior applies elsewhere.
 - A shared change is not repository-wide delivery merely because it reached `master`. The
