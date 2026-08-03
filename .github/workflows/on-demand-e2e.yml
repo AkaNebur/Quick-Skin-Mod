@@ -88,6 +88,10 @@ jobs:
 
       - name: Configure Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          # Build gate is the only writer. Packaged Minecraft jobs consume its stable cache
+          # instead of creating another immutable cache generation for every E2E run.
+          cache-read-only: true
 
       - name: Validate central release matrix
         run: python scripts/release/matrix.py --matrix release/release-matrix.json > /dev/null
@@ -334,7 +338,7 @@ jobs:
             visual-review-manifest.json
             visual-review-report.json
           if-no-files-found: warn
-          retention-days: 3
+          retention-days: 1
 
   attest:
     name: Attest tested E2E on release branch
