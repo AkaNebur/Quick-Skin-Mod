@@ -1,6 +1,6 @@
 # ADR 0002: Publish curated E2E evidence with GitHub Pages
 
-- Status: Accepted — activation pending
+- Status: Accepted — active
 - Date: 2026-08-02
 - Scope: project landing page and cross-version packaged-E2E evidence
 
@@ -40,9 +40,9 @@ inferring identity from screenshot filenames.
 Publish one static project site through a custom GitHub Pages workflow:
 
 1. A successful release-branch Packaged E2E run, or a trusted exact-tree attestation of that run,
-   may produce one curated `pages-e2e-<branch>` bundle. The bundle contains only catalogued PNGs
-   and an exact-schema manifest; it never includes logs, crash reports, runtime directories, or
-   AI-authored HTML.
+   may produce one short-lived curated `pages-e2e-<branch>` handoff. The bundle contains only
+   catalogued PNGs and an exact-schema manifest; it never includes logs, crash reports, runtime
+   directories, or AI-authored HTML.
 2. Screenshot identity is the semantic tuple of artifact, scenario, client role, and step. The
    protected catalog supplies ordering, titles, expectations, and comparison coverage.
 3. The Pages workflow discovers all release branches from GitHub and requires valid evidence for
@@ -55,9 +55,13 @@ Publish one static project site through a custom GitHub Pages workflow:
 5. Restrict the `github-pages` deployment environment to `master`. Keep `pages: write` and
    `id-token: write` only in the deployment job, which consumes the already rendered immutable
    Pages artifact and checks out no repository code.
-6. After a successful deployment, retain each validated exact-head bundle in a protected 90-day
-   cache and refresh unchanged evidence monthly. A changed release branch still requires new
-   exact-head evidence; Pages never relaunches Minecraft merely to refresh presentation.
+6. After a successful deployment, retain exactly one validated exact-head cache per release branch
+   and refresh unchanged evidence monthly. Rotation runs only after the owning Pages workflow is
+   `completed/success`: validate the replacement and current release head again, then delete caches
+   older than that replacement and the exact handoff it consumed. Preserve a concurrent newer
+   handoff and preserve the previous cache whenever E2E, deployment, validation, or rotation fails.
+   A changed release branch still requires new exact-head evidence; Pages never relaunches
+   Minecraft merely to refresh presentation.
 7. Publish bounded WebP derivatives for browsing while recording source-PNG and published-image
    hashes and dimensions separately. Content-address public image URLs by the bytes actually
    served.
@@ -90,8 +94,10 @@ auditable. New or renamed screenshots must update the runtime contract, visual c
 tests, and every affected release branch together.
 
 Publication fails closed when any release head lacks current evidence, while the previous atomic
-deployment remains available. The site does not create a second supported-version list. GitHub
-Pages limits and artifact retention must be monitored as the number of versions or captures grows.
+deployment remains available. The site does not create a second supported-version list. Artifact
+storage is bounded to one durable gallery generation per release branch; handoffs overlap only
+until their successful deployment has been promoted. GitHub Pages limits and artifact retention
+must still be monitored as the number of versions or captures grows.
 
 Repository activation is deliberately separate from accepting this decision: the implementation
 must first reach `master` and the release branches, after which an administrator enables GitHub

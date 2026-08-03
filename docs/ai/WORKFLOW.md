@@ -88,7 +88,8 @@ python -m py_compile scripts/release/branch_readme.py scripts/release/matrix.py 
   scripts/release/release_identity.py scripts/release/status_table.py `
   scripts/release/verify_reproducibility.py `
   scripts/release/version_branches.py scripts/ci/ai_patch_policy.py e2e/orchestrator.py `
-  scripts/pages/evidence.py scripts/pages/build_site.py `
+  scripts/pages/evidence.py scripts/pages/build_site.py scripts/pages/select_artifact.py `
+  scripts/pages/rotate_artifacts.py `
   e2e/packaged_runtime.py e2e/visual_evidence.py e2e/visual_review.py `
   e2e/check_visual_review.py
 python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
