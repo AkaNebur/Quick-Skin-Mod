@@ -59,8 +59,11 @@ immutable workflow and governance activation contract.
 - GITHUB_TOKEN-created PRs and child runs do not recursively start ordinary PR or completion
   workflows, so synchronization explicitly dispatches `build-gate.yml` and `on-demand-e2e.yml`.
   Each gate reports completion through a trusted `repository_dispatch`; the result handler merges
-  only when the latest exact-head run of both gates succeeds. An open synchronization PR is updated
-  in place when newer shared commits arrive.
+  only when the latest exact-head run of both gates succeeds. After revalidating the PR identity,
+  base, head, ancestry, and both run records, the handler binds those results to the exact head with
+  the two stable commit-status contexts required by the release ruleset. These statuses are a
+  ruleset bridge, never substitute test executions. An open synchronization PR is updated in place
+  when newer shared commits arrive.
 - After merging, the controller publishes lightweight Build and Packaged E2E attestations on the
   final release branch. They must verify the original trusted run IDs, exact tested commit, ancestry,
   and identical Git trees; never rerun Minecraft merely to populate a badge or attest a changed tree.
