@@ -77,6 +77,11 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
   review and public site.
 - `scripts/pages/evidence.py` creates and validates a small branch-scoped public bundle. It may copy
   only catalogued screenshots and structured provenance—never runtime logs or arbitrary HTML.
+- `scripts/pages/select_artifact.py` authenticates exact-current E2E handoffs and SHA-bound rolling
+  caches, then selects the newest valid source. A branch-only cache name is migration fallback only.
+- `scripts/pages/rotate_artifacts.py` owns post-deployment retention. It may delete only exact
+  Actions artifact IDs whose protected run provenance, branch, SHA, age, and successful replacement
+  have all been revalidated; it never implements screenshot or version discovery itself.
 - `scripts/pages/build_site.py` combines exact branch bundles and renders the tracked assets under
   `site/`. `site/` contains presentation code, not a support/version inventory; supported versions
   always come from validated evidence discovered from release branches.

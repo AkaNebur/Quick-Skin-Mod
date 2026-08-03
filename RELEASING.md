@@ -125,6 +125,10 @@ release-branch Packaged E2E runs wake the site workflow automatically. The workf
 generator from protected `master`, validates all current release heads, and deploys through the
 `github-pages` environment. If Pages is not enabled or any branch lacks current evidence, the
 workflow fails without replacing the previously deployed site.
-Successful deployments refresh a protected cache of each exact-head evidence bundle. The monthly
-Pages schedule revalidates and rolls those caches forward without rerunning packaged Minecraft;
-an updated branch still requires a new exact-head E2E/attestation artifact before it can appear.
+Successful deployments refresh one protected cache for each exact-head evidence bundle. After the
+owning Pages run reaches `completed/success`, a separate protected rotation workflow validates the
+new cache, deletes only older caches for that branch, and retires the exact `pages-e2e-<branch>`
+handoff that was consumed. It never removes the previous fallback before a replacement is usable,
+nor does it delete a concurrent newer handoff. The monthly Pages schedule revalidates and rolls the
+single caches forward without rerunning packaged Minecraft; an updated branch still requires a new
+exact-head E2E/attestation artifact before it can appear.
