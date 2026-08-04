@@ -7,7 +7,7 @@ import com.quickskin.mod.client.gui.GuiCompat;
 import com.quickskin.mod.QuickSkin;
 //? if <1.21 {
 import com.quickskin.mod.client.rendering.PreviewRenderBackend;
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 //?} else {
 import com.quickskin.mod.client.rendering.PreviewRenderBackend;
@@ -92,9 +92,9 @@ public class PlayerWidget extends AbstractWidget {
      * How the running Minecraft version decides which GUI draw ends up on top.
      *
      * <p>Vanilla swapped the depth-buffered immediate GUI for the deferred, depth-less
-     * {@code GuiRenderState} in 1.21.6; 1.21.9 is the first supported lane on the new pipeline.
+     * {@code GuiRenderState} in 1.21.6; the 1.21.8 lane therefore uses painter ordering.
      */
-//? if <1.21.9 {
+//? if <1.21.6 {
     private static final PreviewCompositeOrder.Pipeline GUI_PIPELINE =
             PreviewCompositeOrder.Pipeline.DEPTH_ORDERED;
 //?} else {
@@ -647,12 +647,9 @@ public class PlayerWidget extends AbstractWidget {
         float previewScale = cachedScale;
 
         // Render the player model
-//? if <1.21 {
-        // Use GuiGraphics directly for vanilla rendering method
+//? if <1.21.9 {
+        // Use the era-specific immediate or picture-in-picture backend.
         PreviewRenderBackend.INSTANCE.renderPlayerModel(
-//?} else if <1.21.9 {
-        // Use GuiGraphics directly for vanilla rendering method
-        PlayerModelRenderer.renderPlayerModel(
 //?} else if <26.1.2 {
         // Use GuiGraphics directly for vanilla rendering method
         PreviewRenderBackend.INSTANCE.renderPlayerModel(

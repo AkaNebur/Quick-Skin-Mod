@@ -1800,7 +1800,7 @@ public class LocalAssetManager {
             }
 
             // Create dynamic texture
-//? if <1.21.9 {
+//? if <1.21.6 {
             dynamicTexture = new DynamicTexture(nativeImage);
 //?} else {
             dynamicTexture = new DynamicTexture(() -> "quickskin_local_" + primary, nativeImage);

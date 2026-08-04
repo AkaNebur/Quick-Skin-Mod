@@ -291,7 +291,7 @@ public class SkinPreviewOverlay {
         previewData.setCapeLocation(null); // No cape for HUD preview
         previewData.setModelType(modelType);
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         PoseStack poseStack = graphics.pose();
         //?} else {
         // 1.21.9+: graphics.pose() is a Matrix3x2fStack; the renderer owns its 3D PoseStack.

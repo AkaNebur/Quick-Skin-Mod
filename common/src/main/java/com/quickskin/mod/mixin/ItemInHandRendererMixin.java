@@ -9,8 +9,10 @@ import com.quickskin.mod.client.compat.CPMCompatIntegration;
 import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.model.geom.ModelPart;
-//? if <1.21.9 {
+//? if <1.21.6 {
 import net.minecraft.client.player.AbstractClientPlayer;
+//?}
+//? if <1.21.9 {
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
@@ -54,8 +56,10 @@ public class ItemInHandRendererMixin {
      * transparent pixels.
      */
     @Redirect(
-//? if <1.21.9 {
+//? if <1.21.6 {
             method = "renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;Lnet/minecraft/client/model/geom/ModelPart;Lnet/minecraft/client/model/geom/ModelPart;)V",
+//?} else if <1.21.9 {
+            method = "renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/resources/ResourceLocation;Lnet/minecraft/client/model/geom/ModelPart;Z)V",
 //?} else if <1.21.11 {
             method = "renderHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/resources/ResourceLocation;Lnet/minecraft/client/model/geom/ModelPart;Z)V",
 //?} else {
@@ -72,7 +76,7 @@ public class ItemInHandRendererMixin {
 //?}
             ),
             require = 0,
-//? if <1.21.9 {
+//? if <1.21.6 {
             // Vanilla requests one buffer for the arm and one for the sleeve.
             expect = 2,
             allow = 2
@@ -81,10 +85,16 @@ public class ItemInHandRendererMixin {
             allow = 1
 //?}
     )
-//? if <1.21.9 {
+//? if <1.21.6 {
     private VertexConsumer quickskin$redirectRenderHandBuffer(MultiBufferSource instance, RenderType renderType,
                                                               // Injected arguments from renderHand:
                                                               PoseStack poseStack, MultiBufferSource buffer, int packedLight, AbstractClientPlayer player, ModelPart arm, ModelPart sleeve) {
+//?} else if <1.21.9 {
+    private VertexConsumer quickskin$redirectRenderHandBuffer(MultiBufferSource instance, RenderType renderType,
+                                                              PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+                                                              ResourceLocation skinTexture, ModelPart arm, boolean slim) {
+//?}
+//? if <1.21.9 {
         if (CPMCompatIntegration.shouldDeferToCPM()) return instance.getBuffer(renderType);
 
         // When CPM has a bound player, it manages the texture pipeline and already converts
@@ -123,8 +133,9 @@ public class ItemInHandRendererMixin {
 
 //? if <1.21 {
         ResourceLocation skinTexture = player.getSkinTextureLocation();
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
         ResourceLocation skinTexture = player.getSkin().texture();
+//?} else if <1.21.9 {
 //?} else {
         if (CPMCompatIntegration.isCPMActivelyRendering()) {
             collector.submitModelPart(part, poseStack, renderType, packedLight, overlay, sprite);

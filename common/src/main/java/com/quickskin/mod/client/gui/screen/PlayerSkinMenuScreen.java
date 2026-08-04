@@ -751,7 +751,7 @@ public class PlayerSkinMenuScreen extends Screen {
         );
 
 //? if <1.21 {
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
         // Push pose
         graphics.pose().pushPose();
 
@@ -763,7 +763,7 @@ public class PlayerSkinMenuScreen extends Screen {
         // Render widgets (buttons, etc.)
 //? if <1.21 {
         super.render(graphics, mouseX, mouseY, partialTick);
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
         super.render(graphics, mouseX, mouseY, partialTick);
 
         // Pop pose
@@ -870,7 +870,7 @@ public class PlayerSkinMenuScreen extends Screen {
     @Override
 //? if <1.21 {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
     public void renderBlurredBackground(float partialTick) {
         // Disable the default blur effect - we have our own custom background
     }
@@ -893,10 +893,14 @@ public class PlayerSkinMenuScreen extends Screen {
     }
 
     @Override
+//? if <1.21.9 {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+//?} else {
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
         int keyCode = event.key();
         int scanCode = event.scancode();
         int modifiers = event.modifiers();
+//?}
 //?} else {
     protected void extractBlurredBackground(net.minecraft.client.gui.GuiGraphicsExtractor guiGraphics) {
         // Disable the default blur effect - we have our own custom background

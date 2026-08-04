@@ -3,12 +3,18 @@ package com.quickskin.mod.neoforge.mixin;
 import com.quickskin.mod.client.services.PlayerAppearanceService;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
+//? if <1.21.9 {
+import net.minecraft.client.resources.PlayerSkin;
+import net.minecraft.resources.ResourceLocation;
+//?} else if <1.21.11 {
 import net.minecraft.core.ClientAsset;
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
-//? if <1.21.11 {
 import net.minecraft.resources.ResourceLocation;
 //?} else {
+import net.minecraft.core.ClientAsset;
+import net.minecraft.world.entity.player.PlayerModelType;
+import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.resources.Identifier;
 //?}
 import org.spongepowered.asm.mixin.Mixin;
@@ -66,15 +72,17 @@ public abstract class MixinAbstractClientPlayer {
             return;
         }
 
-        //? if <1.21.11 {
+        //? if <1.21.9 {
+        ResourceLocation skinTexture = originalSkin.texture();
+        PlayerSkin.Model skinModel = originalSkin.model();
+        ResourceLocation capeTexture = originalSkin.capeTexture();
+        //?} else if <1.21.11 {
         ResourceLocation skinTexture = originalSkin.body().texturePath();
-        //?} else {
-        Identifier skinTexture = originalSkin.body().texturePath();
-        //?}
         PlayerModelType skinModel = originalSkin.model();
-        //? if <1.21.11 {
         ResourceLocation capeTexture = originalSkin.cape() != null ? originalSkin.cape().texturePath() : null;
         //?} else {
+        Identifier skinTexture = originalSkin.body().texturePath();
+        PlayerModelType skinModel = originalSkin.model();
         Identifier capeTexture = originalSkin.cape() != null ? originalSkin.cape().texturePath() : null;
         //?}
 
@@ -92,7 +100,11 @@ public abstract class MixinAbstractClientPlayer {
         if (hasCustomSkin || hasModelOverride) {
             String customModel = service.getModelName(self.getUUID());
             if (customModel != null) {
+                //? if <1.21.9 {
+                skinModel = "slim".equals(customModel) ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE;
+                //?} else {
                 skinModel = "slim".equals(customModel) ? PlayerModelType.SLIM : PlayerModelType.WIDE;
+                //?}
             }
         }
 
@@ -112,9 +124,16 @@ public abstract class MixinAbstractClientPlayer {
         }
 
         PlayerSkin customSkin = new PlayerSkin(
+            //? if <1.21.9 {
+            skinTexture,
+            originalSkin.textureUrl(),
+            capeTexture,
+            originalSkin.elytraTexture(),
+            //?} else {
             new ClientAsset.ResourceTexture(skinTexture, skinTexture),
             capeTexture != null ? new ClientAsset.ResourceTexture(capeTexture, capeTexture) : null,
             originalSkin.elytra(),
+            //?}
             skinModel,
             originalSkin.secure()
         );

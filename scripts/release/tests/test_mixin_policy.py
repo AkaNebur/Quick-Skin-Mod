@@ -129,6 +129,14 @@ INJECTION_COUNT_OVERRIDES = {
     ): {1, 2},
     (
         "main:com/quickskin/mod/mixin/SkinManagerMixin.java",
+        "quickskin$modifyInsecureSkin",
+    ): {1, 2},
+    (
+        "neoforge:com/quickskin/mod/neoforge/mixin/SkinManagerMixin.java",
+        "quickskin$modifyInsecureSkin",
+    ): {1, 2},
+    (
+        "main:com/quickskin/mod/mixin/SkinManagerMixin.java",
         "quickskin$modifyCreateLookup",
     ): {3},
     (

@@ -75,7 +75,7 @@ public class StarPatternCache {
             cachedTextureHeight = cachedImage.getHeight();
 
             // Upload to GPU
-            //? if <1.21.9 {
+            //? if <1.21.6 {
             cachedTexture = new DynamicTexture(cachedImage);
             cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache", cachedTexture);
             //?} else if <1.21.11 {
@@ -154,7 +154,7 @@ public class StarPatternCache {
             // Fill with transparent pixels
             for (int y = 0; y < size; y++) {
                 for (int x = 0; x < size; x++) {
-                    //? if <1.21.9 {
+                    //? if <1.21.6 {
                     fallbackImage.setPixelRGBA(x, y, 0x00000000); // Fully transparent
                     //?} else {
                     fallbackImage.setPixel(x, y, 0x00000000); // Fully transparent
@@ -164,7 +164,7 @@ public class StarPatternCache {
 
             cachedTextureWidth = size;
             cachedTextureHeight = size;
-            //? if <1.21.9 {
+            //? if <1.21.6 {
             cachedTexture = new DynamicTexture(fallbackImage);
             cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache_fallback", cachedTexture);
             //?} else if <1.21.11 {
@@ -181,7 +181,7 @@ public class StarPatternCache {
         }
     }
 
-    //? if >=1.21.9 {
+    //? if >=1.21.6 {
     /**
      * Re-apply linear filtering before rendering.
      * RenderType may reset texture parameters, so this ensures smooth sub-pixel scrolling.

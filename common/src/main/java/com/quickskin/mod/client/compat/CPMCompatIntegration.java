@@ -6,7 +6,7 @@ import com.quickskin.mod.platform.PlatformHelper;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
-//? if <1.21.9 {
+//? if <1.21.4 {
 import net.minecraft.client.renderer.texture.HttpTexture;
 //?}
 //? if <1.21.11 {
@@ -27,7 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Locale;
-//? if <1.21.9 {
+//? if <1.21.4 {
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 //?}
@@ -87,7 +87,7 @@ public final class CPMCompatIntegration {
     private static final ThreadLocal<Integer> renderDepth = ThreadLocal.withInitial(() -> 0);
     private static final ThreadLocal<Long> renderDepthTouchedAt = ThreadLocal.withInitial(() -> 0L);
 
-    //? if <1.21.9 {
+    //? if <1.21.4 {
     private static final Map<String, ResourceLocation> httpTextureCache = new ConcurrentHashMap<>();
     //?}
 
@@ -611,7 +611,7 @@ public final class CPMCompatIntegration {
             return null;
         }
 
-        //? if <1.21.9 {
+        //? if <1.21.4 {
         ResourceLocation cached = httpTextureCache.get(hash);
         if (cached != null) {
             if (Minecraft.getInstance().getTextureManager().getTexture(cached, null) != null) {
@@ -661,7 +661,7 @@ public final class CPMCompatIntegration {
             }
             return;
         }
-        //? if <1.21.9 {
+        //? if <1.21.4 {
         if (hash != null) {
             ResourceLocation old = httpTextureCache.remove(hash);
             if (old != null) {
@@ -677,7 +677,7 @@ public final class CPMCompatIntegration {
 
     /** Releases every connection-owned legacy CPM bridge texture. */
     public static void clearHttpTextureCache() {
-        //? if <1.21.9 {
+        //? if <1.21.4 {
         for (ResourceLocation location : httpTextureCache.values()) {
             try {
                 Minecraft.getInstance().getTextureManager().release(location);

@@ -1,7 +1,11 @@
 package com.quickskin.mod.platform.neoforge;
 
 import net.neoforged.fml.ModList;
+//? if <1.21.9 {
+import net.neoforged.fml.loading.FMLLoader;
+//?} else {
 import net.neoforged.fml.loading.FMLEnvironment;
+//?}
 import net.neoforged.fml.loading.FMLPaths;
 
 import java.nio.file.Path;
@@ -47,6 +51,10 @@ public class PlatformHelperImpl {
     }
 
     public static boolean isDevelopmentEnvironment() {
+        //? if <1.21.9 {
+        return !FMLLoader.isProduction();
+        //?} else {
         return !FMLEnvironment.isProduction();
+        //?}
     }
 }

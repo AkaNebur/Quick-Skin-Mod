@@ -589,7 +589,7 @@ public class SettingsScreen extends Screen {
             //?}
         }
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         graphics.flush();
         //?} else {
         // Disable depth test so the blur/overlay/modal panels render on top of the 3D player widget
@@ -651,7 +651,7 @@ public class SettingsScreen extends Screen {
             }
         }
 
-        //? if <1.21.9 {
+        //? if <1.21 {
         graphics.pose().popPose();
         //?} else {
         org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);

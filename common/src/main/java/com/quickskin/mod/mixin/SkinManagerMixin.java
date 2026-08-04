@@ -1,7 +1,7 @@
 package com.quickskin.mod.mixin;
 
 import com.mojang.authlib.GameProfile;
-//? if <1.21.9 {
+//? if <1.21.4 {
 import com.quickskin.mod.client.compat.CPMCompatIntegration;
 //?} else {
 //?}
@@ -31,7 +31,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-//? if >=1.21.9 {
+//? if >=1.21.4 {
 import java.util.Optional;
 //?}
 import java.util.UUID;
@@ -91,7 +91,7 @@ public class SkinManagerMixin {
             boolean anyOverride = false;
 
             if (hasCustomSkin) {
-//? if <1.21.9 {
+//? if <1.21.4 {
                 ResourceLocation customSkin;
                 if (CPMCompatIntegration.isAvailable()) {
                     // When CPM is installed, register skin as HttpTexture so CPM can
@@ -275,8 +275,13 @@ public class SkinManagerMixin {
             at = @At("RETURN"),
             cancellable = true,
             require = 1,
+//? if <1.21.4 {
             expect = 1,
             allow = 1
+//?} else {
+            expect = 2,
+            allow = 2
+//?}
     )
     private void quickskin$modifyInsecureSkin(GameProfile profile, CallbackInfoReturnable<PlayerSkin> cir) {
         UUID uuid = profile.getId();
@@ -318,7 +323,7 @@ public class SkinManagerMixin {
      * (cache hit), so getInsecureSkin (which calls getOrLoad().getNow(null)) will also
      * see the modified skin through this mixin.
      */
-//? if <1.21.9 {
+//? if <1.21.4 {
     @Inject(
             method = "getOrLoad",
             at = @At("RETURN"),
@@ -328,6 +333,18 @@ public class SkinManagerMixin {
             allow = 1
     )
     private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<PlayerSkin>> cir) {
+        UUID uuid = profile.getId();
+//?} else if <1.21.9 {
+    /** In MC 1.21.4-1.21.8, getOrLoad wraps the resolved skin in Optional. */
+    @Inject(
+            method = "getOrLoad",
+            at = @At("RETURN"),
+            cancellable = true,
+            require = 1,
+            expect = 1,
+            allow = 1
+    )
+    private void quickskin$modifyGetOrLoad(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
         UUID uuid = profile.getId();
 //?} else {
     /** In MC 1.21.9, the async loader was renamed to get. */
@@ -367,10 +384,14 @@ public class SkinManagerMixin {
         // Only wrap the future if we actually have overrides to apply
         if (!hasServiceOverrides && !hasTitleScreenFallback) return;
 
-//? if <1.21.9 {
+//? if <1.21.4 {
         CompletableFuture<PlayerSkin> original = cir.getReturnValue();
         CompletableFuture<PlayerSkin> modified = original.thenApply(skin -> {
             return quickskin$applyOverrides(skin, uuid);
+//?} else if <1.21.9 {
+        CompletableFuture<Optional<PlayerSkin>> original = cir.getReturnValue();
+        CompletableFuture<Optional<PlayerSkin>> modified = original.thenApply(optSkin -> {
+            return optSkin.map(skin -> quickskin$applyOverrides(skin, uuid));
 //?} else {
         CompletableFuture<Optional<PlayerSkin>> original = cir.getReturnValue();
         CompletableFuture<Optional<PlayerSkin>> modified = original.thenApply(optSkin -> {

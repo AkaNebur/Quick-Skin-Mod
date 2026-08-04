@@ -1,6 +1,6 @@
 package com.quickskin.mod.client.gui.util;
 
-//? if <1.21.9 {
+//? if <1.21.6 {
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.quickskin.mod.QuickSkin;
 //?}
@@ -15,7 +15,7 @@ import com.quickskin.mod.client.gui.effect.BlurHandler;
 import com.quickskin.mod.config.ClientConfig;
 import com.quickskin.mod.common.data.BackgroundStyle;
 //? if <1.21 {
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
 import com.quickskin.mod.platform.PlatformHelper;
 //?} else if <1.21.11 {
 import com.quickskin.mod.platform.PlatformHelper;
@@ -34,7 +34,7 @@ import net.minecraft.client.renderer.PanoramaRenderer;
 //?} else {
 import net.minecraft.client.renderer.Panorama;
 //?}
-//? if >=1.21.9 {
+//? if >=1.21.6 {
 import net.minecraft.client.renderer.RenderPipelines;
 //?}
 //? if <1.21.11 {
@@ -109,7 +109,7 @@ public class BackgroundRenderer {
         // 2. Star pattern
         renderStarPattern(screen, graphics, partialTick);
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(0.0F, 0.0F, 0.0F, 0.75F);
@@ -139,7 +139,7 @@ public class BackgroundRenderer {
         double pixelsPerSecond = 5.0;
         int tileSize = StarPatternCache.getTileSize();
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         ResourceLocation starTexture = StarPatternCache.getTextureLocation();
         int texWidth = StarPatternCache.getTextureWidth();
         int texHeight = StarPatternCache.getTextureHeight();
@@ -163,7 +163,7 @@ public class BackgroundRenderer {
         double smoothTime = (tickCount + partialTick) / 20.0;
         double offsetX = (smoothTime * pixelsPerSecond) % tileSize;
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 0.15f);
@@ -172,7 +172,7 @@ public class BackgroundRenderer {
         int argbColor = (38 << 24) | (255 << 16) | (255 << 8) | 255; // 0x26FFFFFF
         //?}
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         float u0 = (float)offsetX / (float)texWidth;
         float v0 = 0.0f;
         float u1 = u0 + ((float)screen.width / (float)texWidth);
@@ -182,7 +182,7 @@ public class BackgroundRenderer {
         StarPatternCache.ensureLinearFiltering();
         //?}
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         var pose = graphics.pose();
         pose.pushPose();
         RenderSystem.setShaderTexture(0, starTexture);
@@ -251,7 +251,7 @@ public class BackgroundRenderer {
 
             //? if <1.21 {
             GuiCompat.renderPanorama(panoramaRenderer, partialTick);
-            //?} else if <1.21.9 {
+            //?} else if <1.21.6 {
             panoramaRenderer.render(graphics, screen.width, screen.height, 1.0F, partialTick);
             //?} else if <1.21.11 {
             panoramaRenderer.render(graphics, screen.width, screen.height, true);
@@ -268,7 +268,7 @@ public class BackgroundRenderer {
             RenderSystem.enableBlend();
             graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
             GuiCompat.blit(graphics, PANORAMA_OVERLAY, 0, 0, 0, 0.0F, 0.0F, screen.width, screen.height, 16, 128);
-            //?} else if <1.21.9 {
+            //?} else if <1.21.6 {
             graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
             graphics.blit(PANORAMA_OVERLAY, 0, 0, 0, 0.0F, 0.0F, screen.width, screen.height, 16, 128);
             //?} else if <1.21.11 {

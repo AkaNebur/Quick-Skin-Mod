@@ -1,7 +1,7 @@
 package com.quickskin.mod.client.rendering;
 
 import com.mojang.blaze3d.platform.Lighting;
-//? if <1.21.9 {
+//? if <1.21.6 {
 import com.mojang.blaze3d.systems.RenderSystem;
 //?} else {
 //?}
@@ -25,7 +25,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 //?}
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
-//? if <1.21.9 {
+//? if <1.21.4 {
 import net.minecraft.client.model.PlayerModel;
 //?} else if <1.21.11 {
 import net.minecraft.client.model.PlayerCapeModel;
@@ -63,17 +63,15 @@ import net.minecraft.world.item.ItemStack;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 
-//? if <1.21.9 {
-//?} else if <26.2 {
+//? if >=1.21.6 {
+import java.util.Map;
+    //? if <26.2 {
 import java.util.LinkedHashMap;
-//?} else {
+    //?} else {
 import java.util.IdentityHashMap;
+    //?}
 //?}
 import java.util.Locale;
-//? if <1.21.9 {
-//?} else {
-import java.util.Map;
-//?}
 
 /**
  * Utility for rendering player models in GUI using vanilla Minecraft rendering
@@ -95,9 +93,13 @@ public class PlayerModelRenderer {
 
     // Grass block caching - cache is built on first use
     private static boolean grassBlockCacheBuilt = false;
-//?} else if <1.21.9 {
+//?} else if <1.21.4 {
     private static PlayerModel<?>  classicModel;
     private static PlayerModel<?> slimModel;
+//?} else if <1.21.6 {
+    private static PlayerModel classicModel;
+    private static PlayerModel slimModel;
+    private static PlayerCapeModel capeModel;
 //?} else if <26.2 {
     private static PlayerModel  classicModel;
     private static PlayerModel slimModel;
@@ -226,24 +228,24 @@ public class PlayerModelRenderer {
         if (classicModel == null) {
             Minecraft mc = Minecraft.getInstance();
             ModelPart classicRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER);
-//? if <1.21.9 {
+//? if <1.21.4 {
             classicModel = new PlayerModel<>(classicRoot, false);
 //?} else {
             classicModel = new PlayerModel(classicRoot, false);
 //?}
 
             ModelPart slimRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER_SLIM);
-//? if <1.21.9 {
+//? if <1.21.4 {
             slimModel = new PlayerModel<>(slimRoot, true);
 //?} else {
             slimModel = new PlayerModel(slimRoot, true);
 
-            // In MC 1.21.9+, the cape is a separate model (PlayerCapeModel).
+            // In MC 1.21.4+, the cape is a separate model (PlayerCapeModel).
             ModelPart capeRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER_CAPE);
             capeModel = new PlayerCapeModel(capeRoot);
 //?}
         }
-//? if <1.21.9 {
+//? if <1.21.6 {
 //?} else if <26.2 {
     }
 
@@ -407,7 +409,7 @@ public class PlayerModelRenderer {
         if (slot == EquipmentSlot.OFFHAND) return PreviewEquipmentPolicy.Slot.OFF_HAND;
         return null;
     }
-//? if <1.21.9 {
+//? if <1.21.6 {
 //?} else {
 
     /**
@@ -467,11 +469,19 @@ public class PlayerModelRenderer {
                 humanoid.feetEquipment = ItemStack.EMPTY;
             }
         }
+//? if <1.21.9 {
+        if (state instanceof net.minecraft.client.renderer.entity.state.PlayerRenderState player) {
+            if (PreviewEquipmentPolicy.suppresses(PreviewEquipmentPolicy.Slot.MAIN_HAND)) {
+                // Carried-on-head item; the item-in-hand layer draws it from its own baked state.
+                player.heldOnHead.clear();
+            }
+//?} else {
         if (state instanceof net.minecraft.client.renderer.entity.state.AvatarRenderState avatar) {
             if (PreviewEquipmentPolicy.suppresses(PreviewEquipmentPolicy.Slot.MAIN_HAND)) {
                 // Carried-on-head item; the item-in-hand layer draws it from its own baked state.
                 avatar.heldOnHead.clear();
             }
+//?}
         }
     }
 //?}
@@ -621,7 +631,7 @@ public class PlayerModelRenderer {
             // Render grass block if sitting animation is active AND we're not in a world
             // When in-game, animations are controlled by the game, so don't render the custom grass block
             if ("sit".equals(playerData.getCurrentAnimation() != null ? playerData.getCurrentAnimation().toLowerCase(Locale.ROOT) : null) && mc.level == null) {
-//? if <1.21.9 {
+//? if <1.21.6 {
                 PoseStack poseStack = graphics.pose();
                 MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
 //?} else if <26.2 {
@@ -669,7 +679,7 @@ public class PlayerModelRenderer {
                     x,
                     y,
                     (int)scale,
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
             // The entity render runs inline, so the previewed entity keys the preview cape and the
             // binding is released as soon as the call returns. Equipment suppression is scoped the
             // same way: the layers read the live entity during this call and nowhere else.
@@ -699,9 +709,11 @@ public class PlayerModelRenderer {
             var dispatcher = mc.getEntityRenderDispatcher();
             var renderer = dispatcher.getRenderer(playerToRender);
             var renderState = renderer.createRenderState(playerToRender, 1.0f);
+//? if >=1.21.9 {
             renderState.lightCoords = 15728880; // full bright
             renderState.shadowPieces.clear();
             renderState.outlineColor = 0;
+//?}
 
             // createRenderState already copied the entity's rotation (set at lines 157-161),
             // so we only need to normalize bounding box for scale=1
@@ -816,13 +828,13 @@ public class PlayerModelRenderer {
 //?}
                     quaternionXZ,
                     quaternionY,
-//? if <1.21.9 {
+//? if <1.21.6 {
                     playerToRender
 //?} else {
                     x1, y1, x2, y2
 //?}
             );
-//? if <1.21.9 {
+//? if <1.21.6 {
             } finally {
                 endPreviewEquipment(playerToRender);
                 unbindPreviewCape(playerToRender);
@@ -921,7 +933,7 @@ public class PlayerModelRenderer {
         }
 
         // Get Minecraft instance for tick count
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
         PoseStack poseStack = graphics.pose();
         poseStack.pushPose();
 
@@ -956,7 +968,7 @@ public class PlayerModelRenderer {
 //?} else {
 //?}
         Minecraft mc = Minecraft.getInstance();
-//? if <1.21.9 {
+//? if <1.21.6 {
 
         // Get buffer source
         MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
@@ -1002,7 +1014,7 @@ public class PlayerModelRenderer {
         );
 
         // Render cape AFTER model if present
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
         // Render the model with skin texture
         RenderType renderType = RenderType.entityTranslucent(playerData.getSkinLocation());
         var vertexConsumer = bufferSource.getBuffer(renderType);
@@ -1040,7 +1052,7 @@ public class PlayerModelRenderer {
         Identifier capeTexture = null;
 //?}
         if (playerData.getCapeLocation() != null) {
-//? if <1.21.9 {
+//? if <1.21.6 {
             ResourceLocation capeAtlasLocation = playerData.getCapeLocation();
 //?} else {
             capeTexture = CapeAnimationHelper.resolveVisibleFrame(
@@ -1048,7 +1060,7 @@ public class PlayerModelRenderer {
 //?}
             String capeId = playerData.getCapeId();
 
-//? if <1.21.9 {
+//? if <1.21.6 {
             ResourceLocation finalCapeTexture = CapeAnimationHelper.resolveVisibleFrame(
                     capeAtlasLocation, capeId);
 //?} else {
@@ -1074,7 +1086,7 @@ public class PlayerModelRenderer {
 
                 poseStack.popPose();
             }
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
 
             if (finalCapeTexture != null) {
                 // Now render the cape using the final texture
@@ -1097,7 +1109,7 @@ public class PlayerModelRenderer {
 //?} else {
 //?}
         }
-//? if <1.21.9 {
+//? if <1.21.6 {
 //?} else if <26.2 {
         // Force PiP cache invalidation when cape changes by adding imperceptible scale nudge
         int capeHash = capeTexture != null ? capeTexture.hashCode() : 0;
@@ -1109,7 +1121,7 @@ public class PlayerModelRenderer {
         float scaleNudge = 0.000001f * (capeHash & 0xFF);
 //?}
 
-//? if <1.21.9 {
+//? if <1.21.6 {
         // Flush buffers - matches guiGraphics.flush() in InventoryScreen
         bufferSource.endBatch();
 //?} else {
@@ -1122,7 +1134,7 @@ public class PlayerModelRenderer {
         poseStack.popPose();
 
         // Don't restore lighting - let next render set what it needs (optimization)
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
         poseStack.popPose();
 
         // Lighting.setupFor3DItems();
@@ -1182,7 +1194,7 @@ public class PlayerModelRenderer {
 //?}
     }
 
-//? if <1.21.9 {
+//? if <1.21.6 {
     /**
      * Legacy method for backwards compatibility - forwards to new GuiGraphics version
      */
@@ -2787,7 +2799,7 @@ public class PlayerModelRenderer {
             brightness = 1.2f + ((normalizedRotation - 270.0f) / 90.0f) * 0.225f;
         }
 
-//? if <1.21.9 {
+//? if <1.21.6 {
         // Setup shader lights with custom light vector
         // Standard light direction (from top-left-front)
         org.joml.Vector3f lightDirection = new org.joml.Vector3f(0.2f, 1.0f, -0.7f).normalize();
@@ -2900,7 +2912,7 @@ public class PlayerModelRenderer {
      */
     public static void clearGrassBlockCache() {
         grassBlockCacheBuilt = false;
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
 //?} else {
         clearPendingCapes();
 //?}

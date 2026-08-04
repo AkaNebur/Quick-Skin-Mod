@@ -9,6 +9,9 @@ import com.quickskin.mod.common.util.TextureAlphaDetector;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.Minecraft;
 import com.mojang.blaze3d.vertex.PoseStack;
+//? if <1.21.9 {
+import com.mojang.blaze3d.vertex.VertexConsumer;
+//?}
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.player.AbstractClientPlayer;
 //? if <1.21.11 {
@@ -17,9 +20,17 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 //?}
+//? if <1.21.9 {
+import net.minecraft.client.renderer.MultiBufferSource;
+//?} else {
 import net.minecraft.client.renderer.SubmitNodeCollector;
+//?}
 import net.minecraft.client.renderer.entity.layers.CapeLayer;
+//? if <1.21.9 {
+import net.minecraft.client.renderer.entity.state.PlayerRenderState;
+//?} else {
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+//?}
 import net.minecraft.client.renderer.texture.OverlayTexture;
 //? if <1.21.11 {
 import net.minecraft.resources.ResourceLocation;
@@ -40,17 +51,26 @@ import java.util.UUID;
 @Mixin(value = CapeLayer.class, priority = 1100)
 public class CapeLayerMixin {
 
-    // In MC 1.21.9+, CapeLayer has its own cape model (PlayerCapeModel) separate from PlayerModel.
+    // In MC 1.21.4+, CapeLayer has its own cape model (PlayerCapeModel) separate from PlayerModel.
     @Shadow @Final private HumanoidModel<?> model;
 
+//? if <1.21.9 {
+    @Inject(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/renderer/entity/state/PlayerRenderState;FF)V",
+//?} else {
     @Inject(method = "submit(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;ILnet/minecraft/client/renderer/entity/state/AvatarRenderState;FF)V",
+//?}
             at = @At("HEAD"),
             cancellable = true,
             require = 1,
             expect = 1,
             allow = 1)
+//? if <1.21.9 {
+    private void quickskin$renderCustomCape(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+                                            PlayerRenderState renderState, float yRot, float xRot,
+//?} else {
     private void quickskin$renderCustomCape(PoseStack poseStack, SubmitNodeCollector buffer, int packedLight,
                                             AvatarRenderState renderState, float yRot, float xRot,
+//?}
                                             CallbackInfo ci) {
         // The GUI preview renders the real player entity, so without this the cape below would be
         // the one the player is wearing rather than the one the editor has selected. The preview
@@ -134,9 +154,15 @@ public class CapeLayerMixin {
             }
             if (capeTexture == null) {
                 // Fall back to render state's skin cape
+//? if <1.21.9 {
+                if (renderState.skin != null) {
+                    capeTexture = renderState.skin.capeTexture();
+                }
+//?} else {
                 if (renderState.skin != null && renderState.skin.cape() != null) {
                     capeTexture = renderState.skin.cape().texturePath();
                 }
+//?}
             }
         }
 
@@ -182,15 +208,24 @@ public class CapeLayerMixin {
             }
         }
 
-        // Replicate the vanilla cape rendering logic with our custom render type
-        // In MC 1.21.9+, CapeLayer uses SubmitNodeCollector.submitModel() instead of renderToBuffer().
+        // Replicate the vanilla cape rendering logic with our custom render type.
         @SuppressWarnings("unchecked")
+//? if <1.21.9 {
+        HumanoidModel<PlayerRenderState> capeModel =
+                (HumanoidModel<PlayerRenderState>) (HumanoidModel<?>) this.model;
+        ((CapeLayer)(Object)this).getParentModel().copyPropertiesTo(capeModel);
+        capeModel.setupAnim(renderState);
+
+        VertexConsumer vertexConsumer = buffer.getBuffer(renderType);
+        capeModel.renderToBuffer(poseStack, vertexConsumer, packedLight, OverlayTexture.NO_OVERLAY);
+//?} else {
         HumanoidModel<AvatarRenderState> capeModel = (HumanoidModel<AvatarRenderState>) (HumanoidModel<?>) this.model;
         capeModel.setupAnim(renderState);
 
         // Submit the cape model with our custom render type
         buffer.submitModel(capeModel, renderState, poseStack, renderType, packedLight,
                 OverlayTexture.NO_OVERLAY, renderState.outlineColor, null);
+//?}
 
         ci.cancel();
     }

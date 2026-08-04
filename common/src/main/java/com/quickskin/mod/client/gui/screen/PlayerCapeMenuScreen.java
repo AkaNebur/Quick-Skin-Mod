@@ -1,6 +1,6 @@
 package com.quickskin.mod.client.gui.screen;
 
-//? if <1.21.9 {
+//? if <1.21.6 {
 import com.mojang.blaze3d.systems.RenderSystem;
 //?} else {
 //?}
@@ -53,7 +53,7 @@ import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
-//? if <1.21.9 {
+//? if <1.21.6 {
 //?} else if <26.1.2 {
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
@@ -91,7 +91,7 @@ public class PlayerCapeMenuScreen extends Screen {
 //?} else if <1.21.11 {
     private static final ResourceLocation STAR_PATTERN_TEXTURE = ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/gui/background/star_pattern.png");
     private static final ResourceLocation VIGNETTE_LOCATION = ResourceLocation.withDefaultNamespace("textures/misc/vignette.png");
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
     private static final ResourceLocation STAR_PATTERN_TEXTURE = ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/gui/background/star_pattern.png");
     private static final ResourceLocation VIGNETTE_LOCATION = ResourceLocation.withDefaultNamespace("textures/misc/vignette.png");
 //?} else {
@@ -884,7 +884,7 @@ public class PlayerCapeMenuScreen extends Screen {
 //? if <1.21 {
         // Title
         graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFF);
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
         // Flush and ensure clean render state
         graphics.flush();
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
@@ -898,7 +898,7 @@ public class PlayerCapeMenuScreen extends Screen {
         graphics.fill(this.gridX - 5, this.gridY - 5,
                 this.gridX + this.gridWidth + 5, this.gridY + this.gridHeight + 5,
                 0xB0000000);
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
         // Title
         graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFF);
 
@@ -935,7 +935,7 @@ public class PlayerCapeMenuScreen extends Screen {
         this.renderScrollbar(graphics);
 //? if <1.21 {
         super.render(graphics, mouseX, mouseY, partialTick);
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
 
         // Pop pose
         graphics.pose().popPose();
@@ -973,7 +973,7 @@ public class PlayerCapeMenuScreen extends Screen {
                         GuiCompat.tooltip(
                                 graphics, this.font, Component.translatable("quickskin.tooltip.delete_cape"),
                                 mouseX, mouseY);
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
                         graphics.renderTooltip(this.font, Component.translatable("quickskin.tooltip.delete_cape"), mouseX, mouseY);
 //?} else if <26.1.2 {
                         // 1.21.11: renderTooltip takes List<ClientTooltipComponent>
@@ -994,7 +994,7 @@ public class PlayerCapeMenuScreen extends Screen {
                 if (!deleteHovered) {
 //? if <1.21 {
                     GuiCompat.tooltip(graphics, this.font, getCapeTooltip(hoveredCape), mouseX, mouseY);
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
                     graphics.renderTooltip(this.font, getCapeTooltip(hoveredCape), Optional.empty(), mouseX, mouseY);
 //?} else if <26.1.2 {
                     // 1.21.11: renderTooltip takes List<ClientTooltipComponent>
@@ -1257,7 +1257,7 @@ public class PlayerCapeMenuScreen extends Screen {
         }
     }
 
-//? if <1.21.9 {
+//? if <1.21.6 {
     private void renderCapeTexture(GuiGraphics graphics, ResourceLocation texture, CapeEntry cape, int x, int y) {
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 //?} else if <1.21.11 {
@@ -1292,7 +1292,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         float scaleFactor = capeDisplaySize / 56f;
 
-//? if <1.21.9 {
+//? if <1.21.6 {
         graphics.pose().pushPose();
         graphics.pose().translate(x + capeDisplaySize / 2f, y + capeDisplaySize / 2f, 0);
         graphics.pose().scale(scaleFactor * 3.5f, scaleFactor * 3.5f, 1.0f);
@@ -1314,7 +1314,7 @@ public class PlayerCapeMenuScreen extends Screen {
         GuiCompat.blit(graphics, texture, 0, 0, 10, 16, u, v, uWidth, vHeight, textureWidth, textureHeight);
 //?}
 
-//? if <1.21.9 {
+//? if <1.21.6 {
         graphics.pose().popPose();
 //?} else {
         graphics.pose().popMatrix();
@@ -1833,7 +1833,7 @@ public class PlayerCapeMenuScreen extends Screen {
         // Don't pause game when this screen is open
         return false;
 //? if <1.21 {
-//?} else if <1.21.9 {
+//?} else if <1.21.6 {
     }
 
     @Override

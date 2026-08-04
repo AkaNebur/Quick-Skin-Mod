@@ -154,7 +154,7 @@ public class RenameScreen extends Screen {
             //?}
         }
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         graphics.flush();
         //?} else {
         // Disable depth test so the blur/overlay/modal panels render on top of the 3D player widget
@@ -262,7 +262,7 @@ public class RenameScreen extends Screen {
         }
     }
     //? if >=1.21 {
-        //? if <1.21.9 {
+        //? if <1.21.6 {
     @Override
     public void renderBlurredBackground(float partialTick) {
         // Disable the default Minecraft blur effect - we handle blur with BlurHandler

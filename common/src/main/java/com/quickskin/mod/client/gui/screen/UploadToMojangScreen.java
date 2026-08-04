@@ -181,7 +181,7 @@ public class UploadToMojangScreen extends Screen {
             //?}
         }
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         graphics.flush();
         //?}
         BlurHandler.renderBlur();
@@ -417,7 +417,7 @@ public class UploadToMojangScreen extends Screen {
         this.callback.accept(false);
     }
     //? if >=1.21 {
-        //? if <1.21.9 {
+        //? if <1.21.6 {
     @Override
     public void renderBlurredBackground(float partialTick) {
         // Disable the default Minecraft blur effect - we handle blur with BlurHandler

@@ -106,7 +106,7 @@ public class AnimatedTextureManager {
             boolean registered = false;
             try {
                 copyFrameTo(framePixels, 0);
-                //? if <1.21.9 {
+                //? if <1.21.6 {
                 createdTexture = new DynamicTexture(framePixels);
                 //?} else {
                 createdTexture = new DynamicTexture(
@@ -115,7 +115,7 @@ public class AnimatedTextureManager {
 
                 String texId = "animated/"
                         + animationId.replaceAll("[^a-zA-Z0-9/._-]", "_");
-                //? if <1.21.9 {
+                //? if <1.21.6 {
                 createdLocation = Minecraft.getInstance().getTextureManager()
                         .register(texId, createdTexture);
                 //?} else if <1.21.11 {
@@ -252,7 +252,7 @@ public class AnimatedTextureManager {
             //?}
             boolean registered = false;
             try {
-                //? if <1.21.9 {
+                //? if <1.21.6 {
                 createdTexture = new DynamicTexture(firstFramePixels);
                 //?} else {
                 createdTexture = new DynamicTexture(
@@ -260,7 +260,7 @@ public class AnimatedTextureManager {
                 //?}
                 String texId = "animated_static/"
                         + animationId.replaceAll("[^a-zA-Z0-9/._-]", "_");
-                //? if <1.21.9 {
+                //? if <1.21.6 {
                 createdLocation = Minecraft.getInstance().getTextureManager()
                         .register(texId, createdTexture);
                 //?} else if <1.21.11 {

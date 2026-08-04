@@ -1,7 +1,7 @@
 package com.quickskin.mod.client.gui.screen;
 
 import com.mojang.blaze3d.platform.NativeImage;
-//? if <1.21.9 {
+//? if <1.21.6 {
 import com.mojang.blaze3d.systems.RenderSystem;
 //?}
 import com.quickskin.mod.QuickSkin;
@@ -193,7 +193,7 @@ public class CapeAdjustScreen extends Screen {
                 ? sourceImage.getSubimage(0, 0, sourceImage.getWidth(), srcFrameHeight)
                 : sourceImage;
         NativeImage nativeImage = convertToNativeImage(displayFrame);
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         sourceDynTexture = new DynamicTexture(nativeImage);
         sourceTextureLocation = Minecraft.getInstance().getTextureManager()
                 .register("quickskin/cape_adjust_source", sourceDynTexture);
@@ -1168,7 +1168,7 @@ public class CapeAdjustScreen extends Screen {
     //?}
         if (sourceTextureLocation == null) return;
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         //?}
 
@@ -1402,7 +1402,7 @@ public class CapeAdjustScreen extends Screen {
         graphics.fill(rightPanelX - 1, previewStartY - 1,
                 rightPanelX + backPreviewW + 1, previewStartY + backPreviewH + 1, 0xFF333333);
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         //?}
         // Cape back UV: (1*s, 1*s) size (10*s, 16*s)
@@ -1423,7 +1423,7 @@ public class CapeAdjustScreen extends Screen {
         graphics.fill(frontX - 1, previewStartY - 1,
                 frontX + backPreviewW + 1, previewStartY + backPreviewH + 1, 0xFF333333);
 
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         //?}
         // Cape front UV: (12*s, 1*s) size (10*s, 16*s)
@@ -1455,7 +1455,7 @@ public class CapeAdjustScreen extends Screen {
             graphics.fill(rightPanelX - 1, elytraY - 1,
                     rightPanelX + elytraPreviewW + 1, elytraY + elytraPreviewH + 1, 0xFF333333);
 
-            //? if <1.21.9 {
+            //? if <1.21.6 {
             RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
             //?}
             // Back/outer wing UV: (36*s, 2*s) size (10*s, 20*s)
@@ -1500,7 +1500,7 @@ public class CapeAdjustScreen extends Screen {
         }
 
         NativeImage ni = convertToNativeImage(cape);
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         previewDynTexture = new DynamicTexture(ni);
         previewTextureLocation = Minecraft.getInstance().getTextureManager()
                 .register("quickskin/cape_adjust_preview", previewDynTexture);
@@ -1728,7 +1728,7 @@ public class CapeAdjustScreen extends Screen {
         return false;
     }
 
-    //? if >=1.21.9 {
+    //? if >=1.21.6 {
         //? if <26.1.2 {
     @Override
     protected void renderBlurredBackground(GuiGraphics guiGraphics) {

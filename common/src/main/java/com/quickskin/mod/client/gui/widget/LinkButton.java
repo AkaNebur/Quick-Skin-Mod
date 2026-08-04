@@ -1,6 +1,6 @@
 package com.quickskin.mod.client.gui.widget;
 
-//? if <1.21.9 {
+//? if <1.21.6 {
 import com.mojang.blaze3d.systems.RenderSystem;
 //?}
 import com.quickskin.mod.QuickSkin;
@@ -62,7 +62,7 @@ public class LinkButton extends Button {
         //?} else {
         super.renderWidget(graphics, mouseX, mouseY, partialTicks);
         //?}
-        //? if <1.21.9 {
+        //? if <1.21.6 {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.enableDepthTest();

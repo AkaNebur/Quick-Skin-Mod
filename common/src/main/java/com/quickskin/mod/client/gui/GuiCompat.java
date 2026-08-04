@@ -57,7 +57,7 @@ public final class GuiCompat {
     //? if <1.21 {
     public static void renderPanorama(PanoramaRenderer panorama, float partialTick) {
         panorama.render(partialTick, 1.0F);
-    //?} else if <1.21.9 {
+    //?} else if <1.21.6 {
     public static void renderPanorama(
             PanoramaRenderer panorama, GuiGraphics graphics, int width, int height, float partialTick) {
         panorama.render(graphics, width, height, 1.0F, partialTick);
@@ -186,7 +186,7 @@ public final class GuiCompat {
                 //?}
     }
 
-    //? if <1.21.9 {
+    //? if <1.21.6 {
     public static void tooltip(GuiGraphics graphics, Font font, Component text, int mouseX, int mouseY) {
         graphics.renderTooltip(font, text, mouseX, mouseY);
     //?} else if <1.21.11 {
@@ -215,7 +215,7 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <1.21.9 {
+    //? if <1.21.6 {
     public static void tooltip(GuiGraphics graphics, Font font, List<Component> lines, int mouseX, int mouseY) {
         graphics.renderTooltip(font, lines, Optional.empty(), mouseX, mouseY);
     //?} else if <1.21.11 {
