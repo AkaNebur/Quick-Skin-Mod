@@ -118,7 +118,7 @@ public class ClientEvents {
 
             // Handle HUD overlay dragging only when a GUI is open (cursor is visible)
             if (!client.mouseHandler.isMouseGrabbed()) {
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                 boolean leftMouseDown = GLFW.glfwGetMouseButton(client.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
                 boolean rightMouseDown = GLFW.glfwGetMouseButton(client.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
                 //?} else {
@@ -661,7 +661,7 @@ public class ClientEvents {
                 com.quickskin.mod.client.gui.widget.PlayerWidget.getActiveInteractionWidget();
         //?} else {
         // Debug screen toggle (F3)
-            //? if <1.21.11 {
+            //? if <1.21.9 {
         ClientScreenInputEvent.KEY_PRESSED_PRE.register((client, screen, keyCode, scanCode, modifiers) -> {
             //?} else {
         ClientScreenInputEvent.KEY_PRESSED_PRE.register((client, screen, keyEvent) -> {
@@ -681,7 +681,7 @@ public class ClientEvents {
             }
             //?} else {
         // Raw input (for global keybinds outside of screens)
-            //? if <1.21.11 {
+            //? if <1.21.9 {
         ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
             //?} else {
         ClientRawInputEvent.KEY_PRESSED.register((client, action, keyEvent) -> {
