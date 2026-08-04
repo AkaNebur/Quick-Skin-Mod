@@ -7,7 +7,7 @@ import com.quickskin.mod.client.gui.GuiCompat;
 import com.quickskin.mod.QuickSkin;
 //? if <1.21 {
 import com.quickskin.mod.client.rendering.PreviewRenderBackend;
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 //?} else {
 import com.quickskin.mod.client.rendering.PreviewRenderBackend;
@@ -92,10 +92,9 @@ public class PlayerWidget extends AbstractWidget {
      * How the running Minecraft version decides which GUI draw ends up on top.
      *
      * <p>Vanilla swapped the depth-buffered immediate GUI for the deferred, depth-less
-     * {@code GuiRenderState} in 1.21.6; the mod ships no lane between 1.21.6 and 1.21.10, so the
-     * boundary that matters here is its first lane on the new pipeline.
+     * {@code GuiRenderState} in 1.21.6; 1.21.9 is the first supported lane on the new pipeline.
      */
-//? if <1.21.11 {
+//? if <1.21.9 {
     private static final PreviewCompositeOrder.Pipeline GUI_PIPELINE =
             PreviewCompositeOrder.Pipeline.DEPTH_ORDERED;
 //?} else {
@@ -651,7 +650,7 @@ public class PlayerWidget extends AbstractWidget {
 //? if <1.21 {
         // Use GuiGraphics directly for vanilla rendering method
         PreviewRenderBackend.INSTANCE.renderPlayerModel(
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
         // Use GuiGraphics directly for vanilla rendering method
         PlayerModelRenderer.renderPlayerModel(
 //?} else if <26.1.2 {
@@ -845,7 +844,7 @@ public class PlayerWidget extends AbstractWidget {
     }
 
     @Override
-//? if <1.21.11 {
+//? if <1.21.9 {
     public void onClick(double mouseX, double mouseY) {
 //?} else {
     public void onClick(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
@@ -860,7 +859,7 @@ public class PlayerWidget extends AbstractWidget {
         // let that widget handle it instead
         if (isOverPriorityWidget(mouseX, mouseY)) {
             return false; // Don't consume the event, let the button handle it
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         // Check if customization feature is enabled and left click
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
@@ -954,7 +953,7 @@ public class PlayerWidget extends AbstractWidget {
                 activeInteractionWidget = null; // Clear active widget
             }
             handled = true;
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (!isDragging || button != 0) {
             return false;
@@ -1005,7 +1004,7 @@ public class PlayerWidget extends AbstractWidget {
             // Save the new offsets to config
             savePositionOffsetsToConfig(newOffsetX, newOffsetY);
             return true;
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (!isDragging || button != 0) {
             return false;

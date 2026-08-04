@@ -35,8 +35,10 @@ public class EarsModMixin {
         if (EarsCompatIntegration.isDisabledResult(cir.getReturnValue())) {
             //? if <1.21 {
             ResourceLocation skin = peer.getSkinTextureLocation();
-            //?} else if <1.21.11 {
+            //?} else if <1.21.9 {
             ResourceLocation skin = peer.getSkin().texture();
+            //?} else if <1.21.11 {
+            ResourceLocation skin = peer.getSkin().body().texturePath();
             //?} else {
             Identifier skin = peer.getSkin().body().texturePath();
             //?}

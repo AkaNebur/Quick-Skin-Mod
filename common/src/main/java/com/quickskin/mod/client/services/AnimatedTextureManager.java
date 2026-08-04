@@ -106,20 +106,24 @@ public class AnimatedTextureManager {
             boolean registered = false;
             try {
                 copyFrameTo(framePixels, 0);
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                 createdTexture = new DynamicTexture(framePixels);
                 //?} else {
                 createdTexture = new DynamicTexture(
                         () -> "quickskin_anim_" + animationId, framePixels);
                 //?}
 
-                String texId = "quickskin/animated/"
+                String texId = "animated/"
                         + animationId.replaceAll("[^a-zA-Z0-9/._-]", "_");
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                 createdLocation = Minecraft.getInstance().getTextureManager()
                         .register(texId, createdTexture);
+                //?} else if <1.21.11 {
+                createdLocation = ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, texId);
+                Minecraft.getInstance().getTextureManager().register(
+                        createdLocation, createdTexture);
                 //?} else {
-                createdLocation = Identifier.parse(texId);
+                createdLocation = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, texId);
                 Minecraft.getInstance().getTextureManager().register(
                         createdLocation, createdTexture);
                 //?}
@@ -248,19 +252,23 @@ public class AnimatedTextureManager {
             //?}
             boolean registered = false;
             try {
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                 createdTexture = new DynamicTexture(firstFramePixels);
                 //?} else {
                 createdTexture = new DynamicTexture(
                         () -> "quickskin_static_anim_" + animationId, firstFramePixels);
                 //?}
-                String texId = "quickskin/animated_static/"
+                String texId = "animated_static/"
                         + animationId.replaceAll("[^a-zA-Z0-9/._-]", "_");
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                 createdLocation = Minecraft.getInstance().getTextureManager()
                         .register(texId, createdTexture);
+                //?} else if <1.21.11 {
+                createdLocation = ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, texId);
+                Minecraft.getInstance().getTextureManager().register(
+                        createdLocation, createdTexture);
                 //?} else {
-                createdLocation = Identifier.parse(texId);
+                createdLocation = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, texId);
                 Minecraft.getInstance().getTextureManager().register(
                         createdLocation, createdTexture);
                 //?}

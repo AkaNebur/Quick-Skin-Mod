@@ -62,7 +62,7 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
      * Make an entry visible by scrolling to it
      */
     public void makeVisible(SkinEntry entry) {
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         this.ensureVisible(entry);
         //?} else {
         this.scrollToEntry(entry);
@@ -82,7 +82,7 @@ public class SkinListWidget extends ContainerObjectSelectionList<SkinEntry> {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     protected int getScrollbarPosition() {
         //? if <1.21 {
         return this.x1 - 6;

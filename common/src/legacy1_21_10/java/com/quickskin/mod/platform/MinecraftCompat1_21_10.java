@@ -4,15 +4,15 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
-/** Minecraft 1.21.11 implementation of rendering and image compatibility operations. */
-public final class MinecraftCompat1_21_11 implements MinecraftCompat {
+/** Minecraft 1.21.10 implementation of rendering and image compatibility operations. */
+public final class MinecraftCompat1_21_10 implements MinecraftCompat {
     private static Field cloakField;
     private static boolean cloakFieldChecked;
 
@@ -51,13 +51,13 @@ public final class MinecraftCompat1_21_11 implements MinecraftCompat {
     }
 
     @Override
-    public void blit(GuiGraphics graphics, Identifier texture, int x, int y, int blitOffset,
+    public void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, int blitOffset,
                      float u, float v, int width, int height, int textureWidth, int textureHeight) {
         graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, width, height, textureWidth, textureHeight);
     }
 
     @Override
-    public void blit(GuiGraphics graphics, Identifier texture, int x, int y, int width, int height,
+    public void blit(GuiGraphics graphics, ResourceLocation texture, int x, int y, int width, int height,
                      float u, float v, int regionWidth, int regionHeight,
                      int textureWidth, int textureHeight) {
         graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, width, height,

@@ -16,7 +16,7 @@ public class StyledButton extends Button {
     private static final int NORMAL_BG = 0xB0000000;         // Dark semi-transparent background
     private static final int HOVER_BG = 0xC0202020;          // Slightly lighter on hover
     private static final int OUTLINE = 0x80FFFFFF;           // White outline
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     private static final int TEXT_COLOR = 0xFFFFFF;          // White text
     //?} else {
     private static final int TEXT_COLOR = 0xFFFFFFFF;          // White text
@@ -71,7 +71,7 @@ public class StyledButton extends Button {
                      outlineColor);
 
         // Draw centered text
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         int textColor = this.active ? TEXT_COLOR : 0x666666;
         //?} else {
         int textColor = this.active ? TEXT_COLOR : 0xFF666666;
@@ -90,13 +90,13 @@ public class StyledButton extends Button {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     protected boolean isValidClickButton(int button) {
     //?} else {
     protected boolean isValidClickButton(net.minecraft.client.input.MouseButtonInfo buttonInfo) {
     //?}
         // Only allow left-click
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         return button == 0;
         //?} else {
         return buttonInfo.button() == 0;

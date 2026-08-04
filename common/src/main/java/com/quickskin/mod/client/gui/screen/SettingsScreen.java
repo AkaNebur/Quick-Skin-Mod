@@ -369,7 +369,7 @@ public class SettingsScreen extends Screen {
             }
 
             @Override
-            //? if <1.21.11 {
+            //? if <1.21.9 {
             public boolean mouseClicked(double pMouseX, double pMouseY, int pButton) {
             //?} else {
             public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
@@ -490,7 +490,7 @@ public class SettingsScreen extends Screen {
             }
 
             @Override
-            //? if <1.21.11 {
+            //? if <1.21.9 {
             public boolean mouseClicked(double pMouseX, double pMouseY, int pButton) {
             //?} else {
             public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
@@ -589,7 +589,7 @@ public class SettingsScreen extends Screen {
             //?}
         }
 
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         graphics.flush();
         //?} else {
         // Disable depth test so the blur/overlay/modal panels render on top of the 3D player widget
@@ -651,7 +651,7 @@ public class SettingsScreen extends Screen {
             }
         }
 
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         graphics.pose().popPose();
         //?} else {
         org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
@@ -690,7 +690,7 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
     //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
@@ -712,7 +712,7 @@ public class SettingsScreen extends Screen {
             this.onClose();
             return true;
         }
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         return super.mouseClicked(mouseX, mouseY, button);
         //?} else {
         return super.mouseClicked(event, focused);
@@ -720,7 +720,7 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
     //?} else {
     public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double dragX, double dragY) {
@@ -748,7 +748,7 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
     //?} else {
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
@@ -761,7 +761,7 @@ public class SettingsScreen extends Screen {
             if (keyCode == InputConstants.KEY_ESCAPE) {
                 this.selectedKey.setKey(InputConstants.UNKNOWN);
             } else {
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                 this.selectedKey.setKey(InputConstants.getKey(keyCode, scanCode));
                 //?} else {
                 this.selectedKey.setKey(InputConstants.getKey(event));
@@ -777,7 +777,7 @@ public class SettingsScreen extends Screen {
             this.onClose();
             return true;
         }
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         return super.keyPressed(keyCode, scanCode, modifiers);
         //?} else {
         return super.keyPressed(event);

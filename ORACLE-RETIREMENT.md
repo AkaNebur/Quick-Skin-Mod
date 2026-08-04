@@ -17,7 +17,7 @@ fix the canonical source or an active `legacy*` overlay; do not copy an oracle t
 ## Live resource routing after retirement
 
 No `src/v*` content remains. Canonical resources live in each module's `src/main/resources` tree.
-The active `common/src/legacy1_21_11` overlay is Java-only, so this branch has no era-specific
+The active `common/src/legacy1_21_10` overlay is Java-only, so this branch has no era-specific
 resource overrides.
 
 Gradle consumes the canonical resources for every active module. Fabric

@@ -6,7 +6,11 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.core.ClientAsset;
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -62,12 +66,24 @@ public abstract class MixinAbstractClientPlayer {
             return;
         }
 
+        //? if <1.21.11 {
+        ResourceLocation skinTexture = originalSkin.body().texturePath();
+        //?} else {
         Identifier skinTexture = originalSkin.body().texturePath();
+        //?}
         PlayerModelType skinModel = originalSkin.model();
+        //? if <1.21.11 {
+        ResourceLocation capeTexture = originalSkin.cape() != null ? originalSkin.cape().texturePath() : null;
+        //?} else {
         Identifier capeTexture = originalSkin.cape() != null ? originalSkin.cape().texturePath() : null;
+        //?}
 
         if (hasCustomSkin) {
+            //? if <1.21.11 {
+            ResourceLocation customSkin = service.getSkinLocation(self.getUUID());
+            //?} else {
             Identifier customSkin = service.getSkinLocation(self.getUUID());
+            //?}
             if (customSkin != null) {
                 skinTexture = customSkin;
             }
@@ -81,7 +97,11 @@ public abstract class MixinAbstractClientPlayer {
         }
 
         if (hasCustomCape) {
+            //? if <1.21.11 {
+            ResourceLocation customCape = service.getCapeLocation(self.getUUID());
+            //?} else {
             Identifier customCape = service.getCapeLocation(self.getUUID());
+            //?}
             if (customCape != null) {
                 capeTexture = customCape;
             } else {

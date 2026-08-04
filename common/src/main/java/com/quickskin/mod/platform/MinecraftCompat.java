@@ -23,8 +23,10 @@ public interface MinecraftCompat {
     //? if <1.21 {
     MinecraftCompat INSTANCE = new MinecraftCompat1_20_1();
     //?} else {
-        //? if <1.21.11 {
+        //? if <1.21.9 {
     MinecraftCompat INSTANCE = new MinecraftCompat1_21_1();
+        //?} else if <1.21.11 {
+    MinecraftCompat INSTANCE = new MinecraftCompat1_21_10();
         //?} else if <26.1.2 {
     MinecraftCompat INSTANCE = new MinecraftCompat1_21_11();
         //?} else {
@@ -36,7 +38,7 @@ public interface MinecraftCompat {
 
     int getPixel(NativeImage image, int x, int y);
 
-    //? if <1.21.11 {
+    //? if <1.21.4 {
     void setYoung(PlayerModel<?> model, boolean young);
     void setCrouching(PlayerModel<?> model, boolean crouching);
     void setRiding(PlayerModel<?> model, boolean riding);
@@ -74,7 +76,7 @@ public interface MinecraftCompat {
         //?}
     //?}
 
-    //? if <1.21.11 {
+    //? if <1.21.4 {
     void renderCloak(PlayerModel<?> model, PoseStack poseStack, VertexConsumer vertexConsumer,
                      int packedLight, int packedOverlay);
     //?} else {

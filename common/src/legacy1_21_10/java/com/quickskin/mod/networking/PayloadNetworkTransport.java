@@ -4,7 +4,7 @@ import dev.architectury.networking.NetworkManager;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
-/** 1.21.11 payload-era transport implementation. */
+/** 1.21.10 payload-era transport implementation. */
 public final class PayloadNetworkTransport implements NetworkTransport {
     @Override
     public void init() {

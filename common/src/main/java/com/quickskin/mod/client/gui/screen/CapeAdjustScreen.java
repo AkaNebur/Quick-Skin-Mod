@@ -1,7 +1,7 @@
 package com.quickskin.mod.client.gui.screen;
 
 import com.mojang.blaze3d.platform.NativeImage;
-//? if <1.21.11 {
+//? if <1.21.9 {
 import com.mojang.blaze3d.systems.RenderSystem;
 //?}
 import com.quickskin.mod.QuickSkin;
@@ -193,10 +193,15 @@ public class CapeAdjustScreen extends Screen {
                 ? sourceImage.getSubimage(0, 0, sourceImage.getWidth(), srcFrameHeight)
                 : sourceImage;
         NativeImage nativeImage = convertToNativeImage(displayFrame);
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         sourceDynTexture = new DynamicTexture(nativeImage);
         sourceTextureLocation = Minecraft.getInstance().getTextureManager()
                 .register("quickskin/cape_adjust_source", sourceDynTexture);
+        //?} else if <1.21.11 {
+        sourceDynTexture = new DynamicTexture(() -> "quickskin_cape_adjust_source", nativeImage);
+        sourceTextureLocation = ResourceLocation.fromNamespaceAndPath(
+                QuickSkin.MOD_ID, "cape_adjust_source");
+        Minecraft.getInstance().getTextureManager().register(sourceTextureLocation, sourceDynTexture);
         //?} else {
         sourceDynTexture = new DynamicTexture(() -> "quickskin_cape_adjust_source", nativeImage);
         sourceTextureLocation = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "cape_adjust_source");
@@ -362,7 +367,7 @@ public class CapeAdjustScreen extends Screen {
                 }
             }
             if (skinLocation == null && player != null) {
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                     //? if <1.21 {
                 skinLocation = player.getSkinTextureLocation();
                     //?} else {
@@ -372,7 +377,7 @@ public class CapeAdjustScreen extends Screen {
                 skinLocation = player.getSkin().body().texturePath();
                 //?}
                 if ("auto".equals(modelType)) {
-                    //? if <1.21.11 {
+                    //? if <1.21.9 {
                         //? if <1.21 {
                     String vanillaModel = player.getModelName(); // "default" or "slim"
                     modelType = "slim".equals(vanillaModel) ? "slim" : "classic";
@@ -1085,7 +1090,7 @@ public class CapeAdjustScreen extends Screen {
             if (i == selectedResolution) {
                 int btnW2 = Math.min(this.width - resBtnX - 10, 120);
                 int by = gridY + i * 24;
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                 graphics.renderOutline(resBtnX - 1, by - 1, btnW2 + 2, 22, 0xFF55FF55);
                 //?} else {
                 drawOutline(graphics, resBtnX - 1, by - 1, btnW2 + 2, 22, 0xFF55FF55);
@@ -1140,7 +1145,7 @@ public class CapeAdjustScreen extends Screen {
         }
 
         graphics.fill(pickerX, pickerY, pickerX + pickerW, pickerY + pickerH, 0xF0111111);
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         graphics.renderOutline(pickerX, pickerY, pickerW, pickerH, 0x80FFFFFF);
         //?} else {
         drawOutline(graphics, pickerX, pickerY, pickerW, pickerH, 0x80FFFFFF);
@@ -1149,7 +1154,7 @@ public class CapeAdjustScreen extends Screen {
         int bigSwatchX = pickerX + pickerW - 5 - SWATCH_SIZE;
         int bigSwatchBottom = pickerY + 57;
         graphics.fill(bigSwatchX, pickerY + 5, bigSwatchX + SWATCH_SIZE, bigSwatchBottom, fillArgb);
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         graphics.renderOutline(bigSwatchX, pickerY + 5, SWATCH_SIZE, bigSwatchBottom - pickerY - 5, 0x80FFFFFF);
         //?} else {
         drawOutline(graphics, bigSwatchX, pickerY + 5, SWATCH_SIZE, bigSwatchBottom - pickerY - 5, 0x80FFFFFF);
@@ -1163,7 +1168,7 @@ public class CapeAdjustScreen extends Screen {
     //?}
         if (sourceTextureLocation == null) return;
 
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         //?}
 
@@ -1184,7 +1189,7 @@ public class CapeAdjustScreen extends Screen {
     private void renderCapeGridOverlay(GuiGraphicsExtractor graphics) {
     //?}
         // Cape template overlay — Outer border
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         graphics.renderOutline(gridX, gridY, gridW, gridH, 0xAAFFFFFF);
         //?} else {
         drawOutline(graphics, gridX, gridY, gridW, gridH, 0xAAFFFFFF);
@@ -1232,13 +1237,13 @@ public class CapeAdjustScreen extends Screen {
         graphics.fill(gridX, elytraBottomY, gridX + gridW, gridY + gridH, 0x88000000);
 
         // --- Cape outlines ---
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         graphics.renderOutline(backX, backY, backW, backH, 0xFF5599FF);
         //?} else {
         drawOutline(graphics, backX, backY, backW, backH, 0xFF5599FF);
         //?}
         if (!mirrorFrontBack) {
-            //? if <1.21.11 {
+            //? if <1.21.9 {
             graphics.renderOutline(frontX, backY, frontW, backH, 0xFF55FF55);
             //?} else {
             drawOutline(graphics, frontX, backY, frontW, backH, 0xFF55FF55);
@@ -1397,7 +1402,7 @@ public class CapeAdjustScreen extends Screen {
         graphics.fill(rightPanelX - 1, previewStartY - 1,
                 rightPanelX + backPreviewW + 1, previewStartY + backPreviewH + 1, 0xFF333333);
 
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         //?}
         // Cape back UV: (1*s, 1*s) size (10*s, 16*s)
@@ -1418,7 +1423,7 @@ public class CapeAdjustScreen extends Screen {
         graphics.fill(frontX - 1, previewStartY - 1,
                 frontX + backPreviewW + 1, previewStartY + backPreviewH + 1, 0xFF333333);
 
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         //?}
         // Cape front UV: (12*s, 1*s) size (10*s, 16*s)
@@ -1450,7 +1455,7 @@ public class CapeAdjustScreen extends Screen {
             graphics.fill(rightPanelX - 1, elytraY - 1,
                     rightPanelX + elytraPreviewW + 1, elytraY + elytraPreviewH + 1, 0xFF333333);
 
-            //? if <1.21.11 {
+            //? if <1.21.9 {
             RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
             //?}
             // Back/outer wing UV: (36*s, 2*s) size (10*s, 20*s)
@@ -1495,10 +1500,15 @@ public class CapeAdjustScreen extends Screen {
         }
 
         NativeImage ni = convertToNativeImage(cape);
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         previewDynTexture = new DynamicTexture(ni);
         previewTextureLocation = Minecraft.getInstance().getTextureManager()
                 .register("quickskin/cape_adjust_preview", previewDynTexture);
+        //?} else if <1.21.11 {
+        previewDynTexture = new DynamicTexture(() -> "quickskin_cape_adjust_preview", ni);
+        previewTextureLocation = ResourceLocation.fromNamespaceAndPath(
+                QuickSkin.MOD_ID, "cape_adjust_preview");
+        Minecraft.getInstance().getTextureManager().register(previewTextureLocation, previewDynTexture);
         //?} else {
         previewDynTexture = new DynamicTexture(() -> "quickskin_cape_adjust_preview", ni);
         previewTextureLocation = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "cape_adjust_preview");
@@ -1551,7 +1561,7 @@ public class CapeAdjustScreen extends Screen {
     // --- Input handling ---
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
     //?} else {
@@ -1586,7 +1596,7 @@ public class CapeAdjustScreen extends Screen {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
     //?} else {
     public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent event) {
@@ -1597,7 +1607,7 @@ public class CapeAdjustScreen extends Screen {
             previewDirty = true;
             return true;
         }
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         return super.mouseReleased(mouseX, mouseY, button);
         //?} else {
         return super.mouseReleased(event);
@@ -1605,7 +1615,7 @@ public class CapeAdjustScreen extends Screen {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
     //?} else {
     public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double dragX, double dragY) {
@@ -1623,7 +1633,7 @@ public class CapeAdjustScreen extends Screen {
             previewDirty = true;
             return true;
         }
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         //?} else {
         return super.mouseDragged(event, dragX, dragY);
@@ -1718,7 +1728,7 @@ public class CapeAdjustScreen extends Screen {
         return false;
     }
 
-    //? if >=1.21.11 {
+    //? if >=1.21.9 {
         //? if <26.1.2 {
     @Override
     protected void renderBlurredBackground(GuiGraphics guiGraphics) {
@@ -1742,7 +1752,7 @@ public class CapeAdjustScreen extends Screen {
         //?}
     //?}
 
-    //? if >=1.21.11 {
+    //? if >=1.21.9 {
     /**
      * Draws an outline immediately using fill calls.
      */

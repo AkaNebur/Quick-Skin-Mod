@@ -1,6 +1,6 @@
 package com.quickskin.mod.client.gui.screen;
 
-//? if <1.21.11 {
+//? if <1.21.9 {
 import com.mojang.blaze3d.systems.RenderSystem;
 //?} else {
 //?}
@@ -53,7 +53,7 @@ import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
-//? if <1.21.11 {
+//? if <1.21.9 {
 //?} else if <26.1.2 {
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
@@ -89,6 +89,9 @@ public class PlayerCapeMenuScreen extends Screen {
     private static final ResourceLocation STAR_PATTERN_TEXTURE = new ResourceLocation(QuickSkin.MOD_ID, "textures/gui/background/star_pattern.png");
     private static final ResourceLocation VIGNETTE_LOCATION = new ResourceLocation("textures/misc/vignette.png");
 //?} else if <1.21.11 {
+    private static final ResourceLocation STAR_PATTERN_TEXTURE = ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/gui/background/star_pattern.png");
+    private static final ResourceLocation VIGNETTE_LOCATION = ResourceLocation.withDefaultNamespace("textures/misc/vignette.png");
+//?} else if <1.21.9 {
     private static final ResourceLocation STAR_PATTERN_TEXTURE = ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "textures/gui/background/star_pattern.png");
     private static final ResourceLocation VIGNETTE_LOCATION = ResourceLocation.withDefaultNamespace("textures/misc/vignette.png");
 //?} else {
@@ -302,7 +305,7 @@ public class PlayerCapeMenuScreen extends Screen {
         if (skinLocation == null && player != null) {
 //? if <1.21 {
             skinLocation = player.getSkinTextureLocation();
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
             skinLocation = player.getSkin().texture();
 //?} else {
             skinLocation = player.getSkin().body().texturePath();
@@ -326,7 +329,7 @@ public class PlayerCapeMenuScreen extends Screen {
                     if ("default".equals(modelType)) {
                         modelType = "classic";
                     }
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
                     modelType = player.getSkin().model().id(); // "default" or "slim"
                     // Convert Minecraft model names to our format
                     if ("default".equals(modelType)) {
@@ -344,7 +347,7 @@ public class PlayerCapeMenuScreen extends Screen {
                 if ("default".equals(modelType)) {
                     modelType = "classic";
                 }
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
                 modelType = player.getSkin().model().id(); // "default" or "slim"
                 // Convert Minecraft model names to our format
                 if ("default".equals(modelType)) {
@@ -881,7 +884,7 @@ public class PlayerCapeMenuScreen extends Screen {
 //? if <1.21 {
         // Title
         graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFF);
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
         // Flush and ensure clean render state
         graphics.flush();
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
@@ -895,7 +898,7 @@ public class PlayerCapeMenuScreen extends Screen {
         graphics.fill(this.gridX - 5, this.gridY - 5,
                 this.gridX + this.gridWidth + 5, this.gridY + this.gridHeight + 5,
                 0xB0000000);
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
         // Title
         graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFF);
 
@@ -932,7 +935,7 @@ public class PlayerCapeMenuScreen extends Screen {
         this.renderScrollbar(graphics);
 //? if <1.21 {
         super.render(graphics, mouseX, mouseY, partialTick);
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
 
         // Pop pose
         graphics.pose().popPose();
@@ -970,7 +973,7 @@ public class PlayerCapeMenuScreen extends Screen {
                         GuiCompat.tooltip(
                                 graphics, this.font, Component.translatable("quickskin.tooltip.delete_cape"),
                                 mouseX, mouseY);
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
                         graphics.renderTooltip(this.font, Component.translatable("quickskin.tooltip.delete_cape"), mouseX, mouseY);
 //?} else if <26.1.2 {
                         // 1.21.11: renderTooltip takes List<ClientTooltipComponent>
@@ -991,7 +994,7 @@ public class PlayerCapeMenuScreen extends Screen {
                 if (!deleteHovered) {
 //? if <1.21 {
                     GuiCompat.tooltip(graphics, this.font, getCapeTooltip(hoveredCape), mouseX, mouseY);
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
                     graphics.renderTooltip(this.font, getCapeTooltip(hoveredCape), Optional.empty(), mouseX, mouseY);
 //?} else if <26.1.2 {
                     // 1.21.11: renderTooltip takes List<ClientTooltipComponent>
@@ -1035,7 +1038,7 @@ public class PlayerCapeMenuScreen extends Screen {
         int headerY = startY + HEADER_HEIGHT / 2 - 4;
         if (headerY > gridY - 8 && headerY < gridY + gridHeight + 8) {
             int gridCenterX = this.gridX + (this.gridWidth / 2);
-//? if <1.21.11 {
+//? if <1.21.9 {
             graphics.drawCenteredString(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFF);
 //?} else if <26.1.2 {
             graphics.drawCenteredString(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFFFF);
@@ -1098,7 +1101,7 @@ public class PlayerCapeMenuScreen extends Screen {
         Component mainMessage = Component.translatable("quickskin.dropzone.capes.main");
         Component subMessage = Component.translatable("quickskin.dropzone.capes.sub");
 
-//? if <1.21.11 {
+//? if <1.21.9 {
         int mainColor = isHovering ? 0xFFFFFF : 0xE0E0E0;
         int subColor = isHovering ? 0xB0B0B0 : 0x909090;
 //?} else {
@@ -1171,7 +1174,7 @@ public class PlayerCapeMenuScreen extends Screen {
             graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0x90000000);
 
             // Render "None" text centered
-//? if <1.21.11 {
+//? if <1.21.9 {
             graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.option.none"), x + capeDisplaySize / 2,
                     y + capeDisplaySize / 2 - 4, 0xFFFFFF);
 //?} else if <26.1.2 {
@@ -1184,7 +1187,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
             // Highlight if selected or hovered
             if (isSelected(cape)) {
-//? if <1.21.11 {
+//? if <1.21.9 {
                 graphics.renderOutline(x - 2, y - 2, capeDisplaySize + 4, capeDisplaySize + 4, 0xFFFFFF00);
 //?} else {
                 drawOutline(graphics,x - 2, y - 2, capeDisplaySize + 4, capeDisplaySize + 4, 0xFFFFFF00);
@@ -1229,7 +1232,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         // Highlight if selected or hovered
         if (isSelected(cape)) {
-//? if <1.21.11 {
+//? if <1.21.9 {
             graphics.renderOutline(x - 2, y - 2, capeDisplaySize + 4, capeDisplaySize + 4, 0xFFFFFF00);
 //?} else {
             drawOutline(graphics,x - 2, y - 2, capeDisplaySize + 4, capeDisplaySize + 4, 0xFFFFFF00);
@@ -1254,9 +1257,11 @@ public class PlayerCapeMenuScreen extends Screen {
         }
     }
 
-//? if <1.21.11 {
+//? if <1.21.9 {
     private void renderCapeTexture(GuiGraphics graphics, ResourceLocation texture, CapeEntry cape, int x, int y) {
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+//?} else if <1.21.11 {
+    private void renderCapeTexture(GuiGraphics graphics, ResourceLocation texture, CapeEntry cape, int x, int y) {
 //?} else if <26.1.2 {
     private void renderCapeTexture(GuiGraphics graphics, Identifier texture, CapeEntry cape, int x, int y) {
         // RenderSystem.setShaderColor() removed in 1.21.11
@@ -1287,7 +1292,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         float scaleFactor = capeDisplaySize / 56f;
 
-//? if <1.21.11 {
+//? if <1.21.9 {
         graphics.pose().pushPose();
         graphics.pose().translate(x + capeDisplaySize / 2f, y + capeDisplaySize / 2f, 0);
         graphics.pose().scale(scaleFactor * 3.5f, scaleFactor * 3.5f, 1.0f);
@@ -1309,7 +1314,7 @@ public class PlayerCapeMenuScreen extends Screen {
         GuiCompat.blit(graphics, texture, 0, 0, 10, 16, u, v, uWidth, vHeight, textureWidth, textureHeight);
 //?}
 
-//? if <1.21.11 {
+//? if <1.21.9 {
         graphics.pose().popPose();
 //?} else {
         graphics.pose().popMatrix();
@@ -1322,7 +1327,7 @@ public class PlayerCapeMenuScreen extends Screen {
     private void renderLoadingTexture(GuiGraphicsExtractor graphics, int x, int y) {
 //?}
         graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0xFF222222);
-//? if <1.21.11 {
+//? if <1.21.9 {
         graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.loading"),
                 x + capeDisplaySize / 2, y + capeDisplaySize / 2 - 4, 0x888888);
 //?} else if <26.1.2 {
@@ -1366,7 +1371,7 @@ public class PlayerCapeMenuScreen extends Screen {
         graphics.fill(badgeX, badgeY, badgeX + badgeWidth, badgeY + badgeHeight, bgColor);
 
         int borderColor = 0xFF00AADD;
-//? if <1.21.11 {
+//? if <1.21.9 {
         graphics.renderOutline(badgeX, badgeY, badgeWidth, badgeHeight, borderColor);
 //?} else {
         drawOutline(graphics,badgeX, badgeY, badgeWidth, badgeHeight, borderColor);
@@ -1416,7 +1421,7 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     @Override
-//? if <1.21.11 {
+//? if <1.21.9 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
 //?} else if <26.1.2 {
@@ -1581,7 +1586,7 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     @Override
-//? if <1.21.11 {
+//? if <1.21.9 {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
 //?} else if <26.1.2 {
     public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double dragX, double dragY) {
@@ -1594,7 +1599,7 @@ public class PlayerCapeMenuScreen extends Screen {
             updateScrollFromMouse(mouseY);
             return true;
         }
-//? if <1.21.11 {
+//? if <1.21.9 {
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
 //?} else {
         return super.mouseDragged(event, dragX, dragY);
@@ -1602,7 +1607,7 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     @Override
-//? if <1.21.11 {
+//? if <1.21.9 {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
 //?} else if <26.1.2 {
     public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent event) {
@@ -1614,7 +1619,7 @@ public class PlayerCapeMenuScreen extends Screen {
         if (button == 0) {
             this.isDraggingScrollbar = false;
         }
-//? if <1.21.11 {
+//? if <1.21.9 {
         return super.mouseReleased(mouseX, mouseY, button);
 //?} else {
         return super.mouseReleased(event);
@@ -1828,7 +1833,7 @@ public class PlayerCapeMenuScreen extends Screen {
         // Don't pause game when this screen is open
         return false;
 //? if <1.21 {
-//?} else if <1.21.11 {
+//?} else if <1.21.9 {
     }
 
     @Override
@@ -1958,7 +1963,7 @@ public class PlayerCapeMenuScreen extends Screen {
         }
 
         @Override
-//? if <1.21.11 {
+//? if <1.21.9 {
         public void onRelease(double mouseX, double mouseY) {
             super.onRelease(mouseX, mouseY);
 //?} else {
@@ -1992,7 +1997,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
         return null;
     }
-//? if <1.21.11 {
+//? if <1.21.9 {
 //?} else if <26.1.2 {
 
     /**

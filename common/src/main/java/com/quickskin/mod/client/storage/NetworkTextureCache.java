@@ -335,7 +335,7 @@ public class NetworkTextureCache {
             }
 
             // Create dynamic texture
-            //? if <1.21.11 {
+            //? if <1.21.9 {
             dynamicTexture = new DynamicTexture(nativeImage);
             //?} else {
             dynamicTexture = new DynamicTexture(() -> "quickskin_network_" + hash, nativeImage);

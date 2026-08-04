@@ -2,7 +2,7 @@ package com.quickskin.mod.client.rendering;
 
 import net.minecraft.client.gui.GuiGraphics;
 
-/** Direct 1.21.11 GUI render-state preview submission backend. */
+/** Direct 1.21.10 GUI render-state preview submission backend. */
 public final class RenderStatePreviewRenderBackend implements PreviewRenderBackend {
     @Override
     public void renderPlayerModel(

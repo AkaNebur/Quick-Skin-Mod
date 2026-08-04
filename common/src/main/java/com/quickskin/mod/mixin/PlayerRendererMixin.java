@@ -6,21 +6,25 @@ import com.quickskin.mod.common.data.TextureQuality;
 import com.quickskin.mod.config.ClientConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
-//? if <1.21.11 {
+//? if <1.21.9 {
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.resources.ResourceLocation;
 //?} else {
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
+    //? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+    //?} else {
+import net.minecraft.resources.Identifier;
+    //?}
 //?}
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-//? if <1.21.11 {
+//? if <1.21.9 {
 //?} else {
 import java.util.UUID;
 
@@ -33,15 +37,17 @@ import java.util.UUID;
  * doesn't fire for those subclasses, but getTextureLocation() on the renderer is always
  * called regardless of the entity's class hierarchy.
  */
-//? if <1.21.11 {
+//? if <1.21.9 {
 @Mixin(PlayerRenderer.class)
 //?} else {
 @Mixin(AvatarRenderer.class)
 //?}
 public class PlayerRendererMixin {
 
-//? if <1.21.11 {
+//? if <1.21.9 {
     @Inject(method = "getTextureLocation(Lnet/minecraft/client/player/AbstractClientPlayer;)Lnet/minecraft/resources/ResourceLocation;",
+//?} else if <1.21.11 {
+    @Inject(method = "getTextureLocation(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;)Lnet/minecraft/resources/ResourceLocation;",
 //?} else {
     @Inject(method = "getTextureLocation(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;)Lnet/minecraft/resources/Identifier;",
 //?}
@@ -50,15 +56,17 @@ public class PlayerRendererMixin {
             require = 1,
             expect = 1,
             allow = 1)
-//? if <1.21.11 {
+//? if <1.21.9 {
     private void quickskin$overrideTextureLocation(AbstractClientPlayer player, CallbackInfoReturnable<ResourceLocation> cir) {
+//?} else if <1.21.11 {
+    private void quickskin$overrideTextureLocation(AvatarRenderState renderState, CallbackInfoReturnable<ResourceLocation> cir) {
 //?} else {
     private void quickskin$overrideTextureLocation(AvatarRenderState renderState, CallbackInfoReturnable<Identifier> cir) {
 //?}
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
         if (service == null) return;
 
-//? if <1.21.11 {
+//? if <1.21.9 {
 //?} else {
         // Look up the actual player entity from the render state to get UUID
         UUID playerUUID = null;
@@ -74,10 +82,14 @@ public class PlayerRendererMixin {
 
 //?}
         // Try service-based lookup (covers registered data from Essential compat or server sync)
-//? if <1.21.11 {
+//? if <1.21.9 {
         service.markSkinVisible(player.getUUID());
         if (service.hasActiveSkin(player.getUUID())) {
             ResourceLocation customSkin = service.getSkinLocation(player.getUUID());
+//?} else if <1.21.11 {
+        service.markSkinVisible(playerUUID);
+        if (service.hasActiveSkin(playerUUID)) {
+            ResourceLocation customSkin = service.getSkinLocation(playerUUID);
 //?} else {
         service.markSkinVisible(playerUUID);
         if (service.hasActiveSkin(playerUUID)) {
@@ -90,7 +102,7 @@ public class PlayerRendererMixin {
         }
 
         // Title screen fallback: load directly from saved config
-//? if <1.21.11 {
+//? if <1.21.9 {
         if (Minecraft.getInstance().level == null) {
 //?} else {
         if (mc.level == null) {

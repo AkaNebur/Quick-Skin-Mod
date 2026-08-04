@@ -19,7 +19,7 @@ import net.minecraft.client.renderer.Panorama;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner;
 //?}
-//? if >=1.21.11 {
+//? if >=1.21.9 {
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 //?}
@@ -57,10 +57,14 @@ public final class GuiCompat {
     //? if <1.21 {
     public static void renderPanorama(PanoramaRenderer panorama, float partialTick) {
         panorama.render(partialTick, 1.0F);
-    //?} else if <1.21.11 {
+    //?} else if <1.21.9 {
     public static void renderPanorama(
             PanoramaRenderer panorama, GuiGraphics graphics, int width, int height, float partialTick) {
         panorama.render(graphics, width, height, 1.0F, partialTick);
+    //?} else if <1.21.11 {
+    public static void renderPanorama(
+            PanoramaRenderer panorama, GuiGraphics graphics, int width, int height, float partialTick) {
+        panorama.render(graphics, width, height, true);
     //?} else {
         //? if <26.1.2 {
     public static void renderPanorama(
@@ -78,7 +82,7 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public static double mouseX(double mouseX) {
         return mouseX;
     //?} else {
@@ -87,7 +91,7 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public static double mouseY(double mouseY) {
         return mouseY;
     //?} else {
@@ -96,7 +100,7 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public static int mouseButton(int button) {
         return button;
     //?} else {
@@ -105,7 +109,7 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public static int keyCode(int keyCode) {
         return keyCode;
     //?} else {
@@ -182,9 +186,12 @@ public final class GuiCompat {
                 //?}
     }
 
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public static void tooltip(GuiGraphics graphics, Font font, Component text, int mouseX, int mouseY) {
         graphics.renderTooltip(font, text, mouseX, mouseY);
+    //?} else if <1.21.11 {
+    public static void tooltip(GuiGraphics graphics, Font font, Component text, int mouseX, int mouseY) {
+        graphics.setTooltipForNextFrame(font, text, mouseX, mouseY);
     //?} else {
         //? if <26.1.2 {
     public static void tooltip(GuiGraphics graphics, Font font, Component text, int mouseX, int mouseY) {
@@ -208,9 +215,12 @@ public final class GuiCompat {
     //?}
     }
 
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public static void tooltip(GuiGraphics graphics, Font font, List<Component> lines, int mouseX, int mouseY) {
         graphics.renderTooltip(font, lines, Optional.empty(), mouseX, mouseY);
+    //?} else if <1.21.11 {
+    public static void tooltip(GuiGraphics graphics, Font font, List<Component> lines, int mouseX, int mouseY) {
+        graphics.setComponentTooltipForNextFrame(font, lines, mouseX, mouseY);
     //?} else {
         //? if <26.1.2 {
     public static void tooltip(GuiGraphics graphics, Font font, List<Component> lines, int mouseX, int mouseY) {

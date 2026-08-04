@@ -458,7 +458,7 @@ public class ClientEvents {
 
                 // Second priority: Use current player skin (when in-game)
                 if (skinLocation == null && player != null) {
-                    //? if <1.21.11 {
+                    //? if <1.21.9 {
                         //? if <1.21 {
                     skinLocation = player.getSkinTextureLocation();
                         //?} else {
@@ -480,7 +480,7 @@ public class ClientEvents {
                             modelType = metadata.skinModel();
                         } else {
                             // Fallback: detect from the vanilla player's model
-                            //? if <1.21.11 {
+                            //? if <1.21.9 {
                                 //? if <1.21 {
                             modelType = player.getModelName(); // "default" or "slim"
                                 //?} else {
@@ -495,7 +495,7 @@ public class ClientEvents {
                         }
                     } else if ("auto".equals(modelType)) {
                         // No custom skin active, use vanilla player's model
-                        //? if <1.21.11 {
+                        //? if <1.21.9 {
                             //? if <1.21 {
                         modelType = player.getModelName(); // "default" or "slim"
                             //?} else {

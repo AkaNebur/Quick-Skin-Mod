@@ -16,7 +16,7 @@ public class PrimaryButton extends Button {
     private static final int NORMAL_BG = 0xB0005500;         // Dark green semi-transparent background
     private static final int HOVER_BG = 0xC0007700;          // Brighter green on hover
     private static final int OUTLINE = 0x8000DD00;           // Green outline
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     private static final int TEXT_COLOR = 0xFFFFFF;          // White text
     //?} else {
     private static final int TEXT_COLOR = 0xFFFFFFFF;          // White text
@@ -78,13 +78,13 @@ public class PrimaryButton extends Button {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     protected boolean isValidClickButton(int button) {
     //?} else {
     protected boolean isValidClickButton(net.minecraft.client.input.MouseButtonInfo buttonInfo) {
     //?}
         // Only allow left-click
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         return button == 0;
         //?} else {
         return buttonInfo.button() == 0;

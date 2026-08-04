@@ -1,6 +1,6 @@
 package com.quickskin.mod.client.gui.widget;
 
-//? if <1.21.11 {
+//? if <1.21.9 {
 import com.mojang.blaze3d.systems.RenderSystem;
 //?} else {
 import com.quickskin.mod.client.services.LocalAssetManager;
@@ -75,20 +75,18 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public void render(GuiGraphics graphics, int index, int top, int left, int width, int height,
                       int mouseX, int mouseY, boolean isHovered, float partialTicks) {
-    //?} else {
-        //? if <26.1.2 {
+    //?} else if <26.1.2 {
     public void renderContent(GuiGraphics graphics, int mouseX, int mouseY, boolean isHovered, float partialTicks) {
-        //?} else {
+    //?} else {
     public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean isHovered, float partialTicks) {
-        //?}
+    //?}
         int top = this.getY();
         int left = this.getX();
         int width = this.getWidth();
         int height = this.getHeight();
-    //?}
 
         // Selection and hover highlight
         int highlightPaddingH = 4;
@@ -106,7 +104,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             if (isPlayerOwnSkin) {
                 // Selected state for player's own skin - purple highlight with border
                 graphics.fill(highlightLeft, highlightTop, highlightRight, highlightBottom, 0x80A020F0);
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                 graphics.renderOutline(highlightLeft, highlightTop, highlightRight - highlightLeft,
                 //?} else {
                 drawOutline(graphics, highlightLeft, highlightTop, highlightRight - highlightLeft,
@@ -115,7 +113,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             } else {
                 // Selected state - blue highlight with border
                 graphics.fill(highlightLeft, highlightTop, highlightRight, highlightBottom, 0x80308CC0);
-                //? if <1.21.11 {
+                //? if <1.21.9 {
                 graphics.renderOutline(highlightLeft, highlightTop, highlightRight - highlightLeft,
                 //?} else {
                 drawOutline(graphics, highlightLeft, highlightTop, highlightRight - highlightLeft,
@@ -133,7 +131,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         int faceY = top + 4;
 
         if (textureLocation != null) {
-            //? if <1.21.11 {
+            //? if <1.21.9 {
             RenderSystem.enableBlend();
             //?}
 
@@ -161,7 +159,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
                 textureWidth, textureHeight);
             }
 
-            //? if <1.21.11 {
+            //? if <1.21.9 {
             RenderSystem.disableBlend();
             //?}
         } else {
@@ -286,7 +284,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
     //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
@@ -333,7 +331,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
     public @NotNull List<? extends NarratableEntry> narratables() {
         return List.of();
     }
-    //? if >=1.21.11 {
+    //? if >=1.21.9 {
 
     /**
      * Draws an outline immediately using fill calls instead of submitOutline,

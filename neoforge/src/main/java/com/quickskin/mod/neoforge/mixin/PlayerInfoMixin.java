@@ -12,7 +12,11 @@ import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.core.ClientAsset;
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
+//? if <1.21.11 {
+import net.minecraft.resources.ResourceLocation;
+//?} else {
 import net.minecraft.resources.Identifier;
+//?}
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -36,12 +40,24 @@ public abstract class PlayerInfoMixin {
     private PlayerSkin quickskin$cachedSkin = null;
 
     @Unique
+    //? if <1.21.11 {
+    private ResourceLocation quickskin$cachedOriginalTexture = null;
+    //?} else {
     private Identifier quickskin$cachedOriginalTexture = null;
+    //?}
 
     @Unique
+    //? if <1.21.11 {
+    private ResourceLocation quickskin$cachedSkinLocation = null;
+    //?} else {
     private Identifier quickskin$cachedSkinLocation = null;
+    //?}
     @Unique
+    //? if <1.21.11 {
+    private ResourceLocation quickskin$cachedCapeLocation = null;
+    //?} else {
     private Identifier quickskin$cachedCapeLocation = null;
+    //?}
     @Unique
     private String quickskin$cachedModelName = null;
 
@@ -84,8 +100,13 @@ public abstract class PlayerInfoMixin {
             return;
         }
 
+        //? if <1.21.11 {
+        ResourceLocation currentSkinLocation = hasCustomSkin ? service.getSkinLocation(this.profile.id()) : null;
+        ResourceLocation currentCapeLocation = hasCustomCape ? service.getCapeLocation(this.profile.id()) : null;
+        //?} else {
         Identifier currentSkinLocation = hasCustomSkin ? service.getSkinLocation(this.profile.id()) : null;
         Identifier currentCapeLocation = hasCustomCape ? service.getCapeLocation(this.profile.id()) : null;
+        //?}
         String currentModelName = (hasCustomSkin || hasModelOverride) ? service.getModelName(this.profile.id()) : null;
 
         if (quickskin$cachedSkin != null &&
@@ -97,9 +118,17 @@ public abstract class PlayerInfoMixin {
             return;
         }
 
+        //? if <1.21.11 {
+        ResourceLocation skinTexture = original.body().texturePath();
+        //?} else {
         Identifier skinTexture = original.body().texturePath();
+        //?}
         PlayerModelType skinModel = original.model();
+        //? if <1.21.11 {
+        ResourceLocation capeTexture = original.cape() != null ? original.cape().texturePath() : null;
+        //?} else {
         Identifier capeTexture = original.cape() != null ? original.cape().texturePath() : null;
+        //?}
 
         if (hasCustomSkin && currentSkinLocation != null) {
             skinTexture = currentSkinLocation;
@@ -151,9 +180,17 @@ public abstract class PlayerInfoMixin {
         }
 
         LocalAssetManager assetManager = LocalAssetManager.getInstance();
+        //? if <1.21.11 {
+        ResourceLocation skinTexture = null;
+        //?} else {
         Identifier skinTexture = null;
+        //?}
         PlayerModelType skinModel = (original != null) ? original.model() : PlayerModelType.WIDE;
+        //? if <1.21.11 {
+        ResourceLocation capeTexture = null;
+        //?} else {
         Identifier capeTexture = null;
+        //?}
 
         if (hasSkin) {
             skinTexture = assetManager.getTextureLocation(config.activeSkinHash, TextureQuality.FULL);

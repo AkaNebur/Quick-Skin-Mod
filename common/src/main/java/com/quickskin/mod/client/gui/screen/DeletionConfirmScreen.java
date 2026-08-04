@@ -98,7 +98,7 @@ public class DeletionConfirmScreen extends Screen {
             //?}
         }
 
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         graphics.flush();
         //?} else {
         // Disable depth test so the blur/overlay/modal panels render on top of the 3D player widget
@@ -220,7 +220,7 @@ public class DeletionConfirmScreen extends Screen {
     }
 
     @Override
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
     //?} else {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
@@ -235,7 +235,7 @@ public class DeletionConfirmScreen extends Screen {
             return true;
         }
         // Click inside panel - handle normally
-        //? if <1.21.11 {
+        //? if <1.21.9 {
         return super.mouseClicked(mouseX, mouseY, button);
         //?} else {
         return super.mouseClicked(event, focused);
@@ -248,10 +248,15 @@ public class DeletionConfirmScreen extends Screen {
         this.callback.accept(false);
     }
     //? if >=1.21 {
-        //? if <1.21.11 {
+        //? if <1.21.9 {
     @Override
     public void renderBlurredBackground(float partialTick) {
         // Disable the default Minecraft blur effect - we handle blur with BlurHandler
+    }
+        //?} else if <26.1.2 {
+    @Override
+    protected void renderBlurredBackground(GuiGraphics graphics) {
+        // Disable the default Minecraft blur effect - we handle blur with BlurHandler.
     }
         //?}
     //?}

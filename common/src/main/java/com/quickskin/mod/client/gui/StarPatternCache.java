@@ -75,9 +75,14 @@ public class StarPatternCache {
             cachedTextureHeight = cachedImage.getHeight();
 
             // Upload to GPU
-            //? if <1.21.11 {
+            //? if <1.21.9 {
             cachedTexture = new DynamicTexture(cachedImage);
             cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache", cachedTexture);
+            //?} else if <1.21.11 {
+            cachedTexture = new DynamicTexture(() -> "quickskin_star_cache", cachedImage);
+            cachedTextureLocation = ResourceLocation.fromNamespaceAndPath(QuickSkin.MOD_ID, "star_cache");
+            mc.getTextureManager().register(cachedTextureLocation, cachedTexture);
+            cachedTexture.setFilter(true, false);
             //?} else {
             cachedTexture = new DynamicTexture(() -> "quickskin_star_cache", cachedImage);
             cachedTextureLocation = Identifier.fromNamespaceAndPath(QuickSkin.MOD_ID, "star_cache");
@@ -149,7 +154,7 @@ public class StarPatternCache {
             // Fill with transparent pixels
             for (int y = 0; y < size; y++) {
                 for (int x = 0; x < size; x++) {
-                    //? if <1.21.11 {
+                    //? if <1.21.9 {
                     fallbackImage.setPixelRGBA(x, y, 0x00000000); // Fully transparent
                     //?} else {
                     fallbackImage.setPixel(x, y, 0x00000000); // Fully transparent
@@ -159,9 +164,13 @@ public class StarPatternCache {
 
             cachedTextureWidth = size;
             cachedTextureHeight = size;
-            //? if <1.21.11 {
+            //? if <1.21.9 {
             cachedTexture = new DynamicTexture(fallbackImage);
             cachedTextureLocation = mc.getTextureManager().register("quickskin_star_cache_fallback", cachedTexture);
+            //?} else if <1.21.11 {
+            cachedTexture = new DynamicTexture(() -> "quickskin_star_cache_fallback", fallbackImage);
+            cachedTextureLocation = ResourceLocation.withDefaultNamespace("quickskin_star_cache_fallback");
+            mc.getTextureManager().register(cachedTextureLocation, cachedTexture);
             //?} else {
             cachedTexture = new DynamicTexture(() -> "quickskin_star_cache_fallback", fallbackImage);
             cachedTextureLocation = Identifier.withDefaultNamespace("quickskin_star_cache_fallback");
@@ -172,13 +181,19 @@ public class StarPatternCache {
         }
     }
 
-    //? if >=1.21.11 {
+    //? if >=1.21.9 {
     /**
      * Re-apply linear filtering before rendering.
      * RenderType may reset texture parameters, so this ensures smooth sub-pixel scrolling.
      */
     public static void ensureLinearFiltering() {
+        //? if <1.21.11 {
+        if (cachedTexture != null) {
+            cachedTexture.setFilter(true, false);
+        }
+        //?} else {
         // 1.21.11: setFilter() removed, filtering handled at GpuSampler level
+        //?}
     }
     //?}
 
