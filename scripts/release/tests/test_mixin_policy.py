@@ -31,6 +31,26 @@ MIXIN_MARKER = re.compile(r"@Mixin\s*\(")
 INJECTOR_MARKER = re.compile(r"@(Inject|Redirect)\s*\(")
 HANDLER_MARKER = re.compile(r"\b(quickskin\$[A-Za-z0-9_$]+)\s*\(")
 JAVA_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
+SCREEN_HOOK_ACCESS = {
+    (
+        "net/minecraft/client/gui/screens/Screen",
+        "addRenderableWidget",
+        "(Lnet/minecraft/client/gui/components/events/GuiEventListener;)"
+        "Lnet/minecraft/client/gui/components/events/GuiEventListener;",
+    ),
+    (
+        "net/minecraft/client/gui/screens/Screen",
+        "addRenderableOnly",
+        "(Lnet/minecraft/client/gui/components/Renderable;)"
+        "Lnet/minecraft/client/gui/components/Renderable;",
+    ),
+    (
+        "net/minecraft/client/gui/screens/Screen",
+        "addWidget",
+        "(Lnet/minecraft/client/gui/components/events/GuiEventListener;)"
+        "Lnet/minecraft/client/gui/components/events/GuiEventListener;",
+    ),
+}
 
 
 def relative(path: Path) -> str:
@@ -261,6 +281,46 @@ class MixinPolicyTest(unittest.TestCase):
             "com.quickskin.mod.neoforge.mixin.compat.ArchitecturyCompatMixinPlugin",
         )
         self.assertEqual(config["mixins"], ["ArchitecturyEventHandlerCompatMixin"])
+
+    def test_architectury_screen_hook_access_is_equivalent_on_both_loaders(self) -> None:
+        fabric_path = (
+            ROOT / "fabric" / "src" / "main" / "resources" / "quick-skin.accesswidener"
+        )
+        fabric_lines = [
+            line.split()
+            for raw_line in fabric_path.read_text(encoding="utf-8").splitlines()
+            if (line := raw_line.strip()) and not line.startswith("#")
+        ]
+        self.assertEqual(fabric_lines.pop(0), ["accessWidener", "v2", "official"])
+        self.assertTrue(all(parts[:2] == ["accessible", "method"] for parts in fabric_lines))
+        fabric_access = {
+            (owner, name, descriptor)
+            for _, _, owner, name, descriptor in fabric_lines
+        }
+        self.assertEqual(fabric_access, SCREEN_HOOK_ACCESS)
+        self.assertEqual(len(fabric_lines), len(SCREEN_HOOK_ACCESS))
+
+        neoforge_path = (
+            ROOT
+            / "neoforge"
+            / "src"
+            / "main"
+            / "resources"
+            / "META-INF"
+            / "accesstransformer.cfg"
+        )
+        neoforge_lines = [
+            line.split()
+            for raw_line in neoforge_path.read_text(encoding="utf-8").splitlines()
+            if (line := raw_line.strip()) and not line.startswith("#")
+        ]
+        self.assertTrue(all(parts[0] == "public" for parts in neoforge_lines))
+        neoforge_access = {
+            (owner.replace(".", "/"), signature.split("(", 1)[0], "(" + signature.split("(", 1)[1])
+            for _, owner, signature in neoforge_lines
+        }
+        self.assertEqual(neoforge_access, SCREEN_HOOK_ACCESS)
+        self.assertEqual(len(neoforge_lines), len(SCREEN_HOOK_ACCESS))
 
     def test_configured_mixins_exist_and_dynamic_mixins_are_audited(self) -> None:
         configs = self.configs_named("quickskin.mixins.json") + self.configs_named(

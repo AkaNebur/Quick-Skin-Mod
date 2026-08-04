@@ -130,7 +130,7 @@ Release automation also builds two separate, loader-specific test harness jars a
 ## Source layout
 
 - `common/src/main`, `fabric/src/main`, and `neoforge/src/main` contain canonical sources.
-- `common/src/legacy26_1_1` supplies the immediate-extraction preview backend for 26.1.1; NeoForge also carries one fail-closed Architectury event compatibility mixin.
+- `common/src/legacy26_1_1` supplies the immediate-extraction preview backend for 26.1.1; NeoForge also carries one fail-closed Architectury event compatibility mixin and the matching screen-hook access transformer.
 - `PreviewRenderBackend`, `GuiCompat`, `NetworkTransport`, `MinecraftCompat`, and `PlatformHelper` define the cross-version seams.
 - Copy-based `src/v*` snapshots are retired; matrix validation rejects their reintroduction. Their preserved reference and resource-routing plan are documented in [Migration oracle retirement](ORACLE-RETIREMENT.md).
 

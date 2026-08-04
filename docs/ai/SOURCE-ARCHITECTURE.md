@@ -48,7 +48,8 @@ overlays are:
 The common overlay owns the single immediate-extraction preview backend selected on 26.1.1 and
 excludes the canonical deferred-collector backend that requires the newer GUI API. All other 26.1.1 API deltas are
 selected from the maintained canonical source by Stonecutter. Fabric uses canonical output;
-NeoForge adds only its loader-specific, fail-closed Architectury event compatibility mixin.
+NeoForge adds only its loader-specific, fail-closed Architectury event compatibility mixin and the
+matching screen-hook access transformer required by the pinned Architectury API.
 
 Keep overlays narrow. Prefer a small adapter or a Stonecutter version branch over copying an entire
 service, screen, or handler. When a class exists in an active overlay:

@@ -16,7 +16,7 @@ EXPECTED_LOCAL_TRUST = {
     (r"^loom$", r"^mappings$"),
     (
         r"^net[.]minecraft$",
-        r"^(minecraft-merged-[0-9a-f]{10}|(?:forge|neoforge)-[0-9A-Za-z.+_-]+-minecraft-merged(?:-deobf)?)$",
+        r"^(minecraft-merged-[0-9a-f]{10}|(?:forge|neoforge)-[0-9A-Za-z.+_-]+-minecraft-merged(?:-deobf|-[0-9a-f]{10})?)$",
     ),
     (r"^net[.]minecraftforge[.][0-9a-f]{64}$", r"^fmlloader$"),
 }
@@ -192,6 +192,10 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             ("net.minecraft", "forge-1.20.1-47.4.9-minecraft-merged"),
             ("net.minecraft", "neoforge-21.11.38-beta-minecraft-merged"),
             ("net.minecraft", "neoforge-26.2.0.6-beta-minecraft-merged-deobf"),
+            (
+                "net.minecraft",
+                "neoforge-26.1.1.15-beta-minecraft-merged-df325f964f",
+            ),
             ("net.minecraftforge." + "a" * 64, "fmlloader"),
         )
         rejected = (
@@ -203,6 +207,18 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             ("net.minecraft", "minecraft"),
             ("net.minecraft", "neoforged-21.11.38-beta-minecraft-merged"),
             ("net.minecraft", "forge-1.20.1-47.4.9-minecraft-merged-deobf-extra"),
+            (
+                "net.minecraft",
+                "neoforge-26.1.1.15-beta-minecraft-merged-df325f964",
+            ),
+            (
+                "net.minecraft",
+                "neoforge-26.1.1.15-beta-minecraft-merged-df325f964ff",
+            ),
+            (
+                "net.minecraft",
+                "neoforge-26.1.1.15-beta-minecraft-merged-deobf-df325f964f",
+            ),
             ("net.minecraft", "neoforged-26.2.0.6-beta-minecraft-merged-deobf"),
             ("net.minecraftforge." + "a" * 63, "fmlloader"),
             ("net.minecraftforge." + "g" * 64, "fmlloader"),
