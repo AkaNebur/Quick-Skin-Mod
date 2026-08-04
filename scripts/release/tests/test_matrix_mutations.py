@@ -46,8 +46,79 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
                 marker.write_text("live\n", encoding="utf-8")
         return matrix_path
 
+    def neoforge_compatibility_matrix(self) -> dict:
+        data = self.mutated()
+        version = data["unit_test_version"]
+        artifact = self.fml_artifact(data)
+        old_loader = artifact["loader"]
+        old_node = artifact["artifact_node"]
+        runtime = next(
+            row for row in data["runtimes"] if row["artifact_node"] == old_node
+        )
+        old_installer = runtime["installer"]
+
+        node = f"neoforge-{version}"
+        artifact["artifact_node"] = node
+        artifact["loader"] = "neoforge"
+        production_task = "shadowJar" if artifact["no_remap"] else "remapJar"
+        harness_task = (
+            "e2eHarnessJar" if artifact["no_remap"] else "remapE2EHarnessJar"
+        )
+        artifact["gradle_task"] = f":neoforge:{version}:{production_task}"
+        artifact["harness_task"] = f":neoforge:{version}:{harness_task}"
+        artifact["jar"] = (
+            f"neoforge/versions/{version}/build/libs/"
+            f"Quick Skin - NeoForge - {version}-{{mod_version}}.jar"
+        )
+        artifact["harness_jar"] = (
+            f"neoforge/versions/{version}/build/libs/"
+            f"Quick Skin E2E - NeoForge - {version}-0.0.0.jar"
+        )
+        artifact["metadata"]["file"] = "META-INF/neoforge.mods.toml"
+        artifact["metadata"]["architectury"] = "[20.0.4]"
+
+        runtime["artifact_node"] = node
+        runtime["loader"] = "neoforge"
+        runtime["architectury"]["version"] = "20.0.4"
+        runtime["compatibility_patch"] = "neoforge-26.1-break-event-v1"
+        runtime["installer"] = f"neoforge-{runtime['loader_version']}"
+        data["installers"][runtime["installer"]] = data["installers"].pop(
+            old_installer
+        )
+        data["source_overlays"]["neoforge"] = data["source_overlays"].pop(old_loader)
+        data["project"]["release_branch"] = f"fabric-and-neoforge-{version}"
+        return data
+
     def test_checked_in_matrix_is_valid(self) -> None:
         release_matrix.validate_matrix(self.mutated())
+
+    def test_runtime_compatibility_patch_is_known_neoforge_only_and_exact(self) -> None:
+        release_matrix.validate_matrix(self.neoforge_compatibility_matrix())
+
+        unknown = self.neoforge_compatibility_matrix()
+        next(
+            row for row in unknown["runtimes"] if row["loader"] == "neoforge"
+        )["compatibility_patch"] = "unknown"
+        self.assert_invalid(unknown, "unknown compatibility patch")
+
+        wrong_type = self.neoforge_compatibility_matrix()
+        next(
+            row for row in wrong_type["runtimes"] if row["loader"] == "neoforge"
+        )["compatibility_patch"] = []
+        self.assert_invalid(wrong_type, "unknown compatibility patch")
+
+        wrong_loader = self.mutated()
+        fabric = next(
+            row for row in wrong_loader["runtimes"] if row["loader"] == "fabric"
+        )
+        fabric["compatibility_patch"] = "neoforge-26.1-break-event-v1"
+        self.assert_invalid(wrong_loader, "only on NeoForge")
+
+        broad_dependency = self.neoforge_compatibility_matrix()
+        self.fml_artifact(broad_dependency)["metadata"]["architectury"] = (
+            "[20.0.4,)"
+        )
+        self.assert_invalid(broad_dependency, "metadata disagrees with its tested Architectury")
 
     def test_version_can_explicitly_select_no_remap(self) -> None:
         data = self.mutated()
