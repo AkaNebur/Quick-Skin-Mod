@@ -959,6 +959,7 @@ def compact_bundle(
     branch: str,
     *,
     only_branch: bool = True,
+    expected_input_kind: str | None = None,
     expected_repository: str | None = None,
     expected_source_run_id: str | None = None,
     expected_target_run_id: str | None = None,
@@ -973,6 +974,7 @@ def compact_bundle(
         input_root,
         branch,
         only_branch=only_branch,
+        expected_kind=expected_input_kind,
         expected_repository=expected_repository,
         expected_source_run_id=expected_source_run_id,
         expected_target_run_id=expected_target_run_id,
@@ -1118,6 +1120,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     compact_parser.add_argument("--output", type=Path, required=True)
     compact_parser.add_argument("--branch", required=True)
     compact_parser.add_argument("--allow-sibling-branches", action="store_true")
+    compact_parser.add_argument("--input-kind", choices=("raw", "compact"))
     compact_parser.add_argument("--repository")
     compact_parser.add_argument("--source-run-id")
     compact_parser.add_argument("--target-run-id")
@@ -1163,6 +1166,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.output,
                 args.branch,
                 only_branch=not args.allow_sibling_branches,
+                expected_input_kind=args.input_kind,
                 expected_repository=args.repository,
                 expected_source_run_id=args.source_run_id,
                 expected_target_run_id=args.target_run_id,

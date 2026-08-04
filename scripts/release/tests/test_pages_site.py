@@ -341,6 +341,23 @@ class PagesSiteTest(unittest.TestCase):
         }
         self.assertEqual(first_files, second_files)
 
+    def test_raw_handoff_contract_rejects_a_precompacted_bundle(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        compact_root = self.root / "compact"
+        rejected_output = self.root / "rejected-handoff"
+        compact_bundle(self.evidence_root, compact_root, branch)
+
+        with self.assertRaises(PublicEvidenceError):
+            compact_bundle(
+                compact_root,
+                rejected_output,
+                branch,
+                expected_input_kind="raw",
+            )
+
+        self.assertFalse((rejected_output / branch).exists())
+
     def test_compact_manifest_rejects_source_and_derivative_metadata_drift(self) -> None:
         branch = "forge-and-fabric-1.20.1"
         self.write_branch(branch, "1.20.1")
@@ -658,6 +675,8 @@ class PagesSiteTest(unittest.TestCase):
         compact = pages.index("python3 scripts/pages/evidence.py compact")
         fan_in = pages.index("name: collected-pages-${{ matrix.branch }}", compact)
         self.assertLess(compact, fan_in)
+        self.assertIn("kind_argument=(--kind raw)", pages[:compact])
+        self.assertIn("input_kind_argument=(--input-kind raw)", pages[:fan_in])
         self.assertIn("--kind compact", pages[compact:fan_in])
         durable = pages.index("name: ${{ steps.cache.outputs.name }}")
         self.assertIn("retention-days: 90", pages[durable : durable + 500])

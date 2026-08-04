@@ -152,8 +152,10 @@ jobs:
         run: |
           set -euo pipefail
           target_run_argument=()
+          kind_argument=()
           if [[ "$ARTIFACT_NAME" == "pages-e2e-$BRANCH" ]]; then
             target_run_argument=(--target-run-id "$OWNER_RUN_ID")
+            kind_argument=(--kind raw)
           fi
           python3 scripts/pages/evidence.py validate \
             --evidence-root selected-evidence \
@@ -161,7 +163,8 @@ jobs:
             --only-branch \
             --repository "$GITHUB_REPOSITORY" \
             --target-sha "$EXPECTED_SHA" \
-            "${target_run_argument[@]}"
+            "${target_run_argument[@]}" \
+            "${kind_argument[@]}"
 
           manifest="selected-evidence/$BRANCH/manifest.json"
           source_run_id="$(jq -er .provenance.source.run_id "$manifest")"
@@ -207,8 +210,10 @@ jobs:
         run: |
           set -euo pipefail
           target_run_argument=()
+          input_kind_argument=()
           if [[ "$ARTIFACT_NAME" == "pages-e2e-$BRANCH" ]]; then
             target_run_argument=(--target-run-id "$OWNER_RUN_ID")
+            input_kind_argument=(--input-kind raw)
           fi
           python3 scripts/pages/evidence.py compact \
             --evidence-root selected-evidence \
@@ -216,7 +221,8 @@ jobs:
             --branch "$BRANCH" \
             --repository "$GITHUB_REPOSITORY" \
             --target-sha "$EXPECTED_SHA" \
-            "${target_run_argument[@]}"
+            "${target_run_argument[@]}" \
+            "${input_kind_argument[@]}"
           python3 scripts/pages/evidence.py validate \
             --evidence-root public-evidence \
             --branch "$BRANCH" \
