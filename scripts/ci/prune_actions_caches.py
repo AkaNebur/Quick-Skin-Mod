@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Prune GitHub Actions caches owned by branches that no longer exist.
+"""Prune unusable and superseded GitHub Actions caches conservatively.
 
-The command is intentionally conservative.  It never removes caches for a live
-branch, a branch with an active workflow run, a tag, or a pull-request ref.
-Dry-run is the default; callers must pass ``--apply`` to delete anything.
+Every cache for an absent branch is disposable.  For a live branch, only an
+old ``setup-gradle`` Gradle-home generation with an unambiguous SHA-bearing key
+is eligible, and only after a retained generation is tied to a successful Build
+gate.  Any active workflow run preserves the complete cache inventory; unknown
+cache-key formats, tags, and pull-request refs are always preserved.  Dry-run is the default;
+callers must pass ``--apply`` to delete anything.
 """
 
 from __future__ import annotations
@@ -23,10 +26,23 @@ from typing import Any, Protocol
 
 
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+GRADLE_HOME_KEY = re.compile(
+    r"^(gradle-home-v[1-9][0-9]*\|[A-Za-z0-9_.-]+\|"
+    r"[A-Za-z0-9_.-]+)\[[0-9a-f]{32}\]-([0-9a-f]{40})$"
+)
 BRANCH_REF_PREFIX = "refs/heads/"
 ACTIVE_RUN_STATUSES = ("requested", "pending", "queued", "in_progress", "waiting")
+BUILD_WORKFLOW_FILE = "build-gate.yml"
+BUILD_WORKFLOW_PATH = ".github/workflows/build-gate.yml"
+BUILD_JOB_NAME = "Build and verify"
+BUILD_WRITER_EVENTS = frozenset({"push", "workflow_dispatch"})
+PRUNE_WORKFLOW_PATH = ".github/workflows/prune-actions-caches.yml"
 PAGE_SIZE = 100
-MAX_PAGES = 10_000
+MAX_PAGES = 100
+MAX_ACTIVE_RUN_RESULTS = 1_000
+MAX_BUILD_RUNS_PER_SHA = 100
+MAX_JOBS_PER_RUN = 100
 DEFAULT_MAX_DELETE_COUNT = 75
 DEFAULT_MAX_DELETE_BYTES = 10 * 1024 * 1024 * 1024
 
@@ -76,6 +92,14 @@ class CacheEntry:
         branch = self.ref[len(BRANCH_REF_PREFIX) :]
         return branch or None
 
+    @property
+    def gradle_home_generation(self) -> tuple[str, str] | None:
+        """Return the broad restore family and commit SHA for a known key."""
+        match = GRADLE_HOME_KEY.fullmatch(self.key)
+        if match is None:
+            return None
+        return match.group(1), match.group(2)
+
     def report(self) -> dict[str, Any]:
         return {
             "id": self.cache_id,
@@ -95,9 +119,11 @@ class CacheApi(Protocol):
 
     def list_active_run_branches(self) -> set[str]: ...
 
-    def branch_has_active_run(self, branch: str) -> bool: ...
+    def has_any_active_run(self) -> bool: ...
 
     def list_caches(self) -> list[CacheEntry]: ...
+
+    def has_successful_build(self, branch: str, sha: str) -> bool: ...
 
     def branch_exists(self, branch: str) -> bool: ...
 
@@ -231,18 +257,17 @@ class GitHubApi:
             branches.add(_text(item.get("name"), "branch.name"))
         return branches
 
-    def _active_run_branches(self, *, branch: str | None = None) -> set[str]:
+    def _active_run_inventory(self) -> tuple[set[str], bool]:
         branches: set[str] = set()
+        any_run = False
         path = self._repo_path("/actions/runs")
         for status in ACTIVE_RUN_STATUSES:
             query = {"status": status}
-            if branch is not None:
-                query["branch"] = branch
             payload = self._paginate(
                 path,
                 field="workflow_runs",
                 query=query,
-                max_search_results=1_000,
+                max_search_results=MAX_ACTIVE_RUN_RESULTS,
             )
             for item in payload:
                 if not isinstance(item, dict):
@@ -251,23 +276,24 @@ class GitHubApi:
                     raise PruneError(
                         f"workflow run status disagrees with {status!r} inventory"
                     )
+                workflow_path = _text(item.get("path"), "workflow_run.path")
+                if workflow_path == PRUNE_WORKFLOW_PATH:
+                    # The protected cleanup job itself runs on master but never configures or
+                    # restores Gradle. Counting it would permanently self-lock master rotation.
+                    continue
+                any_run = True
                 head_branch = item.get("head_branch")
                 if head_branch is None:
                     continue
                 parsed_branch = _text(head_branch, "workflow_run.head_branch")
-                if branch is not None and parsed_branch != branch:
-                    raise PruneError(
-                        f"workflow run branch filter returned {parsed_branch!r}, "
-                        f"expected {branch!r}"
-                    )
                 branches.add(parsed_branch)
-        return branches
+        return branches, any_run
 
     def list_active_run_branches(self) -> set[str]:
-        return self._active_run_branches()
+        return self._active_run_inventory()[0]
 
-    def branch_has_active_run(self, branch: str) -> bool:
-        return bool(self._active_run_branches(branch=branch))
+    def has_any_active_run(self) -> bool:
+        return self._active_run_inventory()[1]
 
     def _list_caches(self, *, query: dict[str, str] | None = None) -> list[CacheEntry]:
         payload = self._paginate(
@@ -279,6 +305,74 @@ class GitHubApi:
 
     def list_caches(self) -> list[CacheEntry]:
         return self._list_caches()
+
+    def _run_has_successful_build_job(
+        self, *, run_id: int, branch: str, sha: str
+    ) -> bool:
+        jobs = self._paginate(
+            self._repo_path(f"/actions/runs/{run_id}/jobs"),
+            field="jobs",
+            max_search_results=MAX_JOBS_PER_RUN,
+        )
+        for item in jobs:
+            if not isinstance(item, dict):
+                raise PruneError("workflow job inventory item must be an object")
+            if _text(item.get("name"), "workflow_job.name") != BUILD_JOB_NAME:
+                continue
+            if _positive_int(item.get("run_id"), "workflow_job.run_id") != run_id:
+                raise PruneError(f"Build job run ID disagrees with run {run_id}")
+            if _text(item.get("head_branch"), "workflow_job.head_branch") != branch:
+                raise PruneError(f"Build job branch disagrees with {branch!r}")
+            if _text(item.get("head_sha"), "workflow_job.head_sha") != sha:
+                raise PruneError(f"Build job SHA disagrees with {sha!r}")
+            if item.get("status") != "completed":
+                raise PruneError(
+                    f"successful workflow run {run_id} has an incomplete Build job"
+                )
+            # A successful attestation-only invocation has this real job present but skipped.
+            # That is a valid response shape, but it proves no cache-writing Build execution.
+            return _text(item.get("conclusion"), "workflow_job.conclusion") == "success"
+        return False
+
+    def has_successful_build(self, branch: str, sha: str) -> bool:
+        _text(branch, "branch")
+        if not COMMIT_SHA.fullmatch(sha):
+            raise PruneError("Build SHA must be 40 lowercase hexadecimal characters")
+        runs = self._paginate(
+            self._repo_path(f"/actions/workflows/{BUILD_WORKFLOW_FILE}/runs"),
+            field="workflow_runs",
+            query={"branch": branch, "head_sha": sha, "status": "success"},
+            max_search_results=MAX_BUILD_RUNS_PER_SHA,
+        )
+        for item in runs:
+            if not isinstance(item, dict):
+                raise PruneError("successful Build run inventory item must be an object")
+            run_id = _positive_int(item.get("id"), "workflow_run.id")
+            if _text(item.get("path"), "workflow_run.path") != BUILD_WORKFLOW_PATH:
+                raise PruneError(f"run {run_id} has an unexpected workflow path")
+            if _text(item.get("head_branch"), "workflow_run.head_branch") != branch:
+                raise PruneError(f"run {run_id} branch disagrees with {branch!r}")
+            if _text(item.get("head_sha"), "workflow_run.head_sha") != sha:
+                raise PruneError(f"run {run_id} SHA disagrees with {sha!r}")
+            if item.get("status") != "completed" or item.get("conclusion") != "success":
+                raise PruneError(f"run {run_id} disagrees with the success filter")
+            if item.get("event") not in BUILD_WRITER_EVENTS:
+                # Read-only events cannot prove that this branch-scoped generation came from
+                # one of the policy's historical writer events.
+                continue
+            head_repository = item.get("head_repository")
+            if not isinstance(head_repository, dict):
+                raise PruneError(f"run {run_id} head repository is invalid")
+            if (
+                _text(head_repository.get("full_name"), "workflow_run.repository")
+                != self.repository
+            ):
+                raise PruneError(f"run {run_id} belongs to an unexpected repository")
+            if self._run_has_successful_build_job(
+                run_id=run_id, branch=branch, sha=sha
+            ):
+                return True
+        return False
 
     def branch_exists(self, branch: str) -> bool:
         encoded = urllib.parse.quote(branch, safe="")
@@ -336,10 +430,108 @@ def select_candidates(
         and cache.branch not in existing_branches
         and cache.branch not in active_run_branches
     ]
-    return sorted(
-        candidates,
-        key=lambda cache: (cache.ref, cache.created_at, cache.cache_id),
+    return sorted(candidates, key=_cache_sort_key)
+
+
+def _cache_sort_key(cache: CacheEntry) -> tuple[str, datetime, int]:
+    return (
+        cache.ref,
+        datetime.fromisoformat(cache.created_at.replace("Z", "+00:00")),
+        cache.cache_id,
     )
+
+
+def _validate_cache_inventory(caches: list[CacheEntry]) -> list[CacheEntry]:
+    seen: set[int] = set()
+    for cache in caches:
+        if cache.cache_id in seen:
+            raise PruneError(f"cache ID {cache.cache_id} appeared more than once")
+        seen.add(cache.cache_id)
+    return caches
+
+
+def _successful_build_shas(
+    api: CacheApi,
+    caches: list[CacheEntry],
+    *,
+    existing_branches: set[str],
+    active_run_branches: set[str],
+) -> dict[str, set[str]]:
+    identities = {
+        (cache.branch, generation[1])
+        for cache in caches
+        if cache.branch is not None
+        and cache.branch in existing_branches
+        and cache.branch not in active_run_branches
+        and (generation := cache.gradle_home_generation) is not None
+    }
+    successful: dict[str, set[str]] = {}
+    for branch, sha in sorted(identities):
+        if branch is None:  # Defensive: the comprehension excludes this case.
+            raise PruneError("live Gradle cache lost its branch identity")
+        if api.has_successful_build(branch, sha):
+            successful.setdefault(branch, set()).add(sha)
+    return successful
+
+
+def select_superseded_generations(
+    caches: list[CacheEntry],
+    *,
+    existing_branches: set[str],
+    active_run_branches: set[str],
+    successful_build_shas: dict[str, set[str]],
+) -> tuple[list[CacheEntry], list[CacheEntry]]:
+    """Select old known Gradle-home generations and their protected replacements."""
+    groups: dict[tuple[str, str, str], list[CacheEntry]] = {}
+    for cache in caches:
+        branch = cache.branch
+        generation = cache.gradle_home_generation
+        if (
+            branch is None
+            or branch not in existing_branches
+            or branch in active_run_branches
+            or generation is None
+        ):
+            continue
+        restore_family, _sha = generation
+        groups.setdefault((branch, restore_family, cache.version), []).append(cache)
+
+    candidates: list[CacheEntry] = []
+    protected: list[CacheEntry] = []
+    for (branch, _restore_family, _cache_version), group in sorted(groups.items()):
+        successful = [
+            cache
+            for cache in group
+            if cache.gradle_home_generation is not None
+            and cache.gradle_home_generation[1]
+            in successful_build_shas.get(branch, set())
+        ]
+        if not successful:
+            # No proven replacement means every generation remains a fallback.
+            continue
+        keeper = max(successful, key=_cache_sort_key)
+        protected.append(keeper)
+        candidates.extend(cache for cache in group if cache.cache_id != keeper.cache_id)
+
+    return (
+        sorted(candidates, key=_cache_sort_key),
+        sorted(protected, key=_cache_sort_key),
+    )
+
+
+def _validate_delete_limits(*, max_delete_count: int, max_delete_bytes: int) -> None:
+    if max_delete_count <= 0:
+        raise PruneError("max_delete_count must be positive")
+    if max_delete_count > DEFAULT_MAX_DELETE_COUNT:
+        raise PruneError(
+            f"max_delete_count cannot exceed {DEFAULT_MAX_DELETE_COUNT}"
+        )
+    if max_delete_bytes <= 0:
+        raise PruneError("max_delete_bytes must be positive")
+    if max_delete_bytes > DEFAULT_MAX_DELETE_BYTES:
+        raise PruneError(
+            f"max_delete_bytes cannot exceed {DEFAULT_MAX_DELETE_BYTES}"
+        )
 
 
 def _bounded_batch(
@@ -348,10 +540,10 @@ def _bounded_batch(
     max_delete_count: int,
     max_delete_bytes: int,
 ) -> tuple[list[CacheEntry], list[CacheEntry]]:
-    if max_delete_count <= 0:
-        raise PruneError("max_delete_count must be positive")
-    if max_delete_bytes <= 0:
-        raise PruneError("max_delete_bytes must be positive")
+    _validate_delete_limits(
+        max_delete_count=max_delete_count,
+        max_delete_bytes=max_delete_bytes,
+    )
     selected: list[CacheEntry] = []
     deferred: list[CacheEntry] = []
     selected_bytes = 0
@@ -378,6 +570,10 @@ def prune(
 ) -> dict[str, Any]:
     if delete_delay_seconds < 0 or delete_delay_seconds > 10:
         raise PruneError("delete_delay_seconds must be between 0 and 10")
+    _validate_delete_limits(
+        max_delete_count=max_delete_count,
+        max_delete_bytes=max_delete_bytes,
+    )
 
     default_branch = api.get_default_branch()
     if default_branch != expected_default_branch:
@@ -390,24 +586,68 @@ def prune(
         raise PruneError("default branch is missing from the complete branch inventory")
 
     active_run_branches = api.list_active_run_branches()
-    candidates = select_candidates(
-        api.list_caches(),
-        existing_branches=existing_branches,
-        active_run_branches=active_run_branches,
+    active_run_present = bool(active_run_branches) or api.has_any_active_run()
+    caches = _validate_cache_inventory(api.list_caches())
+    if active_run_present:
+        # Every Actions run may restore the default branch, and pull-request runs may also restore
+        # their base branch. Treating the whole repository as one active restore boundary avoids
+        # racing a cache lookup/download whose consumer is not the cache's owning ref.
+        orphan_candidates: list[CacheEntry] = []
+        superseded_candidates: list[CacheEntry] = []
+        protected_generations: list[CacheEntry] = []
+    else:
+        orphan_candidates = select_candidates(
+            caches,
+            existing_branches=existing_branches,
+            active_run_branches=active_run_branches,
+        )
+        successful_build_shas = _successful_build_shas(
+            api,
+            caches,
+            existing_branches=existing_branches,
+            active_run_branches=active_run_branches,
+        )
+        superseded_candidates, protected_generations = select_superseded_generations(
+            caches,
+            existing_branches=existing_branches,
+            active_run_branches=active_run_branches,
+            successful_build_shas=successful_build_shas,
+        )
+    candidate_kinds = {
+        cache.cache_id: "absent-branch" for cache in orphan_candidates
+    }
+    candidate_kinds.update(
+        {cache.cache_id: "superseded-gradle-home" for cache in superseded_candidates}
+    )
+    protected_by_group = {
+        (cache.branch, cache.gradle_home_generation[0], cache.version): cache
+        for cache in protected_generations
+        if cache.branch is not None and cache.gradle_home_generation is not None
+    }
+    replacement_by_candidate: dict[int, CacheEntry] = {}
+    for cache in superseded_candidates:
+        if cache.branch is None or cache.gradle_home_generation is None:
+            raise PruneError(f"cache {cache.cache_id} lost its Gradle identity")
+        replacement = protected_by_group.get(
+            (cache.branch, cache.gradle_home_generation[0], cache.version)
+        )
+        if replacement is None:
+            raise PruneError(f"cache {cache.cache_id} has no protected replacement")
+        replacement_by_candidate[cache.cache_id] = replacement
+    candidates = sorted(
+        [*orphan_candidates, *superseded_candidates], key=_cache_sort_key
     )
 
     skipped: list[dict[str, Any]] = []
     if apply:
-        # Close most of the inventory-to-delete gap before checking the global limits.  A run
-        # that started while the initial inventory was being read protects its branch here.
-        refreshed_active_branches = api.list_active_run_branches()
-        still_safe: list[CacheEntry] = []
-        for cache in candidates:
-            if cache.branch in refreshed_active_branches:
-                skipped.append({"id": cache.cache_id, "reason": "active-run"})
-            else:
-                still_safe.append(cache)
-        candidates = still_safe
+        # Close most of the inventory-to-delete gap before checking the global limits. Any run
+        # that started while the initial inventory was being read protects the whole restore scope.
+        if api.has_any_active_run():
+            skipped.extend(
+                {"id": cache.cache_id, "reason": "active-run"}
+                for cache in candidates
+            )
+            candidates = []
 
     discovered_candidates = list(candidates)
     candidates, deferred = _bounded_batch(
@@ -425,6 +665,9 @@ def prune(
             branch = cache.branch
             if branch is None:  # Defensive: select_candidates already excludes this case.
                 raise PruneError(f"cache {cache.cache_id} lost its branch identity")
+            candidate_kind = candidate_kinds.get(cache.cache_id)
+            if candidate_kind not in {"absent-branch", "superseded-gradle-home"}:
+                raise PruneError(f"cache {cache.cache_id} lost its candidate policy")
 
             current = api.get_cache(cache)
             if current is None:
@@ -434,17 +677,51 @@ def prune(
                 skipped.append({"id": cache.cache_id, "reason": "cache-changed"})
                 continue
 
-            # Recheck active work per candidate so a rerun that starts during a large batch does
-            # not lose the branch-scoped cache it may still restore.
-            if api.branch_has_active_run(branch):
-                skipped.append({"id": cache.cache_id, "reason": "active-run-late"})
-                continue
+            if candidate_kind == "absent-branch":
+                # Recheck active work per candidate so a run that starts during a large batch
+                # cannot lose any default/base cache it may still restore.
+                if api.has_any_active_run():
+                    skipped.append(
+                        {"id": cache.cache_id, "reason": "active-run-late"}
+                    )
+                    continue
 
-            # This is deliberately the final read before DELETE. A branch recreated after the
-            # initial inventory keeps every cache that was formerly scoped to its name.
-            if api.branch_exists(branch):
-                skipped.append({"id": cache.cache_id, "reason": "branch-recreated"})
-                continue
+                # This is deliberately the final read before DELETE. A branch recreated after
+                # the initial inventory keeps every cache formerly scoped to its name.
+                if api.branch_exists(branch):
+                    skipped.append(
+                        {"id": cache.cache_id, "reason": "branch-recreated"}
+                    )
+                    continue
+            else:
+                if not api.branch_exists(branch):
+                    skipped.append(
+                        {"id": cache.cache_id, "reason": "branch-removed-replan"}
+                    )
+                    continue
+                replacement = replacement_by_candidate.get(cache.cache_id)
+                if replacement is None:
+                    raise PruneError(
+                        f"cache {cache.cache_id} lost its protected replacement"
+                    )
+                replacement_current = api.get_cache(replacement)
+                if replacement_current is None:
+                    skipped.append(
+                        {"id": cache.cache_id, "reason": "replacement-absent"}
+                    )
+                    continue
+                if replacement_current != replacement:
+                    skipped.append(
+                        {"id": cache.cache_id, "reason": "replacement-changed"}
+                    )
+                    continue
+                # Keep this as the last policy read before DELETE. Any active workflow may be
+                # restoring a default/base fallback, so the whole repository is protected.
+                if api.has_any_active_run():
+                    skipped.append(
+                        {"id": cache.cache_id, "reason": "active-run-late"}
+                    )
+                    continue
 
             if not api.delete_cache(cache.cache_id):
                 skipped.append({"id": cache.cache_id, "reason": "already-absent"})
@@ -455,8 +732,17 @@ def prune(
 
     return {
         "mode": "apply" if apply else "dry-run",
+        "limits": {
+            "max_pages": MAX_PAGES,
+            "max_active_runs_per_status": MAX_ACTIVE_RUN_RESULTS,
+            "max_build_runs_per_sha": MAX_BUILD_RUNS_PER_SHA,
+            "max_jobs_per_run": MAX_JOBS_PER_RUN,
+            "max_delete_count": max_delete_count,
+            "max_delete_bytes": max_delete_bytes,
+        },
         "repository_default_branch": default_branch,
         "existing_branch_count": len(existing_branches),
+        "active_run_present": active_run_present,
         "active_run_branches": sorted(active_run_branches),
         "discovered_candidate_count": len(discovered_candidates),
         "discovered_candidate_bytes": sum(
@@ -464,7 +750,13 @@ def prune(
         ),
         "candidate_count": len(candidates),
         "candidate_bytes": sum(cache.size_in_bytes for cache in candidates),
-        "candidates": [cache.report() for cache in candidates],
+        "candidates": [
+            {**cache.report(), "reason": candidate_kinds[cache.cache_id]}
+            for cache in candidates
+        ],
+        "protected_generation_ids": [
+            cache.cache_id for cache in protected_generations
+        ],
         "deleted_ids": deleted_ids,
         "skipped": skipped,
     }
@@ -491,11 +783,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--max-delete-count",
         type=int,
         default=DEFAULT_MAX_DELETE_COUNT,
+        help="maximum exact cache IDs selected in one invocation",
     )
     parser.add_argument(
         "--max-delete-bytes",
         type=int,
         default=DEFAULT_MAX_DELETE_BYTES,
+        help="maximum total candidate bytes selected in one invocation",
     )
     parser.add_argument(
         "--delete-delay-seconds",

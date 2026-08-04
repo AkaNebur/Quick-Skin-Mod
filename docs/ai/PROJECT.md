@@ -72,9 +72,12 @@ immutable workflow and governance activation contract.
   `master`. Do not edit its rows manually or add a branch/version list to its workflow.
 - Each successful release-branch E2E tree may produce one transient curated
   `pages-e2e-<branch>` handoff. The Pages workflow must discover the same release branches, require
-  evidence for every exact current head, render with protected `master` code, and deploy the whole
-  site atomically. Only after that Pages run reaches `completed/success` may protected automation
-  replace the branch's single rolling cache and retire older caches plus the consumed handoff.
+  evidence for every exact current head, validate each source PNG, convert it to a protected WebP
+  derivative before fan-in, render with protected `master` code, and deploy the whole site
+  atomically. `collected-pages-*` and `pages-cache-*` contain only compact derivatives plus the
+  source and derivative proof records, never original PNG bytes. Only after that Pages run reaches
+  `completed/success` may protected automation replace the branch's single rolling cache and
+  retire older caches plus the consumed handoff.
   Never delete the fallback before its replacement succeeds, introduce a second version list,
   publish logs/crash reports, or make Pages a protected release check.
 - Actions artifacts are handoffs, not an archive. Every ordinary upload is retained for one day;
@@ -85,12 +88,19 @@ immutable workflow and governance activation contract.
   cache, consumed `pages-e2e-<branch>` handoff, Pages fan-in artifacts, and deploy artifact. Raw
   packaged-E2E proof retains its one-day window because a concurrent branch attestation may still
   consume it. A protected schedule also deletes by exact cache ID Actions caches scoped to branch
-  refs that no longer exist; it discovers live branches directly and must never infer a
-  supported-version inventory.
-- Build gate owns Gradle cache writes, and only a trusted push or manual Build run on `master` or
-  the matrix's canonical release branch may write. Pull requests and ephemeral branches are
-  read-only; Packaged E2E and Release always restore the cache read-only so they cannot create one
-  immutable cache generation per run or tag.
+  refs that no longer exist. On live branches it recognizes only SHA-bearing `setup-gradle` home
+  keys, preserves the newest restorable generation per OS/job/cache-version family that has a
+  successful Build job, and protects the complete cache inventory while any potentially
+  cache-consuming run is active anywhere in the repository. It deletes only superseded generations
+  after exact candidate, compatible-replacement, branch, and repository-wide run revalidation. The
+  protected cleanup run itself is the sole exclusion because it never configures Gradle; unknown
+  workflows remain protective.
+  Without a proven successful replacement it preserves the whole family. It discovers live
+  branches directly and must never infer a supported-version inventory.
+- Build gate owns Gradle cache writes, and only a trusted push or manual Build run on protected
+  `master` may write. Release branches restore their last known branch cache read-only; pull
+  requests, ephemeral branches, Packaged E2E, and Release are also read-only. This bounds immutable
+  generations without making the release-branch inventory another cache-policy input.
 - Shared behavior changes start on `master`. A version-only fix starts on its release branch and
   must be reflected in canonical `master` sources when the same behavior applies elsewhere.
 - A shared change is not repository-wide delivery merely because it reached `master`. The

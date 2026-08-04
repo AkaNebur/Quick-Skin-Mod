@@ -651,8 +651,17 @@ def failed_marker_summary(game_dir: Path, role: str) -> str:
     return f"{role}: " + ("; ".join(failures) if failures else "marker failed without a failed step")
 
 
-def inspect_screenshot(path: Path) -> dict[str, Any]:
-    """Decode a screenshot and reject corrupt, implausible, or effectively blank evidence."""
+def inspect_screenshot(
+    path: Path, *, expected_format: str = "PNG"
+) -> dict[str, Any]:
+    """Decode an image and reject corrupt, implausible, or effectively blank evidence.
+
+    Packaged-runtime callers retain the PNG-only default.  Protected Pages code may use the
+    same pixel inspection for the WebP derivative that it creates from an already validated PNG.
+    """
+
+    if expected_format not in {"PNG", "WEBP"}:
+        raise RuntimeFailure(f"unsupported screenshot format contract: {expected_format!r}")
 
     try:
         from PIL import Image, ImageStat, UnidentifiedImageError
@@ -662,8 +671,10 @@ def inspect_screenshot(path: Path) -> dict[str, Any]:
     try:
         Image.MAX_IMAGE_PIXELS = 20_000_000
         with Image.open(path) as image:
-            if image.format != "PNG":
-                raise RuntimeFailure(f"screenshot is not a PNG: {path}")
+            if image.format != expected_format:
+                raise RuntimeFailure(
+                    f"screenshot is not a {expected_format} image: {path}"
+                )
             width, height = image.size
             if width < 640 or height < 360 or width * height > Image.MAX_IMAGE_PIXELS:
                 raise RuntimeFailure(

@@ -18,7 +18,12 @@ sys.path.insert(0, str(REPO / "e2e"))
 sys.path.insert(0, str(REPO / "scripts" / "pages"))
 sys.path.insert(0, str(REPO / "scripts" / "release"))
 
-from evidence import PublicEvidenceError, sha256_file, validate_bundle  # noqa: E402
+from evidence import (  # noqa: E402
+    COMPACT_SCHEMA_VERSION,
+    PublicEvidenceError,
+    sha256_file,
+    validate_bundle,
+)
 from packaged_runtime import (  # noqa: E402
     RuntimeFailure,
     compare_screenshots,
@@ -156,6 +161,7 @@ def build(
     repository: str,
     matrix_path: Path = DEFAULT_MATRIX,
     optimize: bool = True,
+    require_compact: bool = False,
     expected_branches: set[str] | None = None,
 ) -> dict[str, Any]:
     root = evidence_root.resolve()
@@ -183,7 +189,12 @@ def build(
             raise SiteBuildError(f"unexpected directory in evidence root: {candidate.name}")
         try:
             manifests.append(
-                validate_bundle(root, candidate.name, expected_repository=repository)
+                validate_bundle(
+                    root,
+                    candidate.name,
+                    expected_kind="compact" if require_compact else None,
+                    expected_repository=repository,
+                )
             )
         except PublicEvidenceError as exc:
             raise SiteBuildError(str(exc)) from exc
@@ -208,6 +219,7 @@ def build(
     rendered_assets: dict[tuple[str, str, str], tuple[Path, int, int, str]] = {}
     inspected_sources: dict[Path, dict[str, Any]] = {}
     for manifest in manifests:
+        compact = manifest["schema_version"] == COMPACT_SCHEMA_VERSION
         release = manifest["release"]
         branch = release["branch"]
         provenance = manifest["provenance"]
@@ -241,20 +253,36 @@ def build(
             if frame_id in frame_ids:
                 raise SiteBuildError(f"duplicate frame identity across release bundles: {frame_id}")
             frame_ids.add(frame_id)
-            source = root / branch / frame["asset"]
+            derivative = frame.get("derivative") if compact else None
+            source = root / branch / (
+                derivative["asset"] if derivative is not None else frame["asset"]
+            )
             release_source_paths[frame_id] = source
-            if optimize:
+            if optimize or compact:
                 if source not in inspected_sources:
                     try:
-                        inspected_sources[source] = inspect_screenshot(source)
+                        inspected_sources[source] = inspect_screenshot(
+                            source,
+                            expected_format="WEBP" if compact else "PNG",
+                        )
                     except RuntimeFailure as exc:
                         raise SiteBuildError(str(exc)) from exc
-                if inspected_sources[source] != frame["pixel_validation"]:
+                expected_pixel_validation = (
+                    derivative["pixel_validation"]
+                    if derivative is not None
+                    else frame["pixel_validation"]
+                )
+                if inspected_sources[source] != expected_pixel_validation:
                     raise SiteBuildError(
                         f"protected pixel reinspection disagrees for {frame_id}"
                     )
-            extension = "webp" if optimize else "png"
-            render_key = (branch, frame["file_sha256"], extension)
+            extension = "webp" if compact or optimize else "png"
+            render_digest = (
+                derivative["file_sha256"]
+                if derivative is not None
+                else frame["file_sha256"]
+            )
+            render_key = (branch, render_digest, extension)
             if render_key in rendered_assets:
                 (
                     image_relative,
@@ -267,11 +295,14 @@ def build(
                     frame["file_sha256"] + ".rendering." + extension
                 )
                 staged = output / staged_relative
-                rendered_width, rendered_height = (
-                    optimize_image(source, staged)
-                    if optimize
-                    else copy_image(source, staged, frame)
-                )
+                if derivative is not None:
+                    rendered_width, rendered_height = copy_image(
+                        source, staged, derivative
+                    )
+                elif optimize:
+                    rendered_width, rendered_height = optimize_image(source, staged)
+                else:
+                    rendered_width, rendered_height = copy_image(source, staged, frame)
                 rendered_sha256 = published_digest(staged)
                 image_relative = Path("e2e") / "images" / branch / (
                     rendered_sha256 + "." + extension
@@ -340,18 +371,21 @@ def build(
             gallery_frames.append(public_frame)
         for comparison in manifest["comparisons"]:
             metrics = comparison["pixel_validation"]
-            if optimize:
-                region = metrics.get("region")
+            rendered_metrics = (
+                comparison["derivative_pixel_validation"] if compact else metrics
+            )
+            if optimize or compact:
+                region = rendered_metrics.get("region")
                 try:
                     reinspected = compare_screenshots(
                         release_source_paths[comparison["first_frame_id"]],
                         release_source_paths[comparison["second_frame_id"]],
-                        metrics["required_changed_fraction"],
+                        rendered_metrics["required_changed_fraction"],
                         tuple(region) if region is not None else None,
                     )
                 except RuntimeFailure as exc:
                     raise SiteBuildError(str(exc)) from exc
-                if reinspected != metrics:
+                if reinspected != rendered_metrics:
                     raise SiteBuildError(
                         "protected comparison reinspection disagrees for "
                         f"{comparison['comparison_id']}"
@@ -371,6 +405,11 @@ def build(
                     )
                 }
                 | {"source_pixel_validation": metrics}
+                | (
+                    {"published_pixel_validation": rendered_metrics}
+                    if compact
+                    else {}
+                )
             )
 
     gallery_frames.sort(
@@ -428,7 +467,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--copy-images",
         action="store_true",
-        help="copy PNGs instead of producing optimized WebP (intended for dependency-free tests)",
+        help="copy raw PNG fixtures instead of optimizing them (compact WebP is always copied)",
+    )
+    parser.add_argument(
+        "--require-compact-evidence",
+        action="store_true",
+        help="reject raw PNG handoffs; protected Pages fan-in must use compact caches",
     )
     args = parser.parse_args(argv)
     expected_branches: set[str] | None = None
@@ -455,6 +499,7 @@ def main(argv: list[str] | None = None) -> int:
             repository=args.repository,
             matrix_path=args.matrix,
             optimize=not args.copy_images,
+            require_compact=args.require_compact_evidence,
             expected_branches=expected_branches,
         )
     except (SiteBuildError, PublicEvidenceError) as exc:
