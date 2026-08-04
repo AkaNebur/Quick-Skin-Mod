@@ -2,7 +2,7 @@ package com.quickskin.mod.client.rendering;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-//? if <26.1.2 {
+//? if <26.1 {
 import net.minecraft.client.gui.GuiGraphics;
 //?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -16,7 +16,7 @@ public interface PreviewRenderBackend {
     //? if <1.21.11 {
     PreviewRenderBackend INSTANCE = new ImmediatePreviewRenderBackend();
     //?} else {
-        //? if <26.1.2 {
+        //? if <26.1 {
     PreviewRenderBackend INSTANCE = new RenderStatePreviewRenderBackend();
         //?} else if <26.2 {
     PreviewRenderBackend INSTANCE = new ExtractorPreviewRenderBackend();
@@ -26,7 +26,7 @@ public interface PreviewRenderBackend {
     //?}
 
     void renderPlayerModel(
-            //? if <26.1.2 {
+            //? if <26.1 {
             GuiGraphics graphics,
             //?} else {
             GuiGraphicsExtractor graphics,

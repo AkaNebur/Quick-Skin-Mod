@@ -10,7 +10,7 @@ These are the primary implementation trees:
 - `fabric/src/main`: canonical Fabric entry points and loader integration.
 - `neoforge/src/main`: canonical NeoForge entry points and loader integration.
 - `common/src/e2e` plus each loader's `src/e2e`: the separate packaged-runtime test mod.
-- `common/src/test`: loader-independent JUnit regression tests compiled against the common 26.1.2
+- `common/src/test`: loader-independent JUnit regression tests compiled against the common 26.1.1
   node.
 
 Stonecutter preprocesses each canonical `src/main` tree into detached generated sources. Never edit
@@ -41,14 +41,14 @@ overlays are:
 
 | Module | Minecraft | Active overlay |
 |---|---|---|
-| common | 26.1.2 | `common/src/legacy26_1_2` |
-| fabric | 26.1.2 | none; canonical output |
-| neoforge | 26.1.2 | none; canonical output |
+| common | 26.1.1 | `common/src/legacy26_1_1` |
+| fabric | 26.1.1 | none; canonical output |
+| neoforge | 26.1.1 | none; canonical output |
 
-The common overlay owns only the additive `ExtractorPreviewRenderBackend` selected by 26.1.2.
-`DeferredCollectorPreviewRenderBackend` exists only in the newer canonical era and is excluded for
-this branch. All other 26.1.2 API deltas are selected from the maintained canonical source by
-Stonecutter; Fabric and NeoForge therefore need no replacement overlay.
+The common overlay owns the single immediate-extraction preview backend selected on 26.1.1 and
+excludes the canonical deferred-collector backend that requires the newer GUI API. All other 26.1.1 API deltas are
+selected from the maintained canonical source by Stonecutter. Fabric uses canonical output;
+NeoForge adds only its loader-specific, fail-closed Architectury event compatibility mixin.
 
 Keep overlays narrow. Prefer a small adapter or a Stonecutter version branch over copying an entire
 service, screen, or handler. When a class exists in an active overlay:

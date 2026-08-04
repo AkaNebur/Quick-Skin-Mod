@@ -14,7 +14,7 @@ import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-//?} else if <26.1.2 {
+//?} else if <26.1 {
 import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -64,7 +64,7 @@ public final class SkinLayers3DIntegration {
     private static final String MESH_HELPER_CLASS = "dev.tr7zw.skinlayers.api.MeshHelper";
     private static final String MESH_CLASS = "dev.tr7zw.skinlayers.api.Mesh";
     private static final long CPM_MODEL_PROBE_TTL_NANOS = 500_000_000L;
-//? if <26.1.2 {
+//? if <26.1 {
     private static final int MAX_MESH_CACHE_ENTRIES = 512;
 //?} else if <26.2 {
 //?} else {
@@ -73,7 +73,7 @@ public final class SkinLayers3DIntegration {
 
     private static final Object MESH_INIT_LOCK = new Object();
     private static final Object REFRESH_INIT_LOCK = new Object();
-//? if <26.1.2 {
+//? if <26.1 {
 //?} else if <26.2 {
 //?} else {
     private static final Object DEFERRED_INIT_LOCK = new Object();
@@ -112,7 +112,7 @@ public final class SkinLayers3DIntegration {
     private static Method refreshMethod;
     private static boolean refreshMethodIsStatic;
 
-//? if <26.1.2 {
+//? if <26.1 {
 //?} else if <26.2 {
 //?} else {
     private static Class<?> modelPartInjectorClass;
@@ -170,7 +170,7 @@ public final class SkinLayers3DIntegration {
         if (poseStack == null || bufferSource == null || model == null || skinLocation == null
                 || shouldSuppressManualLayers() || !ensureMeshCapability()) {
             return;
-//?} else if <26.1.2 {
+//?} else if <26.1 {
     /** Renders the six manual-preview overlay layers into an immediate buffer. */
     public static void render3DLayers(PoseStack poseStack, MultiBufferSource bufferSource,
                                       int light, int overlay,
@@ -240,7 +240,7 @@ public final class SkinLayers3DIntegration {
 
             if (getBooleanConfig(enableHatField)) {
                 renderHeadLayer(poseStack, vertices, light, overlay, model, meshes.headMesh);
-//?} else if <26.1.2 {
+//?} else if <26.1 {
         try {
             VertexConsumer vertices = bufferSource.getBuffer(
                     RenderTypes.entityTranslucent(skinLocation)
@@ -316,10 +316,10 @@ public final class SkinLayers3DIntegration {
             if (deferredAttachmentSuccessLogged.compareAndSet(false, true)) {
 //?}
                 SKIN_LAYERS_LOG.info(
-//? if <26.1.2 {
+//? if <26.1 {
                         "3D Skin Layers immediate manual-preview rendering executed successfully"
 //?} else if <26.2 {
-                        "3D Skin Layers immediate manual-preview rendering executed successfully on the 26.1.2 backend"
+                        "3D Skin Layers immediate manual-preview rendering executed successfully on the 26.1.1 backend"
 //?} else {
                         "3D Skin Layers 26.2 deferred preview bridge attached successfully; "
                                 + "collector execution will render the injected overlay meshes"
@@ -342,7 +342,7 @@ public final class SkinLayers3DIntegration {
         }
     }
 
-//? if <26.1.2 {
+//? if <26.1 {
 //?} else if <26.2 {
 //?} else {
     /** Clears any injected state retained on a QuickSkin-owned model tree. */
@@ -415,18 +415,18 @@ public final class SkinLayers3DIntegration {
                 initializeMeshCapability();
                 meshCapability = CapabilityState.AVAILABLE;
                 if (meshCapabilityLogged.compareAndSet(false, true)) {
-//? if <26.1.2 {
+//? if <26.1 {
                     String backend = "immediate";
 //?} else if <26.2 {
 //?} else {
                     String backend = "deferred-injected-mesh";
 //?}
                     SKIN_LAYERS_LOG.info(
-//? if <26.1.2 {
+//? if <26.1 {
                             "3D Skin Layers manual-preview mesh capability ready: backend={}, create3DMesh={} argument(s)",
                             backend,
 //?} else if <26.2 {
-                            "3D Skin Layers manual-preview mesh capability ready: backend=immediate-26.1.2, create3DMesh={} argument(s)",
+                            "3D Skin Layers manual-preview mesh capability ready: backend=immediate-26.1.1, create3DMesh={} argument(s)",
 //?} else {
                             "3D Skin Layers manual-preview mesh capability ready: backend={}, create3DMesh={} argument(s)",
                             backend,
@@ -459,7 +459,7 @@ public final class SkinLayers3DIntegration {
         if (resolvedConfig == null) {
             throw new IllegalStateException("SkinLayersModBase.config is null");
         }
-//? if <26.1.2 {
+//? if <26.1 {
         Class<?> configClass = resolvedConfig.getClass();
 
 //?} else if <26.2 {
@@ -490,7 +490,7 @@ public final class SkinLayers3DIntegration {
             supportsMirror = false;
         }
 
-//? if <26.1.2 {
+//? if <26.1 {
 //?} else if <26.2 {
         Class<?> configClass = resolvedConfig.getClass();
 //?} else {
@@ -504,7 +504,7 @@ public final class SkinLayers3DIntegration {
         Field resolvedEnableRightSleeve = configClass.getField("enableRightSleeve");
         Field resolvedEnableLeftPants = configClass.getField("enableLeftPants");
         Field resolvedEnableRightPants = configClass.getField("enableRightPants");
-//? if <26.1.2 {
+//? if <26.1 {
 
         Method resolvedRender = meshClass.getMethod(
                 "render", ModelPart.class, PoseStack.class, VertexConsumer.class,
@@ -603,7 +603,7 @@ public final class SkinLayers3DIntegration {
 //? if <1.21.11 {
 
     private static PlayerMeshes getOrCreateMeshes(ResourceLocation skinLocation, boolean thinArms) {
-//?} else if <26.1.2 {
+//?} else if <26.1 {
 
     private static PlayerMeshes getOrCreateMeshes(Identifier skinLocation, boolean thinArms) {
 //?} else if <26.2 {
@@ -741,7 +741,7 @@ public final class SkinLayers3DIntegration {
         if (cached != null && cached.isValid()) {
             return cached;
         }
-//? if <26.1.2 {
+//? if <26.1 {
         if (cached != null) MESH_CACHE.remove(key, cached);
 
 //?} else if <26.2 {
@@ -765,7 +765,7 @@ public final class SkinLayers3DIntegration {
             if (!created.isValid()) {
                 return null;
             }
-//? if <26.1.2 {
+//? if <26.1 {
             return cacheMeshes(key, created);
 //?} else if <26.2 {
             PlayerMeshes raced = MESH_CACHE.putIfAbsent(key, created);
@@ -785,7 +785,7 @@ public final class SkinLayers3DIntegration {
         }
     }
 
-//? if <26.1.2 {
+//? if <26.1 {
     private static PlayerMeshes cacheMeshes(MeshCacheKey key, PlayerMeshes created) {
         synchronized (MESH_CACHE) {
             PlayerMeshes existing = MESH_CACHE.get(key);
@@ -979,7 +979,7 @@ public final class SkinLayers3DIntegration {
             );
         }
     }
-//?} else if <26.1.2 {
+//?} else if <26.1 {
     private static void renderHeadLayer(PoseStack poseStack, VertexConsumer vertices,
                                         int light, int overlay,
                                         PlayerModel model,

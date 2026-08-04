@@ -97,6 +97,12 @@ ACCESSOR_ONLY_MIXINS = {
     "overlay:com/quickskin/mod/mixin/compat/PasConfiguratorAccessor.java",
 }
 
+# This empty pseudo mixin gives its config plugin a transformation point in an optional third-party
+# class. The plugin performs and validates the ASM rewrite; the mixin intentionally has no injector.
+PLUGIN_TARGET_ONLY_MIXINS = {
+    "neoforge:com/quickskin/mod/neoforge/mixin/compat/ArchitecturyEventHandlerCompatMixin.java",
+}
+
 # CPM changed the call made by playerRenderPre. Both optional injection points are kept so one
 # source supports both eras, which means neither alternative can truthfully declare expect=1.
 ALTERNATIVE_HOOKS = {
@@ -174,6 +180,7 @@ class MixinPolicyTest(unittest.TestCase):
             | DEGRADABLE_MIXINS
             | OPTIONAL_MIXINS
             | ACCESSOR_ONLY_MIXINS
+            | PLUGIN_TARGET_ONLY_MIXINS
         )
         self.assertFalse(CRITICAL_MIXINS & DEGRADABLE_MIXINS)
         self.assertFalse(CRITICAL_MIXINS & OPTIONAL_MIXINS)
@@ -188,7 +195,7 @@ class MixinPolicyTest(unittest.TestCase):
             source_name = policy_id(path)
             text = path.read_text(encoding="utf-8")
             annotations = list(INJECTOR_MARKER.finditer(text))
-            if source_name in ACCESSOR_ONLY_MIXINS:
+            if source_name in ACCESSOR_ONLY_MIXINS | PLUGIN_TARGET_ONLY_MIXINS:
                 self.assertFalse(annotations, relative(path))
                 continue
             self.assertIn(source_name, injector_sources)
@@ -237,6 +244,23 @@ class MixinPolicyTest(unittest.TestCase):
                 config = json.loads(path.read_text(encoding="utf-8"))
                 self.assertIs(config["required"], True)
                 self.assertEqual(config["injectors"]["defaultRequire"], 1)
+
+    def test_architectury_compatibility_config_is_required_and_plugin_driven(self) -> None:
+        path = (
+            ROOT
+            / "neoforge"
+            / "src"
+            / "main"
+            / "resources"
+            / "quickskin-architectury-26_1-compat.mixins.json"
+        )
+        config = json.loads(path.read_text(encoding="utf-8"))
+        self.assertIs(config["required"], True)
+        self.assertEqual(
+            config["plugin"],
+            "com.quickskin.mod.neoforge.mixin.compat.ArchitecturyCompatMixinPlugin",
+        )
+        self.assertEqual(config["mixins"], ["ArchitecturyEventHandlerCompatMixin"])
 
     def test_configured_mixins_exist_and_dynamic_mixins_are_audited(self) -> None:
         configs = self.configs_named("quickskin.mixins.json") + self.configs_named(

@@ -19,7 +19,7 @@ import com.quickskin.mod.platform.MinecraftCompat;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
-//? if <26.1.2 {
+//? if <26.1 {
 import net.minecraft.client.gui.GuiGraphics;
 //?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -494,7 +494,7 @@ public class PlayerModelRenderer {
      * @param followMouse Whether the head should follow the mouse
      */
     public static void renderPlayerModel(
-//? if <26.1.2 {
+//? if <26.1 {
             GuiGraphics graphics,
 //?} else {
             GuiGraphicsExtractor graphics,
@@ -655,7 +655,7 @@ public class PlayerModelRenderer {
                     (float) y,
                     (float) scale,
                     new org.joml.Vector3f(0, 0, 0),  // translation offset
-//?} else if <26.1.2 {
+//?} else if <26.1 {
             ensureModelsLoaded();
             // 1.21.11: renderEntityInInventory removed. We call submitEntityRenderState directly
             // to preserve our own rotation (renderEntityInInventoryFollowsMouse overrides rotation).
@@ -836,7 +836,7 @@ public class PlayerModelRenderer {
      * inside renderToTexture(), using the shared buffer source.
      */
     private static void renderPlayerModelManual(
-//? if <26.1.2 {
+//? if <26.1 {
             GuiGraphics graphics,
 //?} else {
             GuiGraphicsExtractor graphics,
@@ -1097,7 +1097,7 @@ public class PlayerModelRenderer {
 
         // Lighting.setupFor3DItems();
         Lighting.setupFor3DItems();
-//?} else if <26.1.2 {
+//?} else if <26.1 {
         float submittedScale = (float)(int) scale + scaleNudge;
         float submittedRotationY = -45.0f + yRotation;
         graphics.submitSkinRenderState(
@@ -1177,7 +1177,7 @@ public class PlayerModelRenderer {
         // Forward to new method
         renderPlayerModel(graphics, x, y, scale, yRotation, playerData, mouseX, mouseY, followMouse);
     }
-//?} else if <26.1.2 {
+//?} else if <26.1 {
     /**
      * Legacy method for backwards compatibility - forwards to new GuiGraphics version
      */
@@ -2160,7 +2160,7 @@ public class PlayerModelRenderer {
             net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY
         );
 
-//?} else if <26.1.2 {
+//?} else if <26.1 {
         // Use Minecraft's BlockRenderer to render a grass block properly
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         net.minecraft.client.renderer.block.BlockRenderDispatcher blockRenderer = mc.getBlockRenderer();

@@ -49,6 +49,22 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
     def test_checked_in_matrix_is_valid(self) -> None:
         release_matrix.validate_matrix(self.mutated())
 
+    def test_runtime_compatibility_patch_is_known_and_neoforge_only(self) -> None:
+        unknown = self.mutated()
+        next(
+            row for row in unknown["runtimes"] if row["loader"] == "neoforge"
+        )["compatibility_patch"] = "unknown"
+        self.assert_invalid(unknown, "unknown compatibility patch")
+
+        wrong_loader = self.mutated()
+        fabric = next(row for row in wrong_loader["runtimes"] if row["loader"] == "fabric")
+        fabric["compatibility_patch"] = "neoforge-26.1-break-event-v1"
+        self.assert_invalid(wrong_loader, "only on NeoForge")
+
+        broad_dependency = self.mutated()
+        self.fml_artifact(broad_dependency)["metadata"]["architectury"] = "[20.0.4,)"
+        self.assert_invalid(broad_dependency, "metadata disagrees with its tested Architectury")
+
     def test_version_can_explicitly_select_no_remap(self) -> None:
         data = self.mutated()
         version = data["unit_test_version"]

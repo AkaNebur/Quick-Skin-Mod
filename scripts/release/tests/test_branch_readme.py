@@ -44,6 +44,7 @@ def matrix_for_branch() -> dict[str, object]:
                 "artifact_node": "neoforge-1.21.1",
                 "loader_version": "21.1.77",
                 "architectury": {"version": "13.0.6"},
+                "compatibility_patch": "fixture-break-event-v1",
             },
         ],
         "source_overlays": {
@@ -70,6 +71,7 @@ class BranchReadmeTest(unittest.TestCase):
             "Fabric API `0.110.0+1.21.1`",
             "NeoForge `21.1.77`",
             "Architectury API `13.0.6`",
+            "compatibility patch `fixture-break-event-v1`",
             "Packaged E2E runtime pins",
             "not minimum dependency claims",
             "`common/src/legacy1_21_1`",

@@ -18,7 +18,7 @@ import com.quickskin.mod.platform.MinecraftCompat;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
-//? if <26.1.2 {
+//? if <26.1 {
 import net.minecraft.client.gui.GuiGraphics;
 //?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -1022,7 +1022,7 @@ public class CapeAdjustScreen extends Screen {
     }
 
     @Override
-    //? if <26.1.2 {
+    //? if <26.1 {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
     //?} else {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
@@ -1035,7 +1035,7 @@ public class CapeAdjustScreen extends Screen {
         BackgroundRenderer.renderBackground(this, graphics, partialTick);
 
         // Title
-        //? if <26.1.2 {
+        //? if <26.1 {
         graphics.drawCenteredString(this.font, this.title, this.width / 2, 10, 0xFFFFFF);
         //?} else {
         graphics.centeredText(this.font, this.title, this.width / 2, 10, 0xFFFFFF);
@@ -1046,7 +1046,7 @@ public class CapeAdjustScreen extends Screen {
                 .append(Component.literal(" · "))
                 .append(Component.literal("Scroll to zoom").withStyle(style -> style.withUnderlined(true)));
         int hintX = gridX + (gridW - this.font.width(hintText)) / 2;
-        //? if <26.1.2 {
+        //? if <26.1 {
         graphics.drawString(this.font, hintText, hintX, gridY + gridH + 8, 0xFFFFFF);
         //?} else {
         graphics.text(this.font, hintText, hintX, gridY + gridH + 8, 0xFFFFFF);
@@ -1071,7 +1071,7 @@ public class CapeAdjustScreen extends Screen {
 
         // Resolution label
         int rightPanelX = gridX + (int) (this.width * 0.6) + 15;
-        //? if <26.1.2 {
+        //? if <26.1 {
         graphics.drawString(this.font,
         //?} else {
         graphics.text(this.font,
@@ -1099,7 +1099,7 @@ public class CapeAdjustScreen extends Screen {
             int noteX = resBtnX + btnW3 + 8;
             int noteY = gridY;
             int noteMaxW = Math.max(60, this.width - noteX - 5);
-            //? if <26.1.2 {
+            //? if <26.1 {
             graphics.drawWordWrap(this.font,
             //?} else {
             graphics.textWithWordWrap(this.font,
@@ -1112,7 +1112,7 @@ public class CapeAdjustScreen extends Screen {
         // its backdrop rather than under it.
         renderOpaqueControls(graphics);
 
-        //? if <26.1.2 {
+        //? if <26.1 {
         super.render(graphics, mouseX, mouseY, partialTick);
         //?} else {
         super.extractRenderState(graphics, mouseX, mouseY, partialTick);
@@ -1120,7 +1120,7 @@ public class CapeAdjustScreen extends Screen {
     }
 
     /** Swatch beside the control row, plus the picker popover chrome while it is open. */
-    //? if <26.1.2 {
+    //? if <26.1 {
     private void renderOpaqueControls(GuiGraphics graphics) {
     //?} else {
     private void renderOpaqueControls(GuiGraphicsExtractor graphics) {
@@ -1156,7 +1156,7 @@ public class CapeAdjustScreen extends Screen {
         //?}
     }
 
-    //? if <26.1.2 {
+    //? if <26.1 {
     private void renderSourceImage(GuiGraphics graphics) {
     //?} else {
     private void renderSourceImage(GuiGraphicsExtractor graphics) {
@@ -1178,7 +1178,7 @@ public class CapeAdjustScreen extends Screen {
                 sourceImage.getWidth(), srcFrameHeight);
     }
 
-    //? if <26.1.2 {
+    //? if <26.1 {
     private void renderCapeGridOverlay(GuiGraphics graphics) {
     //?} else {
     private void renderCapeGridOverlay(GuiGraphicsExtractor graphics) {
@@ -1320,7 +1320,7 @@ public class CapeAdjustScreen extends Screen {
         // Cape front (inner side, against player's body)
         String label = Component.translatable("quickskin.cape.adjust_front").getString();
         int labelW = this.font.width(label);
-        //? if <26.1.2 {
+        //? if <26.1 {
         graphics.drawString(this.font, label,
         //?} else {
         graphics.text(this.font, label,
@@ -1330,7 +1330,7 @@ public class CapeAdjustScreen extends Screen {
         if (!mirrorFrontBack) {
             String frontLabel = Component.translatable("quickskin.cape.adjust_back").getString();
             int frontLabelW = this.font.width(frontLabel);
-            //? if <26.1.2 {
+            //? if <26.1 {
             graphics.drawString(this.font, frontLabel,
             //?} else {
             graphics.text(this.font, frontLabel,
@@ -1341,7 +1341,7 @@ public class CapeAdjustScreen extends Screen {
         String eOuterLabel = Component.translatable("quickskin.cape.adjust_elytra").getString();
         int eOuterLabelW = this.font.width(eOuterLabel);
         if (eBackW > eOuterLabelW + 4) {
-            //? if <26.1.2 {
+            //? if <26.1 {
             graphics.drawString(this.font, eOuterLabel,
             //?} else {
             graphics.text(this.font, eOuterLabel,
@@ -1350,7 +1350,7 @@ public class CapeAdjustScreen extends Screen {
         }
     }
 
-    //? if <26.1.2 {
+    //? if <26.1 {
     private void renderPreview(GuiGraphics graphics) {
     //?} else {
     private void renderPreview(GuiGraphicsExtractor graphics) {
@@ -1388,7 +1388,7 @@ public class CapeAdjustScreen extends Screen {
         }
 
         String backLabel = Component.translatable("quickskin.cape.adjust_front").getString();
-        //? if <26.1.2 {
+        //? if <26.1 {
         graphics.drawString(this.font, backLabel, rightPanelX, previewStartY - 12, 0xFF5599FF);
         //?} else {
         graphics.text(this.font, backLabel, rightPanelX, previewStartY - 12, 0xFF5599FF);
@@ -1409,7 +1409,7 @@ public class CapeAdjustScreen extends Screen {
         int frontX = rightPanelX + backPreviewW + 6;
 
         String frontLabel = Component.translatable("quickskin.cape.adjust_back").getString();
-        //? if <26.1.2 {
+        //? if <26.1 {
         graphics.drawString(this.font, frontLabel, frontX, previewStartY - 12, 0xFF55FF55);
         //?} else {
         graphics.text(this.font, frontLabel, frontX, previewStartY - 12, 0xFF55FF55);
@@ -1441,7 +1441,7 @@ public class CapeAdjustScreen extends Screen {
         if (elytraPreviewH > 4) {
             // Elytra outer (back face — what you see from behind)
             String eOuterLabel = Component.translatable("quickskin.cape.adjust_elytra").getString();
-            //? if <26.1.2 {
+            //? if <26.1 {
             graphics.drawString(this.font, eOuterLabel, rightPanelX, elytraY - 12, 0xFFFFAA00);
             //?} else {
             graphics.text(this.font, eOuterLabel, rightPanelX, elytraY - 12, 0xFFFFAA00);
@@ -1719,7 +1719,7 @@ public class CapeAdjustScreen extends Screen {
     }
 
     //? if >=1.21.11 {
-        //? if <26.1.2 {
+        //? if <26.1 {
     @Override
     protected void renderBlurredBackground(GuiGraphics guiGraphics) {
         // Disable the default blur effect - we have our own custom background
@@ -1747,7 +1747,7 @@ public class CapeAdjustScreen extends Screen {
      * Draws an outline immediately using fill calls.
      */
     private static void drawOutline(
-            //? if <26.1.2 {
+            //? if <26.1 {
             GuiGraphics graphics,
             //?} else {
             GuiGraphicsExtractor graphics,

@@ -1,6 +1,6 @@
 package com.quickskin.mod.client.gui.widget;
 
-//? if <26.1.2 {
+//? if <26.1 {
 //?} else {
 import com.quickskin.mod.client.gui.GuiCompat;
 //?}
@@ -17,7 +17,7 @@ import com.quickskin.mod.client.rendering.PreviewPlayerData;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
-//? if <26.1.2 {
+//? if <26.1 {
 import net.minecraft.client.gui.GuiGraphics;
 //?} else {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -168,7 +168,7 @@ public class PlayerWidget extends AbstractWidget {
      * did not render this frame, or when a previous overlay pass already consumed it - so it is safe
      * to call from every screen's post-render hook.
      */
-//? if <26.1.2 {
+//? if <26.1 {
     public boolean submitDeferredPreview(GuiGraphics graphics) {
 //?} else {
     public boolean submitDeferredPreview(GuiGraphicsExtractor graphics) {
@@ -512,7 +512,7 @@ public class PlayerWidget extends AbstractWidget {
     }
 
     @Override
-//? if <26.1.2 {
+//? if <26.1 {
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
 //?} else {
     public void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
@@ -545,7 +545,7 @@ public class PlayerWidget extends AbstractWidget {
                     // Animation not registered yet - try to register it now
                     if (capeId.startsWith("local_cape:")) {
                         String hash = capeId.substring("local_cape:".length());
-//? if <26.1.2 {
+//? if <26.1 {
                         com.quickskin.mod.common.data.AnimationMetadata metadata =
                             com.quickskin.mod.client.services.LocalAssetManager.getInstance().getAnimationMetadata(hash);
                         java.awt.image.BufferedImage atlasImage =
@@ -637,7 +637,7 @@ public class PlayerWidget extends AbstractWidget {
      * <p>Reads the frame state cached by the render pass rather than recomputing the layout, so the
      * model is always drawn exactly where the mouse-interaction cache says it is.
      */
-//? if <26.1.2 {
+//? if <26.1 {
     public void submitPreview(GuiGraphics graphics, int mouseX, int mouseY) {
 //?} else {
     public void submitPreview(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -654,7 +654,7 @@ public class PlayerWidget extends AbstractWidget {
 //?} else if <1.21.11 {
         // Use GuiGraphics directly for vanilla rendering method
         PlayerModelRenderer.renderPlayerModel(
-//?} else if <26.1.2 {
+//?} else if <26.1 {
         // Use GuiGraphics directly for vanilla rendering method
         PreviewRenderBackend.INSTANCE.renderPlayerModel(
 //?} else {
@@ -681,7 +681,7 @@ public class PlayerWidget extends AbstractWidget {
     /**
      * Render a border around where the player model is actually rendered (for debugging/positioning)
      */
-//? if <26.1.2 {
+//? if <26.1 {
     private void renderModelBorder(GuiGraphics graphics, int centerX, int centerY, float scale) {
 //?} else {
     private void renderModelBorder(GuiGraphicsExtractor graphics, int centerX, int centerY, float scale) {
@@ -716,7 +716,7 @@ public class PlayerWidget extends AbstractWidget {
         int textColor = 0xFFFFFFFF; // White text
 
         // Draw text with shadow for better readability
-//? if <26.1.2 {
+//? if <26.1 {
         graphics.drawString(font, instructionText, textX, textY, textColor, true);
 //?} else {
         graphics.text(font, instructionText, textX, textY, textColor, true);
@@ -866,7 +866,7 @@ public class PlayerWidget extends AbstractWidget {
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
         if (!config.enablePlayerPreviewCustomization || button != 0) {
             return false;
-//?} else if <26.1.2 {
+//?} else if <26.1 {
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean focused) {
         double mouseX = event.x();
         double mouseY = event.y();
@@ -958,7 +958,7 @@ public class PlayerWidget extends AbstractWidget {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (!isDragging || button != 0) {
             return false;
-//?} else if <26.1.2 {
+//?} else if <26.1 {
     public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent event) {
         int button = event.buttonInfo().button();
         if (!isDragging || button != 0) {
@@ -1009,7 +1009,7 @@ public class PlayerWidget extends AbstractWidget {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (!isDragging || button != 0) {
             return false;
-//?} else if <26.1.2 {
+//?} else if <26.1 {
     public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double dragX, double dragY) {
         double mouseX = event.x();
         double mouseY = event.y();

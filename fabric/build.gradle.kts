@@ -136,7 +136,12 @@ dependencies {
     val modImpl = if (isNoRemap) "implementation" else "modImplementation"
     modImpl("net.fabricmc:fabric-loader:${versionProp("fabric_loader_version")}")
     modImpl("net.fabricmc.fabric-api:fabric-api:${versionProp("fabric_api_version")}")
-    modImpl("dev.architectury:architectury-fabric:${versionProp("architectury_api_version")}")
+    add(modImpl, "dev.architectury:architectury-fabric:${versionProp("architectury_api_version")}") {
+        // Architectury 20.0.4 was published with a forward Fabric API dependency targeting
+        // Minecraft 26.1.2. The release matrix is authoritative: compile and run against the
+        // exact 26.1.1 Fabric API declared above instead of silently upgrading the game API.
+        exclude(group = "net.fabricmc.fabric-api", module = "fabric-api")
+    }
 
     "common"(project.files(commonProject.tasks.named("jar")))
     "shadowBundle"(project.files(commonProject.tasks.named("transformProductionFabric")))

@@ -85,7 +85,9 @@ class DependencySecurityPolicyTest(unittest.TestCase):
         self.assertEqual(root.findall(".//v:md5", namespace), [])
 
         components = root.findall("v:components/v:component", namespace)
-        self.assertGreater(len(components), 300)
+        # The exact 26.1.1 graph is smaller than 26.1.2 after obsolete pins are pruned, but still
+        # large enough that a partial or accidentally regenerated metadata file fails closed.
+        self.assertGreater(len(components), 250)
         coordinates: set[tuple[str, str, str]] = set()
         for component in components:
             coordinate = (
@@ -203,6 +205,13 @@ class DependencySecurityPolicyTest(unittest.TestCase):
                 )
             )
         self.assertEqual(expected - coordinates, set())
+        obsolete_release_pins = {
+            ("dev.architectury", "architectury", "20.0.6"),
+            ("net.fabricmc.fabric-api", "fabric-api", "0.151.0+26.1.2"),
+            ("net.neoforged", "neoforge", "26.1.2.76"),
+            ("net.neoforged", "neoform", "26.1.2-1"),
+        }
+        self.assertEqual(obsolete_release_pins & coordinates, set())
 
     def test_repository_policy_keeps_trusted_namespaces_local_only(self) -> None:
         policy = (ROOT / "gradle" / "repository-policy.gradle.kts").read_text(

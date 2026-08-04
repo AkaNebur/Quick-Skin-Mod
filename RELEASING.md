@@ -3,7 +3,7 @@
 Quick Skin publishes one immutable release identity for every branch-owned Minecraft era. The
 identity is derived from the exact Minecraft versions in `release/release-matrix.json` and the
 logical `mod_version`; it is not typed independently into a workflow. For this branch the identity
-is `mc26.1.2-v3.0.0`, and the matrix binds it to `fabric-and-neoforge-26.1.2`.
+is `mc26.1.1-v3.0.0`, and the matrix binds it to `fabric-and-neoforge-26.1.1`.
 
 ## Preconditions
 
@@ -32,11 +32,11 @@ move, reuse, or delete a release tag.
 
 ```bash
 git fetch origin --tags
-git switch fabric-and-neoforge-26.1.2
-git pull --ff-only origin fabric-and-neoforge-26.1.2
+git switch fabric-and-neoforge-26.1.1
+git pull --ff-only origin fabric-and-neoforge-26.1.1
 python scripts/release/release_identity.py
-git tag --sign mc26.1.2-v3.0.0
-git push origin refs/tags/mc26.1.2-v3.0.0
+git tag --sign mc26.1.1-v3.0.0
+git push origin refs/tags/mc26.1.1-v3.0.0
 ```
 
 Replace the example identity and branch with the exact values printed from that branch. The
@@ -116,7 +116,7 @@ Downloaders can verify checksums with `SHA256SUMS`. Maintainers can additionally
 provenance for a downloaded JAR:
 
 ```bash
-gh attestation verify "Quick Skin - Fabric - 26.1.2-3.0.0.jar" \
+gh attestation verify "Quick Skin - Fabric - 26.1.1-3.0.0.jar" \
   --repo AkaNebur/Quick-Skin-Mod
 ```
 

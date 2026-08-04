@@ -50,6 +50,11 @@ KQUEUE_UNSUPPORTED_PLATFORM_CAUSE = (
 )
 DEBUG_FILE_APPENDER_FAILURE = "An exception occurred processing Appender DebugFile"
 DEBUG_FILE_APPENDER_STACK_WINDOW = 96
+COMPATIBILITY_LOG_MARKERS = {
+    "neoforge-26.1-break-event-v1": (
+        "Quick Skin applied Architectury NeoForge 26.1 BreakEvent compatibility patch"
+    ),
+}
 
 EXPECTED_STEPS: dict[tuple[str, str], list[str]] = {
     ("phase0-smoke", "client_a"): ["baseline", "apply_local_skin"],
@@ -898,6 +903,24 @@ def scan_runtime_logs(logs: list[Path]) -> None:
         raise RuntimeFailure("fatal runtime log evidence:\n" + "\n".join(hits[:30]))
 
 
+def require_compatibility_marker(logs: list[Path], row: dict[str, Any]) -> None:
+    patch = row.get("compatibility_patch")
+    if patch is None:
+        return
+    marker = COMPATIBILITY_LOG_MARKERS.get(patch)
+    if marker is None:
+        raise RuntimeFailure(f"unknown runtime compatibility patch {patch!r}")
+    missing: list[str] = []
+    for log in logs:
+        content = log.read_text(encoding="utf-8", errors="replace")
+        if marker not in content:
+            missing.append(str(log))
+    if missing:
+        raise RuntimeFailure(
+            f"compatibility patch {patch!r} was not observed in every process: {missing}"
+        )
+
+
 def artifact_record(manifest: dict[str, Any], node: str) -> dict[str, Any]:
     records = [record for record in manifest.get("artifacts", []) if record.get("artifact_node") == node]
     if len(records) != 1:
@@ -1045,6 +1068,7 @@ def run_packaged_row(
         if two_clients:
             reports["client_b"] = validate_report(client_b, row, scenario, "client_b")
         scan_runtime_logs(runtime_logs)
+        require_compatibility_marker(runtime_logs, row)
         crash_reports = list(profile.rglob("crash-reports/*.txt"))
         if crash_reports:
             raise RuntimeFailure(f"runtime produced crash reports: {crash_reports}")

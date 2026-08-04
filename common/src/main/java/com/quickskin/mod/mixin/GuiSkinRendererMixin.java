@@ -13,7 +13,7 @@ import net.minecraft.client.Minecraft;
 //?} else {
 //?}
 import net.minecraft.client.gui.render.pip.GuiSkinRenderer;
-//? if <26.1.2 {
+//? if <26.1 {
 import net.minecraft.client.gui.render.state.pip.GuiSkinRenderState;
 import net.minecraft.client.renderer.MultiBufferSource;
 //?} else if <26.2 {
@@ -52,7 +52,7 @@ public class GuiSkinRendererMixin {
             require = 0,
             expect = 1,
             allow = 1,
-//? if <26.1.2 {
+//? if <26.1 {
             method = "renderToTexture(Lnet/minecraft/client/gui/render/state/pip/GuiSkinRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;)V",
             at = @At(
                     value = "INVOKE",

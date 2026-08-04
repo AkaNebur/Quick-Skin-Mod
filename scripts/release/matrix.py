@@ -32,6 +32,7 @@ REQUIRED_RUNTIME_FIELDS = {
 }
 
 KNOWN_LOADERS = {"fabric", "forge", "neoforge"}
+KNOWN_COMPATIBILITY_PATCHES = {"neoforge-26.1-break-event-v1"}
 LOADER_DISPLAY_NAMES = {
     "fabric": "Fabric",
     "forge": "Forge",
@@ -440,6 +441,16 @@ def validate_matrix(data: dict[str, Any]) -> None:
             or not architectury["version"]
         ):
             raise MatrixError(f"runtime {node} must use a locked Maven Architectury version")
+        compatibility_patch = runtime.get("compatibility_patch")
+        if compatibility_patch is not None:
+            if compatibility_patch not in KNOWN_COMPATIBILITY_PATCHES:
+                raise MatrixError(
+                    f"runtime {node} uses unknown compatibility patch {compatibility_patch!r}"
+                )
+            if runtime["loader"] != "neoforge":
+                raise MatrixError(
+                    f"runtime {node} compatibility patches are supported only on NeoForge"
+                )
         if runtime.get("scheduled_anchor") is not True:
             raise MatrixError(f"runtime {node} must be a scheduled native anchor")
         if not isinstance(runtime.get("pr_anchor"), bool):
@@ -497,10 +508,15 @@ def validate_matrix(data: dict[str, Any]) -> None:
             )
         validate_metadata_range(node, loader, version, artifact["metadata_range"])
         architectury_version = runtime_by_node[node]["architectury"]["version"]
+        compatibility_patch = runtime_by_node[node].get("compatibility_patch")
         expected_architectury = (
-            f">={architectury_version}"
-            if loader == "fabric"
-            else f"[{architectury_version},)"
+            f"[{architectury_version}]"
+            if compatibility_patch is not None
+            else (
+                f">={architectury_version}"
+                if loader == "fabric"
+                else f"[{architectury_version},)"
+            )
         )
         if metadata.get("architectury") != expected_architectury:
             raise MatrixError(f"artifact {node} metadata disagrees with its tested Architectury")

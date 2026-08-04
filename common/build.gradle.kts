@@ -104,7 +104,7 @@ check(actualLegacyDirectories == declaredLegacyDirectories) {
 }
 
 val canonicalOnlyAfterLegacyByVersion = mapOf(
-    "26.1.2" to setOf(
+    "26.1.1" to setOf(
         "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
     ),
 )
