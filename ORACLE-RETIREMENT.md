@@ -19,8 +19,8 @@ fix the canonical source or an active `legacy*` overlay; do not copy an oracle t
 No `src/v*` content remains. Canonical resources live in each module's `src/main/resources` tree.
 Minecraft 26.2 remains the canonical source era. This 26.1.1 branch routes its single
 immediate-extraction preview backend through `common/src/legacy26_1_1`; Fabric otherwise uses canonical
-output, while NeoForge adds one loader-specific Architectury compatibility mixin. The overlay
-contains no resources.
+output, while NeoForge adds one loader-specific Architectury compatibility mixin and the matching
+screen-hook access transformer. The overlay contains no resources.
 
 Gradle consumes the canonical resources for every active module. Fabric
 metadata is normalized from one canonical `fabric.mod.json`; NeoForge metadata is normalized from

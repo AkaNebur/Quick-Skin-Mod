@@ -1,6 +1,7 @@
 package com.quickskin.mod.neoforge.mixin.compat;
 
 import org.objectweb.asm.Handle;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -113,37 +115,37 @@ public final class ArchitecturyCompatMixinPlugin implements IMixinConfigPlugin {
                             + mixinClassName + " -> " + targetClassName
             );
         }
-        TransformResult result = applyCompatibilityTransform(targetClass);
-        LOGGER.info("{} (method descriptors={}, invocation owners={}, local descriptors={})",
-                PATCH_LOG_MARKER,
-                result.methodDescriptors(),
-                result.invocationOwners(),
-                result.localDescriptors());
+        applyCompatibilityTransform(targetClass);
+        LOGGER.info("{} (method descriptors=1, invocation owners=7, local descriptors=1, frame types=1)",
+                PATCH_LOG_MARKER);
     }
 
-    static TransformResult applyCompatibilityTransform(ClassNode targetClass) {
+    static void applyCompatibilityTransform(ClassNode targetClass) {
         if (!TARGET_CLASS.replace('.', '/').equals(targetClass.name)) {
             throw new IllegalStateException("Wrong Architectury compatibility target: " + targetClass.name);
         }
 
-        int methodDescriptors = 0;
-        int invocationOwners = 0;
-        int localDescriptors = 0;
+        List<MethodNode> methodDescriptors = new ArrayList<>();
+        List<MethodInsnNode> invocationOwners = new ArrayList<>();
+        List<LocalVariableNode> localDescriptors = new ArrayList<>();
+        List<FrameNode> frameTypes = new ArrayList<>();
         for (MethodNode method : targetClass.methods) {
+            boolean targetEventMethod = "event".equals(method.name)
+                    && ("(" + INCOMPATIBLE_DESCRIPTOR + ")V").equals(method.desc);
             if (method.desc.contains(INCOMPATIBLE_DESCRIPTOR)) {
-                if (!("event".equals(method.name)
-                        && ("(" + INCOMPATIBLE_DESCRIPTOR + ")V").equals(method.desc))) {
+                if (!targetEventMethod) {
                     throw unexpected("method descriptor", method.name + method.desc);
                 }
-                method.desc = "(" + COMPATIBLE_DESCRIPTOR + ")V";
-                methodDescriptors++;
+                methodDescriptors.add(method);
             }
             rejectText("method signature", method.signature);
             for (LocalVariableNode local : method.localVariables == null
                     ? List.<LocalVariableNode>of() : method.localVariables) {
                 if (INCOMPATIBLE_DESCRIPTOR.equals(local.desc)) {
-                    local.desc = COMPATIBLE_DESCRIPTOR;
-                    localDescriptors++;
+                    if (!targetEventMethod) {
+                        throw unexpected("local descriptor", local.desc);
+                    }
+                    localDescriptors.add(local);
                 } else {
                     rejectText("local descriptor", local.desc);
                 }
@@ -152,29 +154,46 @@ public final class ArchitecturyCompatMixinPlugin implements IMixinConfigPlugin {
             for (AbstractInsnNode instruction : method.instructions) {
                 if (instruction instanceof MethodInsnNode call) {
                     if (INCOMPATIBLE_TYPE.equals(call.owner)) {
+                        if (!targetEventMethod) {
+                            throw unexpected("invocation owner", call.owner);
+                        }
                         validateCompatibleInvocation(call);
-                        call.owner = COMPATIBLE_TYPE;
-                        invocationOwners++;
+                        invocationOwners.add(call);
+                    } else {
+                        rejectText("invocation owner", call.owner);
                     }
                     rejectText("invocation descriptor", call.desc);
+                } else if (instruction instanceof FrameNode frame
+                        && targetEventMethod
+                        && frame.type == Opcodes.F_NEW
+                        && frame.local != null
+                        && frame.local.size() == 1
+                        && INCOMPATIBLE_TYPE.equals(frame.local.get(0))
+                        && frame.stack != null
+                        && frame.stack.isEmpty()) {
+                    frameTypes.add(frame);
                 } else {
                     rejectUnexpectedInstructionReference(instruction);
                 }
             }
         }
 
-        TransformResult result = new TransformResult(
-                methodDescriptors, invocationOwners, localDescriptors
-        );
-        if (!result.equals(new TransformResult(1, 7, 1))) {
+        if (methodDescriptors.size() != 1
+                || invocationOwners.size() != 7
+                || localDescriptors.size() != 1
+                || frameTypes.size() != 1) {
             throw new IllegalStateException(
-                    "Architectury compatibility target changed; expected 1/7/1 replacements, got "
-                            + result.methodDescriptors() + "/" + result.invocationOwners() + "/"
-                            + result.localDescriptors()
+                    "Architectury compatibility target changed; expected 1/7/1/1 replacements, got "
+                            + methodDescriptors.size() + "/" + invocationOwners.size() + "/"
+                            + localDescriptors.size() + "/" + frameTypes.size()
             );
         }
+
+        methodDescriptors.get(0).desc = "(" + COMPATIBLE_DESCRIPTOR + ")V";
+        for (MethodInsnNode call : invocationOwners) call.owner = COMPATIBLE_TYPE;
+        localDescriptors.get(0).desc = COMPATIBLE_DESCRIPTOR;
+        frameTypes.get(0).local.set(0, COMPATIBLE_TYPE);
         assertNoIncompatibleReferences(targetClass);
-        return result;
     }
 
     private static void validateCompatibleInvocation(MethodInsnNode call) {
@@ -239,6 +258,9 @@ public final class ArchitecturyCompatMixinPlugin implements IMixinConfigPlugin {
                 if (instruction instanceof MethodInsnNode call) {
                     rejectText("remaining invocation owner", call.owner);
                     rejectText("remaining invocation descriptor", call.desc);
+                } else if (instruction instanceof FrameNode frame) {
+                    rejectFrameValues(frame.local);
+                    rejectFrameValues(frame.stack);
                 } else {
                     rejectUnexpectedInstructionReference(instruction);
                 }
@@ -259,6 +281,4 @@ public final class ArchitecturyCompatMixinPlugin implements IMixinConfigPlugin {
         );
     }
 
-    record TransformResult(int methodDescriptors, int invocationOwners, int localDescriptors) {
-    }
 }
