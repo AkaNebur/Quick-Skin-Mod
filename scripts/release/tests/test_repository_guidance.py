@@ -148,6 +148,44 @@ class RepositoryGuidanceTest(unittest.TestCase):
             r"ClientGuiEvent\.RENDER_POST\.register",
         )
 
+    def test_skin_return_counts_follow_loader_specific_bytecode(self) -> None:
+        common_mixin = (
+            ROOT
+            / "common"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "mixin"
+            / "SkinManagerMixin.java"
+        ).read_text(encoding="utf-8")
+        neoforge_mixin = (
+            ROOT
+            / "neoforge"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "neoforge"
+            / "mixin"
+            / "SkinManagerMixin.java"
+        ).read_text(encoding="utf-8")
+
+        self.assertRegex(
+            common_mixin,
+            r"//\? if <1\.21\.1 \{\s+expect = 1,\s+allow = 1\s+"
+            r"//\?\} else \{\s+expect = 2,\s+allow = 2",
+        )
+        self.assertRegex(
+            neoforge_mixin,
+            r"//\? if <1\.21\.6 \{\s+expect = 2,\s+allow = 2\s+"
+            r"//\?\} else \{\s+expect = 1,\s+allow = 1",
+        )
+
     def test_release_publication_is_recoverable_and_non_destructive(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"
