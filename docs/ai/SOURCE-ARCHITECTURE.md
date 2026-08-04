@@ -10,7 +10,7 @@ These are the primary implementation trees:
 - `fabric/src/main`: canonical Fabric entry points and loader integration.
 - `neoforge/src/main`: canonical NeoForge entry points and loader integration.
 - `common/src/e2e` plus each loader's `src/e2e`: the separate packaged-runtime test mod.
-- `common/src/test`: loader-independent JUnit regression tests compiled against the common 1.21.1
+- `common/src/test`: loader-independent JUnit regression tests compiled against the common 1.21.5
   node.
 
 Stonecutter preprocesses each canonical `src/main` tree into detached generated sources. Never edit
@@ -41,13 +41,15 @@ overlays are:
 
 | Module | Minecraft | Active overlay |
 |---|---|---|
-| common | 1.21.1 | `common/src/legacy1_21_1` |
-| fabric | 1.21.1 | none; canonical output |
-| neoforge | 1.21.1 | `neoforge/src/legacy1_21_1` |
+| common | 1.21.5 | `common/src/legacy1_21_5` |
+| fabric | 1.21.5 | none; canonical output |
+| neoforge | 1.21.5 | `neoforge/src/legacy1_21_5` |
 
-The NeoForge whole-file replacements are genuine 1.21.1 rewrites: `CapeLayerMixin`,
-`PlayerInfoMixin`, `MixinAbstractClientPlayer`, and `PlatformHelperImpl`. Common overlay Java files
-are additive compatibility classes or thin 1.21.1 render/network/platform backends.
+The NeoForge whole-file replacements are genuine 1.21.5 rewrites of `CapeLayerMixin`,
+`PlayerRendererMixin`, `SkinManagerMixin`, `PlayerInfoMixin`, `MixinAbstractClientPlayer`, and the
+thin NeoForge 21.5 `PlatformHelperImpl` loader adapter.
+Common overlay Java files are additive compatibility classes, the exact 1.21.5 cape render-state
+adapter, or thin render/network/platform backends.
 
 Keep overlays narrow. Prefer a small adapter or a Stonecutter version branch over copying an entire
 service, screen, or handler. When a class exists in an active overlay:

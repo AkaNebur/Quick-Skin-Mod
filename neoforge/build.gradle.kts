@@ -69,7 +69,7 @@ check(actualLegacyDirectories == declaredLegacyDirectories) {
         "actual=$actualLegacyDirectories"
 }
 val canonicalOnlyByVersion = mapOf(
-    "1.21.1" to setOf("com/quickskin/mod/neoforge/mixin/GuiSkinRendererMixin.java"),
+    "1.21.5" to setOf("com/quickskin/mod/neoforge/mixin/GuiSkinRendererMixin.java"),
 )
 check(canonicalOnlyByVersion.keys == declaredLegacyVersions) {
     "NeoForge canonical exclusions must cover exactly the matrix-declared overlay versions"
@@ -80,8 +80,8 @@ if (overlayDirectory != null) {
     val legacyJavaRoot = rootProject.file("neoforge/src/$overlayDirectory/java")
     check(legacyJavaRoot.isDirectory) { "Missing NeoForge overlay Java root: $legacyJavaRoot" }
     val legacyResourcesRoot = legacyJavaRoot.parentFile.resolve("resources")
-    val canonicalOnlyAfter1211 = canonicalOnlyByVersion.getValue(minecraftVersion)
-    canonicalOnlyAfter1211.forEach { relativePath ->
+    val canonicalOnlyAfterLegacy = canonicalOnlyByVersion.getValue(minecraftVersion)
+    canonicalOnlyAfterLegacy.forEach { relativePath ->
         check(rootProject.file("neoforge/src/main/java/$relativePath").isFile) {
             "NeoForge overlay exclusion matches no canonical source: $relativePath"
         }
@@ -101,7 +101,7 @@ if (overlayDirectory != null) {
     val prepareConsolidatedJava = tasks.register<Sync>("prepareConsolidatedJava") {
         dependsOn("stonecutterGenerate")
         from(generatedStonecutterJava) {
-            exclude(legacyOverrides + canonicalOnlyAfter1211)
+            exclude(legacyOverrides + canonicalOnlyAfterLegacy)
         }
         from(legacyJavaRoot)
         into(consolidatedLegacyJava)

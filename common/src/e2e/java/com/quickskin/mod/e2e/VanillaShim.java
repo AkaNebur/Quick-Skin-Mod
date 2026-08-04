@@ -35,7 +35,7 @@ import java.util.function.Consumer;
  *   <li><b>main render target</b> (for screenshots): {@code Minecraft.getMainRenderTarget()} vs
  *       {@code mc.gameRenderer.mainRenderTarget()} (26.x).</li>
  *   <li><b>Screenshot.grab</b>: classic Fabric exposes intermediary class/method names at runtime,
- *       and an {@code int downscale} param was inserted after 1.20.1; both mappings and shapes are
+ *       and an {@code int downscale} param was inserted in 1.21.6; both mappings and shapes are
  *       handled.</li>
  *   <li><b>widget press</b>: {@code AbstractWidget.onPress()} (no-arg) vs
  *       {@code onPress(InputWithModifiers)} (26.x).</li>
@@ -236,14 +236,14 @@ public final class VanillaShim {
             for (Method m : screenshot.getDeclaredMethods()) {
                 if (!Modifier.isStatic(m.getModifiers())) continue;
                 Class<?>[] p = m.getParameterTypes();
-                // 1.20.1: (File dir, String name, RenderTarget fb, Consumer<Component> msg)
+                // 1.20.1-1.21.5: (File dir, String name, RenderTarget fb, Consumer<Component> msg)
                 if (p.length == 4 && p[0] == File.class && p[1] == String.class
                         && p[2].isInstance(fb) && p[3] == Consumer.class) {
                     m.setAccessible(true);
                     m.invoke(null, gameDir, name, fb, noop);
                     return true;
                 }
-                // 1.21.x/26.x: (File dir, String name, RenderTarget fb, int downscale, Consumer<Component> msg)
+                // 1.21.6+/26.x: (File dir, String name, RenderTarget fb, int downscale, Consumer<Component> msg)
                 if (p.length == 5 && p[0] == File.class && p[1] == String.class
                         && p[2].isInstance(fb) && p[3] == int.class && p[4] == Consumer.class) {
                     m.setAccessible(true);
@@ -311,7 +311,7 @@ public final class VanillaShim {
      * The window's current GUI scale factor, or {@code 0} if it could not be read.
      *
      * <p>Called straight through rather than reflected, unlike its neighbours here: the drift is in
-     * the <em>type</em>, not the name - {@code double} through 1.21.1 and {@code int} from 1.21.11 -
+     * the <em>type</em>, not the name - {@code double} through 1.21.5 and {@code int} from 1.21.6 -
      * and a widening conversion absorbs that at compile time, which reflection could not do without
      * knowing each era's obfuscated name for it. Kept in this class anyway because it is exactly the
      * kind of per-era drift the rest of the harness must not have to know about.

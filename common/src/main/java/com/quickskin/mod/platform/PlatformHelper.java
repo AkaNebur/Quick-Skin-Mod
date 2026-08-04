@@ -73,19 +73,35 @@ public class PlatformHelper {
         return MinecraftCompat.INSTANCE.getPixel(image, x, y);
     }
 
+    //? if <1.21.4 {
     public static void setYoung(PlayerModel<?> model, boolean young) {
+    //?} else {
+    public static void setYoung(PlayerModel model, boolean young) {
+    //?}
         MinecraftCompat.INSTANCE.setYoung(model, young);
     }
 
+    //? if <1.21.4 {
     public static void setCrouching(PlayerModel<?> model, boolean crouching) {
+    //?} else {
+    public static void setCrouching(PlayerModel model, boolean crouching) {
+    //?}
         MinecraftCompat.INSTANCE.setCrouching(model, crouching);
     }
 
+    //? if <1.21.4 {
     public static void setRiding(PlayerModel<?> model, boolean riding) {
+    //?} else {
+    public static void setRiding(PlayerModel model, boolean riding) {
+    //?}
         MinecraftCompat.INSTANCE.setRiding(model, riding);
     }
 
+    //? if <1.21.4 {
     public static void setAttackTime(PlayerModel<?> model, float attackTime) {
+    //?} else {
+    public static void setAttackTime(PlayerModel model, float attackTime) {
+    //?}
         MinecraftCompat.INSTANCE.setAttackTime(model, attackTime);
     }
 
@@ -103,7 +119,11 @@ public class PlatformHelper {
                 u, v, regionWidth, regionHeight, textureWidth, textureHeight);
     }
 
+    //? if <1.21.4 {
     public static void renderCloak(PlayerModel<?> model, PoseStack poseStack,
+    //?} else {
+    public static void renderCloak(PlayerModel model, PoseStack poseStack,
+    //?}
                                    VertexConsumer vertexConsumer, int packedLight, int packedOverlay) {
         MinecraftCompat.INSTANCE.renderCloak(
                 model, poseStack, vertexConsumer, packedLight, packedOverlay);

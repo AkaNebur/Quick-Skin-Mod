@@ -13,6 +13,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.resources.Identifier;
+//?}
+//? if >=1.21.4 {
 import net.minecraft.world.entity.Entity;
 //?}
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,8 +22,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-//? if <1.21.11 {
-//?} else {
+//? if >=1.21.4 {
 import java.util.UUID;
 
 //?}
@@ -40,8 +41,10 @@ import java.util.UUID;
 //?}
 public class PlayerRendererMixin {
 
-//? if <1.21.11 {
+//? if <1.21.4 {
     @Inject(method = "getTextureLocation(Lnet/minecraft/client/player/AbstractClientPlayer;)Lnet/minecraft/resources/ResourceLocation;",
+//?} else if <1.21.11 {
+    @Inject(method = "getTextureLocation(Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;)Lnet/minecraft/resources/ResourceLocation;",
 //?} else {
     @Inject(method = "getTextureLocation(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;)Lnet/minecraft/resources/Identifier;",
 //?}
@@ -50,16 +53,18 @@ public class PlayerRendererMixin {
             require = 1,
             expect = 1,
             allow = 1)
-//? if <1.21.11 {
+//? if <1.21.4 {
     private void quickskin$overrideTextureLocation(AbstractClientPlayer player, CallbackInfoReturnable<ResourceLocation> cir) {
+//?} else if <1.21.11 {
+    private void quickskin$overrideTextureLocation(net.minecraft.client.renderer.entity.state.PlayerRenderState renderState,
+                                                   CallbackInfoReturnable<ResourceLocation> cir) {
 //?} else {
     private void quickskin$overrideTextureLocation(AvatarRenderState renderState, CallbackInfoReturnable<Identifier> cir) {
 //?}
         PlayerAppearanceService service = PlayerAppearanceService.getInstance();
         if (service == null) return;
 
-//? if <1.21.11 {
-//?} else {
+//? if >=1.21.4 {
         // Look up the actual player entity from the render state to get UUID
         UUID playerUUID = null;
         Minecraft mc = Minecraft.getInstance();
@@ -70,14 +75,21 @@ public class PlayerRendererMixin {
             }
         }
 
+        if (playerUUID == null && mc.level == null) {
+            playerUUID = mc.getUser().getProfileId();
+        }
         if (playerUUID == null) return;
 
 //?}
         // Try service-based lookup (covers registered data from Essential compat or server sync)
-//? if <1.21.11 {
+//? if <1.21.4 {
         service.markSkinVisible(player.getUUID());
         if (service.hasActiveSkin(player.getUUID())) {
             ResourceLocation customSkin = service.getSkinLocation(player.getUUID());
+//?} else if <1.21.11 {
+        service.markSkinVisible(playerUUID);
+        if (service.hasActiveSkin(playerUUID)) {
+            ResourceLocation customSkin = service.getSkinLocation(playerUUID);
 //?} else {
         service.markSkinVisible(playerUUID);
         if (service.hasActiveSkin(playerUUID)) {
@@ -90,7 +102,7 @@ public class PlayerRendererMixin {
         }
 
         // Title screen fallback: load directly from saved config
-//? if <1.21.11 {
+//? if <1.21.4 {
         if (Minecraft.getInstance().level == null) {
 //?} else {
         if (mc.level == null) {

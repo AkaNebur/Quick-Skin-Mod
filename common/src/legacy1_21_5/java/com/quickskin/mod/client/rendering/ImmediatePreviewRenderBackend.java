@@ -4,7 +4,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.GuiGraphics;
 
-/** Minecraft 1.21.1 immediate preview backend. */
+/** Minecraft 1.21.5 immediate preview backend. */
 @Environment(EnvType.CLIENT)
 public final class ImmediatePreviewRenderBackend implements PreviewRenderBackend {
     @Override

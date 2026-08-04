@@ -885,8 +885,10 @@ public class PlayerCapeMenuScreen extends Screen {
         // Flush and ensure clean render state
         graphics.flush();
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        //? if <1.21.5 {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
+        //?}
 //?} else {
 //?}
 
@@ -1832,7 +1834,13 @@ public class PlayerCapeMenuScreen extends Screen {
     }
 
     @Override
+    //? if <1.21.4 {
     public void renderBlurredBackground(float partialTick) {
+    //?} else if <1.21.6 {
+    protected void renderBlurredBackground() {
+    //?} else {
+    protected void renderBlurredBackground(net.minecraft.client.gui.GuiGraphics guiGraphics) {
+    //?}
         // Disable the default blur effect - we have our own custom background
     }
 

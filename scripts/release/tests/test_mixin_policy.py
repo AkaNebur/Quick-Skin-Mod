@@ -40,6 +40,8 @@ def policy_id(path: Path) -> str:
 
 CRITICAL_MIXINS = {
     "main:com/quickskin/mod/mixin/CapeLayerMixin.java",
+    "overlay:com/quickskin/mod/mixin/CapeLayerMixin.java",
+    "main:com/quickskin/mod/mixin/ItemInHandRendererMixin.java",
     "main:com/quickskin/mod/mixin/MixinAbstractClientPlayer.java",
     "main:com/quickskin/mod/mixin/PlayerInfoMixin.java",
     "main:com/quickskin/mod/mixin/PlayerRendererMixin.java",
@@ -53,7 +55,6 @@ CRITICAL_MIXINS = {
 # deterministic compatibility gate.
 DEGRADABLE_MIXINS = {
     "main:com/quickskin/mod/mixin/GuiSkinRendererMixin.java",
-    "main:com/quickskin/mod/mixin/ItemInHandRendererMixin.java",
     "main:com/quickskin/mod/mixin/PanoramaRendererMixin.java",
     "main:com/quickskin/mod/mixin/PreviewEquipmentMixin.java",
 }
@@ -88,10 +89,9 @@ ALTERNATIVE_HOOKS = {
 }
 
 # Audited vanilla bytecode multiplicities. The ItemInHand source contains Stonecutter branches:
-# pre-1.21.11 renderHand requests two buffers (arm + sleeve), while the new renderer submits one
-# model part. The NeoForge-specific arm renderer has the same pre-1.21.11 multiplicity.
-# SkinManager 1.20.1 and 1.21.1 each have two RETURN opcodes in their target methods; the later
-# SkinManager branches retain a single RETURN.
+# renderHand requests two buffers through 1.21.3, one buffer from 1.21.4 through 1.21.10, and the
+# later renderer submits one model part. SkinManager 1.20.1, 1.21.1, and 1.21.5 each have two
+# RETURN opcodes in getInsecureSkin; the modern render-state branches retain a single RETURN.
 INJECTION_COUNT_OVERRIDES = {
     (
         "main:com/quickskin/mod/mixin/ItemInHandRendererMixin.java",
@@ -115,6 +115,10 @@ ACTIVE_LOADER_INJECTION_COUNT_OVERRIDES = {
     (
         "neoforge/src/main/java/com/quickskin/mod/neoforge/mixin/SkinManagerMixin.java",
         "quickskin$modifyInsecureSkinLegacy",
+    ): {2},
+    (
+        "neoforge/src/legacy1_21_5/java/com/quickskin/mod/neoforge/mixin/SkinManagerMixin.java",
+        "quickskin$modifyInsecureSkin",
     ): {2},
 }
 
@@ -308,10 +312,9 @@ class MixinPolicyTest(unittest.TestCase):
                     assert handler is not None
                     handler_name = handler.group(1)
                     context = text[annotation.start() : handler.start()]
-                    expected_require = 0 if (
-                        "$redirect" in handler_name
-                        or handler_name == "quickskin$suppressPreviewEquipment"
-                    ) else 1
+                    expected_require = (
+                        0 if handler_name == "quickskin$suppressPreviewEquipment" else 1
+                    )
                     expected_counts = ACTIVE_LOADER_INJECTION_COUNT_OVERRIDES.get(
                         (relative(source_path), handler_name), {1}
                     )

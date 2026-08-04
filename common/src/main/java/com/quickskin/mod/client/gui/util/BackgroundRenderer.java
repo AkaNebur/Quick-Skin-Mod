@@ -1,8 +1,7 @@
 package com.quickskin.mod.client.gui.util;
 
-//? if <1.21.11 {
+//? if <1.21.5 {
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.quickskin.mod.QuickSkin;
 //?}
 import com.quickskin.mod.client.gui.StarPatternCache;
 //? if <1.21 {
@@ -34,6 +33,8 @@ import net.minecraft.client.renderer.Panorama;
 //?}
 //? if >=1.21.11 {
 import net.minecraft.client.renderer.RenderPipelines;
+//?} else if >=1.21.5 {
+import net.minecraft.client.renderer.RenderType;
 //?}
 //? if <1.21.11 {
 import net.minecraft.resources.ResourceLocation;
@@ -107,7 +108,7 @@ public class BackgroundRenderer {
         // 2. Star pattern
         renderStarPattern(screen, graphics, partialTick);
 
-        //? if <1.21.11 {
+        //? if <1.21.5 {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(0.0F, 0.0F, 0.0F, 0.75F);
@@ -118,6 +119,10 @@ public class BackgroundRenderer {
         //?}
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         RenderSystem.disableBlend();
+        //?} else if <1.21.11 {
+        int vignetteColor = 0xBF000000;
+        graphics.blit(RenderType::guiTextured, VIGNETTE_LOCATION, 0, 0, 0.0f, 0.0f,
+                screen.width, screen.height, screen.width, screen.height, vignetteColor);
         //?} else {
         // 3. Vignette overlay — pass ARGB color (black at 75% opacity)
         int vignetteColor = (191 << 24) | 0; // 0xBF000000
@@ -137,10 +142,14 @@ public class BackgroundRenderer {
         double pixelsPerSecond = 5.0;
         int tileSize = StarPatternCache.getTileSize();
 
-        //? if <1.21.11 {
+        //? if <1.21.5 {
         ResourceLocation starTexture = StarPatternCache.getTextureLocation();
         int texWidth = StarPatternCache.getTextureWidth();
         int texHeight = StarPatternCache.getTextureHeight();
+        //?} else if <1.21.11 {
+        ResourceLocation starTexture = StarPatternCache.getTextureLocation();
+        int cacheWidth = StarPatternCache.getTextureWidth();
+        int cacheHeight = StarPatternCache.getTextureHeight();
         //?} else {
         Identifier starTexture = StarPatternCache.getTextureLocation();
         int cacheWidth = StarPatternCache.getTextureWidth();
@@ -157,7 +166,7 @@ public class BackgroundRenderer {
         double smoothTime = (tickCount + partialTick) / 20.0;
         double offsetX = (smoothTime * pixelsPerSecond) % tileSize;
 
-        //? if <1.21.11 {
+        //? if <1.21.5 {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 0.15f);
@@ -166,7 +175,7 @@ public class BackgroundRenderer {
         int argbColor = (38 << 24) | (255 << 16) | (255 << 8) | 255; // 0x26FFFFFF
         //?}
 
-        //? if <1.21.11 {
+        //? if <1.21.5 {
         float u0 = (float)offsetX / (float)texWidth;
         float v0 = 0.0f;
         float u1 = u0 + ((float)screen.width / (float)texWidth);
@@ -176,7 +185,7 @@ public class BackgroundRenderer {
         StarPatternCache.ensureLinearFiltering();
         //?}
 
-        //? if <1.21.11 {
+        //? if <1.21.5 {
         var pose = graphics.pose();
         pose.pushPose();
         RenderSystem.setShaderTexture(0, starTexture);
@@ -207,6 +216,9 @@ public class BackgroundRenderer {
         pose.popPose();
         RenderSystem.disableBlend();
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+        //?} else if <1.21.11 {
+        graphics.blit(RenderType::guiTextured, starTexture, 0, 0, (float) offsetX, 0.0f,
+                screen.width, screen.height, cacheWidth, cacheHeight, argbColor);
         //?} else {
         // Render with blit passing ARGB color for opacity
         // Use GUI_TEXTURED instead of guiTexturedOverlay for Sodium compatibility
@@ -260,9 +272,12 @@ public class BackgroundRenderer {
             RenderSystem.enableBlend();
             graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
             GuiCompat.blit(graphics, PANORAMA_OVERLAY, 0, 0, 0, 0.0F, 0.0F, screen.width, screen.height, 16, 128);
-            //?} else if <1.21.11 {
+            //?} else if <1.21.4 {
             graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
             graphics.blit(PANORAMA_OVERLAY, 0, 0, 0, 0.0F, 0.0F, screen.width, screen.height, 16, 128);
+            //?} else if <1.21.11 {
+            PlatformHelper.blit(graphics, PANORAMA_OVERLAY, 0, 0, 0, 0.0F, 0.0F,
+                    screen.width, screen.height, 16, 128);
             //?} else {
             GuiCompat.blit(graphics, PANORAMA_OVERLAY, 0, 0, 0, 0.0F, 0.0F, screen.width, screen.height, 16, 128);
             //?}

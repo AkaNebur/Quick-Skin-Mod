@@ -15,14 +15,14 @@ public class QuickSkinForge {
 
     public QuickSkinForge(net.neoforged.bus.api.IEventBus modEventBus) {
         // Note: Architectury automatically registers events for NeoForge
-        // No manual event bus registration needed in 1.21.1
+        // No manual event bus registration needed in 1.21.5
     }
 
     /**
      * Common setup event handler (runs on both client and server)
      * Uses @EventBusSubscriber to ensure it's called properly
      */
-//? if <1.21.11 {
+//? if <1.21.6 {
     @EventBusSubscriber(modid = QuickSkin.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
 //?} else {
     @EventBusSubscriber(modid = QuickSkin.MOD_ID)
