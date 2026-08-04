@@ -249,7 +249,15 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn("^[0-9a-f]{40}$", refresh)
         self.assertIn("name=pages-cache-%s--%s", refresh)
         self.assertIn("name: ${{ steps.cache.outputs.name }}", refresh)
-        self.assertNotIn("actions/checkout@", refresh)
+        self.assertIn("actions/checkout@", refresh)
+        self.assertIn(
+            "ref: ${{ needs.discover.outputs.implementation_sha }}", refresh
+        )
+        self.assertIn("persist-credentials: false", refresh)
+        self.assertIn("scripts/pages/evidence.py validate", refresh)
+        self.assertIn("--kind compact", refresh)
+        self.assertNotIn("id-token: write", refresh)
+        self.assertNotIn("pages: write", refresh)
         self.assertIn("api.list_artifacts(handoff_name)", selector)
         self.assertIn("api.list_artifacts(cache_name)", selector)
         self.assertIn("--require-hashes", build)
