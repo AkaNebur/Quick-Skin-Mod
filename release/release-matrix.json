@@ -47,7 +47,7 @@
       "game_versions": ["1.21.6"],
       "metadata": {
         "file": "fabric.mod.json",
-        "loader": ">=0.16.10",
+        "loader": ">=0.16.14",
         "architectury": ">=17.0.6"
       }
     },
@@ -82,7 +82,7 @@
       "jar_sha256": "from:artifact-manifest",
       "port": 0,
       "java": 21,
-      "loader_version": "0.16.10",
+      "loader_version": "0.16.14",
       "installer": "fabric-1.1.0",
       "fabric_api": "0.127.1+1.21.6",
       "architectury": {

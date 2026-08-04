@@ -18,7 +18,7 @@ Quick Skin is a client-and-server Minecraft mod for changing skins and capes in-
 | Minecraft | Exactly `1.21.6` |
 | Loaders | Fabric + NeoForge |
 | Artifact Java | `21` |
-| Packaged E2E runtime pins | Fabric Loader `0.16.10`, Fabric API `0.127.1+1.21.6`, Architectury API `17.0.6`<br>NeoForge `21.6.20-beta`, Architectury API `17.0.6` |
+| Packaged E2E runtime pins | Fabric Loader `0.16.14`, Fabric API `0.127.1+1.21.6`, Architectury API `17.0.6`<br>NeoForge `21.6.20-beta`, Architectury API `17.0.6` |
 | Version-specific overlay roots | `common/src/legacy1_21_6` |
 | Modules without a version-specific overlay | `fabric/src/main`<br>`neoforge/src/main` |
 | Gradle/Stonecutter launcher | JDK 21 or newer |
