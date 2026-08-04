@@ -294,7 +294,7 @@ public class SkinPreviewOverlay {
         //? if <1.21.6 {
         PoseStack poseStack = graphics.pose();
         //?} else {
-        // 1.21.9+: graphics.pose() is a Matrix3x2fStack; the renderer owns its 3D PoseStack.
+        // 1.21.6+: graphics.pose() is a Matrix3x2fStack; the renderer owns its 3D PoseStack.
         PoseStack poseStack = new PoseStack();
         //?}
         poseStack.pushPose();

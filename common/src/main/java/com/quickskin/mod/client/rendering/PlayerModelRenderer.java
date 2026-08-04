@@ -635,11 +635,11 @@ public class PlayerModelRenderer {
                 PoseStack poseStack = graphics.pose();
                 MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
 //?} else if <26.2 {
-                // In 1.21.9+, graphics.pose() returns Matrix3x2fStack; use a 3D PoseStack.
+                // In 1.21.6+, graphics.pose() returns Matrix3x2fStack; use a 3D PoseStack.
                 PoseStack poseStack = new PoseStack();
                 MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
 //?} else {
-                // In 1.21.9+, graphics.pose() returns Matrix3x2fStack; use a 3D PoseStack.
+                // In 1.21.6+, graphics.pose() returns Matrix3x2fStack; use a 3D PoseStack.
                 PoseStack poseStack = new PoseStack();
 //?}
 
@@ -694,7 +694,7 @@ public class PlayerModelRenderer {
                     new org.joml.Vector3f(0, 0, 0),  // translation offset
 //?} else if <26.1.2 {
             ensureModelsLoaded();
-            // 1.21.9+: submit the extracted state directly so preview-only state can be scrubbed.
+            // 1.21.6+: submit the extracted state directly so preview-only state can be scrubbed.
             // to preserve our own rotation (renderEntityInInventoryFollowsMouse overrides rotation).
             int halfWidth = (int)(scale * 0.6f);
             // Shift box center UP by ~bbHeight/2 in screen space to keep feet at y
@@ -870,7 +870,7 @@ public class PlayerModelRenderer {
     /**
      * Manually render player model without requiring a player entity
      * Used on title screen where no world/player exists
-     * In 1.21.9+, all GUI 3D rendering must go through the PiP system.
+     * In 1.21.6+, all GUI 3D rendering must go through the PiP system.
      * Cape rendering is handled by GuiSkinRendererMixin which renders the cape
      * inside renderToTexture(), using the shared buffer source.
      */
@@ -2809,7 +2809,7 @@ public class PlayerModelRenderer {
                 new org.joml.Vector3f(lightDirection).mul(brightness * 0.5f)
         );
 //?} else if <26.2 {
-        // 1.21.9+: RenderSystem.setShaderLights now takes GpuBufferSlice instead of Vector3f.
+        // 1.21.6+: RenderSystem.setShaderLights now takes GpuBufferSlice instead of Vector3f.
         // Use Lighting.Entry-based API instead. This method is currently unused.
         Minecraft.getInstance().gameRenderer.getLighting().setupFor(Lighting.Entry.ENTITY_IN_UI);
 //?} else {
