@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
-"""Prepare and validate the small, public subset of packaged-E2E evidence."""
+"""Prepare raw E2E handoffs and atomically validate/compact public Pages evidence."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import math
+import os
 import re
 import shutil
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "e2e"))
 sys.path.insert(0, str(REPO / "scripts" / "release"))
 
-from packaged_runtime import DISTINCT_SCREENSHOT_PAIRS  # noqa: E402
+from packaged_runtime import (  # noqa: E402
+    DISTINCT_SCREENSHOT_PAIRS,
+    RuntimeFailure,
+    compare_screenshots,
+    inspect_screenshot,
+)
 from version_branches import parse_version_branch  # noqa: E402
 from visual_evidence import (  # noqa: E402
     DEFAULT_CATALOG,
@@ -27,7 +34,6 @@ from visual_evidence import (  # noqa: E402
     VisualEvidenceError,
     collect_evidence,
     load_catalog,
-    png_dimensions,
     reject_symlinks,
     sha256_file,
     validate_comparison_metrics,
@@ -35,7 +41,9 @@ from visual_evidence import (  # noqa: E402
 )
 
 
-SCHEMA_VERSION = 1
+RAW_SCHEMA_VERSION = 1
+COMPACT_SCHEMA_VERSION = 2
+SCHEMA_VERSIONS = frozenset({RAW_SCHEMA_VERSION, COMPACT_SCHEMA_VERSION})
 COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
@@ -43,7 +51,7 @@ MAX_FRAMES = 1000
 MAX_MANIFEST_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_TOTAL_IMAGE_BYTES = 1024 * 1024 * 1024
-MAX_IMAGE_PIXELS = 50_000_000
+MAX_IMAGE_PIXELS = 20_000_000
 MANIFEST_FIELDS = frozenset(
     {"schema_version", "repository", "release", "provenance", "lanes", "frames", "comparisons"}
 )
@@ -61,7 +69,7 @@ LANE_FIELDS = frozenset(
         "elapsed_s",
     }
 )
-PUBLIC_FRAME_FIELDS = frozenset(
+SOURCE_FRAME_FIELDS = frozenset(
     {
         "frame_id",
         "capture_id",
@@ -79,8 +87,12 @@ PUBLIC_FRAME_FIELDS = frozenset(
         "width",
         "height",
         "pixel_validation",
-        "asset",
     }
+)
+RAW_FRAME_FIELDS = SOURCE_FRAME_FIELDS | {"asset"}
+COMPACT_FRAME_FIELDS = SOURCE_FRAME_FIELDS | {"derivative"}
+DERIVATIVE_FIELDS = frozenset(
+    {"asset", "format", "file_sha256", "width", "height", "pixel_validation"}
 )
 COMPARISON_FIELDS = frozenset(
     {
@@ -95,6 +107,7 @@ COMPARISON_FIELDS = frozenset(
         "pixel_validation",
     }
 )
+COMPACT_COMPARISON_FIELDS = COMPARISON_FIELDS | {"derivative_pixel_validation"}
 
 
 class PublicEvidenceError(ValueError):
@@ -137,6 +150,32 @@ def _timestamp(value: Any, label: str) -> str:
     if parsed.tzinfo is None:
         raise PublicEvidenceError(f"{label} must include a timezone")
     return text
+
+
+def _thumbnail_dimensions(width: int, height: int) -> tuple[int, int]:
+    """Return Pillow's aspect-preserving result for the locked 1600x900 derivative."""
+
+    maximum_width, maximum_height = 1600, 900
+    if maximum_width >= width and maximum_height >= height:
+        return (width, height)
+
+    def closest(number: float, key: Callable[[int], float]) -> int:
+        return max(min(math.floor(number), math.ceil(number), key=key), 1)
+
+    aspect = width / height
+    if maximum_width / maximum_height >= aspect:
+        maximum_width = closest(
+            maximum_height * aspect,
+            lambda candidate: abs(aspect - candidate / maximum_height),
+        )
+    else:
+        maximum_height = closest(
+            maximum_width / aspect,
+            lambda candidate: 0
+            if candidate == 0
+            else abs(aspect - maximum_width / candidate),
+        )
+    return (maximum_width, maximum_height)
 
 
 def _branch(value: Any, label: str, *, release: bool = False) -> str:
@@ -303,12 +342,12 @@ def prepare(
                 raise PublicEvidenceError(f"public image digest collision at {destination}")
         else:
             shutil.copyfile(source, destination)
-        public = {key: frame[key] for key in PUBLIC_FRAME_FIELDS - {"asset"}}
+        public = {key: frame[key] for key in SOURCE_FRAME_FIELDS}
         public["asset"] = asset
         public_frames.append(public)
 
     manifest = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": RAW_SCHEMA_VERSION,
         "repository": repository,
         "release": {
             "branch": target_branch,
@@ -357,6 +396,7 @@ def validate_bundle(
     branch: str,
     *,
     only_branch: bool = False,
+    expected_kind: str | None = None,
     expected_repository: str | None = None,
     expected_source_run_id: str | None = None,
     expected_target_run_id: str | None = None,
@@ -398,12 +438,20 @@ def validate_bundle(
     if manifest_size <= 0 or manifest_size > MAX_MANIFEST_BYTES:
         raise PublicEvidenceError("public evidence manifest exceeds its size limit")
     manifest = _read_json(manifest_path, "public evidence manifest")
-    if (
-        not isinstance(manifest, dict)
-        or set(manifest) != MANIFEST_FIELDS
-        or manifest.get("schema_version") != SCHEMA_VERSION
-    ):
-        raise PublicEvidenceError("public evidence schema_version must be 1")
+    if not isinstance(manifest, dict) or set(manifest) != MANIFEST_FIELDS:
+        raise PublicEvidenceError("public evidence manifest fields are invalid")
+    schema_version = manifest.get("schema_version")
+    if schema_version not in SCHEMA_VERSIONS:
+        raise PublicEvidenceError(
+            f"public evidence schema_version must be one of {sorted(SCHEMA_VERSIONS)}"
+        )
+    bundle_kind = "raw" if schema_version == RAW_SCHEMA_VERSION else "compact"
+    if expected_kind is not None and expected_kind not in {"raw", "compact"}:
+        raise PublicEvidenceError(f"unsupported expected evidence kind {expected_kind!r}")
+    if expected_kind is not None and bundle_kind != expected_kind:
+        raise PublicEvidenceError(
+            f"public evidence kind mismatch: {bundle_kind!r} != {expected_kind!r}"
+        )
     repository = _text(manifest.get("repository"), "manifest.repository")
     if not REPOSITORY.fullmatch(repository):
         raise PublicEvidenceError("manifest.repository is invalid")
@@ -590,12 +638,16 @@ def validate_bundle(
         raise PublicEvidenceError("protected visual catalog exceeds the public frame limit")
     frame_ids: set[str] = set()
     frame_by_id: dict[str, dict[str, Any]] = {}
+    asset_path_by_frame_id: dict[str, Path] = {}
     expected_assets: set[str] = set()
-    validated_assets: dict[str, tuple[int, int]] = {}
+    validated_assets: dict[str, dict[str, Any]] = {}
     total_bytes = 0
     frames_per_lane = {lane_id: 0 for lane_id in lane_ids}
     for frame in frames:
-        if not isinstance(frame, dict) or set(frame) != PUBLIC_FRAME_FIELDS:
+        expected_frame_fields = (
+            RAW_FRAME_FIELDS if schema_version == RAW_SCHEMA_VERSION else COMPACT_FRAME_FIELDS
+        )
+        if not isinstance(frame, dict) or set(frame) != expected_frame_fields:
             raise PublicEvidenceError("public frame is invalid or leaks a source path")
         frame_id = _text(frame.get("frame_id"), "frame.frame_id")
         if frame_id in frame_ids:
@@ -631,27 +683,77 @@ def validate_bundle(
         ):
             raise PublicEvidenceError(f"public frame has invalid catalog order: {frame_id}")
         file_sha256 = frame.get("file_sha256")
-        asset = frame.get("asset")
         if not isinstance(file_sha256, str) or not SHA256.fullmatch(file_sha256):
             raise PublicEvidenceError(f"public frame has invalid digest: {frame_id}")
-        if asset != f"images/{file_sha256}.png":
-            raise PublicEvidenceError(f"public frame has invalid asset path: {frame_id}")
         try:
-            pixel_validation = validate_screenshot_metrics(
+            source_pixel_validation = validate_screenshot_metrics(
                 frame.get("pixel_validation"), f"public frame metrics for {frame_id}"
             )
         except VisualEvidenceError as exc:
             raise PublicEvidenceError(str(exc)) from exc
         if (
-            pixel_validation != frame.get("pixel_validation")
-            or pixel_validation["file_sha256"] != file_sha256
-            or pixel_validation["width"] != frame.get("width")
-            or pixel_validation["height"] != frame.get("height")
+            source_pixel_validation != frame.get("pixel_validation")
+            or source_pixel_validation["file_sha256"] != file_sha256
+            or source_pixel_validation["width"] != frame.get("width")
+            or source_pixel_validation["height"] != frame.get("height")
         ):
             raise PublicEvidenceError(f"public frame pixel metadata mismatch: {frame_id}")
+        source_dimensions = (frame.get("width"), frame.get("height"))
+        if (
+            source_dimensions[0] < 640
+            or source_dimensions[1] < 360
+            or source_dimensions[0] * source_dimensions[1] > MAX_IMAGE_PIXELS
+        ):
+            raise PublicEvidenceError(
+                f"public frame source dimensions are implausible: {frame_id}"
+            )
+
+        if schema_version == RAW_SCHEMA_VERSION:
+            asset = frame.get("asset")
+            expected_metrics = source_pixel_validation
+            expected_format = "PNG"
+            if asset != f"images/{file_sha256}.png":
+                raise PublicEvidenceError(f"public frame has invalid asset path: {frame_id}")
+        else:
+            derivative = frame.get("derivative")
+            if not isinstance(derivative, dict) or set(derivative) != DERIVATIVE_FIELDS:
+                raise PublicEvidenceError(f"public frame derivative is invalid: {frame_id}")
+            derivative_sha256 = derivative.get("file_sha256")
+            asset = derivative.get("asset")
+            if (
+                derivative.get("format") != "webp"
+                or not isinstance(derivative_sha256, str)
+                or not SHA256.fullmatch(derivative_sha256)
+                or asset != f"images/{derivative_sha256}.webp"
+            ):
+                raise PublicEvidenceError(
+                    f"public frame derivative identity is invalid: {frame_id}"
+                )
+            try:
+                expected_metrics = validate_screenshot_metrics(
+                    derivative.get("pixel_validation"),
+                    f"public frame derivative metrics for {frame_id}",
+                )
+            except VisualEvidenceError as exc:
+                raise PublicEvidenceError(str(exc)) from exc
+            derivative_dimensions = (derivative.get("width"), derivative.get("height"))
+            if (
+                expected_metrics != derivative.get("pixel_validation")
+                or expected_metrics["file_sha256"] != derivative_sha256
+                or (expected_metrics["width"], expected_metrics["height"])
+                != derivative_dimensions
+                or derivative_dimensions
+                != _thumbnail_dimensions(*source_dimensions)
+                or derivative_dimensions[0] * derivative_dimensions[1] > MAX_IMAGE_PIXELS
+            ):
+                raise PublicEvidenceError(
+                    f"public frame derivative metadata is invalid: {frame_id}"
+                )
+            expected_format = "WEBP"
+
         expected_assets.add(asset)
-        dimensions = validated_assets.get(asset)
-        if dimensions is None:
+        actual_metrics = validated_assets.get(asset)
+        if actual_metrics is None:
             raw_image = bundle / asset
             try:
                 reject_symlinks(raw_image, bundle, "public frame asset")
@@ -665,19 +767,19 @@ def validate_bundle(
             if size <= 0 or size > MAX_IMAGE_BYTES:
                 raise PublicEvidenceError(f"public frame asset exceeds its size limit: {asset}")
             total_bytes += size
-            if sha256_file(image) != file_sha256:
+            if sha256_file(image) != expected_metrics["file_sha256"]:
                 raise PublicEvidenceError(f"public frame asset digest mismatch: {asset}")
-            dimensions = png_dimensions(image)
-            if dimensions[0] < 640 or dimensions[1] < 360:
-                raise PublicEvidenceError(
-                    f"public frame asset is below the E2E resolution floor: {asset}"
+            try:
+                actual_metrics = inspect_screenshot(
+                    image, expected_format=expected_format
                 )
-            if dimensions[0] * dimensions[1] > MAX_IMAGE_PIXELS:
-                raise PublicEvidenceError(f"public frame asset exceeds pixel limit: {asset}")
-            validated_assets[asset] = dimensions
-        if dimensions != (frame.get("width"), frame.get("height")):
-            raise PublicEvidenceError(f"public frame asset dimensions mismatch: {asset}")
+            except RuntimeFailure as exc:
+                raise PublicEvidenceError(str(exc)) from exc
+            validated_assets[asset] = actual_metrics
+        if actual_metrics != expected_metrics:
+            raise PublicEvidenceError(f"public frame asset pixel metadata mismatch: {asset}")
         frame_by_id[frame_id] = frame
+        asset_path_by_frame_id[frame_id] = (bundle / asset).resolve()
     if total_bytes > MAX_TOTAL_IMAGE_BYTES:
         raise PublicEvidenceError("public evidence exceeds the total image byte limit")
     if frame_ids != expected_frame_ids:
@@ -731,7 +833,15 @@ def validate_bundle(
 
     comparison_ids: set[str] = set()
     for comparison in comparisons:
-        if not isinstance(comparison, dict) or set(comparison) != COMPARISON_FIELDS:
+        expected_comparison_fields = (
+            COMPARISON_FIELDS
+            if schema_version == RAW_SCHEMA_VERSION
+            else COMPACT_COMPARISON_FIELDS
+        )
+        if (
+            not isinstance(comparison, dict)
+            or set(comparison) != expected_comparison_fields
+        ):
             raise PublicEvidenceError("public comparison must be an object")
         comparison_id = _text(comparison.get("comparison_id"), "comparison.comparison_id")
         if comparison_id in comparison_ids:
@@ -779,6 +889,41 @@ def validate_bundle(
             raise PublicEvidenceError(f"public comparison threshold drifted: {comparison_id}")
         if metrics.get("region") != expected["region"]:
             raise PublicEvidenceError(f"public comparison region drifted: {comparison_id}")
+        recorded_asset_metrics = metrics
+        if schema_version == COMPACT_SCHEMA_VERSION:
+            try:
+                recorded_asset_metrics = validate_comparison_metrics(
+                    comparison.get("derivative_pixel_validation"),
+                    f"public derivative comparison metrics for {comparison_id}",
+                )
+            except VisualEvidenceError as exc:
+                raise PublicEvidenceError(str(exc)) from exc
+            if recorded_asset_metrics != comparison.get("derivative_pixel_validation"):
+                raise PublicEvidenceError(
+                    f"public derivative comparison metrics are not canonical: {comparison_id}"
+                )
+            if (
+                recorded_asset_metrics["required_changed_fraction"]
+                != expected["required_changed_fraction"]
+                or recorded_asset_metrics.get("region") != expected["region"]
+            ):
+                raise PublicEvidenceError(
+                    f"public derivative comparison contract drifted: {comparison_id}"
+                )
+        region = recorded_asset_metrics.get("region")
+        try:
+            actual_asset_metrics = compare_screenshots(
+                asset_path_by_frame_id[first],
+                asset_path_by_frame_id[second],
+                recorded_asset_metrics["required_changed_fraction"],
+                tuple(region) if region is not None else None,
+            )
+        except RuntimeFailure as exc:
+            raise PublicEvidenceError(str(exc)) from exc
+        if actual_asset_metrics != recorded_asset_metrics:
+            raise PublicEvidenceError(
+                f"public comparison asset metrics mismatch: {comparison_id}"
+            )
     if comparison_ids != set(expected_comparisons):
         raise PublicEvidenceError(
             "public comparisons disagree with the protected runtime contract: "
@@ -786,6 +931,168 @@ def validate_bundle(
             f"extra={sorted(comparison_ids - set(expected_comparisons))}"
         )
     return manifest
+
+
+def _encode_webp(source: Path, destination: Path) -> None:
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError as exc:  # pragma: no cover - protected Pages installs the lockfile
+        raise PublicEvidenceError("Pillow is required to compact Pages evidence") from exc
+    try:
+        Image.MAX_IMAGE_PIXELS = 20_000_000
+        with Image.open(source) as image:
+            if image.format != "PNG":
+                raise PublicEvidenceError(f"compact source is not a PNG: {source}")
+            image.load()
+            rendered = image.convert("RGB")
+            rendered.thumbnail((1600, 900), Image.Resampling.LANCZOS)
+            rendered.save(destination, "WEBP", quality=82, method=6, exact=True)
+    except PublicEvidenceError:
+        raise
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise PublicEvidenceError(f"cannot compact public screenshot {source}: {exc}") from exc
+
+
+def compact_bundle(
+    evidence_root: Path,
+    output_root: Path,
+    branch: str,
+    *,
+    only_branch: bool = True,
+    expected_repository: str | None = None,
+    expected_source_run_id: str | None = None,
+    expected_target_run_id: str | None = None,
+    expected_target_sha: str | None = None,
+    catalog_path: Path = DEFAULT_CATALOG,
+) -> Path:
+    """Atomically copy or convert one validated bundle into the compact cache schema."""
+
+    branch = _branch(branch, "branch", release=True)
+    input_root = evidence_root.resolve()
+    manifest = validate_bundle(
+        input_root,
+        branch,
+        only_branch=only_branch,
+        expected_repository=expected_repository,
+        expected_source_run_id=expected_source_run_id,
+        expected_target_run_id=expected_target_run_id,
+        expected_target_sha=expected_target_sha,
+        catalog_path=catalog_path,
+    )
+    destination_root = output_root.resolve()
+    if destination_root.exists() and not destination_root.is_dir():
+        raise PublicEvidenceError(
+            f"compact evidence output is not a directory: {destination_root}"
+        )
+    destination_root.mkdir(parents=True, exist_ok=True)
+    destination = destination_root / branch
+    if destination.exists():
+        raise PublicEvidenceError(
+            f"refusing to replace existing compact evidence bundle {destination}"
+        )
+
+    temporary_root = Path(
+        tempfile.mkdtemp(prefix=f".{branch}.compact-", dir=destination_root)
+    )
+    staged_bundle = temporary_root / branch
+    try:
+        if manifest["schema_version"] == COMPACT_SCHEMA_VERSION:
+            shutil.copytree(input_root / branch, staged_bundle)
+        else:
+            images = staged_bundle / "images"
+            images.mkdir(parents=True)
+            derivatives: dict[str, dict[str, Any]] = {}
+            derivative_path_by_frame: dict[str, Path] = {}
+            compact_frames: list[dict[str, Any]] = []
+            for frame in manifest["frames"]:
+                source_asset = frame["asset"]
+                derivative = derivatives.get(source_asset)
+                if derivative is None:
+                    source = input_root / branch / source_asset
+                    rendering = images / f".{frame['file_sha256']}.rendering.webp"
+                    _encode_webp(source, rendering)
+                    try:
+                        derivative_metrics = inspect_screenshot(
+                            rendering, expected_format="WEBP"
+                        )
+                    except RuntimeFailure as exc:
+                        raise PublicEvidenceError(str(exc)) from exc
+                    derivative_sha256 = derivative_metrics["file_sha256"]
+                    asset = f"images/{derivative_sha256}.webp"
+                    final_image = staged_bundle / asset
+                    if final_image.exists():
+                        if sha256_file(final_image) != derivative_sha256:
+                            raise PublicEvidenceError(
+                                f"compact derivative digest collision at {final_image}"
+                            )
+                        rendering.unlink()
+                    else:
+                        os.replace(rendering, final_image)
+                    derivative = {
+                        "asset": asset,
+                        "format": "webp",
+                        "file_sha256": derivative_sha256,
+                        "width": derivative_metrics["width"],
+                        "height": derivative_metrics["height"],
+                        "pixel_validation": derivative_metrics,
+                    }
+                    derivatives[source_asset] = derivative
+                compact_frame = {key: frame[key] for key in SOURCE_FRAME_FIELDS}
+                compact_frame["derivative"] = derivative
+                compact_frames.append(compact_frame)
+                derivative_path_by_frame[frame["frame_id"]] = (
+                    staged_bundle / derivative["asset"]
+                )
+
+            compact_comparisons: list[dict[str, Any]] = []
+            for comparison in manifest["comparisons"]:
+                source_metrics = comparison["pixel_validation"]
+                region = source_metrics.get("region")
+                try:
+                    derivative_metrics = compare_screenshots(
+                        derivative_path_by_frame[comparison["first_frame_id"]],
+                        derivative_path_by_frame[comparison["second_frame_id"]],
+                        source_metrics["required_changed_fraction"],
+                        tuple(region) if region is not None else None,
+                    )
+                except RuntimeFailure as exc:
+                    raise PublicEvidenceError(str(exc)) from exc
+                compact_comparisons.append(
+                    {
+                        **comparison,
+                        "derivative_pixel_validation": derivative_metrics,
+                    }
+                )
+
+            compact_manifest = {
+                **manifest,
+                "schema_version": COMPACT_SCHEMA_VERSION,
+                "frames": compact_frames,
+                "comparisons": compact_comparisons,
+            }
+            (staged_bundle / "manifest.json").write_text(
+                json.dumps(
+                    compact_manifest, indent=2, sort_keys=True, allow_nan=False
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+        validate_bundle(
+            temporary_root,
+            branch,
+            only_branch=True,
+            expected_kind="compact",
+            expected_repository=expected_repository,
+            expected_source_run_id=expected_source_run_id,
+            expected_target_run_id=expected_target_run_id,
+            expected_target_sha=expected_target_sha,
+            catalog_path=catalog_path,
+        )
+        os.replace(staged_bundle, destination)
+    finally:
+        shutil.rmtree(temporary_root, ignore_errors=True)
+    return destination
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -806,6 +1113,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     prepare_parser.add_argument("--target-sha", required=True)
     prepare_parser.add_argument("--target-created-at", required=True)
 
+    compact_parser = subparsers.add_parser("compact")
+    compact_parser.add_argument("--evidence-root", type=Path, required=True)
+    compact_parser.add_argument("--output", type=Path, required=True)
+    compact_parser.add_argument("--branch", required=True)
+    compact_parser.add_argument("--allow-sibling-branches", action="store_true")
+    compact_parser.add_argument("--repository")
+    compact_parser.add_argument("--source-run-id")
+    compact_parser.add_argument("--target-run-id")
+    compact_parser.add_argument("--target-sha")
+    compact_parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
+
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("--evidence-root", type=Path, required=True)
     validate_parser.add_argument("--branch", required=True)
@@ -814,6 +1132,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     validate_parser.add_argument("--source-run-id")
     validate_parser.add_argument("--target-run-id")
     validate_parser.add_argument("--target-sha")
+    validate_parser.add_argument("--kind", choices=("raw", "compact"))
     validate_parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     return parser.parse_args(argv)
 
@@ -838,11 +1157,25 @@ def main(argv: list[str] | None = None) -> int:
                 target_created_at=args.target_created_at,
             )
             print(bundle)
+        elif args.command == "compact":
+            bundle = compact_bundle(
+                args.evidence_root,
+                args.output,
+                args.branch,
+                only_branch=not args.allow_sibling_branches,
+                expected_repository=args.repository,
+                expected_source_run_id=args.source_run_id,
+                expected_target_run_id=args.target_run_id,
+                expected_target_sha=args.target_sha,
+                catalog_path=args.catalog,
+            )
+            print(bundle)
         else:
             validate_bundle(
                 args.evidence_root,
                 args.branch,
                 only_branch=args.only_branch,
+                expected_kind=args.kind,
                 expected_repository=args.repository,
                 expected_source_run_id=args.source_run_id,
                 expected_target_run_id=args.target_run_id,

@@ -75,8 +75,11 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
 - `e2e/visual_evidence.py` reads successful `result.json` reports, verifies the catalog contract,
   PNG containment, dimensions, and SHA-256, and exposes the shared evidence model used by the AI
   review and public site.
-- `scripts/pages/evidence.py` creates and validates a small branch-scoped public bundle. It may copy
-  only catalogued screenshots and structured provenance—never runtime logs or arbitrary HTML.
+- `scripts/pages/evidence.py` creates and validates a small branch-scoped raw handoff, then
+  atomically compacts a validated bundle to protected WebP derivatives. It may copy only catalogued
+  screenshots and structured provenance—never runtime logs or arbitrary HTML. The compact schema
+  preserves separate source and derivative identities, hashes, dimensions, pixel metrics, and
+  comparison metrics; raw PNG bytes stop at the one-day E2E handoff.
 - `scripts/pages/select_artifact.py` authenticates exact-current E2E handoffs and SHA-bound rolling
   caches, then selects the newest valid source. A branch-only cache name is migration fallback only.
 - `scripts/pages/rotate_artifacts.py` owns post-deployment retention. It may delete only exact
@@ -89,8 +92,9 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
 - `scripts/ci/prune_actions_caches.py` owns orphan-cache hygiene. It discovers branches and active
   runs from GitHub, revalidates each immutable cache entry and missing branch, and deletes only by
   exact cache ID under bounded automatic limits.
-- `scripts/pages/build_site.py` combines exact branch bundles and renders the tracked assets under
-  `site/`. `site/` contains presentation code, not a support/version inventory; supported versions
-  always come from validated evidence discovered from release branches.
+- `scripts/pages/build_site.py` combines exact compact branch bundles and copies their already
+  content-addressed WebP assets while rendering the tracked assets under `site/`. `site/` contains
+  presentation code, not a support/version inventory; supported versions always come from
+  validated evidence discovered from release branches.
 - `_site/`, `public-evidence/`, and downloaded Actions artifacts are generated output. Do not commit
   them or edit them as source.

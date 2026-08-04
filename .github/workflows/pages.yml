@@ -107,6 +107,18 @@ jobs:
           ref: ${{ needs.discover.outputs.implementation_sha }}
           persist-credentials: false
 
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install the hash-locked evidence decoder and encoder
+        run: >-
+          python -m pip install
+          --only-binary=:all:
+          --require-hashes
+          --requirement scripts/pages/requirements.txt
+
       - name: Select the newest artifact for the exact current branch SHA
         id: artifact
         shell: bash
@@ -123,7 +135,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ steps.artifact.outputs.name }}
-          path: public-evidence
+          path: selected-evidence
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ steps.artifact.outputs.run_id }}
@@ -144,14 +156,14 @@ jobs:
             target_run_argument=(--target-run-id "$OWNER_RUN_ID")
           fi
           python3 scripts/pages/evidence.py validate \
-            --evidence-root public-evidence \
+            --evidence-root selected-evidence \
             --branch "$BRANCH" \
             --only-branch \
             --repository "$GITHUB_REPOSITORY" \
             --target-sha "$EXPECTED_SHA" \
             "${target_run_argument[@]}"
 
-          manifest="public-evidence/$BRANCH/manifest.json"
+          manifest="selected-evidence/$BRANCH/manifest.json"
           source_run_id="$(jq -er .provenance.source.run_id "$manifest")"
           source_branch="$(jq -er .provenance.source.branch "$manifest")"
           source_sha="$(jq -er .provenance.source.sha "$manifest")"
@@ -184,6 +196,35 @@ jobs:
             <<< "$target_run" > /dev/null
           [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/$BRANCH" \
             --jq .commit.sha)" == "$EXPECTED_SHA" ]]
+
+      - name: Convert the validated handoff into an atomic compact bundle
+        shell: bash
+        env:
+          ARTIFACT_NAME: ${{ steps.artifact.outputs.name }}
+          BRANCH: ${{ matrix.branch }}
+          EXPECTED_SHA: ${{ steps.artifact.outputs.sha }}
+          OWNER_RUN_ID: ${{ steps.artifact.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          target_run_argument=()
+          if [[ "$ARTIFACT_NAME" == "pages-e2e-$BRANCH" ]]; then
+            target_run_argument=(--target-run-id "$OWNER_RUN_ID")
+          fi
+          python3 scripts/pages/evidence.py compact \
+            --evidence-root selected-evidence \
+            --output public-evidence \
+            --branch "$BRANCH" \
+            --repository "$GITHUB_REPOSITORY" \
+            --target-sha "$EXPECTED_SHA" \
+            "${target_run_argument[@]}"
+          python3 scripts/pages/evidence.py validate \
+            --evidence-root public-evidence \
+            --branch "$BRANCH" \
+            --only-branch \
+            --kind compact \
+            --repository "$GITHUB_REPOSITORY" \
+            --target-sha "$EXPECTED_SHA" \
+            "${target_run_argument[@]}"
 
       - name: Upload this validated branch to the atomic fan-in
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -249,6 +290,7 @@ jobs:
             python3 scripts/pages/evidence.py validate \
               --evidence-root public-evidence \
               --branch "$branch" \
+              --kind compact \
               --repository "$GITHUB_REPOSITORY" \
               --target-sha "$expected_sha"
           done
@@ -262,6 +304,7 @@ jobs:
           --evidence-root public-evidence
           --output _site
           --repository "$GITHUB_REPOSITORY"
+          --require-compact-evidence
           --expected-branches-json "$EXPECTED_BRANCHES"
 
       - name: Upload the complete Pages artifact
@@ -304,11 +347,30 @@ jobs:
     timeout-minutes: 10
     permissions:
       actions: read
+      contents: read
 
     steps:
       # Only a completely successful deploy reaches this job, so future selectors may require the
       # cache artifact's owning Pages run to have a successful final conclusion. A separate
       # workflow rotates generations only after this complete Pages run reaches success.
+      - name: Check out the exact protected evidence validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.discover.outputs.implementation_sha }}
+          persist-credentials: false
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install the hash-locked evidence decoder
+        run: >-
+          python -m pip install
+          --only-binary=:all:
+          --require-hashes
+          --requirement scripts/pages/requirements.txt
+
       - name: Download the branch bundle validated in this Pages run
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -321,6 +383,7 @@ jobs:
         shell: bash
         env:
           BRANCH: ${{ matrix.branch }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           manifest="public-evidence/$BRANCH/manifest.json"
@@ -328,6 +391,15 @@ jobs:
           target_sha="$(jq -er .provenance.target.sha "$manifest")"
           [[ "$manifest_branch" == "$BRANCH" ]]
           [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/$BRANCH" \
+            --jq .commit.sha)" == "$target_sha" ]]
+          python3 scripts/pages/evidence.py validate \
+            --evidence-root public-evidence \
+            --branch "$BRANCH" \
+            --only-branch \
+            --kind compact \
+            --repository "$GITHUB_REPOSITORY" \
+            --target-sha "$target_sha"
           printf 'name=pages-cache-%s--%s\n' "$BRANCH" "$target_sha" >> "$GITHUB_OUTPUT"
 
       - name: Roll the protected evidence cache forward

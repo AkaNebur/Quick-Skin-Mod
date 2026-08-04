@@ -73,10 +73,12 @@ new logical version and therefore a new immutable identity.
 
 Actions storage follows the same recovery boundary. Ordinary build, diagnostics, packaged-E2E,
 review, publication-receipt, synchronization, and Pages handoff artifacts are transient and expire
-after one day. Each branch's single SHA-bound Pages cache is retained for 90 days, with successful
-rotation deleting the previous generation. The immutable `release-<release-id>` bundle is the other
-90-day exception so the same verified bytes survive protected-environment approvals and can resume
-an interrupted GitHub Release or marketplace publication. Release and Packaged E2E restore Gradle
+after one day. Source PNGs exist only in the `pages-e2e-*` handoff; protected Pages code validates
+and replaces them with WebP derivatives before fan-in. Each branch's single compact SHA-bound Pages
+cache is retained for 90 days, with successful rotation deleting the previous generation. The
+immutable `release-<release-id>` bundle is the other 90-day exception so the same verified bytes
+survive protected-environment approvals and can resume an interrupted GitHub Release or marketplace
+publication. Release and Packaged E2E restore Gradle
 state read-only; only a trusted Build gate push or manual run on protected `master` or the matrix's
 canonical release branch may publish a Gradle cache. A protected daily cleanup discovers live
 branches directly and deletes by exact cache ID only Actions caches scoped to branch refs that no
@@ -139,9 +141,10 @@ generator from protected `master`, validates all current release heads, and depl
 workflow fails without replacing the previously deployed site.
 Successful deployments refresh one protected cache for each exact-head evidence bundle. After the
 owning Pages run reaches `completed/success`, a separate protected rotation workflow validates the
-new cache, deletes only older caches for that branch, and retires by exact artifact ID the consumed
-`pages-e2e-<branch>` handoff plus the successful Pages run's fan-in and deploy artifacts. Raw E2E
-proof expires after one day rather than being deleted during promotion because a concurrent branch
+new compact WebP cache, deletes only older caches for that branch, and retires by exact artifact ID
+the consumed `pages-e2e-<branch>` handoff plus the successful Pages run's fan-in and deploy
+artifacts. Raw E2E proof expires after one day rather than being deleted during promotion because a
+concurrent branch
 attestation may still be consuming it. Rotation never removes the previous fallback before a
 replacement is usable, nor does it delete a concurrent newer handoff. The monthly Pages schedule
 revalidates and rolls the single caches forward without rerunning packaged Minecraft; an updated

@@ -72,9 +72,12 @@ immutable workflow and governance activation contract.
   `master`. Do not edit its rows manually or add a branch/version list to its workflow.
 - Each successful release-branch E2E tree may produce one transient curated
   `pages-e2e-<branch>` handoff. The Pages workflow must discover the same release branches, require
-  evidence for every exact current head, render with protected `master` code, and deploy the whole
-  site atomically. Only after that Pages run reaches `completed/success` may protected automation
-  replace the branch's single rolling cache and retire older caches plus the consumed handoff.
+  evidence for every exact current head, validate each source PNG, convert it to a protected WebP
+  derivative before fan-in, render with protected `master` code, and deploy the whole site
+  atomically. `collected-pages-*` and `pages-cache-*` contain only compact derivatives plus the
+  source and derivative proof records, never original PNG bytes. Only after that Pages run reaches
+  `completed/success` may protected automation replace the branch's single rolling cache and
+  retire older caches plus the consumed handoff.
   Never delete the fallback before its replacement succeeds, introduce a second version list,
   publish logs/crash reports, or make Pages a protected release check.
 - Actions artifacts are handoffs, not an archive. Every ordinary upload is retained for one day;
