@@ -31,7 +31,7 @@ The active production matrix on this branch contains exactly two artifacts:
 
 | Minecraft | Loaders | Java |
 |---|---|---:|
-| 1.21.8 | Fabric, NeoForge | 21 |
+| 1.21.7 | Fabric, NeoForge | 21 |
 
 Every artifact targets exactly the Minecraft version in its filename and metadata. A support or
 loader change starts in the release matrix and must pass its validation and mutation tests.
@@ -45,7 +45,7 @@ immutable workflow and governance activation contract.
 ## Version branch model
 
 - `master` is the shared integration branch. Release branches use the naming form
-  `<loader>-and-<loader>-<minecraft>`, for example `fabric-and-neoforge-1.21.8`.
+  `<loader>-and-<loader>-<minecraft>`, for example `fabric-and-neoforge-1.21.7`.
 - A release branch is a normal descendant of `master`, not an orphan patch branch. Unchanged Git
   blobs are shared; the branch-specific commits contain only its matrix, loader/API adapters,
   overlays, metadata, and documentation differences.

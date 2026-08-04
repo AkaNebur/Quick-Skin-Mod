@@ -15,8 +15,8 @@
 - Added declarative GitHub ruleset/release-environment governance with a fail-closed readiness
   audit, plus a documented 1.21 release-train consolidation experiment.
 - Restored `.cpmmodel` discovery, import, preview, selection, and CPM lifecycle integration on both
-  Minecraft 1.21.8 loader lanes.
-- Restored optional 3D Skin Layers preview integration for the supported 1.21.8 render path.
+  Minecraft 1.21.7 loader lanes.
+- Restored optional 3D Skin Layers preview integration for the supported 1.21.7 render path.
 - Added packaged-artifact E2E coverage for the two release files and their two exact runtime
   combinations.
 - Skin and cape menus now pick up files copied into `quickskin/uploads/` from outside the game, without a client restart.
@@ -40,7 +40,7 @@
 - Consolidated active development into one Stonecutter-managed source tree with narrow era overlays.
 - Made the release matrix the source of truth for artifact paths, runtime coordinates, metadata ranges, and marketplace versions.
 - Corrected loader metadata ranges, project links, and the All Rights Reserved license declaration.
-- Isolated the active Minecraft 1.21.8 Fabric and NeoForge release lanes on their own thin branch.
+- Isolated the active Minecraft 1.21.7 Fabric and NeoForge release lanes on their own thin branch.
 - Adapted the first-generation `GuiRenderState` and picture-in-picture APIs while preserving the
   pre-1.21.9 player-skin identity and input-event contracts.
 

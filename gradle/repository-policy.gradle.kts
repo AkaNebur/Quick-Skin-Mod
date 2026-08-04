@@ -3,7 +3,7 @@ import org.gradle.api.artifacts.repositories.MavenArtifactRepository
 
 // Loom owns the file-backed remap and Minecraft repositories. They contain generated or
 // previously verified local artifacts, so this policy only constrains network repositories.
-// Minecraft 1.21.8 references Mojang's patched macOS FreeType classifier, which is absent from
+// Minecraft 1.21.7 references Mojang's patched macOS FreeType classifier, which is absent from
 // Maven Central. Gradle repository stickiness means the complete module/version must be routed to
 // Mojang even though the other classifiers are mirrored by Central.
 repositories {

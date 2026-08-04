@@ -2,7 +2,7 @@ package com.quickskin.mod.client.rendering;
 
 import net.minecraft.client.gui.GuiGraphics;
 
-/** Minecraft 1.21.8 picture-in-picture preview submission backend. */
+/** Minecraft 1.21.7 picture-in-picture preview submission backend. */
 public final class PictureInPicturePreviewRenderBackend implements PreviewRenderBackend {
     @Override
     public void renderPlayerModel(
