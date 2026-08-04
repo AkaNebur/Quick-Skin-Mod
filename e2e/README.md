@@ -98,19 +98,22 @@ point. It consumes the generated manifest and emits the same exact verdict-array
 
 After a successful full run on a release branch—or after its exact-tree attestation—the advisory
 `prepare-pages-evidence` job downloads the original packaged artifacts and creates
-`pages-e2e-<branch>`. That 90-day artifact contains only catalogued PNGs plus a validated manifest;
-logs, caches, crash reports, Minecraft directories, and AI-authored HTML are never copied.
+`pages-e2e-<branch>`. That one-day handoff contains only catalogued source PNGs plus a validated
+manifest; logs, caches, crash reports, Minecraft directories, and AI-authored HTML are never
+copied.
 
 The `Project site` workflow executes only the protected generator from `master`. It discovers
 release branches from GitHub, accepts the newest public artifact whose workflow branch and SHA
 equal each current branch head, authenticates both recorded Actions runs, validates the exact
-curated tree and every path/hash/dimension/catalog identity, rechecks all
-heads, and publishes the complete site as one atomic GitHub Pages artifact. A missing, stale, or
+curated tree and every path/hash/dimension/catalog identity, rechecks all heads, converts every
+accepted raw bundle to an exact-schema WebP derivative bundle before the `collected-pages-*`
+fan-in, and publishes the complete site as one atomic GitHub Pages artifact. A missing, stale, or
 invalid version aborts the new deployment so the previous site remains available. Pages and the AI
-vision pass stay advisory; neither is added to the protected Build or Packaged E2E checks.
-After a successful deployment, the workflow rolls each already validated bundle into a protected
-90-day cache. A monthly Pages run validates and refreshes those caches, so an unchanged release
-branch does not need to relaunch Minecraft merely to keep its public proof available.
+vision pass stay advisory; neither is added to the protected Build or Packaged E2E checks. After a
+successful deployment, the workflow rolls each compact bundle into a protected 90-day
+`pages-cache-*` artifact. Original PNG bytes never enter that durable cache. A monthly Pages run
+validates and refreshes those compact caches, so an unchanged release branch does not need to
+relaunch Minecraft merely to keep its public proof available.
 
 Run the focused contracts in the project Python environment (CI installs the Linux renderer from
 the hash-locked `scripts/pages/requirements.txt`):
@@ -121,11 +124,13 @@ python -m unittest \
   scripts.release.tests.test_pages_site -v
 ```
 
-The Pages build hash-locks the same Pillow version as packaged E2E. Protected `master` code
-decodes every PNG, recalculates its pixel metrics and required comparisons, and only then creates
-bounded WebP images. The gallery inventory distinguishes the source PNG hash and dimensions from
-the published derivative hash and dimensions; derivative URLs are content-addressed by their own
-SHA-256. For a local dependency-free fixture output, call
+The Pages pipeline hash-locks the same Pillow version as packaged E2E. Protected `master` code
+decodes every source PNG, recalculates its pixel metrics and required comparisons, and only then
+creates bounded WebP images in a temporary bundle. It records and validates source identity,
+hashes, dimensions and pixel metrics separately from the derivative identity, hashes, dimensions,
+pixel metrics and comparisons before atomically admitting that bundle to fan-in. Later cache and
+site reads revalidate the protected source record and the derivative bytes; the site copies the
+content-addressed WebP without re-encoding it. For a local dependency-free fixture output, call
 `scripts/pages/build_site.py --copy-images` with one or more already prepared branch bundles, then
 serve the resulting directory over HTTP; the static JavaScript deliberately fetches its JSON
 inventories rather than embedding untrusted data in HTML.

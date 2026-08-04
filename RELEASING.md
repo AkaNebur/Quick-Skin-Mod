@@ -73,14 +73,44 @@ new logical version and therefore a new immutable identity.
 
 Actions storage follows the same recovery boundary. Ordinary build, diagnostics, packaged-E2E,
 review, publication-receipt, synchronization, and Pages handoff artifacts are transient and expire
-after one day. Each branch's single SHA-bound Pages cache is retained for 90 days, with successful
-rotation deleting the previous generation. The immutable `release-<release-id>` bundle is the other
-90-day exception so the same verified bytes survive protected-environment approvals and can resume
-an interrupted GitHub Release or marketplace publication. Release and Packaged E2E restore Gradle
-state read-only; only a trusted Build gate push or manual run on protected `master` or the matrix's
-canonical release branch may publish a Gradle cache. A protected daily cleanup discovers live
-branches directly and deletes by exact cache ID only Actions caches scoped to branch refs that no
-longer exist; non-branch refs and branches with active runs are preserved.
+after one day. Source PNGs exist only in the `pages-e2e-*` handoff; protected Pages code validates
+and replaces them with WebP derivatives before fan-in. Each branch's single compact SHA-bound Pages
+cache is retained for 90 days, with successful rotation deleting the previous generation. The
+immutable `release-<release-id>` bundle is the other 90-day exception so the same verified bytes
+survive protected-environment approvals and can resume an interrupted GitHub Release or marketplace
+publication. Release, Packaged E2E, and every release-branch Build restore Gradle state read-only;
+only a trusted Build gate push or manual run on protected `master` may publish a Gradle cache.
+Existing branch-scoped release caches remain useful read-only fallbacks. A protected daily cleanup
+discovers live branches directly. It deletes absent-branch caches and superseded, unambiguously
+SHA-bound Gradle-home generations by exact cache ID, while retaining the newest generation per
+OS/job/cache-version restore family whose SHA completed the real `Build and verify` job successfully.
+A family without that proof is not pruned. Unknown cache formats and non-branch refs are preserved.
+Because any workflow may restore the default branch and pull-request workflows may restore their
+base branch, any potentially cache-consuming active run preserves the complete cache inventory for
+that invocation. The protected cleanup run itself is ignored because it does not configure Gradle;
+unknown workflow paths remain protective.
+
+The automatic cache-pruning boundary is deliberately mechanical:
+
+- The only live-branch key shape it recognizes is
+  `gradle-home-v<positive>|<platform>|<job>[<32 lowercase hex>]-<40 lowercase hex>`.
+  The restore family is the protocol, platform, job prefix, and GitHub cache `version` (the paths and
+  compression compatibility hash); content-addressed dependency, transform, wrapper, DSL, and any
+  future/unknown cache keys are not live-branch deletion targets.
+- A SHA is successful only when the exact `build-gate.yml` query returns a completed successful
+  `push` or `workflow_dispatch` run for the same branch, SHA, and repository and that run contains
+  the completed successful `Build and verify` job. Pull-request, other read-only, and successful
+  attestation-only runs are not sufficient.
+- Initial discovery and every exact-cache lookup are paginated. An invocation accepts at most 100
+  pages per inventory, 1,000 active runs per status filter, 100 successful Build runs per exact SHA,
+  and 100 jobs per run; duplicates, malformed payloads, larger searches, or API errors abort the
+  invocation before it can continue deleting.
+- Before planning, before bounding the apply batch, and immediately before each deletion, the
+  repository-wide active-run state is checked. The candidate, branch existence, and exact compatible
+  protected replacement are also revalidated per ID. Any mismatch preserves the candidate. Deletes
+  use only the immutable numeric cache ID.
+- The protected workflow applies at most 75 IDs and 10 GiB per invocation, serially, with one second
+  between deletes. The script remains dry-run unless `--apply` is explicit.
 
 Downloaders can verify checksums with `SHA256SUMS`. Maintainers can additionally verify GitHub's
 provenance for a downloaded JAR:
@@ -139,9 +169,10 @@ generator from protected `master`, validates all current release heads, and depl
 workflow fails without replacing the previously deployed site.
 Successful deployments refresh one protected cache for each exact-head evidence bundle. After the
 owning Pages run reaches `completed/success`, a separate protected rotation workflow validates the
-new cache, deletes only older caches for that branch, and retires by exact artifact ID the consumed
-`pages-e2e-<branch>` handoff plus the successful Pages run's fan-in and deploy artifacts. Raw E2E
-proof expires after one day rather than being deleted during promotion because a concurrent branch
+new compact WebP cache, deletes only older caches for that branch, and retires by exact artifact ID
+the consumed `pages-e2e-<branch>` handoff plus the successful Pages run's fan-in and deploy
+artifacts. Raw E2E proof expires after one day rather than being deleted during promotion because a
+concurrent branch
 attestation may still be consuming it. Rotation never removes the previous fallback before a
 replacement is usable, nor does it delete a concurrent newer handoff. The monthly Pages schedule
 revalidates and rolls the single caches forward without rerunning packaged Minecraft; an updated
