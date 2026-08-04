@@ -23,19 +23,31 @@ class GradleCachePolicyTest(unittest.TestCase):
         )
         return matrix
 
-    def test_approved_events_write_only_on_master_or_canonical_release_branch(self) -> None:
+    def test_approved_events_write_only_on_master(self) -> None:
         for event_name in ("push", "workflow_dispatch"):
-            for ref_name in ("master", "forge-and-fabric-1.20.1"):
-                with self.subTest(event_name=event_name, ref_name=ref_name):
-                    self.assertFalse(
-                        gradle_cache_policy.is_read_only(
-                            event_name=event_name,
-                            ref_name=ref_name,
-                            ref_type="branch",
-                            ref_protected=True,
-                            release_branch="forge-and-fabric-1.20.1",
-                        )
+            with self.subTest(event_name=event_name):
+                self.assertFalse(
+                    gradle_cache_policy.is_read_only(
+                        event_name=event_name,
+                        ref_name="master",
+                        ref_type="branch",
+                        ref_protected=True,
+                        release_branch="forge-and-fabric-1.20.1",
                     )
+                )
+
+    def test_canonical_release_branch_is_read_only(self) -> None:
+        for event_name in ("push", "workflow_dispatch"):
+            with self.subTest(event_name=event_name):
+                self.assertTrue(
+                    gradle_cache_policy.is_read_only(
+                        event_name=event_name,
+                        ref_name="forge-and-fabric-1.20.1",
+                        ref_type="branch",
+                        ref_protected=True,
+                        release_branch="forge-and-fabric-1.20.1",
+                    )
+                )
 
     def test_pull_requests_and_other_events_are_always_read_only(self) -> None:
         for event_name in ("pull_request", "pull_request_target", "schedule", "merge_group"):
