@@ -275,7 +275,7 @@ public class SkinManagerMixin {
             at = @At("RETURN"),
             cancellable = true,
             require = 1,
-//? if <1.21.4 {
+//? if <1.21.1 {
             expect = 1,
             allow = 1
 //?} else {

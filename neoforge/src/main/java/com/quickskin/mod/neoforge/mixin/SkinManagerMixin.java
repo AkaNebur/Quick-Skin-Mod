@@ -361,12 +361,12 @@ public class SkinManagerMixin {
             at = @At("RETURN"),
             cancellable = true,
             require = 1,
-//? if <1.21.4 {
-            expect = 1,
-            allow = 1
-//?} else {
+//? if <1.21.6 {
             expect = 2,
             allow = 2
+//?} else {
+            expect = 1,
+            allow = 1
 //?}
     )
     private void quickskin$modifyInsecureSkin(GameProfile profile, CallbackInfoReturnable<PlayerSkin> cir) {
