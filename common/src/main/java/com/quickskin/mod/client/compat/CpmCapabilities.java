@@ -21,7 +21,7 @@ public final class CpmCapabilities {
     public enum Band {
         MC_1_20_1("1.20.1", RenderPipeline.IMMEDIATE),
         MC_1_21_1("1.21.1", RenderPipeline.IMMEDIATE),
-        MC_1_21_10("1.21.10", RenderPipeline.RENDER_STATE),
+        MC_1_21_9("1.21.9", RenderPipeline.RENDER_STATE),
         MC_1_21_11("1.21.11", RenderPipeline.RENDER_STATE),
         MC_26_1_2("26.1.2", RenderPipeline.EXTRACTOR),
         MC_26_2("26.2", RenderPipeline.DEFERRED_COLLECTOR);
@@ -71,7 +71,7 @@ public final class CpmCapabilities {
         EnumMap<Band, Capabilities> matrix = new EnumMap<>(Band.class);
         matrix.put(Band.MC_1_20_1, availableWithEmbeddedBridge(Band.MC_1_20_1));
         matrix.put(Band.MC_1_21_1, availableWithEmbeddedBridge(Band.MC_1_21_1));
-        matrix.put(Band.MC_1_21_10, availableWithDegradedEmbeddedBridge(Band.MC_1_21_10));
+        matrix.put(Band.MC_1_21_9, availableWithDegradedEmbeddedBridge(Band.MC_1_21_9));
         matrix.put(Band.MC_1_21_11, availableWithDegradedEmbeddedBridge(Band.MC_1_21_11));
         matrix.put(Band.MC_26_1_2, availableWithDegradedEmbeddedBridge(Band.MC_26_1_2));
         matrix.put(Band.MC_26_2, availableWithDegradedEmbeddedBridge(Band.MC_26_2));
@@ -95,7 +95,7 @@ public final class CpmCapabilities {
         //?} else if <1.21.9 {
         return Band.MC_1_21_1;
         //?} else if <1.21.11 {
-        return Band.MC_1_21_10;
+        return Band.MC_1_21_9;
         //?} else if <26.1.2 {
         return Band.MC_1_21_11;
         //?} else if <26.2 {

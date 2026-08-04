@@ -26,7 +26,7 @@ public interface MinecraftCompat {
         //? if <1.21.9 {
     MinecraftCompat INSTANCE = new MinecraftCompat1_21_1();
         //?} else if <1.21.11 {
-    MinecraftCompat INSTANCE = new MinecraftCompat1_21_10();
+    MinecraftCompat INSTANCE = new MinecraftCompat1_21_9();
         //?} else if <26.1.2 {
     MinecraftCompat INSTANCE = new MinecraftCompat1_21_11();
         //?} else {

@@ -50,14 +50,14 @@ The active common test lane:
 
 ```powershell
 .\gradlew.bat --no-daemon --no-parallel `
-  :common:1.21.10:test
+  :common:1.21.9:test
 ```
 
 Full production and packaged-harness gate:
 
 ```powershell
 .\gradlew.bat --no-daemon --no-parallel clean `
-  :common:1.21.10:test `
+  :common:1.21.9:test `
   buildAllLanes buildAllE2EHarnesses
 ```
 

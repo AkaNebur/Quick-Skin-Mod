@@ -16,7 +16,7 @@ Quick Skin treats build plugins and dependencies as executable supply-chain inpu
   Loom namespaces from ever resolving over the network.
 - `gradle/verification-metadata.xml` verifies both artifacts and Maven/Gradle metadata with
   SHA-256. It covers settings and build plugins plus the resolvable common, test, Fabric, NeoForge,
-  Minecraft, mappings, transform, runtime, native, and E2E classpaths for the active 1.21.10 graph.
+  Minecraft, mappings, transform, runtime, native, and E2E classpaths for the active 1.21.9 graph.
 - `gradle/dependency-locks/` strictly locks only `shadowBundle`, the external graph physically
   embedded in each release JAR. Locking Loom's generated configurations is deliberately avoided;
   their external inputs remain pinned by coordinate-specific verification metadata.
@@ -28,7 +28,7 @@ Quick Skin treats build plugins and dependencies as executable supply-chain inpu
 
 ## Mojang-patched LWJGL classifier
 
-Minecraft 1.21.10's version manifest selects
+Minecraft 1.21.9's version manifest selects
 `org.lwjgl:lwjgl-freetype:3.3.3:natives-macos-patch`. Mojang publishes that classifier at
 `libraries.minecraft.net`, while Maven Central publishes the module and ordinary classifiers but
 not the patched JAR. Because Gradle does not mix artifacts for one component across repositories,
@@ -94,9 +94,9 @@ Then regenerate the metadata and selective locks in one serialized invocation:
 ```bash
 ./gradlew --no-daemon --no-parallel \
   --write-verification-metadata sha256 --write-locks \
-  :common:1.21.10:dependencies \
-  :fabric:1.21.10:dependencies \
-  :neoforge:1.21.10:dependencies
+  :common:1.21.9:dependencies \
+  :fabric:1.21.9:dependencies \
+  :neoforge:1.21.9:dependencies
 ```
 
 Review every metadata and lockfile diff. Confirm new coordinates are expected, compare critical
