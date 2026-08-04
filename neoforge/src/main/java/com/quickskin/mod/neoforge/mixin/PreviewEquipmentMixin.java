@@ -2,7 +2,6 @@ package com.quickskin.mod.neoforge.mixin;
 
 import com.quickskin.mod.client.rendering.PlayerModelRenderer;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
@@ -21,11 +20,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * read there and a mixin added only to it would silently not run. The same split already forces a
  * duplicate {@code CapeLayerMixin} in this package.
  *
- * <p>Registered only in the 1.21.4 and 1.21.5 configurations. The method is owned by
- * {@link LivingEntity} in both, so the callback guards that broader owner and changes only players.
- * NeoForge 1.21.11, 26.1.2 and 26.2 blank the extracted render state in the renderer instead.
+ * <p>Registered only in the 1.21.4 configuration. The concrete method is owned by {@link Player};
+ * its declaration on LivingEntity is abstract and has no bytecode injection point. NeoForge
+ * 1.21.11, 26.1.2 and 26.2 blank the extracted render state in the renderer instead.
  */
-@Mixin(LivingEntity.class)
+@Mixin(Player.class)
 public class PreviewEquipmentMixin {
 
     @Inject(
@@ -37,9 +36,7 @@ public class PreviewEquipmentMixin {
             allow = 1)
     private void quickskin$suppressPreviewEquipment(EquipmentSlot slot,
                                                     CallbackInfoReturnable<ItemStack> cir) {
-        Object entity = this;
-        if (entity instanceof Player player
-                && PlayerModelRenderer.suppressesPreviewEquipment(player, slot)) {
+        if (PlayerModelRenderer.suppressesPreviewEquipment((Player) (Object) this, slot)) {
             cir.setReturnValue(ItemStack.EMPTY);
         }
     }
