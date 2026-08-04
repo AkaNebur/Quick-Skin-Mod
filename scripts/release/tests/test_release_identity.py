@@ -20,9 +20,9 @@ class ReleaseIdentityTest(unittest.TestCase):
         cls.identity = release_identity.derive(cls.matrix_path)
 
     def test_identity_names_minecraft_era_and_logical_mod_version(self) -> None:
-        self.assertEqual(self.identity.release_id, "mc1.21.11-v3.0.0")
+        self.assertEqual(self.identity.release_id, "mc26.2-v3.0.0")
         self.assertEqual(self.identity.tag, self.identity.release_id)
-        self.assertEqual(self.identity.branch, "fabric-and-neoforge-1.21.11")
+        self.assertEqual(self.identity.branch, "fabric-and-neoforge-26.2")
 
     def test_publication_matrix_is_artifact_times_marketplace(self) -> None:
         data = release_matrix.load_matrix(self.matrix_path)
@@ -97,7 +97,7 @@ class ReleaseIdentityTest(unittest.TestCase):
     def test_matrix_rejects_a_release_branch_for_other_loaders(self) -> None:
         data = release_matrix.load_matrix(self.matrix_path)
         data["project"] = dict(data["project"])
-        data["project"]["release_branch"] = "forge-and-fabric-1.21.11"
+        data["project"]["release_branch"] = "forge-and-fabric-26.2"
         with self.assertRaisesRegex(
             release_matrix.MatrixError,
             "loaders disagree",

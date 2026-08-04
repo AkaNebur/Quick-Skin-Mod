@@ -31,7 +31,7 @@ The active production matrix on this branch contains exactly two artifacts:
 
 | Minecraft | Loaders | Java |
 |---|---|---:|
-| 1.21.11 | Fabric, NeoForge | 21 |
+| 26.2 | Fabric, NeoForge | 25 |
 
 Every artifact targets exactly the Minecraft version in its filename and metadata. A support or
 loader change starts in the release matrix and must pass its validation and mutation tests.

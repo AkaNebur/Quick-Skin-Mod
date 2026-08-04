@@ -16,7 +16,7 @@ Quick Skin treats build plugins and dependencies as executable supply-chain inpu
   Loom namespaces from ever resolving over the network.
 - `gradle/verification-metadata.xml` verifies both artifacts and Maven/Gradle metadata with
   SHA-256. It covers settings and build plugins plus the resolvable common, test, Fabric, NeoForge,
-  Minecraft, mappings, transform, runtime, native, and E2E classpaths for the active 1.21.11 graph.
+  Minecraft, transform, runtime, native, and E2E classpaths for the active 26.2 graph.
 - `gradle/dependency-locks/` strictly locks only `shadowBundle`, the external graph physically
   embedded in each release JAR. Locking Loom's generated configurations is deliberately avoided;
   their external inputs remain pinned by coordinate-specific verification metadata.
@@ -28,13 +28,15 @@ Quick Skin treats build plugins and dependencies as executable supply-chain inpu
 
 ## Mojang-patched LWJGL classifier
 
-Minecraft 1.21.11's version manifest selects
-`org.lwjgl:lwjgl-freetype:3.3.3:natives-macos-patch`. Mojang publishes that classifier at
-`libraries.minecraft.net`, while Maven Central publishes the module and ordinary classifiers but
-not the patched JAR. Because Gradle does not mix artifacts for one component across repositories,
-the repository policy exclusively routes the exact `org.lwjgl:lwjgl-freetype:3.3.3` component to
+The shared repository policy retains the narrow route required by Minecraft 1.21.11, whose version
+manifest selects `org.lwjgl:lwjgl-freetype:3.3.3:natives-macos-patch`. Mojang publishes that
+classifier at `libraries.minecraft.net`, while Maven Central publishes the module and ordinary
+classifiers but not the patched JAR. Because Gradle does not mix artifacts for one component across
+repositories, the repository policy exclusively routes the exact
+`org.lwjgl:lwjgl-freetype:3.3.3` component to
 Mojang. The exception is deliberately version- and module-specific; it does not grant Mojang's
-repository the broader `org.lwjgl` group.
+repository the broader `org.lwjgl` group. Minecraft 26.2 itself resolves the ordinary LWJGL 3.4.1
+classifiers from Maven Central.
 
 The reviewed patched artifact has Mojang-manifest SHA-1
 `806d869f37ce0df388a24e17aaaf5ca0894d851b` and SHA-256
@@ -90,9 +92,9 @@ Then regenerate the metadata and selective locks in one serialized invocation:
 ```bash
 ./gradlew --no-daemon --no-parallel \
   --write-verification-metadata sha256 --write-locks \
-  :common:1.21.11:dependencies \
-  :fabric:1.21.11:dependencies \
-  :neoforge:1.21.11:dependencies
+  :common:26.2:dependencies \
+  :fabric:26.2:dependencies \
+  :neoforge:26.2:dependencies
 ```
 
 Review every metadata and lockfile diff. Confirm new coordinates are expected, compare critical

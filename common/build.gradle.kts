@@ -103,12 +103,7 @@ check(actualLegacyDirectories == declaredLegacyDirectories) {
         "actual=$actualLegacyDirectories"
 }
 
-val canonicalOnlyAfterLegacyByVersion = mapOf(
-    "1.21.11" to setOf(
-        "com/quickskin/mod/client/rendering/DeferredCollectorPreviewRenderBackend.java",
-        "com/quickskin/mod/platform/MinecraftCompat26_2.java",
-    ),
-)
+val canonicalOnlyAfterLegacyByVersion = emptyMap<String, Set<String>>()
 check(canonicalOnlyAfterLegacyByVersion.keys == declaredLegacyVersions) {
     "Common canonical exclusions must cover exactly the matrix-declared overlay versions"
 }
