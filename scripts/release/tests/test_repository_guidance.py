@@ -148,6 +148,67 @@ class RepositoryGuidanceTest(unittest.TestCase):
             r"ClientGuiEvent\.RENDER_POST\.register",
         )
 
+    def test_settings_screen_pose_stack_uses_one_version_boundary(self) -> None:
+        settings_screen = (
+            ROOT
+            / "common"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "client"
+            / "gui"
+            / "screen"
+            / "SettingsScreen.java"
+        ).read_text(encoding="utf-8")
+        guarded_pose_operations = re.findall(
+            r"//\? if (?P<boundary><[0-9.]+) \{\s+"
+            r"graphics\.pose\(\)\.(?P<operation>pushPose|popPose)\(\);",
+            settings_screen,
+        )
+
+        self.assertEqual(
+            guarded_pose_operations,
+            [("<1.21", "pushPose"), ("<1.21", "popPose")],
+        )
+
+    def test_legacy_preview_equipment_hooks_the_method_owner(self) -> None:
+        mixins = (
+            ROOT
+            / "common"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "mixin"
+            / "PreviewEquipmentMixin.java",
+            ROOT
+            / "neoforge"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "neoforge"
+            / "mixin"
+            / "PreviewEquipmentMixin.java",
+        )
+
+        for path in mixins:
+            with self.subTest(path=path.relative_to(ROOT).as_posix()):
+                source = path.read_text(encoding="utf-8")
+                self.assertIn("@Mixin(LivingEntity.class)", source)
+                self.assertRegex(source, r"entity instanceof Player player")
+                self.assertRegex(
+                    source,
+                    r"cancellable = true,\s+require = 0,\s+expect = 1,\s+allow = 1",
+                )
+
     def test_release_publication_is_recoverable_and_non_destructive(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"
