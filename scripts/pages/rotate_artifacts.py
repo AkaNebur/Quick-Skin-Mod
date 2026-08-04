@@ -516,6 +516,7 @@ def load_generations(
             manifest = validate_bundle(
                 evidence_root,
                 branch,
+                expected_kind="compact",
                 expected_repository=repository,
             )
         except PublicEvidenceError as exc:

@@ -126,6 +126,9 @@ This file is part of the repository-wide instruction set imported by `AGENTS.md`
   metrics before publishing. Presentation code must use escaped/text DOM APIs and local assets.
 - Optimized gallery images are derivatives, not the source proof. Publish separate source and
   derivative hashes/dimensions, and content-address each public image URL with the bytes actually
-  served.
+  served. Original PNGs may exist only in the one-day `pages-e2e-*` handoff. Protected conversion
+  must revalidate source bytes and metrics before atomically producing the WebP-only fan-in/cache;
+  every later cache/render read must revalidate the retained source record, derivative bytes,
+  derivative metrics, and derivative comparisons.
 - Pages is an advisory, atomic publication surface. Failure must preserve the previous site and
   must not weaken or replace the required Build and Packaged E2E gates.
