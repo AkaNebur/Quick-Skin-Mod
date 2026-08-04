@@ -109,6 +109,45 @@ class RepositoryGuidanceTest(unittest.TestCase):
         self.assertRegex(contributing, r"per\s+discovered\s+release branch")
         self.assertRegex(contributing, r"separate ephemeral\s+worktree")
 
+    def test_gui_compositing_producer_and_consumer_share_the_vanilla_boundary(self) -> None:
+        player_widget = (
+            ROOT
+            / "common"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "client"
+            / "gui"
+            / "widget"
+            / "PlayerWidget.java"
+        ).read_text(encoding="utf-8")
+        client_events = (
+            ROOT
+            / "common"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "event"
+            / "ClientEvents.java"
+        ).read_text(encoding="utf-8")
+
+        self.assertRegex(
+            player_widget,
+            r"//\? if <1\.21\.6 \{\s+"
+            r"private static final PreviewCompositeOrder\.Pipeline GUI_PIPELINE",
+        )
+        self.assertRegex(
+            client_events,
+            r"//\? if <1\.21\.6 \{\s+//\?\} else \{\s+"
+            r"ClientGuiEvent\.RENDER_POST\.register",
+        )
+
     def test_release_publication_is_recoverable_and_non_destructive(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"

@@ -122,7 +122,6 @@ public class ItemInHandRendererMixin {
 //?} else if <1.21.4 {
         ResourceLocation skinTexture = player.getSkin().texture();
 //?} else if <1.21.11 {
-        // Minecraft 1.21.4+ passes the skin texture directly to renderHand.
 //?} else {
         if (CPMCompatIntegration.isCPMActivelyRendering()) {
             collector.submitModelPart(part, poseStack, renderType, packedLight, overlay, sprite);
