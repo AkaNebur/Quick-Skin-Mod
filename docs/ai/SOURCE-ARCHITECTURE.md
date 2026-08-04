@@ -73,8 +73,11 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
 - `e2e/visual_evidence.py` reads successful `result.json` reports, verifies the catalog contract,
   PNG containment, dimensions, and SHA-256, and exposes the shared evidence model used by the AI
   review and public site.
-- `scripts/pages/evidence.py` creates and validates a small branch-scoped public bundle. It may copy
-  only catalogued screenshots and structured provenance—never runtime logs or arbitrary HTML.
+- `scripts/pages/evidence.py` creates and validates a small branch-scoped raw handoff, then
+  atomically compacts a validated bundle to protected WebP derivatives. It may copy only catalogued
+  screenshots and structured provenance—never runtime logs or arbitrary HTML. The compact schema
+  preserves separate source and derivative identities, hashes, dimensions, pixel metrics, and
+  comparison metrics; raw PNG bytes stop at the one-day E2E handoff.
 - `scripts/pages/select_artifact.py` authenticates exact-current E2E handoffs and SHA-bound rolling
   caches, then selects the newest valid source. A branch-only cache name is migration fallback only.
 - `scripts/pages/rotate_artifacts.py` owns post-deployment retention. It may delete only exact
@@ -83,12 +86,21 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
   version discovery itself. Raw E2E artifacts remain retention-bound inputs for concurrent
   attestations and are outside rotation ownership.
 - `scripts/ci/gradle_cache_policy.py` is the fail-closed writer policy for Gradle state. It permits
-  writes only from protected stable refs; packaged E2E and release jobs remain read-only.
-- `scripts/ci/prune_actions_caches.py` owns orphan-cache hygiene. It discovers branches and active
-  runs from GitHub, revalidates each immutable cache entry and missing branch, and deletes only by
-  exact cache ID under bounded automatic limits.
-- `scripts/pages/build_site.py` combines exact branch bundles and renders the tracked assets under
-  `site/`. `site/` contains presentation code, not a support/version inventory; supported versions
-  always come from validated evidence discovered from release branches.
+  writes only from protected `master`; release branches, packaged E2E, and release jobs remain
+  read-only.
+- `scripts/ci/prune_actions_caches.py` owns bounded cache hygiene. It discovers branches, active
+  runs, exact successful Build jobs, and caches from paginated GitHub APIs. It revalidates each
+  immutable cache before deleting by exact ID. Absent-branch caches are disposable; on a live
+  branch, only superseded SHA-bearing Gradle-home generations are eligible after preserving the
+  latest successful generation for each OS/job/cache-version restore family. A family with no proven
+  successful generation and unknown keys are retained. Any potentially cache-consuming active run
+  protects the complete repository cache inventory because topic runs may restore `master` and pull
+  requests may restore their base branch. Only the protected pruner's own run is ignored, because
+  that workflow never configures Gradle; an unrecognized workflow fails closed as a potential
+  consumer.
+- `scripts/pages/build_site.py` combines exact compact branch bundles and copies their already
+  content-addressed WebP assets while rendering the tracked assets under `site/`. `site/` contains
+  presentation code, not a support/version inventory; supported versions always come from
+  validated evidence discovered from release branches.
 - `_site/`, `public-evidence/`, and downloaded Actions artifacts are generated output. Do not commit
   them or edit them as source.

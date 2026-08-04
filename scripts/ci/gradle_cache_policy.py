@@ -2,9 +2,10 @@
 """Decide whether Build gate must use the Gradle cache read-only.
 
 The policy is intentionally fail-closed.  A cache writer is allowed only for a
-trusted Build gate event on ``master`` or on the canonical release branch read
-from the repository's release matrix.  Every other input produces ``true``
-(read-only), while malformed required input is rejected.
+trusted Build gate event on protected ``master``.  Long-lived release branches
+restore their branch-scoped last-known-good generation without writing another
+immutable generation per run.  Every other input produces ``true`` (read-only),
+while malformed required input is rejected.
 """
 
 from __future__ import annotations
@@ -70,6 +71,7 @@ def is_read_only(
     _require_non_empty(ref_name, "ref name")
     _require_non_empty(ref_type, "ref type")
     _require_non_empty(release_branch, "release branch")
+    # The matrix identity remains validated, but it deliberately grants no write capability.
     if not isinstance(ref_protected, bool):
         raise PolicyError("ref protected must be a boolean")
 
@@ -81,7 +83,7 @@ def is_read_only(
         return True
     if ref_name.startswith(READ_ONLY_REF_PREFIXES):
         return True
-    return ref_name not in {"master", release_branch}
+    return ref_name != "master"
 
 
 def evaluate(
