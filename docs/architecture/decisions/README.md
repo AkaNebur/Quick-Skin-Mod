@@ -1,0 +1,9 @@
+# Architecture decision records
+
+Accepted project decisions:
+
+- [ADR 0001: Postpone consolidation of the Minecraft 1.21 release branches](0001-postpone-1-21-release-train-consolidation.md)
+- [ADR 0002: Publish curated E2E evidence with GitHub Pages](0002-publish-curated-e2e-evidence-with-github-pages.md)
+
+An ADR records the evidence and trade-offs behind a decision. Operational instructions remain in
+the focused human and AI documentation linked from the repository root.

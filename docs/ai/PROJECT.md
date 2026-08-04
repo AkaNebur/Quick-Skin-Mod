@@ -12,7 +12,9 @@ repository root.
   request, including an AI-assisted workflow.
 - `README.md` is for users and builders; focused architecture documents own their subjects.
 - `RELEASING.md` owns immutable identity, publication, recovery, provenance, and GitHub governance.
-- [`docs/architecture/decisions/`](../architecture/decisions/0001-postpone-1-21-release-train-consolidation.md)
+- `e2e/README.md`, `e2e/visual-catalog.json`, and `scripts/pages/` own public visual-evidence
+  identity, validation, rendering, and GitHub Pages publication.
+- [`docs/architecture/decisions/`](../architecture/decisions/README.md)
   records evidence-backed architectural decisions that must survive individual worktrees.
 
 Do not put operational rules directly in `AGENTS.md` or `CLAUDE.md`, and do not create another root
@@ -57,16 +59,46 @@ immutable workflow and governance activation contract.
 - GITHUB_TOKEN-created PRs and child runs do not recursively start ordinary PR or completion
   workflows, so synchronization explicitly dispatches `build-gate.yml` and `on-demand-e2e.yml`.
   Each gate reports completion through a trusted `repository_dispatch`; the result handler merges
-  only when the latest exact-head run of both gates succeeds. An open synchronization PR is updated
-  in place when newer shared commits arrive.
+  only when the latest exact-head run of both gates succeeds. After revalidating the PR identity,
+  base, head, ancestry, and both run records, the handler binds those results to the exact head with
+  the two stable commit-status contexts required by the release ruleset. These statuses are a
+  ruleset bridge, never substitute test executions. An open synchronization PR is updated in place
+  when newer shared commits arrive.
 - After merging, the controller publishes lightweight Build and Packaged E2E attestations on the
   final release branch. They must verify the original trusted run IDs, exact tested commit, ancestry,
   and identical Git trees; never rerun Minecraft merely to populate a badge or attest a changed tree.
 - The marked README release-status table is generated from discovered release branches and each
   branch's matrix. Its workflow updates one idempotent automation PR and never pushes directly to
   `master`. Do not edit its rows manually or add a branch/version list to its workflow.
+- Each successful release-branch E2E tree may produce one transient curated
+  `pages-e2e-<branch>` handoff. The Pages workflow must discover the same release branches, require
+  evidence for every exact current head, render with protected `master` code, and deploy the whole
+  site atomically. Only after that Pages run reaches `completed/success` may protected automation
+  replace the branch's single rolling cache and retire older caches plus the consumed handoff.
+  Never delete the fallback before its replacement succeeds, introduce a second version list,
+  publish logs/crash reports, or make Pages a protected release check.
+- Actions artifacts are handoffs, not an archive. Every ordinary upload is retained for one day;
+  the only longer-lived uploads are the SHA-bound Pages cache and the immutable
+  `release-<release-id>` bundle, both retained for 90 days. The release bundle spans protected
+  environment approvals and provides bounded recovery for an interrupted publication. After a
+  successful Pages replacement, protected rotation deletes by exact artifact ID the superseded
+  cache, consumed `pages-e2e-<branch>` handoff, Pages fan-in artifacts, and deploy artifact. Raw
+  packaged-E2E proof retains its one-day window because a concurrent branch attestation may still
+  consume it. A protected schedule also deletes by exact cache ID Actions caches scoped to branch
+  refs that no longer exist; it discovers live branches directly and must never infer a
+  supported-version inventory.
+- Build gate owns Gradle cache writes, and only a trusted push or manual Build run on `master` or
+  the matrix's canonical release branch may write. Pull requests and ephemeral branches are
+  read-only; Packaged E2E and Release always restore the cache read-only so they cannot create one
+  immutable cache generation per run or tag.
 - Shared behavior changes start on `master`. A version-only fix starts on its release branch and
   must be reflected in canonical `master` sources when the same behavior applies elsewhere.
+- A shared change is not repository-wide delivery merely because it reached `master`. The
+  synchronizer must create one port PR for every discovered release branch; each PR must pass its
+  exact-head Build and Packaged E2E gates, merge into its target, and receive successful final
+  exact-tree attestations. Until that is true for every target, report the outstanding ports rather
+  than calling the change delivered everywhere. Name every intentional branch exclusion in the
+  issue or source pull request; never let an omitted port become an implicit support policy.
 
 ## Task routing
 

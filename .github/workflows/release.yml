@@ -42,7 +42,7 @@ jobs:
 
     steps:
       - name: Check out tagged source
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -62,7 +62,7 @@ jobs:
             gradle/wrapper/gradle-wrapper.properties
 
       - name: Install all required JDKs
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: |
@@ -71,12 +71,16 @@ jobs:
             25
 
       - name: Install Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
 
       - name: Configure Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          # The stable branch build gate owns cache writes. A tagged release may wait for an
+          # environment approval, so it restores that cache without creating a tag-scoped copy.
+          cache-read-only: true
 
       - name: Validate requested release identity
         id: release
@@ -143,13 +147,13 @@ jobs:
 
       - name: Attest exact production JAR provenance
         if: ${{ github.event_name == 'push' }}
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
           subject-path: build/release/files/*.jar
 
       - name: Attest exact production JAR SBOM
         if: ${{ github.event_name == 'push' }}
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
           subject-path: build/release/files/*.jar
           sbom-path: build/release/sbom/quick-skin.cdx.json
@@ -180,7 +184,7 @@ jobs:
             **/build/test-results/
             **/build/*.log
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 1
 
   runtime-behavior:
     name: ${{ matrix.id }} - packaged release behavior
@@ -194,13 +198,13 @@ jobs:
 
     steps:
       - name: Check out exact tested orchestration code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Install all required JDKs
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: |
@@ -209,7 +213,7 @@ jobs:
             25
 
       - name: Install Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
 
@@ -281,7 +285,7 @@ jobs:
             e2e-out/profiles/**/crash-reports/**
           if-no-files-found: warn
           compression-level: 6
-          retention-days: 90
+          retention-days: 1
 
   stage-github-release:
     name: Stage exact GitHub Release assets
@@ -297,7 +301,7 @@ jobs:
 
     steps:
       - name: Check out exact release source and tag
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -305,7 +309,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
 
@@ -347,13 +351,13 @@ jobs:
 
     steps:
       - name: Check out release metadata
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Install Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
 
@@ -380,7 +384,7 @@ jobs:
 
       - name: Publish exact verified artifact to Modrinth
         if: ${{ matrix.marketplace == 'modrinth' && steps.reconcile.outputs.publish == 'true' }}
-        uses: Kira-NT/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659 # v3.3.0
+        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3.1
         with:
           modrinth-id: ${{ matrix.modrinth_id }}
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
@@ -400,7 +404,7 @@ jobs:
 
       - name: Publish exact verified artifact to CurseForge
         if: ${{ matrix.marketplace == 'curseforge' && steps.reconcile.outputs.publish == 'true' }}
-        uses: Kira-NT/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659 # v3.3.0
+        uses: Kira-NT/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3.1
         with:
           curseforge-id: ${{ matrix.curseforge_id }}
           curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
@@ -436,7 +440,7 @@ jobs:
           name: publication-${{ matrix.id }}
           path: build/publication/${{ matrix.id }}.json
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 1
 
   publish-github-release:
     name: Publish immutable GitHub Release
@@ -453,7 +457,7 @@ jobs:
 
     steps:
       - name: Check out exact release source and tag
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -461,7 +465,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
 

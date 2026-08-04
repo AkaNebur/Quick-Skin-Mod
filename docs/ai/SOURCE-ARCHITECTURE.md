@@ -67,3 +67,30 @@ is preserved by the `pre-scalability-oracle-retirement` Git tag. Consult that ta
 reference, then make the effective change in canonical sources or an active overlay. Matrix
 validation rejects reintroduced `src/v*` content and live Java classes with more than two copies.
 See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
+
+## Visual evidence and static-site sources
+
+- `e2e/visual-catalog.json` is the semantic catalog for screenshot checkpoints. Its identity is
+  scenario + client role + report step; filenames and ordinals are payload details only.
+- `e2e/visual_evidence.py` reads successful `result.json` reports, verifies the catalog contract,
+  PNG containment, dimensions, and SHA-256, and exposes the shared evidence model used by the AI
+  review and public site.
+- `scripts/pages/evidence.py` creates and validates a small branch-scoped public bundle. It may copy
+  only catalogued screenshots and structured provenance—never runtime logs or arbitrary HTML.
+- `scripts/pages/select_artifact.py` authenticates exact-current E2E handoffs and SHA-bound rolling
+  caches, then selects the newest valid source. A branch-only cache name is migration fallback only.
+- `scripts/pages/rotate_artifacts.py` owns post-deployment retention. It may delete only exact
+  Actions artifact IDs whose protected run provenance, branch, SHA, age, and successful replacement
+  have all been revalidated, including Pages-run intermediates; it never implements screenshot or
+  version discovery itself. Raw E2E artifacts remain retention-bound inputs for concurrent
+  attestations and are outside rotation ownership.
+- `scripts/ci/gradle_cache_policy.py` is the fail-closed writer policy for Gradle state. It permits
+  writes only from protected stable refs; packaged E2E and release jobs remain read-only.
+- `scripts/ci/prune_actions_caches.py` owns orphan-cache hygiene. It discovers branches and active
+  runs from GitHub, revalidates each immutable cache entry and missing branch, and deletes only by
+  exact cache ID under bounded automatic limits.
+- `scripts/pages/build_site.py` combines exact branch bundles and renders the tracked assets under
+  `site/`. `site/` contains presentation code, not a support/version inventory; supported versions
+  always come from validated evidence discovered from release branches.
+- `_site/`, `public-evidence/`, and downloaded Actions artifacts are generated output. Do not commit
+  them or edit them as source.

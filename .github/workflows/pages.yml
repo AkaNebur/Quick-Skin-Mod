@@ -1,0 +1,340 @@
+name: Project site
+
+# The privileged workflow always executes the protected implementation from master. A completed
+# packaged run is only a wake-up signal: release-branch artifacts are selected independently by
+# exact current branch SHA and then revalidated as hostile data before any HTML is generated.
+on:
+  schedule:
+    - cron: "43 4 1 * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Packaged E2E
+    types:
+      - completed
+
+permissions: {}
+
+concurrency:
+  group: quick-skin-github-pages
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    name: Discover exact release heads
+    if: >-
+      (github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') ||
+      github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      branches: ${{ steps.inventory.outputs.branches }}
+      eligible: ${{ steps.inventory.outputs.eligible }}
+      implementation_sha: ${{ steps.inventory.outputs.implementation_sha }}
+
+    steps:
+      - name: Check out protected site implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Discover release branches and validate the wake-up event
+        id: inventory
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          TRIGGER_EVENT: ${{ github.event_name }}
+          TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          printf 'branches=[]\n' >> "$GITHUB_OUTPUT"
+          printf 'eligible=false\n' >> "$GITHUB_OUTPUT"
+
+          default_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha)"
+          [[ "$(git rev-parse HEAD)" == "$default_sha" ]]
+          printf 'implementation_sha=%s\n' "$default_sha" >> "$GITHUB_OUTPUT"
+          if [[ "$TRIGGER_EVENT" == workflow_run ]]; then
+            if ! python3 scripts/release/version_branches.py \
+                --target "$TRIGGER_BRANCH" > /dev/null 2>&1; then
+              printf 'Ignoring packaged run from non-release branch %s\n' "$TRIGGER_BRANCH"
+              exit 0
+            fi
+            trigger_run="$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$TRIGGER_RUN_ID")"
+            if ! jq -e \
+                --arg branch "$TRIGGER_BRANCH" \
+                '.status == "completed" and .conclusion == "success" and
+                 .event == "workflow_dispatch" and .head_branch == $branch and
+                 .path == ".github/workflows/on-demand-e2e.yml" and
+                 .head_repository.full_name == env.GITHUB_REPOSITORY' \
+                <<< "$trigger_run" > /dev/null; then
+              printf 'Ignoring unauthenticated packaged run %s\n' "$TRIGGER_RUN_ID"
+              exit 0
+            fi
+          fi
+
+          branches="$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name' \
+            | python3 scripts/release/version_branches.py)"
+          [[ "$(jq 'length' <<< "$branches")" -gt 0 ]]
+          printf 'branches=%s\n' "$branches" >> "$GITHUB_OUTPUT"
+          printf 'eligible=true\n' >> "$GITHUB_OUTPUT"
+
+  collect:
+    name: Collect ${{ matrix.branch }}
+    needs: discover
+    if: needs.discover.outputs.eligible == 'true'
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        branch: ${{ fromJSON(needs.discover.outputs.branches) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out protected evidence validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.discover.outputs.implementation_sha }}
+          persist-credentials: false
+
+      - name: Select the newest artifact for the exact current branch SHA
+        id: artifact
+        shell: bash
+        env:
+          BRANCH: ${{ matrix.branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 scripts/pages/select_artifact.py
+          --repository "$GITHUB_REPOSITORY"
+          --branch "$BRANCH"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Download the digest-checked branch artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: public-evidence
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.artifact.outputs.run_id }}
+          digest-mismatch: error
+
+      - name: Validate the curated bundle and recheck its branch head
+        shell: bash
+        env:
+          ARTIFACT_NAME: ${{ steps.artifact.outputs.name }}
+          BRANCH: ${{ matrix.branch }}
+          EXPECTED_SHA: ${{ steps.artifact.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+          OWNER_RUN_ID: ${{ steps.artifact.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          target_run_argument=()
+          if [[ "$ARTIFACT_NAME" == "pages-e2e-$BRANCH" ]]; then
+            target_run_argument=(--target-run-id "$OWNER_RUN_ID")
+          fi
+          python3 scripts/pages/evidence.py validate \
+            --evidence-root public-evidence \
+            --branch "$BRANCH" \
+            --only-branch \
+            --repository "$GITHUB_REPOSITORY" \
+            --target-sha "$EXPECTED_SHA" \
+            "${target_run_argument[@]}"
+
+          manifest="public-evidence/$BRANCH/manifest.json"
+          source_run_id="$(jq -er .provenance.source.run_id "$manifest")"
+          source_branch="$(jq -er .provenance.source.branch "$manifest")"
+          source_sha="$(jq -er .provenance.source.sha "$manifest")"
+          source_created_at="$(jq -er .provenance.source.created_at "$manifest")"
+          target_run_id="$(jq -er .provenance.target.run_id "$manifest")"
+          target_created_at="$(jq -er .provenance.target.created_at "$manifest")"
+          source_run="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$source_run_id")"
+          target_run="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$target_run_id")"
+          jq -e \
+            --arg branch "$source_branch" \
+            --arg sha "$source_sha" \
+            --arg created "$source_created_at" \
+            '.status == "completed" and .conclusion == "success" and
+             .event == "workflow_dispatch" and .head_branch == $branch and
+             .head_sha == $sha and .created_at == $created and
+             .path == ".github/workflows/on-demand-e2e.yml" and
+             .head_repository.full_name == env.GITHUB_REPOSITORY' \
+            <<< "$source_run" > /dev/null
+          jq -e \
+            --arg branch "$BRANCH" \
+            --arg sha "$EXPECTED_SHA" \
+            --arg created "$target_created_at" \
+            '.status == "completed" and .conclusion == "success" and
+             .event == "workflow_dispatch" and .head_branch == $branch and
+             .head_sha == $sha and .created_at == $created and
+             .path == ".github/workflows/on-demand-e2e.yml" and
+             .head_repository.full_name == env.GITHUB_REPOSITORY' \
+            <<< "$target_run" > /dev/null
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/$BRANCH" \
+            --jq .commit.sha)" == "$EXPECTED_SHA" ]]
+
+      - name: Upload this validated branch to the atomic fan-in
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: collected-pages-${{ matrix.branch }}
+          path: public-evidence/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 1
+
+  build:
+    name: Build atomic static site
+    needs:
+      - discover
+      - collect
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out protected site implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.discover.outputs.implementation_sha }}
+          persist-credentials: false
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install the hash-locked image encoder used by packaged E2E
+        run: >-
+          python -m pip install
+          --only-binary=:all:
+          --require-hashes
+          --requirement scripts/pages/requirements.txt
+
+      - name: Download every validated release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: collected-pages-*
+          merge-multiple: true
+          path: public-evidence
+          digest-mismatch: error
+
+      - name: Recheck every branch immediately before rendering
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          found=0
+          for manifest in public-evidence/*/manifest.json; do
+            test -f "$manifest"
+            found=$((found + 1))
+            branch="$(basename "$(dirname "$manifest")")"
+            expected_sha="$(jq -er .provenance.target.sha "$manifest")"
+            [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/$branch" \
+              --jq .commit.sha)" == "$expected_sha" ]]
+            python3 scripts/pages/evidence.py validate \
+              --evidence-root public-evidence \
+              --branch "$branch" \
+              --repository "$GITHUB_REPOSITORY" \
+              --target-sha "$expected_sha"
+          done
+          [[ "$found" -gt 0 ]]
+
+      - name: Render the landing page and comparison gallery
+        env:
+          EXPECTED_BRANCHES: ${{ needs.discover.outputs.branches }}
+        run: >-
+          python3 scripts/pages/build_site.py
+          --evidence-root public-evidence
+          --output _site
+          --repository "$GITHUB_REPOSITORY"
+          --expected-branches-json "$EXPECTED_BRANCHES"
+
+      - name: Upload the complete Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+          include-hidden-files: true
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy the immutable site artifact
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+  refresh-cache:
+    name: Refresh evidence cache for ${{ matrix.branch }}
+    needs:
+      - discover
+      - deploy
+    if: >-
+      needs.discover.outputs.eligible == 'true' &&
+      needs.deploy.result == 'success'
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        branch: ${{ fromJSON(needs.discover.outputs.branches) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+
+    steps:
+      # Only a completely successful deploy reaches this job, so future selectors may require the
+      # cache artifact's owning Pages run to have a successful final conclusion. A separate
+      # workflow rotates generations only after this complete Pages run reaches success.
+      - name: Download the branch bundle validated in this Pages run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: collected-pages-${{ matrix.branch }}
+          path: public-evidence
+          digest-mismatch: error
+
+      - name: Bind the rolling cache to its exact release head
+        id: cache
+        shell: bash
+        env:
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          set -euo pipefail
+          manifest="public-evidence/$BRANCH/manifest.json"
+          manifest_branch="$(jq -er .release.branch "$manifest")"
+          target_sha="$(jq -er .provenance.target.sha "$manifest")"
+          [[ "$manifest_branch" == "$BRANCH" ]]
+          [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'name=pages-cache-%s--%s\n' "$BRANCH" "$target_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Roll the protected evidence cache forward
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.cache.outputs.name }}
+          path: public-evidence/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 90

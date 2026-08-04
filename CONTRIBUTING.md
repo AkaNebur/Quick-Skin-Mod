@@ -43,13 +43,21 @@ git branch --remotes
 Never work on `automation/sync/*`. GitHub Actions owns those temporary branches and deletes them
 after their tested port PR is merged.
 
-Do not edit the marked release-status table in `README.md`. Automation discovers release branches,
-reads each branch's matrix, and regenerates its build and packaged-E2E badges.
+Do not edit either generated block in `README.md` by hand. Automation discovers release branches
+and regenerates the release-status badges, while `scripts/release/branch_readme.py` derives the
+current branch's identity, compatibility pins, and source-routing differences from its matrix. If
+matrix-owned profile facts change, run that helper with `--profile-branch master` or the matrix's
+exact `project.release_branch` and `--write`.
 
 The current synchronizer attempts to port every new `master` change to every release branch. A
 change described as “all versions except one” therefore needs an explicit design decision before
 coding. Open an issue or draft PR stating the exclusion; do not let an AI hide the policy in many
 scattered version conditions.
+
+A shared change is delivered repository-wide only after one synchronization PR per discovered
+release branch passes its exact-head Build and Packaged E2E gates, merges into that branch, and
+receives successful final exact-tree attestations. Record every intentional exclusion and
+outstanding port in the source pull request so an omitted branch is never mistaken for success.
 
 ## 2. Prepare a checkout
 
@@ -77,15 +85,30 @@ Create a topic branch from the correct base. For a shared fix:
 git switch --create fix/short-description upstream/master
 ```
 
-For a version-only fix, use that release branch instead, for example:
+For a version-only fix, keep the existing checkout where it is and create a separate ephemeral
+worktree from the fetched release branch. The commands below use a POSIX-compatible shell on macOS,
+Linux, or Git Bash; replace the placeholders first:
 
 ```bash
-git switch --create fix/1.20.1-short-description \
-  upstream/forge-and-fabric-1.20.1
+release_branch="<release-branch>"
+topic_branch="fix/short-description"
+git fetch upstream
+qsm_worktree_root="$(mktemp -d "${TMPDIR:-/tmp}/quick-skin-worktree.XXXXXX")"
+qsm_worktree_path="$qsm_worktree_root/checkout"
+git worktree add -b "$topic_branch" "$qsm_worktree_path" \
+  "upstream/$release_branch"
+cd "$qsm_worktree_path"
 ```
 
+Read `AGENTS.md`, all of its imports, and the active matrix again inside the worktree. Keep it while
+the topic branch is in progress. After every valuable change belongs to that named branch and is
+committed, pushed, or otherwise exported, return to the original checkout, require
+`git status --short` in the worktree to be empty, then run
+`git worktree remove "$qsm_worktree_path"` and `rmdir "$qsm_worktree_root"`. Never pass `--force`
+to erase a dirty or unfamiliar worktree; a detached-HEAD commit alone is not preservation.
+
 Use your own short branch description. Do not commit directly to `master` or a release branch in
-your fork.
+your fork, and do not run Gradle concurrently in multiple worktrees.
 
 ## 3. Give an AI enough context
 
@@ -98,7 +121,8 @@ the focused documentation relevant to this task. Inspect git status, the active 
 canonical sources, and every active overlay before editing. Explain the intended
 branch/version/loader scope, make the smallest coherent change, preserve unrelated work, do not
 edit generated output, and run proportional checks. Do not commit, push, open a PR, weaken tests,
-or change the support matrix unless I ask.
+or change the support matrix unless I ask. If another release branch must be inspected or edited,
+use a separate ephemeral worktree and never repurpose an existing checkout.
 
 Task: <describe one concrete bug or feature, including how to reproduce it>
 ```
@@ -170,6 +194,7 @@ Run the repository-level checks before handing work off:
 ```bash
 git diff --check
 python -m py_compile \
+  scripts/release/branch_readme.py \
   scripts/release/github_governance.py \
   scripts/release/github_release.py \
   scripts/release/matrix.py \
@@ -179,8 +204,14 @@ python -m py_compile \
   scripts/release/verify_release.py \
   scripts/release/verify_reproducibility.py \
   scripts/release/version_branches.py \
+  scripts/pages/evidence.py \
+  scripts/pages/build_site.py \
+  scripts/pages/select_artifact.py \
+  scripts/pages/rotate_artifacts.py \
   e2e/orchestrator.py \
   e2e/packaged_runtime.py \
+  e2e/visual_evidence.py \
+  e2e/check_visual_review.py \
   e2e/visual_review.py
 python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
 ```
