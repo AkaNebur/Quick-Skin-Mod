@@ -17,7 +17,12 @@ sys.path.insert(0, str(ROOT / "scripts" / "release"))
 
 import packaged_runtime  # noqa: E402
 from build_site import SiteBuildError, build  # noqa: E402
-from evidence import PublicEvidenceError, prepare, validate_bundle  # noqa: E402
+from evidence import (  # noqa: E402
+    PublicEvidenceError,
+    compact_bundle,
+    prepare,
+    validate_bundle,
+)
 from version_branches import parse_version_branch  # noqa: E402
 from visual_evidence import load_catalog  # noqa: E402
 
@@ -246,6 +251,152 @@ class PagesSiteTest(unittest.TestCase):
         self.assertEqual(2, len(list((self.evidence_root / branch / "images").glob("*.png"))))
         self.assertNotIn("source_path", json.dumps(manifest))
 
+    def test_compacts_validated_pngs_and_preserves_both_image_identities(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        raw_manifest = validate_bundle(self.evidence_root, branch)
+        compact_root = self.root / "compact"
+
+        compact_bundle(
+            self.evidence_root,
+            compact_root,
+            branch,
+            expected_repository="AkaNebur/Quick-Skin-Mod",
+            expected_target_sha="2" * 40,
+        )
+        compact_manifest = validate_bundle(
+            compact_root,
+            branch,
+            expected_kind="compact",
+            expected_repository="AkaNebur/Quick-Skin-Mod",
+            expected_target_sha="2" * 40,
+        )
+
+        self.assertEqual(2, compact_manifest["schema_version"])
+        self.assertFalse(list((compact_root / branch).rglob("*.png")))
+        self.assertEqual(
+            2, len(list((compact_root / branch / "images").glob("*.webp")))
+        )
+        raw_by_id = {frame["frame_id"]: frame for frame in raw_manifest["frames"]}
+        for frame in compact_manifest["frames"]:
+            raw = raw_by_id[frame["frame_id"]]
+            self.assertEqual(raw["file_sha256"], frame["file_sha256"])
+            self.assertEqual((raw["width"], raw["height"]), (frame["width"], frame["height"]))
+            derivative = frame["derivative"]
+            published = compact_root / branch / derivative["asset"]
+            self.assertEqual("webp", derivative["format"])
+            self.assertEqual(
+                derivative["file_sha256"], hashlib.sha256(published.read_bytes()).hexdigest()
+            )
+            self.assertEqual(
+                derivative["file_sha256"], derivative["pixel_validation"]["file_sha256"]
+            )
+        self.assertTrue(
+            all(
+                "derivative_pixel_validation" in comparison
+                for comparison in compact_manifest["comparisons"]
+            )
+        )
+
+    def test_compaction_is_atomic_and_compact_validation_rejects_tampering(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        raw_manifest_path = self.evidence_root / branch / "manifest.json"
+        original_manifest = json.loads(raw_manifest_path.read_text(encoding="utf-8"))
+        original_manifest["frames"][0]["width"] += 1
+        raw_manifest_path.write_text(json.dumps(original_manifest), encoding="utf-8")
+        failed_output = self.root / "failed-compact"
+        with self.assertRaises(PublicEvidenceError):
+            compact_bundle(self.evidence_root, failed_output, branch)
+        self.assertFalse((failed_output / branch).exists())
+
+        self.evidence_root = self.root / "fresh-evidence"
+        self.write_branch(branch, "1.20.1")
+        compact_root = self.root / "compact"
+        compact_bundle(self.evidence_root, compact_root, branch)
+        manifest_path = compact_root / branch / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        derivative_path = compact_root / branch / manifest["frames"][0]["derivative"]["asset"]
+        derivative_path.write_bytes(derivative_path.read_bytes() + b"tampered")
+        with self.assertRaises(PublicEvidenceError):
+            validate_bundle(compact_root, branch, expected_kind="compact")
+
+    def test_compacting_a_compact_cache_preserves_exact_bytes(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        first = self.root / "compact-first"
+        second = self.root / "compact-second"
+        compact_bundle(self.evidence_root, first, branch)
+        compact_bundle(first, second, branch)
+
+        first_files = {
+            path.relative_to(first / branch): path.read_bytes()
+            for path in (first / branch).rglob("*")
+            if path.is_file()
+        }
+        second_files = {
+            path.relative_to(second / branch): path.read_bytes()
+            for path in (second / branch).rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(first_files, second_files)
+
+    def test_raw_handoff_contract_rejects_a_precompacted_bundle(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        compact_root = self.root / "compact"
+        rejected_output = self.root / "rejected-handoff"
+        compact_bundle(self.evidence_root, compact_root, branch)
+
+        with self.assertRaises(PublicEvidenceError):
+            compact_bundle(
+                compact_root,
+                rejected_output,
+                branch,
+                expected_input_kind="raw",
+            )
+
+        self.assertFalse((rejected_output / branch).exists())
+
+    def test_compact_manifest_rejects_source_and_derivative_metadata_drift(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        compact_root = self.root / "compact"
+        compact_bundle(self.evidence_root, compact_root, branch)
+        manifest_path = compact_root / branch / "manifest.json"
+        original = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        cases: list[tuple[str, dict[str, object]]] = []
+        source_hash = json.loads(json.dumps(original))
+        source_hash["frames"][0]["file_sha256"] = "f" * 64
+        cases.append(("source hash", source_hash))
+        source_dimensions = json.loads(json.dumps(original))
+        source_dimensions["frames"][0]["width"] += 1
+        cases.append(("source dimensions", source_dimensions))
+        derivative_hash = json.loads(json.dumps(original))
+        derivative_hash["frames"][0]["derivative"]["file_sha256"] = "f" * 64
+        cases.append(("derivative hash", derivative_hash))
+        derivative_dimensions = json.loads(json.dumps(original))
+        derivative_dimensions["frames"][0]["derivative"]["width"] -= 1
+        cases.append(("derivative dimensions", derivative_dimensions))
+        derivative_metrics = json.loads(json.dumps(original))
+        derivative_metrics["frames"][0]["derivative"]["pixel_validation"][
+            "private_note"
+        ] = "forbidden"
+        cases.append(("derivative payload", derivative_metrics))
+        derivative_comparison = json.loads(json.dumps(original))
+        derivative_comparison["comparisons"][0]["derivative_pixel_validation"][
+            "required_changed_fraction"
+        ] = 0.0
+        cases.append(("derivative comparison threshold", derivative_comparison))
+
+        for label, manifest in cases:
+            with self.subTest(label=label):
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                with self.assertRaises(PublicEvidenceError):
+                    validate_bundle(compact_root, branch, expected_kind="compact")
+        manifest_path.write_text(json.dumps(original), encoding="utf-8")
+
     def test_single_branch_artifact_rejects_a_sibling_bundle(self) -> None:
         branch = "forge-and-fabric-1.20.1"
         self.write_branch(branch, "1.20.1")
@@ -462,6 +613,74 @@ class PagesSiteTest(unittest.TestCase):
                 self.assertEqual("WEBP", image.format)
                 self.assertEqual((640, 360), image.size)
         self.assertFalse(list(output.rglob("*.rendering.*")))
+
+    def test_site_builds_directly_from_compact_cache_without_reencoding(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        matrix = self.write_branch(branch, "1.20.1")
+        compact_root = self.root / "compact"
+        compact_bundle(self.evidence_root, compact_root, branch)
+        output = self.root / "compact-site"
+
+        build(
+            evidence_root=compact_root,
+            output=output,
+            repository="AkaNebur/Quick-Skin-Mod",
+            matrix_path=matrix,
+            require_compact=True,
+        )
+
+        manifest = json.loads(
+            (compact_root / branch / "manifest.json").read_text(encoding="utf-8")
+        )
+        gallery = json.loads(
+            (output / "e2e" / "gallery-data.json").read_text(encoding="utf-8")
+        )
+        compact_by_id = {frame["frame_id"]: frame for frame in manifest["frames"]}
+        for frame in gallery["frames"]:
+            cached = compact_by_id[frame["frame_id"]]["derivative"]
+            source = compact_root / branch / cached["asset"]
+            published = output / "e2e" / frame["image"]
+            self.assertEqual(source.read_bytes(), published.read_bytes())
+            self.assertEqual(cached["file_sha256"], frame["published_file_sha256"])
+            self.assertEqual(
+                compact_by_id[frame["frame_id"]]["file_sha256"],
+                frame["source_file_sha256"],
+            )
+        self.assertTrue(
+            all("published_pixel_validation" in item for item in gallery["comparisons"])
+        )
+
+    def test_protected_site_mode_rejects_a_raw_handoff(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        matrix = self.write_branch(branch, "1.20.1")
+        with self.assertRaises(SiteBuildError):
+            build(
+                evidence_root=self.evidence_root,
+                output=self.root / "raw-site",
+                repository="AkaNebur/Quick-Skin-Mod",
+                matrix_path=matrix,
+                require_compact=True,
+            )
+
+    def test_workflows_compact_before_fan_in_and_use_bounded_retention(self) -> None:
+        pages = (ROOT / ".github" / "workflows" / "pages.yml").read_text(
+            encoding="utf-8"
+        )
+        packaged = (ROOT / ".github" / "workflows" / "on-demand-e2e.yml").read_text(
+            encoding="utf-8"
+        )
+
+        handoff = packaged.index("name: pages-e2e-${{ github.ref_name }}")
+        self.assertIn("retention-days: 1", packaged[handoff : handoff + 600])
+        compact = pages.index("python3 scripts/pages/evidence.py compact")
+        fan_in = pages.index("name: collected-pages-${{ matrix.branch }}", compact)
+        self.assertLess(compact, fan_in)
+        self.assertIn("kind_argument=(--kind raw)", pages[:compact])
+        self.assertIn("input_kind_argument=(--input-kind raw)", pages[:fan_in])
+        self.assertIn("--kind compact", pages[compact:fan_in])
+        durable = pages.index("name: ${{ steps.cache.outputs.name }}")
+        self.assertIn("retention-days: 90", pages[durable : durable + 500])
+        self.assertIn("--require-compact-evidence", pages)
 
     def test_untrusted_project_text_never_becomes_inline_html(self) -> None:
         matrix = self.write_branch("forge-and-fabric-1.20.1", "1.20.1")

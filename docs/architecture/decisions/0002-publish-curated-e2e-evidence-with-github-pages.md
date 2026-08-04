@@ -48,16 +48,18 @@ Publish one static project site through a custom GitHub Pages workflow:
 3. The Pages workflow discovers all release branches from GitHub and requires valid evidence for
    every exact current branch head. Downloaded artifacts and manifests are hostile input: validate
    their run provenance, branch and commit identity, tree shape, schemas, paths, hashes, decoded
-   pixels, metrics, comparisons, and size bounds.
+   pixels, metrics, comparisons, and size bounds. Before `collected-pages-*` fan-in, protected code
+   atomically converts a validated raw bundle to a WebP-only schema that retains separate source
+   and derivative identities, hashes, dimensions, pixel metrics, and comparisons.
 4. Discovery pins one protected `master` SHA for the complete Pages run. Only that exact code may
    validate or render the downloaded evidence. Deploy the complete set of versions atomically so a
    partial or stale site never replaces the previous successful deployment.
 5. Restrict the `github-pages` deployment environment to `master`. Keep `pages: write` and
    `id-token: write` only in the deployment job, which consumes the already rendered immutable
    Pages artifact and checks out no repository code.
-6. After a successful deployment, retain exactly one validated exact-head cache per release branch
-   and refresh unchanged evidence monthly. Rotation runs only after the owning Pages workflow is
-   `completed/success`: validate the replacement and current release head again, then delete caches
+6. After a successful deployment, retain exactly one validated compact exact-head cache per release
+   branch and refresh unchanged evidence monthly. Rotation runs only after the owning Pages workflow
+   is `completed/success`: validate the replacement and current release head again, then delete caches
    older than that replacement and the exact handoff it consumed. The same authenticated promotion
    retires by immutable artifact ID the successful Pages run's fan-in and deploy artifacts. Raw
    packaged-E2E proof instead expires after one day so a concurrent branch attestation can finish
@@ -67,9 +69,10 @@ Publish one static project site through a custom GitHub Pages workflow:
    longer exist. It does not treat non-branch refs or branches with active runs as orphans. A changed
    release branch still requires new exact-head evidence; Pages never relaunches Minecraft merely
    to refresh presentation.
-7. Publish bounded WebP derivatives for browsing while recording source-PNG and published-image
-   hashes and dimensions separately. Content-address public image URLs by the bytes actually
-   served.
+7. Keep original PNGs only in the one-day `pages-e2e-*` handoff. Publish bounded WebP derivatives
+   for browsing while recording and revalidating source-PNG and published-image hashes, dimensions,
+   and pixel contracts separately. `collected-pages-*` and the 90-day `pages-cache-*` contain no
+   original PNG bytes. Content-address public image URLs by the bytes actually served.
 8. Provide a landing/link page and a gallery with an all-versions view, one accessible tab per
    discovered version, filters, and semantic cross-version/loader comparison. Unsupported loaders
    are explicit `not applicable` cells, not missing-test claims.
@@ -100,9 +103,9 @@ tests, and every affected release branch together.
 
 Publication fails closed when any release head lacks current evidence, while the previous atomic
 deployment remains available. The site does not create a second supported-version list. Artifact
-storage is bounded to one durable gallery generation per release branch; handoffs, fan-in, and
-deploy artifacts overlap only until their successful deployment has been promoted. Raw E2E proof
-may overlap for its one-day consumer-safety window. Ordinary Actions uploads expire after one day.
+storage is bounded to one compact durable gallery generation per release branch; handoffs, fan-in,
+and deploy artifacts overlap only until their successful deployment has been promoted. Raw E2E
+proof may overlap for its one-day consumer-safety window. Ordinary Actions uploads expire after one day.
 GitHub Pages limits and artifact retention must still be monitored as the number of versions or
 captures grows.
 
