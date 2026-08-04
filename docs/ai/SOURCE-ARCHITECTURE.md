@@ -10,7 +10,7 @@ These are the primary implementation trees:
 - `fabric/src/main`: canonical Fabric entry points and loader integration.
 - `neoforge/src/main`: canonical NeoForge entry points and loader integration.
 - `common/src/e2e` plus each loader's `src/e2e`: the separate packaged-runtime test mod.
-- `common/src/test`: loader-independent JUnit regression tests compiled against the common 1.21.7
+- `common/src/test`: loader-independent JUnit regression tests compiled against the common 1.21.6
   node.
 
 Stonecutter preprocesses each canonical `src/main` tree into detached generated sources. Never edit
@@ -41,11 +41,11 @@ overlays are:
 
 | Module | Minecraft | Active overlay |
 |---|---|---|
-| common | 1.21.7 | `common/src/legacy1_21_7` |
-| fabric | 1.21.7 | none; canonical output |
-| neoforge | 1.21.7 | none; canonical output |
+| common | 1.21.6 | `common/src/legacy1_21_6` |
+| fabric | 1.21.6 | none; canonical output |
+| neoforge | 1.21.6 | none; canonical output |
 
-The common overlay contains only the additive 1.21.7 picture-in-picture render backend, payload
+The common overlay contains only the additive 1.21.6 picture-in-picture render backend, payload
 network transport, and Minecraft platform adapter.
 Fabric and NeoForge use their Stonecutter-generated canonical sources directly on this branch.
 

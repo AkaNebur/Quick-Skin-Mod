@@ -1,13 +1,13 @@
 {
   "schema_version": 2,
   "lane_count": 2,
-  "unit_test_version": "1.21.7",
+  "unit_test_version": "1.21.6",
   "project": {
     "name": "Quick Skin",
     "mod_id": "quickskin",
     "description": "Change, preview, and synchronize local skins, capes, and CPM models in-game across Fabric and NeoForge.",
     "mod_version_property": "mod_version",
-    "release_branch": "fabric-and-neoforge-1.21.7",
+    "release_branch": "fabric-and-neoforge-1.21.6",
     "modrinth_id": "zAIE84Ch",
     "curseforge_id": 1323980,
     "homepage": "https://modrinth.com/mod/quick-skin",
@@ -17,7 +17,7 @@
   },
   "source_overlays": {
     "common": {
-      "1.21.7": "legacy1_21_7"
+      "1.21.6": "legacy1_21_6"
     },
     "fabric": {},
     "neoforge": {}
@@ -27,84 +27,84 @@
       "url": "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.1.0/fabric-installer-1.1.0.jar",
       "sha256": "c20c407d5ca4b119aae97847eb2fbb1d34c92969b647fbbb1de2fd36ca00738e"
     },
-    "neoforge-21.7.25-beta": {
-      "url": "https://maven.neoforged.net/releases/net/neoforged/neoforge/21.7.25-beta/neoforge-21.7.25-beta-installer.jar",
-      "sha256": "1ceecf4fad699ec5ff1f02dbfd9b08b49069ac158adb1f1b9133f9db524f0fe1"
+    "neoforge-21.6.20-beta": {
+      "url": "https://maven.neoforged.net/releases/net/neoforged/neoforge/21.6.20-beta/neoforge-21.6.20-beta-installer.jar",
+      "sha256": "e85b8ed2614f2ab3f10d2d179064e3e81f5836519a074d22b8a8460f2e91b5d5"
     }
   },
   "artifacts": [
     {
-      "artifact_node": "fabric-1.21.7",
-      "artifact_version": "1.21.7",
+      "artifact_node": "fabric-1.21.6",
+      "artifact_version": "1.21.6",
       "loader": "fabric",
       "java": 21,
       "no_remap": false,
-      "metadata_range": "=1.21.7",
-      "gradle_task": ":fabric:1.21.7:remapJar",
-      "harness_task": ":fabric:1.21.7:remapE2EHarnessJar",
-      "jar": "fabric/versions/1.21.7/build/libs/Quick Skin - Fabric - 1.21.7-{mod_version}.jar",
-      "harness_jar": "fabric/versions/1.21.7/build/libs/Quick Skin E2E - Fabric - 1.21.7-0.0.0.jar",
-      "game_versions": ["1.21.7"],
+      "metadata_range": "=1.21.6",
+      "gradle_task": ":fabric:1.21.6:remapJar",
+      "harness_task": ":fabric:1.21.6:remapE2EHarnessJar",
+      "jar": "fabric/versions/1.21.6/build/libs/Quick Skin - Fabric - 1.21.6-{mod_version}.jar",
+      "harness_jar": "fabric/versions/1.21.6/build/libs/Quick Skin E2E - Fabric - 1.21.6-0.0.0.jar",
+      "game_versions": ["1.21.6"],
       "metadata": {
         "file": "fabric.mod.json",
-        "loader": ">=0.16.14",
-        "architectury": ">=17.0.8"
+        "loader": ">=0.16.10",
+        "architectury": ">=17.0.6"
       }
     },
     {
-      "artifact_node": "neoforge-1.21.7",
-      "artifact_version": "1.21.7",
+      "artifact_node": "neoforge-1.21.6",
+      "artifact_version": "1.21.6",
       "loader": "neoforge",
       "java": 21,
       "no_remap": false,
-      "metadata_range": "[1.21.7,1.21.8)",
-      "gradle_task": ":neoforge:1.21.7:remapJar",
-      "harness_task": ":neoforge:1.21.7:remapE2EHarnessJar",
-      "jar": "neoforge/versions/1.21.7/build/libs/Quick Skin - NeoForge - 1.21.7-{mod_version}.jar",
-      "harness_jar": "neoforge/versions/1.21.7/build/libs/Quick Skin E2E - NeoForge - 1.21.7-0.0.0.jar",
-      "game_versions": ["1.21.7"],
+      "metadata_range": "[1.21.6,1.21.7)",
+      "gradle_task": ":neoforge:1.21.6:remapJar",
+      "harness_task": ":neoforge:1.21.6:remapE2EHarnessJar",
+      "jar": "neoforge/versions/1.21.6/build/libs/Quick Skin - NeoForge - 1.21.6-{mod_version}.jar",
+      "harness_jar": "neoforge/versions/1.21.6/build/libs/Quick Skin E2E - NeoForge - 1.21.6-0.0.0.jar",
+      "game_versions": ["1.21.6"],
       "metadata": {
         "file": "META-INF/neoforge.mods.toml",
         "loader_api": "[4,)",
-        "loader": "[21.7,)",
-        "architectury": "[17.0.8,)",
-        "pack_format": 64,
-        "server_data_pack_format": 81
+        "loader": "[21.6,)",
+        "architectury": "[17.0.6,)",
+        "pack_format": 63,
+        "server_data_pack_format": 80
       }
     }
   ],
   "runtimes": [
     {
-      "artifact_node": "fabric-1.21.7",
-      "runtime_version": "1.21.7",
+      "artifact_node": "fabric-1.21.6",
+      "runtime_version": "1.21.6",
       "loader": "fabric",
       "scenario": "phase0-smoke",
       "jar_sha256": "from:artifact-manifest",
       "port": 0,
       "java": 21,
-      "loader_version": "0.16.14",
+      "loader_version": "0.16.10",
       "installer": "fabric-1.1.0",
-      "fabric_api": "0.128.1+1.21.7",
+      "fabric_api": "0.127.1+1.21.6",
       "architectury": {
         "kind": "maven",
-        "version": "17.0.8"
+        "version": "17.0.6"
       },
       "scheduled_anchor": true,
       "pr_anchor": true
     },
     {
-      "artifact_node": "neoforge-1.21.7",
-      "runtime_version": "1.21.7",
+      "artifact_node": "neoforge-1.21.6",
+      "runtime_version": "1.21.6",
       "loader": "neoforge",
       "scenario": "phase0-smoke",
       "jar_sha256": "from:artifact-manifest",
       "port": 0,
       "java": 21,
-      "loader_version": "21.7.25-beta",
-      "installer": "neoforge-21.7.25-beta",
+      "loader_version": "21.6.20-beta",
+      "installer": "neoforge-21.6.20-beta",
       "architectury": {
         "kind": "maven",
-        "version": "17.0.8"
+        "version": "17.0.6"
       },
       "scheduled_anchor": true,
       "pr_anchor": true

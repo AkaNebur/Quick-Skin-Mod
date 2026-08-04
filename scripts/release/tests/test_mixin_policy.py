@@ -113,6 +113,7 @@ ALTERNATIVE_HOOKS = {
 # Audited vanilla bytecode multiplicities. The ItemInHand source contains Stonecutter branches:
 # pre-1.21.11 renderHand requests two buffers (arm + sleeve), while the new renderer submits one
 # model part. SkinManager 1.20.1 has two RETURN opcodes in its one target method; in 1.21.11,
+# NeoForge's patched getInsecureSkin changes from two returns to one at 1.21.6. In 1.21.11,
 # createLookup and get have three and two returns respectively on both loaders.
 INJECTION_COUNT_OVERRIDES = {
     (
@@ -219,6 +220,30 @@ class MixinPolicyTest(unittest.TestCase):
                         self.assertEqual(assignment_values(context, "expect"), set())
                     else:
                         self.assertEqual(assignment_values(context, "expect"), expected_counts)
+
+    def test_neoforge_insecure_skin_count_tracks_the_patched_bytecode_boundary(self) -> None:
+        source = (
+            ROOT
+            / "neoforge"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "neoforge"
+            / "mixin"
+            / "SkinManagerMixin.java"
+        ).read_text(encoding="utf-8")
+
+        self.assertRegex(
+            source,
+            r'//\? if <1\.21\.6 \{\s+'
+            r'expect = 2,\s+allow = 2\s+'
+            r'//\?\} else \{\s+'
+            r'expect = 1,\s+allow = 1\s+'
+            r'//\?\}',
+        )
 
     def test_core_and_optional_configs_have_different_failure_policies(self) -> None:
         core_configs = self.configs_named("quickskin.mixins.json")

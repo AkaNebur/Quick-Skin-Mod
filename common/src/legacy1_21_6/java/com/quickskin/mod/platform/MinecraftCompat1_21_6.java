@@ -11,8 +11,8 @@ import net.minecraft.resources.ResourceLocation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
-/** Minecraft 1.21.7 RenderPipeline implementation of rendering and image compatibility operations. */
-public final class MinecraftCompat1_21_7 implements MinecraftCompat {
+/** Minecraft 1.21.6 RenderPipeline implementation of rendering and image compatibility operations. */
+public final class MinecraftCompat1_21_6 implements MinecraftCompat {
     private static Field cloakField;
     private static boolean cloakFieldChecked;
 
