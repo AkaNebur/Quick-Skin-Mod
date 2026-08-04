@@ -176,8 +176,11 @@ class RepositoryGuidanceTest(unittest.TestCase):
         for path in mixins:
             with self.subTest(path=path.relative_to(ROOT).as_posix()):
                 source = path.read_text(encoding="utf-8")
-                self.assertIn("@Mixin(LivingEntity.class)", source)
-                self.assertRegex(source, r"entity instanceof Player player")
+                self.assertNotIn(
+                    "import net.minecraft.world.entity.LivingEntity;", source
+                )
+                self.assertIn("@Mixin(Player.class)", source)
+                self.assertRegex(source, r"\(Player\) \(Object\) this")
                 self.assertRegex(
                     source,
                     r"cancellable = true,\s+require = 0,\s+expect = 1,\s+allow = 1",
