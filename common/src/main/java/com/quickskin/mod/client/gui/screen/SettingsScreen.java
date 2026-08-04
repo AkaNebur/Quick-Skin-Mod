@@ -651,7 +651,7 @@ public class SettingsScreen extends Screen {
             }
         }
 
-        //? if <1.21.11 {
+        //? if <1.21 {
         graphics.pose().popPose();
         //?} else {
         org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);

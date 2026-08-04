@@ -148,6 +148,32 @@ class RepositoryGuidanceTest(unittest.TestCase):
             r"ClientGuiEvent\.RENDER_POST\.register",
         )
 
+    def test_settings_screen_pose_stack_uses_one_version_boundary(self) -> None:
+        settings_screen = (
+            ROOT
+            / "common"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "client"
+            / "gui"
+            / "screen"
+            / "SettingsScreen.java"
+        ).read_text(encoding="utf-8")
+        guarded_pose_operations = re.findall(
+            r"//\? if (?P<boundary><[0-9.]+) \{\s+"
+            r"graphics\.pose\(\)\.(?P<operation>pushPose|popPose)\(\);",
+            settings_screen,
+        )
+
+        self.assertEqual(
+            guarded_pose_operations,
+            [("<1.21", "pushPose"), ("<1.21", "popPose")],
+        )
+
     def test_legacy_preview_equipment_hooks_the_method_owner(self) -> None:
         mixins = (
             ROOT
