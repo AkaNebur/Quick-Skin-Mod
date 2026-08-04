@@ -61,7 +61,7 @@ class DependencySecurityPolicyTest(unittest.TestCase):
         self.assertIsNotNone(distribution_hash)
         assert distribution_hash is not None
         distribution_sidecar = (
-            ROOT / "gradle" / "wrapper" / "gradle-9.4.0-bin.zip.sha256"
+            ROOT / "gradle" / "wrapper" / "gradle-9.6.1-bin.zip.sha256"
         ).read_text(encoding="utf-8").strip()
         self.assertEqual(distribution_hash.group(1), distribution_sidecar)
 
@@ -169,7 +169,7 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             ("org.sejda.imageio", "webp-imageio", "0.1.6"),
             ("org.junit.jupiter", "junit-jupiter", "5.13.4"),
             ("dev.architectury", "architectury-loom", "1.17.480"),
-            ("dev.kikugie", "stonecutter", "0.9.6"),
+            ("dev.kikugie", "stonecutter", "0.9.7"),
             ("com.gradleup.shadow", "shadow-gradle-plugin", "8.3.11"),
             ("org.gradle.toolchains", "foojay-resolver", "1.0.0"),
         }
