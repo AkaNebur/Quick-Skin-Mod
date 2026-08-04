@@ -1,8 +1,8 @@
-name: Prune orphaned Actions caches
+name: Prune bounded Actions caches
 
-# Cache entries scoped to deleted work branches cannot help a future build. Reconcile the whole
-# repository after a branch deletion and once per day; a replaced pending run is harmless because
-# every invocation rediscovers every orphan rather than acting only on the triggering branch.
+# Cache entries scoped to deleted work branches cannot help a future build. Live branches keep the
+# newest successful setup-gradle home generation while older recognized generations are bounded.
+# Reconcile after a branch deletion and once per day; every invocation rediscovers repository state.
 on:
   schedule:
     - cron: "29 9 * * *"
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   prune:
-    name: Delete caches owned by absent branches
+    name: Delete unusable and superseded caches
     if: >-
       github.event_name == 'schedule' ||
       (github.event_name == 'delete' && github.event.ref_type == 'branch')
@@ -82,7 +82,7 @@ jobs:
           ref: ${{ steps.trusted.outputs.implementation_sha }}
           persist-credentials: false
 
-      - name: Prune only caches whose branch is absent
+      - name: Prune only revalidated bounded cache IDs
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
