@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.lang.reflect.Field;
 
 /**
- * NeoForge-specific mixin to intercept AbstractClientPlayer skin lookups.
+ * NeoForge 21.4-specific mixin to intercept AbstractClientPlayer skin lookups.
  * Uses Mojmap names directly since NeoForge uses Mojmap at runtime.
  */
 @Mixin(value = AbstractClientPlayer.class, priority = 100)

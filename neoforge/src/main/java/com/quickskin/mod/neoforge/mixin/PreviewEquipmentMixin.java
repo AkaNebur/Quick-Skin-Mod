@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * NeoForge 1.21.5 twin of {@code com.quickskin.mod.mixin.PreviewEquipmentMixin}; see that class for
+ * NeoForge 1.21.4 twin of {@code com.quickskin.mod.mixin.PreviewEquipmentMixin}; see that class for
  * why the preview has to answer equipment reads as empty and why this is a read override rather than
  * a write.
  *
@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * read there and a mixin added only to it would silently not run. The same split already forces a
  * duplicate {@code CapeLayerMixin} in this package.
  *
- * <p>Registered only in the 1.21.5 configuration. NeoForge 1.21.11, 26.1.2 and 26.2 blank the
+ * <p>Registered only in the 1.21.4 configuration. NeoForge 1.21.11, 26.1.2 and 26.2 blank the
  * extracted render state in the renderer instead, so this class is compiled but never applied there.
  */
 @Mixin(Player.class)

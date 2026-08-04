@@ -1,4 +1,4 @@
-package com.quickskin.mod.mixin;
+package com.quickskin.mod.neoforge.mixin;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -31,11 +31,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.UUID;
 
-/** Minecraft 1.21.5 cape adapter: render-state input with an immediate buffer. */
+/** NeoForge Minecraft 1.21.4 cape adapter: render-state input with an immediate buffer. */
 @Mixin(value = CapeLayer.class, priority = 1100)
 public class CapeLayerMixin {
 
-    /** CapeLayer owns a separate PlayerCapeModel from Minecraft 1.21.4 onward. */
     @Shadow @Final private HumanoidModel<?> model;
 
     @Inject(
@@ -63,8 +62,6 @@ public class CapeLayerMixin {
             }
         }
 
-        // The 1.21.5 entity render is immediate but CapeLayer receives PlayerRenderState.
-        // consumePreviewCape falls back to the inline render's thread-scoped entity binding.
         PreviewCapeBindings.Resolution<ResourceLocation> preview =
                 PlayerModelRenderer.consumePreviewCape(player);
         if (preview.decision() == PreviewCapeBindings.Decision.HIDDEN) {
@@ -79,7 +76,6 @@ public class CapeLayerMixin {
         if (playerId == null && !previewing) {
             return;
         }
-
         if (!previewing && renderState.chestEquipment.is(Items.ELYTRA)) {
             ci.cancel();
             return;
@@ -116,7 +112,6 @@ public class CapeLayerMixin {
         ResourceLocation finalTexture =
                 CapeAnimationHelper.resolveCurrentFrame(capeTexture, capeId);
         if (finalTexture == null) {
-            // Network animations deliberately render nothing until their bounded first frame exists.
             ci.cancel();
             return;
         }
@@ -127,8 +122,6 @@ public class CapeLayerMixin {
                 : RenderType.entitySolid(finalTexture);
         VertexConsumer vertices = buffer.getBuffer(renderType);
 
-        // Copy the parent pose into CapeLayer's separate PlayerCapeModel, then animate it from
-        // the same PlayerRenderState vanilla supplied for this frame.
         @SuppressWarnings("unchecked")
         HumanoidModel<PlayerRenderState> capeModel =
                 (HumanoidModel<PlayerRenderState>) (HumanoidModel<?>) model;

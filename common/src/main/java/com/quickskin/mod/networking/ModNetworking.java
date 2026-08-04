@@ -10,7 +10,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 /**
  * Central networking registry for QuickSkin
- * Registers all packet payloads used by the mod (Architectury 16.x for MC 1.21.5)
+ * Registers all packet payloads used by the mod (Architectury 15.x for MC 1.21.4)
  */
 //? if <26.1.2 {
 public class ModNetworking {

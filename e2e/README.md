@@ -5,8 +5,8 @@ compiled `main` output.
 
 The checked-in [release matrix](../release/release-matrix.json) is the lane inventory consumed by
 Stonecutter settings, aggregate Gradle tasks, publication, and E2E. This branch defines two
-Minecraft 1.21.5 release files and two matching runtime rows: Fabric and NeoForge. Every artifact
-advertises and launches on exactly Minecraft 1.21.5; matrix validation fails if any consumer-facing
+Minecraft 1.21.4 release files and two matching runtime rows: Fabric and NeoForge. Every artifact
+advertises and launches on exactly Minecraft 1.21.4; matrix validation fails if any consumer-facing
 row or task identity disagrees.
 
 ## Local setup
@@ -38,15 +38,15 @@ included — run it directly.
 # Headless Linux / CI
 xvfb-run -a python e2e/orchestrator.py \
   --packaged \
-  --artifact-node fabric-1.21.5 \
-  --runtime-version 1.21.5 \
+  --artifact-node fabric-1.21.4 \
+  --runtime-version 1.21.4 \
   --scenarios phase0-smoke
 
 # macOS or any desktop session
 python e2e/orchestrator.py \
   --packaged \
-  --artifact-node fabric-1.21.5 \
-  --runtime-version 1.21.5 \
+  --artifact-node fabric-1.21.4 \
+  --runtime-version 1.21.4 \
   --scenarios phase0-smoke
 ```
 

@@ -15,7 +15,7 @@ public class QuickSkinForge {
 
     public QuickSkinForge(net.neoforged.bus.api.IEventBus modEventBus) {
         // Note: Architectury automatically registers events for NeoForge
-        // No manual event bus registration needed in 1.21.5
+        // No manual event bus registration needed in 1.21.4
     }
 
     /**

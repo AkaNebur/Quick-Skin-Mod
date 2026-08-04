@@ -269,7 +269,7 @@ public class SkinManagerMixin {
             at = @At("RETURN"),
             cancellable = true,
             require = 1,
-            // Minecraft 1.21.5 has two RETURN opcodes in getInsecureSkin; both must be wrapped.
+            // Minecraft 1.21.4-1.21.5 has two RETURN opcodes here; both must be wrapped.
             expect = 2,
             allow = 2
     )

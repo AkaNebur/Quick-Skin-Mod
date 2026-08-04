@@ -8,7 +8,7 @@ import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
 
-/** Minecraft 1.21.5 implementation of rendering and image compatibility operations. */
+/** Minecraft 1.21.4-1.21.5 implementation of rendering and image compatibility operations. */
 public final class MinecraftCompat1_21_5 implements MinecraftCompat {
     private static int abgrToArgb(int abgr) {
         int a = (abgr >>> 24) & 0xFF;

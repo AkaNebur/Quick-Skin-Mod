@@ -24,7 +24,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.UUID;
 
-/** NeoForge Minecraft 1.21.5 renderer adapter. */
+/** NeoForge Minecraft 1.21.4 renderer adapter. */
 @Mixin(value = PlayerRenderer.class, priority = 1100)
 public class PlayerRendererMixin {
 

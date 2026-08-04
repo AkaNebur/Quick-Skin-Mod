@@ -22,7 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-/** NeoForge Minecraft 1.21.5 SkinManager adapter. */
+/** NeoForge Minecraft 1.21.4 SkinManager adapter. */
 @Mixin(SkinManager.class)
 public class SkinManagerMixin {
 
@@ -47,7 +47,7 @@ public class SkinManagerMixin {
             boolean anyOverride = false;
 
             if (hasCustomSkin) {
-                // HttpTexture no longer exists in 1.21.5. This activates CPM's explicit one-time
+                // HttpTexture no longer exists in this render-state era. This activates CPM's explicit one-time
                 // degraded-capability report while QuickSkin keeps its normal DynamicTexture.
                 CPMCompatIntegration.isAvailable();
                 ResourceLocation customSkin = service.getSkinLocation(uuid);

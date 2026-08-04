@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * NeoForge-specific mixin to intercept PlayerInfo skin lookups and apply custom skins/capes.
+ * NeoForge 21.4-specific mixin to intercept PlayerInfo skin lookups and apply custom skins/capes.
  * Uses Mojmap names directly since NeoForge uses Mojmap at runtime.
  */
 @Mixin(value = PlayerInfo.class, priority = 500)

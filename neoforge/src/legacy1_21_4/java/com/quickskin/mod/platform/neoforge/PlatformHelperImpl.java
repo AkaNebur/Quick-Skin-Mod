@@ -6,7 +6,7 @@ import net.neoforged.fml.loading.FMLPaths;
 
 import java.nio.file.Path;
 
-/** NeoForge 21.5 loader-service adapter. Rendering and image seams live in MinecraftCompat. */
+/** NeoForge 21.4 loader-service adapter. Rendering and image seams live in MinecraftCompat. */
 @SuppressWarnings("unused")
 public final class PlatformHelperImpl {
     private PlatformHelperImpl() {

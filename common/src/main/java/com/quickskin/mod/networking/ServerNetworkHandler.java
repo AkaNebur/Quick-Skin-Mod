@@ -27,7 +27,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
- * Server-side network packet handlers (Architectury 16.x for MC 1.21.5)
+ * Server-side network packet handlers (Architectury 15.x for MC 1.21.4)
  * Handles all C2S (Client to Server) packets using CustomPacketPayload
  */
 public class ServerNetworkHandler {

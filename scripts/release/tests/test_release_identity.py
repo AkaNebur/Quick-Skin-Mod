@@ -20,9 +20,9 @@ class ReleaseIdentityTest(unittest.TestCase):
         cls.identity = release_identity.derive(cls.matrix_path)
 
     def test_identity_names_minecraft_era_and_logical_mod_version(self) -> None:
-        self.assertEqual(self.identity.release_id, "mc1.21.5-v3.0.0")
+        self.assertEqual(self.identity.release_id, "mc1.21.4-v3.0.0")
         self.assertEqual(self.identity.tag, self.identity.release_id)
-        self.assertEqual(self.identity.branch, "fabric-and-neoforge-1.21.5")
+        self.assertEqual(self.identity.branch, "fabric-and-neoforge-1.21.4")
 
     def test_publication_matrix_is_artifact_times_marketplace(self) -> None:
         data = release_matrix.load_matrix(self.matrix_path)

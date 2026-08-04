@@ -69,7 +69,7 @@ check(actualLegacyDirectories == declaredLegacyDirectories) {
         "actual=$actualLegacyDirectories"
 }
 val canonicalOnlyByVersion = mapOf(
-    "1.21.5" to setOf("com/quickskin/mod/neoforge/mixin/GuiSkinRendererMixin.java"),
+    "1.21.4" to setOf("com/quickskin/mod/neoforge/mixin/GuiSkinRendererMixin.java"),
 )
 check(canonicalOnlyByVersion.keys == declaredLegacyVersions) {
     "NeoForge canonical exclusions must cover exactly the matrix-declared overlay versions"
