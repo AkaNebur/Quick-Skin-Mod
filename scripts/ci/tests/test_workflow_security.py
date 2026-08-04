@@ -142,7 +142,7 @@ class WorkflowSecurityTest(unittest.TestCase):
                     observed_long_lived.add(identity)
         self.assertEqual(observed_long_lived, long_lived)
 
-    def test_gradle_cache_writes_are_limited_to_protected_stable_builds(self) -> None:
+    def test_gradle_cache_writes_are_limited_to_protected_master_builds(self) -> None:
         build = job_block("build-gate.yml", "build")
         e2e = job_block("on-demand-e2e.yml", "build")
         release = job_block("release.yml", "build")
@@ -177,7 +177,7 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn("event_name not in WRITER_EVENTS", policy)
         self.assertIn('or ref_type != "branch"', policy)
         self.assertIn("or not ref_protected", policy)
-        self.assertIn('return ref_name not in {"master", release_branch}', policy)
+        self.assertIn('return ref_name != "master"', policy)
 
     def test_visual_review_is_advisory_and_not_a_port_gate(self) -> None:
         visual = job_block("on-demand-e2e.yml", "visual-review")
@@ -307,7 +307,7 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn("api.get_artifact(artifact.artifact_id)", rotator)
         self.assertIn("api.delete_artifact(artifact.artifact_id)", rotator)
 
-    def test_orphaned_branch_caches_are_pruned_by_exact_id_from_protected_code(
+    def test_bounded_actions_caches_are_pruned_by_exact_id_from_protected_code(
         self,
     ) -> None:
         workflow = (WORKFLOWS / "prune-actions-caches.yml").read_text(
@@ -341,6 +341,10 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn("current = api.get_cache(cache)", implementation)
         self.assertIn("if api.branch_has_active_run(branch):", implementation)
         self.assertIn("if api.branch_exists(branch):", implementation)
+        self.assertIn("api.has_successful_build(branch, sha)", implementation)
+        self.assertIn("replacement_current = api.get_cache(replacement)", implementation)
+        self.assertIn('"superseded-gradle-home"', implementation)
+        self.assertIn('"protected_generation_ids"', implementation)
         self.assertIn("api.delete_cache(cache.cache_id)", implementation)
         self.assertIn('f"/actions/caches/{cache_id}"', implementation)
 

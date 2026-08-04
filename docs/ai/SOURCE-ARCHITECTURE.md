@@ -88,10 +88,16 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
   version discovery itself. Raw E2E artifacts remain retention-bound inputs for concurrent
   attestations and are outside rotation ownership.
 - `scripts/ci/gradle_cache_policy.py` is the fail-closed writer policy for Gradle state. It permits
-  writes only from protected stable refs; packaged E2E and release jobs remain read-only.
-- `scripts/ci/prune_actions_caches.py` owns orphan-cache hygiene. It discovers branches and active
-  runs from GitHub, revalidates each immutable cache entry and missing branch, and deletes only by
-  exact cache ID under bounded automatic limits.
+  writes only from protected `master`; release branches, packaged E2E, and release jobs remain
+  read-only.
+- `scripts/ci/prune_actions_caches.py` owns bounded cache hygiene. It discovers branches, active
+  runs, exact successful Build jobs, and caches from paginated GitHub APIs. It revalidates each
+  immutable cache before deleting by exact ID. Absent-branch caches are disposable; on a live
+  branch, only superseded SHA-bearing Gradle-home generations are eligible after preserving the
+  latest successful generation for each restore family. A family with no proven successful
+  generation, unknown keys, and every branch with a potentially cache-consuming active run are
+  retained. Only the protected pruner's own run is ignored, because that workflow never configures
+  Gradle; an unrecognized workflow fails closed as a potential consumer.
 - `scripts/pages/build_site.py` combines exact compact branch bundles and copies their already
   content-addressed WebP assets while rendering the tracked assets under `site/`. `site/` contains
   presentation code, not a support/version inventory; supported versions always come from

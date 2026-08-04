@@ -19,6 +19,7 @@ from prune_actions_caches import (  # noqa: E402
     parse_args,
     prune,
     select_candidates,
+    select_superseded_generations,
 )
 
 
@@ -28,6 +29,7 @@ def cache(
     *,
     size: int = 10,
     key: str | None = None,
+    created_at: str = "2026-08-01T00:00:00Z",
     last_accessed_at: str = "2026-08-01T00:00:00Z",
 ) -> CacheEntry:
     return CacheEntry(
@@ -36,9 +38,19 @@ def cache(
         key=key or f"gradle-{cache_id}",
         version=f"version-{cache_id}",
         size_in_bytes=size,
-        created_at="2026-08-01T00:00:00Z",
+        created_at=created_at,
         last_accessed_at=last_accessed_at,
     )
+
+
+def gradle_key(
+    sha: str,
+    *,
+    platform: str = "Linux-X64",
+    job: str = "build",
+    workflow_hash: str = "95041b765eeb2f81cb29b3de7add34da",
+) -> str:
+    return f"gradle-home-v1|{platform}|{job}[{workflow_hash}]-{sha}"
 
 
 class FakeApi:
@@ -49,13 +61,16 @@ class FakeApi:
         self.caches = list(caches)
         self.revalidated = {item.cache_id: item for item in caches}
         self.recreated: set[str] = set()
+        self.missing_on_revalidation: set[str] = set()
         self.late_active: set[str] = set()
+        self.successful_builds: set[tuple[str, str]] = set()
         self.delete_404: set[int] = set()
         self.deleted: list[int] = []
         self.branch_checks: list[str] = []
         self.cache_checks: list[int] = []
         self.active_calls = 0
         self.late_active_checks: list[str] = []
+        self.successful_build_checks: list[tuple[str, str]] = []
 
     def get_default_branch(self) -> str:
         return self.default_branch
@@ -71,13 +86,19 @@ class FakeApi:
     def list_caches(self) -> list[CacheEntry]:
         return list(self.caches)
 
+    def has_successful_build(self, branch: str, sha: str) -> bool:
+        self.successful_build_checks.append((branch, sha))
+        return (branch, sha) in self.successful_builds
+
     def branch_has_active_run(self, branch: str) -> bool:
         self.late_active_checks.append(branch)
         return branch in self.late_active
 
     def branch_exists(self, branch: str) -> bool:
         self.branch_checks.append(branch)
-        return branch in self.recreated
+        if branch in self.missing_on_revalidation:
+            return False
+        return branch in self.branches or branch in self.recreated
 
     def get_cache(self, expected: CacheEntry) -> CacheEntry | None:
         self.cache_checks.append(expected.cache_id)
@@ -113,6 +134,89 @@ class CandidateSelectionTest(unittest.TestCase):
             active_run_branches=set(),
         )
         self.assertEqual(selected, [])
+
+    def test_live_branch_keeps_latest_successful_generation_per_restore_family(
+        self,
+    ) -> None:
+        old_sha = "1" * 40
+        keeper_sha = "2" * 40
+        failed_sha = "3" * 40
+        windows_sha = "4" * 40
+        values = [
+            cache(
+                1,
+                "refs/heads/stable",
+                key=gradle_key(old_sha),
+                created_at="2026-08-01T00:00:00Z",
+            ),
+            cache(
+                2,
+                "refs/heads/stable",
+                key=gradle_key(keeper_sha),
+                created_at="2026-08-02T00:00:00Z",
+            ),
+            cache(
+                3,
+                "refs/heads/stable",
+                key=gradle_key(failed_sha),
+                created_at="2026-08-03T00:00:00Z",
+            ),
+            cache(4, "refs/heads/stable", key="gradle-dependencies-v1-opaque"),
+            cache(
+                5,
+                "refs/heads/stable",
+                key=gradle_key(windows_sha, platform="Windows-X64"),
+            ),
+        ]
+
+        candidates, protected = select_superseded_generations(
+            values,
+            existing_branches={"master", "stable"},
+            active_run_branches=set(),
+            successful_build_shas={
+                "stable": {old_sha, keeper_sha, windows_sha},
+            },
+        )
+
+        self.assertEqual([item.cache_id for item in candidates], [1, 3])
+        self.assertEqual([item.cache_id for item in protected], [5, 2])
+
+    def test_live_branch_without_successful_replacement_is_preserved(self) -> None:
+        values = [
+            cache(1, "refs/heads/stable", key=gradle_key("1" * 40)),
+            cache(2, "refs/heads/stable", key=gradle_key("2" * 40)),
+        ]
+
+        candidates, protected = select_superseded_generations(
+            values,
+            existing_branches={"master", "stable"},
+            active_run_branches=set(),
+            successful_build_shas={},
+        )
+
+        self.assertEqual(candidates, [])
+        self.assertEqual(protected, [])
+
+    def test_active_live_branch_and_unknown_key_formats_are_preserved(self) -> None:
+        sha = "1" * 40
+        values = [
+            cache(1, "refs/heads/stable", key=gradle_key(sha)),
+            cache(
+                2,
+                "refs/heads/other",
+                key=f"gradle-home-v1|Linux-X64|build[not-a-hash]-{sha}",
+            ),
+        ]
+
+        candidates, protected = select_superseded_generations(
+            values,
+            existing_branches={"master", "stable", "other"},
+            active_run_branches={"stable"},
+            successful_build_shas={"stable": {sha}, "other": {sha}},
+        )
+
+        self.assertEqual(candidates, [])
+        self.assertEqual(protected, [])
 
 
 class PruneTest(unittest.TestCase):
@@ -206,6 +310,124 @@ class PruneTest(unittest.TestCase):
         self.assertEqual(result["deleted_ids"], [])
         self.assertIn({"id": 1, "reason": "already-absent"}, result["skipped"])
 
+    def test_live_branch_deletes_only_superseded_gradle_home_generation(self) -> None:
+        old_sha = "1" * 40
+        keeper_sha = "2" * 40
+        old = cache(
+            1,
+            "refs/heads/stable",
+            key=gradle_key(old_sha),
+            created_at="2026-08-01T00:00:00Z",
+            size=25,
+        )
+        keeper = cache(
+            2,
+            "refs/heads/stable",
+            key=gradle_key(keeper_sha),
+            created_at="2026-08-02T00:00:00Z",
+            size=30,
+        )
+        unknown = cache(
+            3,
+            "refs/heads/stable",
+            key="gradle-dependencies-v1-opaque",
+            size=35,
+        )
+        api = FakeApi([old, keeper, unknown])
+        api.branches.add("stable")
+        api.successful_builds.update(
+            {("stable", old_sha), ("stable", keeper_sha)}
+        )
+
+        result = prune(api, apply=True)
+
+        self.assertEqual(result["protected_generation_ids"], [2])
+        self.assertEqual(result["candidate_count"], 1)
+        self.assertEqual(result["candidates"][0]["reason"], "superseded-gradle-home")
+        self.assertEqual(result["deleted_ids"], [1])
+        self.assertEqual(api.deleted, [1])
+        self.assertEqual(api.cache_checks, [1, 2])
+        self.assertEqual(api.late_active_checks, ["stable"])
+
+    def test_live_branch_revalidation_preserves_candidate_if_replacement_vanishes(
+        self,
+    ) -> None:
+        old_sha = "1" * 40
+        keeper_sha = "2" * 40
+        old = cache(1, "refs/heads/stable", key=gradle_key(old_sha))
+        keeper = cache(
+            2,
+            "refs/heads/stable",
+            key=gradle_key(keeper_sha),
+            created_at="2026-08-02T00:00:00Z",
+        )
+        api = FakeApi([old, keeper])
+        api.branches.add("stable")
+        api.successful_builds.add(("stable", keeper_sha))
+        api.revalidated.pop(2)
+
+        result = prune(api, apply=True)
+
+        self.assertEqual(api.deleted, [])
+        self.assertIn(
+            {"id": 1, "reason": "replacement-absent"},
+            result["skipped"],
+        )
+
+    def test_active_run_starting_during_live_revalidation_preserves_candidate(
+        self,
+    ) -> None:
+        old_sha = "1" * 40
+        keeper_sha = "2" * 40
+        old = cache(1, "refs/heads/stable", key=gradle_key(old_sha))
+        keeper = cache(
+            2,
+            "refs/heads/stable",
+            key=gradle_key(keeper_sha),
+            created_at="2026-08-02T00:00:00Z",
+        )
+        api = FakeApi([old, keeper])
+        api.branches.add("stable")
+        api.successful_builds.add(("stable", keeper_sha))
+        api.late_active.add("stable")
+
+        result = prune(api, apply=True)
+
+        self.assertEqual(api.deleted, [])
+        self.assertIn({"id": 1, "reason": "active-run-late"}, result["skipped"])
+
+    def test_live_branch_removed_before_revalidation_is_left_for_next_plan(self) -> None:
+        old_sha = "1" * 40
+        keeper_sha = "2" * 40
+        old = cache(1, "refs/heads/stable", key=gradle_key(old_sha))
+        keeper = cache(
+            2,
+            "refs/heads/stable",
+            key=gradle_key(keeper_sha),
+            created_at="2026-08-02T00:00:00Z",
+        )
+        api = FakeApi([old, keeper])
+        api.branches.add("stable")
+        api.successful_builds.add(("stable", keeper_sha))
+        api.missing_on_revalidation.add("stable")
+
+        result = prune(api, apply=True)
+
+        self.assertEqual(api.deleted, [])
+        self.assertIn(
+            {"id": 1, "reason": "branch-removed-replan"}, result["skipped"]
+        )
+
+    def test_duplicate_cache_ids_fail_closed_before_deletion(self) -> None:
+        api = FakeApi(
+            [cache(1, "refs/heads/deleted-a"), cache(1, "refs/heads/deleted-b")]
+        )
+
+        with self.assertRaisesRegex(PruneError, "appeared more than once"):
+            prune(api, apply=True)
+
+        self.assertEqual(api.deleted, [])
+
     def test_count_limit_processes_a_deterministic_bounded_batch(self) -> None:
         api = FakeApi(
             [cache(1, "refs/heads/deleted"), cache(2, "refs/heads/deleted")]
@@ -216,6 +438,8 @@ class PruneTest(unittest.TestCase):
         self.assertEqual(api.deleted, [1])
         self.assertEqual(result["discovered_candidate_count"], 2)
         self.assertEqual(result["candidate_count"], 1)
+        self.assertEqual(result["limits"]["max_delete_count"], 1)
+        self.assertEqual(result["limits"]["max_delete_bytes"], 10 * 1024**3)
         self.assertIn({"id": 2, "reason": "batch-limit"}, result["skipped"])
 
     def test_oversized_cache_is_deferred_without_blocking_the_job(self) -> None:
@@ -228,6 +452,18 @@ class PruneTest(unittest.TestCase):
         self.assertEqual(api.deleted, [])
         self.assertEqual(result["candidate_count"], 0)
         self.assertIn({"id": 1, "reason": "batch-limit"}, result["skipped"])
+
+    def test_callers_cannot_raise_the_hard_delete_limits(self) -> None:
+        for kwargs in (
+            {"max_delete_count": 76},
+            {"max_delete_bytes": 10 * 1024**3 + 1},
+        ):
+            api = FakeApi([cache(1, "refs/heads/deleted")])
+            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(
+                PruneError, "cannot exceed"
+            ):
+                prune(api, apply=True, **kwargs)
+            self.assertEqual(api.deleted, [])
 
     def test_missing_default_branch_fails_closed(self) -> None:
         api = FakeApi([cache(1, "refs/heads/deleted")])
@@ -281,7 +517,11 @@ class PagingApi(GitHubApi):
                 return {
                     "total_count": self.queued_total_count,
                     "workflow_runs": [
-                        {"status": "queued", "head_branch": f"active-{index}"}
+                        {
+                            "status": "queued",
+                            "head_branch": f"active-{index}",
+                            "path": ".github/workflows/build-gate.yml",
+                        }
                         for index in range(100)
                     ]
                 }
@@ -289,8 +529,23 @@ class PagingApi(GitHubApi):
                 return {
                     "total_count": self.queued_total_count,
                     "workflow_runs": [
-                        {"status": "queued", "head_branch": "active-100"}
+                        {
+                            "status": "queued",
+                            "head_branch": "active-100",
+                            "path": ".github/workflows/build-gate.yml",
+                        }
                     ]
+                }
+            if status == "pending" and page == 1:
+                return {
+                    "total_count": 1,
+                    "workflow_runs": [
+                        {
+                            "status": "pending",
+                            "head_branch": "master",
+                            "path": ".github/workflows/prune-actions-caches.yml",
+                        }
+                    ],
                 }
             return {"total_count": 0, "workflow_runs": []}
         raise AssertionError(f"unexpected request: {method} {path}")
@@ -325,6 +580,61 @@ class DeleteApi(GitHubApi):
             raise AssertionError(f"unexpected request: {method} {path}")
 
 
+class SuccessfulBuildApi(GitHubApi):
+    def __init__(
+        self,
+        *,
+        build_job_name: str = "Build and verify",
+        build_job_conclusion: str = "success",
+        event: str = "push",
+    ) -> None:
+        super().__init__(repository="owner/repository", token="token", api_url="https://api")
+        self.build_job_name = build_job_name
+        self.build_job_conclusion = build_job_conclusion
+        self.event = event
+        self.run_total_count = 1
+        self.requests: list[tuple[str, str]] = []
+
+    def _request(self, method: str, path: str) -> Any:
+        self.requests.append((method, path))
+        parsed = urllib.parse.urlparse(path)
+        query = urllib.parse.parse_qs(parsed.query)
+        page = int(query.get("page", ["1"])[0])
+        if parsed.path.endswith("/actions/workflows/build-gate.yml/runs"):
+            if page > 1:
+                return {"total_count": self.run_total_count, "workflow_runs": []}
+            return {
+                "total_count": self.run_total_count,
+                "workflow_runs": [
+                    {
+                        "id": 77,
+                        "path": ".github/workflows/build-gate.yml",
+                        "head_branch": "stable",
+                        "head_sha": "1" * 40,
+                        "status": "completed",
+                        "conclusion": "success",
+                        "event": self.event,
+                        "head_repository": {"full_name": "owner/repository"},
+                    }
+                ],
+            }
+        if parsed.path.endswith("/actions/runs/77/jobs"):
+            return {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "name": self.build_job_name,
+                        "run_id": 77,
+                        "head_branch": "stable",
+                        "head_sha": "1" * 40,
+                        "status": "completed",
+                        "conclusion": self.build_job_conclusion,
+                    }
+                ],
+            }
+        raise AssertionError(f"unexpected request: {method} {path}")
+
+
 class PaginationTest(unittest.TestCase):
     def test_branch_and_cache_inventory_follow_every_page(self) -> None:
         api = PagingApi()
@@ -343,6 +653,7 @@ class PaginationTest(unittest.TestCase):
         branches = api.list_active_run_branches()
 
         self.assertEqual(len(branches), 101)
+        self.assertNotIn("master", branches)
         for status in ACTIVE_RUN_STATUSES:
             self.assertTrue(
                 any(
@@ -369,6 +680,35 @@ class PaginationTest(unittest.TestCase):
     def test_api_delete_treats_404_as_successful_idempotence(self) -> None:
         self.assertFalse(DeleteApi(missing=True).delete_cache(42))
         self.assertTrue(DeleteApi(missing=False).delete_cache(42))
+
+    def test_successful_build_requires_the_real_build_job(self) -> None:
+        api = SuccessfulBuildApi()
+
+        self.assertTrue(api.has_successful_build("stable", "1" * 40))
+
+        run_request = next(
+            path
+            for method, path in api.requests
+            if method == "GET" and "/workflows/build-gate.yml/runs" in path
+        )
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(run_request).query)
+        self.assertEqual(query["branch"], ["stable"])
+        self.assertEqual(query["head_sha"], ["1" * 40])
+        self.assertEqual(query["status"], ["success"])
+
+        attest_only = SuccessfulBuildApi(build_job_name="Attest tested build")
+        self.assertFalse(attest_only.has_successful_build("stable", "1" * 40))
+        skipped_build = SuccessfulBuildApi(build_job_conclusion="skipped")
+        self.assertFalse(skipped_build.has_successful_build("stable", "1" * 40))
+        read_only_event = SuccessfulBuildApi(event="pull_request")
+        self.assertFalse(read_only_event.has_successful_build("stable", "1" * 40))
+
+    def test_successful_build_search_fails_closed_above_local_result_cap(self) -> None:
+        api = SuccessfulBuildApi()
+        api.run_total_count = 101
+
+        with self.assertRaisesRegex(PruneError, "API limit is 100"):
+            api.has_successful_build("stable", "1" * 40)
 
 
 class WorkflowContractTest(unittest.TestCase):
@@ -402,6 +742,7 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("--apply", workflow)
         self.assertIn("--max-delete-count 75", workflow)
         self.assertIn("--max-delete-bytes 10737418240", workflow)
+        self.assertIn("Prune bounded Actions caches", workflow)
 
 
 if __name__ == "__main__":
