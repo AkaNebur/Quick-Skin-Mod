@@ -17,8 +17,9 @@ fix the canonical source or an active `legacy*` overlay; do not copy an oracle t
 ## Live resource routing after retirement
 
 No `src/v*` content remains. Canonical resources live in each module's `src/main/resources` tree.
-The active `common/src/legacy1_21_11` overlay is Java-only, so this branch has no era-specific
-resource overrides.
+Minecraft 26.2 remains the canonical source era. This 26.1.2 branch routes its one additive preview
+backend through `common/src/legacy26_1_2`; Fabric and NeoForge use their Stonecutter-generated
+canonical sources directly. The overlay contains no resources.
 
 Gradle consumes the canonical resources for every active module. Fabric
 metadata is normalized from one canonical `fabric.mod.json`; NeoForge metadata is normalized from

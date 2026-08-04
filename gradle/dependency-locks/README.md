@@ -17,7 +17,7 @@ Regenerate a loader lock after intentionally changing a shaded dependency:
 
 ```bash
 ./gradlew --no-daemon --no-parallel \
-  :fabric:1.21.11:dependencies :neoforge:1.21.11:dependencies --write-locks
+  :fabric:26.1.2:dependencies :neoforge:26.1.2:dependencies --write-locks
 ```
 
 Review the resulting diff. A lockfile must contain only the expected `shadowBundle` entries and

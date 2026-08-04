@@ -55,10 +55,14 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
         for artifact in data["artifacts"]:
             if artifact["artifact_version"] != version:
                 continue
-            artifact["no_remap"] = True
+            artifact["no_remap"] = not artifact["no_remap"]
             prefix = f":{artifact['loader']}:{version}:"
-            artifact["gradle_task"] = prefix + "shadowJar"
-            artifact["harness_task"] = prefix + "e2eHarnessJar"
+            artifact["gradle_task"] = prefix + (
+                "shadowJar" if artifact["no_remap"] else "remapJar"
+            )
+            artifact["harness_task"] = prefix + (
+                "e2eHarnessJar" if artifact["no_remap"] else "remapE2EHarnessJar"
+            )
         release_matrix.validate_matrix(data)
 
     def test_new_java_major_is_data_not_an_allowlist_change(self) -> None:
@@ -76,16 +80,21 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
         data = self.mutated()
         artifact = self.artifact(data, "fabric")
         prefix = f":fabric:{artifact['artifact_version']}:"
-        artifact["no_remap"] = True
-        artifact["gradle_task"] = prefix + "shadowJar"
-        artifact["harness_task"] = prefix + "e2eHarnessJar"
+        artifact["no_remap"] = not artifact["no_remap"]
+        artifact["gradle_task"] = prefix + (
+            "shadowJar" if artifact["no_remap"] else "remapJar"
+        )
+        artifact["harness_task"] = prefix + (
+            "e2eHarnessJar" if artifact["no_remap"] else "remapE2EHarnessJar"
+        )
         self.assert_invalid(data, "disagree on Java/no_remap")
 
     def test_task_names_follow_explicit_no_remap(self) -> None:
         data = self.mutated()
         artifact = data["artifacts"][0]
         artifact["gradle_task"] = (
-            f":{artifact['loader']}:{artifact['artifact_version']}:shadowJar"
+            f":{artifact['loader']}:{artifact['artifact_version']}:"
+            + ("remapJar" if artifact["no_remap"] else "shadowJar")
         )
         self.assert_invalid(data, "Gradle task must be")
 
@@ -96,8 +105,8 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
 
     def test_overlay_routes_require_legacy_roots(self) -> None:
         data = self.mutated()
-        version = next(iter(data["source_overlays"]["common"]))
-        data["source_overlays"]["common"][version] = "v1_20_1"
+        version = data["unit_test_version"]
+        data["source_overlays"]["common"][version] = "v_fixture"
         self.assert_invalid(data, "must name legacy")
 
         traversal = self.mutated()
@@ -128,7 +137,8 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             data = self.mutated()
-            data["source_overlays"]["common"]["fixture"] = "legacy_fixture"
+            data["source_overlays"]["common"]["fixture_one"] = "legacy_fixture_one"
+            data["source_overlays"]["common"]["fixture_two"] = "legacy_fixture_two"
             matrix_path = root / "release" / "release-matrix.json"
             matrix_path.parent.mkdir(parents=True)
             for module, routes in data["source_overlays"].items():
@@ -139,11 +149,10 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
                     marker.parent.mkdir(parents=True)
                     marker.write_text("live\n", encoding="utf-8")
             relative = Path("com/quickskin/mod/Duplicated.java")
-            active_overlay = next(iter(self.base["source_overlays"]["common"].values()))
             roots = [
                 root / "common" / "src" / "main" / "java",
-                root / "common" / "src" / active_overlay / "java",
-                root / "common" / "src" / "legacy_fixture" / "java",
+                root / "common" / "src" / "legacy_fixture_one" / "java",
+                root / "common" / "src" / "legacy_fixture_two" / "java",
             ]
             for java_root in roots:
                 source = java_root / relative

@@ -50,14 +50,14 @@ The active common test lane:
 
 ```powershell
 .\gradlew.bat --no-daemon --no-parallel `
-  :common:1.21.11:test
+  :common:26.1.2:test
 ```
 
 Full production and packaged-harness gate:
 
 ```powershell
 .\gradlew.bat --no-daemon --no-parallel clean `
-  :common:1.21.11:test `
+  :common:26.1.2:test `
   buildAllLanes buildAllE2EHarnesses
 ```
 
@@ -97,7 +97,7 @@ python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
 python -m unittest discover -s scripts/ci/tests -p "test_*.py" -v
 ```
 
-Packaged Minecraft runtime scenarios require a display and the Java 21 toolchain. Use Xvfb on
+Packaged Minecraft runtime scenarios require a display and the Java 25 toolchain. Use Xvfb on
 headless Linux and in CI; on a desktop session, macOS included, run the orchestrator directly.
 Follow `e2e/README.md` for what is verified on which platform, and do not substitute Loom
 development runs for packaged-JAR E2E evidence. Gradle and Stonecutter must themselves start on
