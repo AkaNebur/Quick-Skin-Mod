@@ -115,16 +115,12 @@ public final class ArchitecturyCompatMixinPlugin implements IMixinConfigPlugin {
                             + mixinClassName + " -> " + targetClassName
             );
         }
-        TransformResult result = applyCompatibilityTransform(targetClass);
-        LOGGER.info("{} (method descriptors={}, invocation owners={}, local descriptors={}, frame types={})",
-                PATCH_LOG_MARKER,
-                result.methodDescriptors(),
-                result.invocationOwners(),
-                result.localDescriptors(),
-                result.frameTypes());
+        applyCompatibilityTransform(targetClass);
+        LOGGER.info("{} (method descriptors=1, invocation owners=7, local descriptors=1, frame types=1)",
+                PATCH_LOG_MARKER);
     }
 
-    static TransformResult applyCompatibilityTransform(ClassNode targetClass) {
+    static void applyCompatibilityTransform(ClassNode targetClass) {
         if (!TARGET_CLASS.replace('.', '/').equals(targetClass.name)) {
             throw new IllegalStateException("Wrong Architectury compatibility target: " + targetClass.name);
         }
@@ -182,15 +178,14 @@ public final class ArchitecturyCompatMixinPlugin implements IMixinConfigPlugin {
             }
         }
 
-        TransformResult result = new TransformResult(
-                methodDescriptors.size(), invocationOwners.size(), localDescriptors.size(),
-                frameTypes.size()
-        );
-        if (!result.equals(new TransformResult(1, 7, 1, 1))) {
+        if (methodDescriptors.size() != 1
+                || invocationOwners.size() != 7
+                || localDescriptors.size() != 1
+                || frameTypes.size() != 1) {
             throw new IllegalStateException(
                     "Architectury compatibility target changed; expected 1/7/1/1 replacements, got "
-                            + result.methodDescriptors() + "/" + result.invocationOwners() + "/"
-                            + result.localDescriptors() + "/" + result.frameTypes()
+                            + methodDescriptors.size() + "/" + invocationOwners.size() + "/"
+                            + localDescriptors.size() + "/" + frameTypes.size()
             );
         }
 
@@ -199,7 +194,6 @@ public final class ArchitecturyCompatMixinPlugin implements IMixinConfigPlugin {
         localDescriptors.get(0).desc = COMPATIBLE_DESCRIPTOR;
         frameTypes.get(0).local.set(0, COMPATIBLE_TYPE);
         assertNoIncompatibleReferences(targetClass);
-        return result;
     }
 
     private static void validateCompatibleInvocation(MethodInsnNode call) {
@@ -287,7 +281,4 @@ public final class ArchitecturyCompatMixinPlugin implements IMixinConfigPlugin {
         );
     }
 
-    record TransformResult(int methodDescriptors, int invocationOwners, int localDescriptors,
-                           int frameTypes) {
-    }
 }

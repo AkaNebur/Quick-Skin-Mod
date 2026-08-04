@@ -23,10 +23,7 @@ class ArchitecturyCompatMixinPluginTest {
         ClassNode target = loadTarget(ClassReader.EXPAND_FRAMES);
         FrameNode frame = incompatibleFrame(target);
 
-        assertEquals(
-                new ArchitecturyCompatMixinPlugin.TransformResult(1, 7, 1, 1),
-                ArchitecturyCompatMixinPlugin.applyCompatibilityTransform(target)
-        );
+        ArchitecturyCompatMixinPlugin.applyCompatibilityTransform(target);
         assertEquals(ArchitecturyCompatMixinPlugin.COMPATIBLE_TYPE, frame.local.get(0));
         assertTrue(frame.stack.isEmpty());
 
@@ -39,6 +36,11 @@ class ArchitecturyCompatMixinPluginTest {
                 () -> ArchitecturyCompatMixinPlugin.applyCompatibilityTransform(roundTrip),
                 "a second application must fail rather than silently double-patch"
         );
+    }
+
+    @Test
+    void definesNoNestedHelpersInsideTheMixinOwnedPackage() {
+        assertEquals(0, ArchitecturyCompatMixinPlugin.class.getDeclaredClasses().length);
     }
 
     @Test
