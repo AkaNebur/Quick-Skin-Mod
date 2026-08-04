@@ -139,7 +139,7 @@ dependencies {
     add(modImpl, "dev.architectury:architectury-fabric:${versionProp("architectury_api_version")}") {
         // Architectury 20.0.4 was published with a forward Fabric API dependency targeting
         // Minecraft 26.1.2. The release matrix is authoritative: compile and run against the
-        // exact 26.1.1 Fabric API declared above instead of silently upgrading the game API.
+        // exact 26.1 Fabric API declared above instead of silently upgrading the game API.
         exclude(group = "net.fabricmc.fabric-api", module = "fabric-api")
     }
 

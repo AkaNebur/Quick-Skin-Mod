@@ -5,8 +5,8 @@ compiled `main` output.
 
 The checked-in [release matrix](../release/release-matrix.json) is the lane inventory consumed by
 Stonecutter settings, aggregate Gradle tasks, publication, and E2E. This branch defines two
-Minecraft 26.1.1 release files and two matching runtime rows: Fabric and NeoForge. Every artifact
-advertises and launches on exactly Minecraft 26.1.1; matrix validation fails if any consumer-facing
+Minecraft 26.1 release files and two matching runtime rows: Fabric and NeoForge. Every artifact
+advertises and launches on exactly Minecraft 26.1; matrix validation fails if any consumer-facing
 row or task identity disagrees.
 
 ## Local setup
@@ -38,15 +38,15 @@ included — run it directly.
 # Headless Linux / CI
 xvfb-run -a python e2e/orchestrator.py \
   --packaged \
-  --artifact-node fabric-26.1.1 \
-  --runtime-version 26.1.1 \
+  --artifact-node fabric-26.1 \
+  --runtime-version 26.1 \
   --scenarios phase0-smoke
 
 # macOS or any desktop session
 python e2e/orchestrator.py \
   --packaged \
-  --artifact-node fabric-26.1.1 \
-  --runtime-version 26.1.1 \
+  --artifact-node fabric-26.1 \
+  --runtime-version 26.1 \
   --scenarios phase0-smoke
 ```
 
@@ -63,7 +63,9 @@ loader-specific dependencies and separate E2E harness.
 The NeoForge row also requires the log marker emitted by the narrowly scoped Architectury
 BreakEvent compatibility mixin in every server and client process. The mixin rewrites the one
 upstream 20.0.x event descriptor that targets a NeoForge 26.1.2-only class; its structural test and
-runtime guard fail closed if the pinned upstream bytecode or loader API shape changes.
+runtime guard fail closed if the pinned upstream bytecode or loader API shape changes. The packaged
+NeoForge artifact also widens exactly the same three protected `Screen` helpers as Fabric so the
+pinned Architectury screen hooks can add widgets without a runtime access violation.
 
 ## Fail-closed contract
 

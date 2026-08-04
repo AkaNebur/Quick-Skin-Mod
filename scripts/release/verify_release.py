@@ -31,6 +31,20 @@ class VerificationError(RuntimeError):
     pass
 
 
+NEOFORGE_ACCESS_TRANSFORMER_PATH = "META-INF/accesstransformer.cfg"
+NEOFORGE_SCREEN_HOOK_ACCESS_RULES = (
+    "public net.minecraft.client.gui.screens.Screen "
+    "addRenderableWidget(Lnet/minecraft/client/gui/components/events/GuiEventListener;)"
+    "Lnet/minecraft/client/gui/components/events/GuiEventListener;",
+    "public net.minecraft.client.gui.screens.Screen "
+    "addRenderableOnly(Lnet/minecraft/client/gui/components/Renderable;)"
+    "Lnet/minecraft/client/gui/components/Renderable;",
+    "public net.minecraft.client.gui.screens.Screen "
+    "addWidget(Lnet/minecraft/client/gui/components/events/GuiEventListener;)"
+    "Lnet/minecraft/client/gui/components/events/GuiEventListener;",
+)
+
+
 def file_digest(path: Path, algorithm: str) -> str:
     digest = hashlib.new(algorithm)
     with path.open("rb") as stream:
@@ -221,6 +235,22 @@ def verify_fml_pack_metadata(raw: bytes, artifact: dict[str, Any]) -> None:
     )
 
 
+def verify_neoforge_access_transformer(raw: bytes) -> None:
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise VerificationError(f"invalid NeoForge access transformer: {exc}") from exc
+    rules = tuple(
+        line
+        for raw_line in text.splitlines()
+        if (line := raw_line.strip()) and not line.startswith("#")
+    )
+    require(
+        rules == NEOFORGE_SCREEN_HOOK_ACCESS_RULES,
+        "NeoForge screen-hook access transformer disagrees with the audited compatibility rules",
+    )
+
+
 def verify_jar(
     path: Path,
     artifact: dict[str, Any],
@@ -287,6 +317,14 @@ def verify_jar(
                 )
                 require("pack.mcmeta" in names, f"FML pack metadata missing from {path.name}")
                 verify_fml_pack_metadata(jar.read("pack.mcmeta"), artifact)
+                if artifact["loader"] == "neoforge":
+                    require(
+                        NEOFORGE_ACCESS_TRANSFORMER_PATH in names,
+                        f"NeoForge access transformer missing from {path.name}",
+                    )
+                    verify_neoforge_access_transformer(
+                        jar.read(NEOFORGE_ACCESS_TRANSFORMER_PATH)
+                    )
     except zipfile.BadZipFile as exc:
         raise VerificationError(f"invalid jar {path}: {exc}") from exc
 

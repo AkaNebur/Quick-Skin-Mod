@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * read there and a mixin added only to it would silently not run. The same split already forces a
  * duplicate {@code CapeLayerMixin} in this package.
  *
- * <p>Registered only in the 1.21.1 configuration. NeoForge 1.21.11, 26.1.1 and 26.2 blank the
+ * <p>Registered only in the 1.21.1 configuration. NeoForge 1.21.11, 26.1 and 26.2 blank the
  * extracted render state in the renderer instead, so this class is compiled but never applied there.
  */
 @Mixin(Player.class)

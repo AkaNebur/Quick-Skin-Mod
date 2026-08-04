@@ -4,7 +4,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
-/** Minecraft 26.1.1 immediate-extraction preview backend. */
+/** Minecraft 26.1 immediate-extraction preview backend. */
 @Environment(EnvType.CLIENT)
 public final class ExtractorPreviewRenderBackend implements PreviewRenderBackend {
     @Override

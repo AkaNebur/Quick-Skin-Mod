@@ -16,9 +16,65 @@ EXPECTED_LOCAL_TRUST = {
     (r"^loom$", r"^mappings$"),
     (
         r"^net[.]minecraft$",
-        r"^(minecraft-merged-[0-9a-f]{10}|(?:forge|neoforge)-[0-9A-Za-z.+_-]+-minecraft-merged(?:-deobf)?)$",
+        r"^(minecraft-merged-[0-9a-f]{10}|(?:forge|neoforge)-[0-9A-Za-z.+_-]+-minecraft-merged(?:-deobf|-[0-9a-f]{10})?)$",
     ),
     (r"^net[.]minecraftforge[.][0-9a-f]{64}$", r"^fmlloader$"),
+}
+# Loom's NeoForge library resolver and the Shadow plugin traverse these parent/BOM
+# variants on a clean Linux runner even when an already-warm macOS build does not.
+REQUIRED_CLEAN_LINUX_METADATA = {
+    ("com.fasterxml.jackson", "jackson-bom", "2.19.1", "jackson-bom-2.19.1.pom"),
+    (
+        "com.fasterxml.jackson",
+        "jackson-parent",
+        "2.19.2",
+        "jackson-parent-2.19.2.pom",
+    ),
+    ("com.google.guava", "guava-parent", "33.5.0-jre", "guava-parent-33.5.0-jre.pom"),
+    (
+        "jakarta.platform",
+        "jakarta.jakartaee-bom",
+        "9.1.0",
+        "jakarta.jakartaee-bom-9.1.0.pom",
+    ),
+    (
+        "jakarta.platform",
+        "jakartaee-api-parent",
+        "9.1.0",
+        "jakartaee-api-parent-9.1.0.pom",
+    ),
+    ("org.apache.groovy", "groovy-bom", "4.0.27", "groovy-bom-4.0.27.module"),
+    ("org.apache.groovy", "groovy-bom", "4.0.27", "groovy-bom-4.0.27.pom"),
+    ("org.apache.logging.log4j", "log4j", "2.25.2", "log4j-2.25.2.pom"),
+    ("org.apache.logging.log4j", "log4j", "2.25.3", "log4j-2.25.3.pom"),
+    (
+        "org.apache.logging.log4j",
+        "log4j-bom",
+        "2.25.2",
+        "log4j-bom-2.25.2.pom",
+    ),
+    (
+        "org.apache.logging.log4j",
+        "log4j-bom",
+        "2.25.3",
+        "log4j-bom-2.25.3.pom",
+    ),
+    ("org.eclipse.ee4j", "project", "1.0.7", "project-1.0.7.pom"),
+    ("org.junit", "junit-bom", "5.13.2", "junit-bom-5.13.2.module"),
+    ("org.junit", "junit-bom", "5.13.2", "junit-bom-5.13.2.pom"),
+    ("org.mockito", "mockito-bom", "4.11.0", "mockito-bom-4.11.0.pom"),
+    (
+        "org.springframework",
+        "spring-framework-bom",
+        "5.3.39",
+        "spring-framework-bom-5.3.39.module",
+    ),
+    (
+        "org.springframework",
+        "spring-framework-bom",
+        "5.3.39",
+        "spring-framework-bom-5.3.39.pom",
+    ),
 }
 
 
@@ -85,7 +141,7 @@ class DependencySecurityPolicyTest(unittest.TestCase):
         self.assertEqual(root.findall(".//v:md5", namespace), [])
 
         components = root.findall("v:components/v:component", namespace)
-        # The exact 26.1.1 graph is smaller than 26.1.2 after obsolete pins are pruned, but still
+        # The exact 26.1 graph is smaller than 26.1.2 after obsolete pins are pruned, but still
         # large enough that a partial or accidentally regenerated metadata file fails closed.
         self.assertGreater(len(components), 250)
         coordinates: set[tuple[str, str, str]] = set()
@@ -103,6 +159,20 @@ class DependencySecurityPolicyTest(unittest.TestCase):
                 hashes = artifact.findall("v:sha256", namespace)
                 self.assertEqual(len(hashes), 1, (coordinate, artifact.attrib["name"]))
                 self.assertIsNotNone(SHA256.fullmatch(hashes[0].attrib.get("value", "")))
+
+    def test_clean_linux_metadata_closure_is_pinned(self) -> None:
+        root, namespace = _verification_tree()
+        artifacts = {
+            (
+                component.attrib["group"],
+                component.attrib["name"],
+                component.attrib["version"],
+                artifact.attrib["name"],
+            )
+            for component in root.findall("v:components/v:component", namespace)
+            for artifact in component.findall("v:artifact", namespace)
+        }
+        self.assertEqual(REQUIRED_CLEAN_LINUX_METADATA - artifacts, set())
 
     def test_local_trust_rules_are_exact_and_reject_lookalikes(self) -> None:
         root, namespace = _verification_tree()
@@ -122,6 +192,10 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             ("net.minecraft", "forge-1.20.1-47.4.9-minecraft-merged"),
             ("net.minecraft", "neoforge-21.11.38-beta-minecraft-merged"),
             ("net.minecraft", "neoforge-26.2.0.6-beta-minecraft-merged-deobf"),
+            (
+                "net.minecraft",
+                "neoforge-26.1.0.19-beta-minecraft-merged-df325f964f",
+            ),
             ("net.minecraftforge." + "a" * 64, "fmlloader"),
         )
         rejected = (
@@ -133,6 +207,18 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             ("net.minecraft", "minecraft"),
             ("net.minecraft", "neoforged-21.11.38-beta-minecraft-merged"),
             ("net.minecraft", "forge-1.20.1-47.4.9-minecraft-merged-deobf-extra"),
+            (
+                "net.minecraft",
+                "neoforge-26.1.0.19-beta-minecraft-merged-df325f964",
+            ),
+            (
+                "net.minecraft",
+                "neoforge-26.1.0.19-beta-minecraft-merged-df325f964ff",
+            ),
+            (
+                "net.minecraft",
+                "neoforge-26.1.0.19-beta-minecraft-merged-deobf-df325f964f",
+            ),
             ("net.minecraft", "neoforged-26.2.0.6-beta-minecraft-merged-deobf"),
             ("net.minecraftforge." + "a" * 63, "fmlloader"),
             ("net.minecraftforge." + "g" * 64, "fmlloader"),
@@ -207,8 +293,12 @@ class DependencySecurityPolicyTest(unittest.TestCase):
         self.assertEqual(expected - coordinates, set())
         obsolete_release_pins = {
             ("dev.architectury", "architectury", "20.0.6"),
+            ("net.fabricmc.fabric-api", "fabric-api", "0.145.4+26.1.1"),
+            ("net.fabricmc.fabric-api", "fabric-api-deprecated", "0.145.4+26.1.1"),
             ("net.fabricmc.fabric-api", "fabric-api", "0.151.0+26.1.2"),
+            ("net.neoforged", "neoforge", "26.1.1.15-beta"),
             ("net.neoforged", "neoforge", "26.1.2.76"),
+            ("net.neoforged", "neoform", "26.1.1-1"),
             ("net.neoforged", "neoform", "26.1.2-1"),
         }
         self.assertEqual(obsolete_release_pins & coordinates, set())

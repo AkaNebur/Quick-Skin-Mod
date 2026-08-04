@@ -319,7 +319,7 @@ public final class SkinLayers3DIntegration {
 //? if <26.1 {
                         "3D Skin Layers immediate manual-preview rendering executed successfully"
 //?} else if <26.2 {
-                        "3D Skin Layers immediate manual-preview rendering executed successfully on the 26.1.1 backend"
+                        "3D Skin Layers immediate manual-preview rendering executed successfully on the 26.1 backend"
 //?} else {
                         "3D Skin Layers 26.2 deferred preview bridge attached successfully; "
                                 + "collector execution will render the injected overlay meshes"
@@ -426,7 +426,7 @@ public final class SkinLayers3DIntegration {
                             "3D Skin Layers manual-preview mesh capability ready: backend={}, create3DMesh={} argument(s)",
                             backend,
 //?} else if <26.2 {
-                            "3D Skin Layers manual-preview mesh capability ready: backend=immediate-26.1.1, create3DMesh={} argument(s)",
+                            "3D Skin Layers manual-preview mesh capability ready: backend=immediate-26.1, create3DMesh={} argument(s)",
 //?} else {
                             "3D Skin Layers manual-preview mesh capability ready: backend={}, create3DMesh={} argument(s)",
                             backend,

@@ -15,8 +15,8 @@
 - Added declarative GitHub ruleset/release-environment governance with a fail-closed readiness
   audit, plus a documented 1.21 release-train consolidation experiment.
 - Restored `.cpmmodel` discovery, import, preview, selection, and CPM lifecycle integration on both
-  Minecraft 26.1.1 loader lanes.
-- Restored optional 3D Skin Layers preview integration for the supported 26.1.1 render path.
+  Minecraft 26.1 loader lanes.
+- Restored optional 3D Skin Layers preview integration for the supported 26.1 render path.
 - Added a structurally verified NeoForge compatibility mixin for Architectury 20.0.x's single
   Minecraft 26.1.2-only BreakEvent descriptor.
 - Added packaged-artifact E2E coverage for the two release files and their two exact runtime
@@ -42,7 +42,7 @@
 - Consolidated active development into one Stonecutter-managed source tree with narrow era overlays.
 - Made the release matrix the source of truth for artifact paths, runtime coordinates, metadata ranges, and marketplace versions.
 - Corrected loader metadata ranges, project links, and the All Rights Reserved license declaration.
-- Isolated the active Minecraft 26.1.1 Fabric and NeoForge release lanes on their own thin branch.
+- Isolated the active Minecraft 26.1 Fabric and NeoForge release lanes on their own thin branch.
 
 ## 2.6.2.5
 
