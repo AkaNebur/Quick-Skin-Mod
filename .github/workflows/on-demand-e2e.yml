@@ -379,6 +379,18 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install the hash-locked evidence decoder
+        run: >-
+          python -m pip install
+          --only-binary=:all:
+          --require-hashes
+          --requirement scripts/pages/requirements.txt
+
       # Pull-request, master, schedule and automation-branch runs still pass through this advisory
       # job, but only a real release branch may create the stable artifact consumed by Pages.
       - name: Resolve exact public evidence provenance
