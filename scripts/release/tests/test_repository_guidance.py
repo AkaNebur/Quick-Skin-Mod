@@ -148,6 +148,41 @@ class RepositoryGuidanceTest(unittest.TestCase):
             r"ClientGuiEvent\.RENDER_POST\.register",
         )
 
+    def test_legacy_preview_equipment_hooks_the_method_owner(self) -> None:
+        mixins = (
+            ROOT
+            / "common"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "mixin"
+            / "PreviewEquipmentMixin.java",
+            ROOT
+            / "neoforge"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "neoforge"
+            / "mixin"
+            / "PreviewEquipmentMixin.java",
+        )
+
+        for path in mixins:
+            with self.subTest(path=path.relative_to(ROOT).as_posix()):
+                source = path.read_text(encoding="utf-8")
+                self.assertIn("@Mixin(LivingEntity.class)", source)
+                self.assertRegex(source, r"entity instanceof Player player")
+                self.assertRegex(
+                    source,
+                    r"cancellable = true,\s+require = 0,\s+expect = 1,\s+allow = 1",
+                )
+
     def test_release_publication_is_recoverable_and_non_destructive(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"
