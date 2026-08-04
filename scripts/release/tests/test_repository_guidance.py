@@ -183,6 +183,32 @@ class RepositoryGuidanceTest(unittest.TestCase):
                     r"cancellable = true,\s+require = 0,\s+expect = 1,\s+allow = 1",
                 )
 
+    def test_legacy_star_shader_follows_the_minecraft_api_boundary(self) -> None:
+        source = (
+            ROOT
+            / "common"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "quickskin"
+            / "mod"
+            / "client"
+            / "gui"
+            / "util"
+            / "BackgroundRenderer.java"
+        ).read_text(encoding="utf-8")
+
+        self.assertRegex(
+            source,
+            r"//\? if <1\.21\.2 \{\s+"
+            r"RenderSystem\.setShader\(net\.minecraft\.client\.renderer\."
+            r"GameRenderer::getPositionTexShader\);\s+"
+            r"//\?\} else if <1\.21\.5 \{\s+"
+            r"RenderSystem\.setShader\(net\.minecraft\.client\.renderer\."
+            r"CoreShaders\.POSITION_TEX\);",
+        )
+
     def test_release_publication_is_recoverable_and_non_destructive(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"

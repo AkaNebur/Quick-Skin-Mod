@@ -189,7 +189,11 @@ public class BackgroundRenderer {
         var pose = graphics.pose();
         pose.pushPose();
         RenderSystem.setShaderTexture(0, starTexture);
+        //? if <1.21.2 {
         RenderSystem.setShader(net.minecraft.client.renderer.GameRenderer::getPositionTexShader);
+        //?} else if <1.21.5 {
+        RenderSystem.setShader(net.minecraft.client.renderer.CoreShaders.POSITION_TEX);
+        //?}
         com.mojang.blaze3d.vertex.Tesselator tesselator = com.mojang.blaze3d.vertex.Tesselator.getInstance();
         //? if <1.21 {
         com.mojang.blaze3d.vertex.BufferBuilder bufferBuilder = tesselator.getBuilder();
