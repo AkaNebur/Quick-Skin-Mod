@@ -29,6 +29,7 @@ def cache(
     *,
     size: int = 10,
     key: str | None = None,
+    version: str = "cache-version-1",
     created_at: str = "2026-08-01T00:00:00Z",
     last_accessed_at: str = "2026-08-01T00:00:00Z",
 ) -> CacheEntry:
@@ -36,7 +37,7 @@ def cache(
         cache_id=cache_id,
         ref=ref,
         key=key or f"gradle-{cache_id}",
-        version=f"version-{cache_id}",
+        version=version,
         size_in_bytes=size,
         created_at=created_at,
         last_accessed_at=last_accessed_at,
@@ -62,14 +63,14 @@ class FakeApi:
         self.revalidated = {item.cache_id: item for item in caches}
         self.recreated: set[str] = set()
         self.missing_on_revalidation: set[str] = set()
-        self.late_active: set[str] = set()
+        self.any_active_snapshots: list[bool] = [False]
         self.successful_builds: set[tuple[str, str]] = set()
         self.delete_404: set[int] = set()
         self.deleted: list[int] = []
         self.branch_checks: list[str] = []
         self.cache_checks: list[int] = []
         self.active_calls = 0
-        self.late_active_checks: list[str] = []
+        self.any_active_calls = 0
         self.successful_build_checks: list[tuple[str, str]] = []
 
     def get_default_branch(self) -> str:
@@ -90,9 +91,10 @@ class FakeApi:
         self.successful_build_checks.append((branch, sha))
         return (branch, sha) in self.successful_builds
 
-    def branch_has_active_run(self, branch: str) -> bool:
-        self.late_active_checks.append(branch)
-        return branch in self.late_active
+    def has_any_active_run(self) -> bool:
+        index = min(self.any_active_calls, len(self.any_active_snapshots) - 1)
+        self.any_active_calls += 1
+        return self.any_active_snapshots[index]
 
     def branch_exists(self, branch: str) -> bool:
         self.branch_checks.append(branch)
@@ -197,6 +199,36 @@ class CandidateSelectionTest(unittest.TestCase):
         self.assertEqual(candidates, [])
         self.assertEqual(protected, [])
 
+    def test_cache_versions_form_independent_restore_families(self) -> None:
+        first_sha = "1" * 40
+        second_sha = "2" * 40
+        values = [
+            cache(
+                1,
+                "refs/heads/stable",
+                key=gradle_key(first_sha),
+                version="paths-and-compression-v1",
+                created_at="2026-08-01T00:00:00Z",
+            ),
+            cache(
+                2,
+                "refs/heads/stable",
+                key=gradle_key(second_sha),
+                version="paths-and-compression-v2",
+                created_at="2026-08-02T00:00:00Z",
+            ),
+        ]
+
+        candidates, protected = select_superseded_generations(
+            values,
+            existing_branches={"master", "stable"},
+            active_run_branches=set(),
+            successful_build_shas={"stable": {first_sha, second_sha}},
+        )
+
+        self.assertEqual(candidates, [])
+        self.assertEqual([item.cache_id for item in protected], [1, 2])
+
     def test_active_live_branch_and_unknown_key_formats_are_preserved(self) -> None:
         sha = "1" * 40
         values = [
@@ -236,19 +268,67 @@ class PruneTest(unittest.TestCase):
         self.assertEqual(api.branch_checks, [])
         self.assertEqual(api.deleted, [])
 
-    def test_apply_rechecks_active_runs_and_protects_a_newly_active_branch(self) -> None:
+    def test_active_topic_run_protects_default_branch_restore_caches(self) -> None:
+        old_sha = "1" * 40
+        keeper_sha = "2" * 40
+        api = FakeApi(
+            [
+                cache(1, "refs/heads/master", key=gradle_key(old_sha)),
+                cache(
+                    2,
+                    "refs/heads/master",
+                    key=gradle_key(keeper_sha),
+                    created_at="2026-08-02T00:00:00Z",
+                ),
+            ]
+        )
+        api.active_snapshots = [{"topic/using-master-fallback"}]
+        api.successful_builds.add(("master", keeper_sha))
+
+        result = prune(api, apply=False)
+
+        self.assertTrue(result["active_run_present"])
+        self.assertEqual(result["candidate_count"], 0)
+        self.assertEqual(api.successful_build_checks, [])
+
+    def test_active_pull_request_run_protects_release_base_caches(self) -> None:
+        old_sha = "1" * 40
+        keeper_sha = "2" * 40
+        api = FakeApi(
+            [
+                cache(1, "refs/heads/stable", key=gradle_key(old_sha)),
+                cache(
+                    2,
+                    "refs/heads/stable",
+                    key=gradle_key(keeper_sha),
+                    created_at="2026-08-02T00:00:00Z",
+                ),
+            ]
+        )
+        api.branches.add("stable")
+        api.active_snapshots = [{"pull-request-head"}]
+        api.successful_builds.add(("stable", keeper_sha))
+
+        result = prune(api, apply=False)
+
+        self.assertTrue(result["active_run_present"])
+        self.assertEqual(result["candidate_count"], 0)
+        self.assertEqual(api.successful_build_checks, [])
+
+    def test_apply_rechecks_active_runs_and_protects_the_complete_restore_scope(self) -> None:
         api = FakeApi(
             [
                 cache(1, "refs/heads/deleted-a"),
                 cache(2, "refs/heads/deleted-b"),
             ]
         )
-        api.active_snapshots = [set(), {"deleted-b"}]
+        api.any_active_snapshots = [False, True]
 
         result = prune(api, apply=True)
 
-        self.assertEqual(api.deleted, [1])
-        self.assertEqual(result["deleted_ids"], [1])
+        self.assertEqual(api.deleted, [])
+        self.assertEqual(result["deleted_ids"], [])
+        self.assertIn({"id": 1, "reason": "active-run"}, result["skipped"])
         self.assertIn({"id": 2, "reason": "active-run"}, result["skipped"])
 
     def test_apply_deletes_serially_by_exact_id_after_revalidation(self) -> None:
@@ -278,7 +358,7 @@ class PruneTest(unittest.TestCase):
 
     def test_run_starting_during_batch_is_preserved(self) -> None:
         api = FakeApi([cache(1, "refs/heads/deleted")])
-        api.late_active.add("deleted")
+        api.any_active_snapshots = [False, False, True]
 
         result = prune(api, apply=True)
 
@@ -347,7 +427,7 @@ class PruneTest(unittest.TestCase):
         self.assertEqual(result["deleted_ids"], [1])
         self.assertEqual(api.deleted, [1])
         self.assertEqual(api.cache_checks, [1, 2])
-        self.assertEqual(api.late_active_checks, ["stable"])
+        self.assertEqual(api.any_active_calls, 3)
 
     def test_live_branch_revalidation_preserves_candidate_if_replacement_vanishes(
         self,
@@ -389,7 +469,7 @@ class PruneTest(unittest.TestCase):
         api = FakeApi([old, keeper])
         api.branches.add("stable")
         api.successful_builds.add(("stable", keeper_sha))
-        api.late_active.add("stable")
+        api.any_active_snapshots = [False, False, True]
 
         result = prune(api, apply=True)
 

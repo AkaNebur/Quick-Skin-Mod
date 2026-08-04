@@ -89,10 +89,12 @@ immutable workflow and governance activation contract.
   packaged-E2E proof retains its one-day window because a concurrent branch attestation may still
   consume it. A protected schedule also deletes by exact cache ID Actions caches scoped to branch
   refs that no longer exist. On live branches it recognizes only SHA-bearing `setup-gradle` home
-  keys, preserves the newest restorable generation per OS/job family that has a successful Build
-  job, protects every cache while any potentially cache-consuming run on that branch is active,
-  and deletes only superseded generations after revalidation. The protected cleanup run itself is
-  the sole exclusion because it never configures Gradle; unknown workflows remain protective.
+  keys, preserves the newest restorable generation per OS/job/cache-version family that has a
+  successful Build job, and protects the complete cache inventory while any potentially
+  cache-consuming run is active anywhere in the repository. It deletes only superseded generations
+  after exact candidate, compatible-replacement, branch, and repository-wide run revalidation. The
+  protected cleanup run itself is the sole exclusion because it never configures Gradle; unknown
+  workflows remain protective.
   Without a proven successful replacement it preserves the whole family. It discovers live
   branches directly and must never infer a supported-version inventory.
 - Build gate owns Gradle cache writes, and only a trusted push or manual Build run on protected

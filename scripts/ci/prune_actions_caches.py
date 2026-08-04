@@ -4,8 +4,8 @@
 Every cache for an absent branch is disposable.  For a live branch, only an
 old ``setup-gradle`` Gradle-home generation with an unambiguous SHA-bearing key
 is eligible, and only after a retained generation is tied to a successful Build
-gate.  A branch with any active workflow run, an unknown cache-key format, a
-tag, and a pull-request ref are always preserved.  Dry-run is the default;
+gate.  Any active workflow run preserves the complete cache inventory; unknown
+cache-key formats, tags, and pull-request refs are always preserved.  Dry-run is the default;
 callers must pass ``--apply`` to delete anything.
 """
 
@@ -119,7 +119,7 @@ class CacheApi(Protocol):
 
     def list_active_run_branches(self) -> set[str]: ...
 
-    def branch_has_active_run(self, branch: str) -> bool: ...
+    def has_any_active_run(self) -> bool: ...
 
     def list_caches(self) -> list[CacheEntry]: ...
 
@@ -257,13 +257,12 @@ class GitHubApi:
             branches.add(_text(item.get("name"), "branch.name"))
         return branches
 
-    def _active_run_branches(self, *, branch: str | None = None) -> set[str]:
+    def _active_run_inventory(self) -> tuple[set[str], bool]:
         branches: set[str] = set()
+        any_run = False
         path = self._repo_path("/actions/runs")
         for status in ACTIVE_RUN_STATUSES:
             query = {"status": status}
-            if branch is not None:
-                query["branch"] = branch
             payload = self._paginate(
                 path,
                 field="workflow_runs",
@@ -282,23 +281,19 @@ class GitHubApi:
                     # The protected cleanup job itself runs on master but never configures or
                     # restores Gradle. Counting it would permanently self-lock master rotation.
                     continue
+                any_run = True
                 head_branch = item.get("head_branch")
                 if head_branch is None:
                     continue
                 parsed_branch = _text(head_branch, "workflow_run.head_branch")
-                if branch is not None and parsed_branch != branch:
-                    raise PruneError(
-                        f"workflow run branch filter returned {parsed_branch!r}, "
-                        f"expected {branch!r}"
-                    )
                 branches.add(parsed_branch)
-        return branches
+        return branches, any_run
 
     def list_active_run_branches(self) -> set[str]:
-        return self._active_run_branches()
+        return self._active_run_inventory()[0]
 
-    def branch_has_active_run(self, branch: str) -> bool:
-        return bool(self._active_run_branches(branch=branch))
+    def has_any_active_run(self) -> bool:
+        return self._active_run_inventory()[1]
 
     def _list_caches(self, *, query: dict[str, str] | None = None) -> list[CacheEntry]:
         payload = self._paginate(
@@ -487,7 +482,7 @@ def select_superseded_generations(
     successful_build_shas: dict[str, set[str]],
 ) -> tuple[list[CacheEntry], list[CacheEntry]]:
     """Select old known Gradle-home generations and their protected replacements."""
-    groups: dict[tuple[str, str], list[CacheEntry]] = {}
+    groups: dict[tuple[str, str, str], list[CacheEntry]] = {}
     for cache in caches:
         branch = cache.branch
         generation = cache.gradle_home_generation
@@ -499,11 +494,11 @@ def select_superseded_generations(
         ):
             continue
         restore_family, _sha = generation
-        groups.setdefault((branch, restore_family), []).append(cache)
+        groups.setdefault((branch, restore_family, cache.version), []).append(cache)
 
     candidates: list[CacheEntry] = []
     protected: list[CacheEntry] = []
-    for (branch, _restore_family), group in sorted(groups.items()):
+    for (branch, _restore_family, _cache_version), group in sorted(groups.items()):
         successful = [
             cache
             for cache in group
@@ -591,24 +586,33 @@ def prune(
         raise PruneError("default branch is missing from the complete branch inventory")
 
     active_run_branches = api.list_active_run_branches()
+    active_run_present = bool(active_run_branches) or api.has_any_active_run()
     caches = _validate_cache_inventory(api.list_caches())
-    orphan_candidates = select_candidates(
-        caches,
-        existing_branches=existing_branches,
-        active_run_branches=active_run_branches,
-    )
-    successful_build_shas = _successful_build_shas(
-        api,
-        caches,
-        existing_branches=existing_branches,
-        active_run_branches=active_run_branches,
-    )
-    superseded_candidates, protected_generations = select_superseded_generations(
-        caches,
-        existing_branches=existing_branches,
-        active_run_branches=active_run_branches,
-        successful_build_shas=successful_build_shas,
-    )
+    if active_run_present:
+        # Every Actions run may restore the default branch, and pull-request runs may also restore
+        # their base branch. Treating the whole repository as one active restore boundary avoids
+        # racing a cache lookup/download whose consumer is not the cache's owning ref.
+        orphan_candidates: list[CacheEntry] = []
+        superseded_candidates: list[CacheEntry] = []
+        protected_generations: list[CacheEntry] = []
+    else:
+        orphan_candidates = select_candidates(
+            caches,
+            existing_branches=existing_branches,
+            active_run_branches=active_run_branches,
+        )
+        successful_build_shas = _successful_build_shas(
+            api,
+            caches,
+            existing_branches=existing_branches,
+            active_run_branches=active_run_branches,
+        )
+        superseded_candidates, protected_generations = select_superseded_generations(
+            caches,
+            existing_branches=existing_branches,
+            active_run_branches=active_run_branches,
+            successful_build_shas=successful_build_shas,
+        )
     candidate_kinds = {
         cache.cache_id: "absent-branch" for cache in orphan_candidates
     }
@@ -616,7 +620,7 @@ def prune(
         {cache.cache_id: "superseded-gradle-home" for cache in superseded_candidates}
     )
     protected_by_group = {
-        (cache.branch, cache.gradle_home_generation[0]): cache
+        (cache.branch, cache.gradle_home_generation[0], cache.version): cache
         for cache in protected_generations
         if cache.branch is not None and cache.gradle_home_generation is not None
     }
@@ -625,7 +629,7 @@ def prune(
         if cache.branch is None or cache.gradle_home_generation is None:
             raise PruneError(f"cache {cache.cache_id} lost its Gradle identity")
         replacement = protected_by_group.get(
-            (cache.branch, cache.gradle_home_generation[0])
+            (cache.branch, cache.gradle_home_generation[0], cache.version)
         )
         if replacement is None:
             raise PruneError(f"cache {cache.cache_id} has no protected replacement")
@@ -636,16 +640,14 @@ def prune(
 
     skipped: list[dict[str, Any]] = []
     if apply:
-        # Close most of the inventory-to-delete gap before checking the global limits.  A run
-        # that started while the initial inventory was being read protects its branch here.
-        refreshed_active_branches = api.list_active_run_branches()
-        still_safe: list[CacheEntry] = []
-        for cache in candidates:
-            if cache.branch in refreshed_active_branches:
-                skipped.append({"id": cache.cache_id, "reason": "active-run"})
-            else:
-                still_safe.append(cache)
-        candidates = still_safe
+        # Close most of the inventory-to-delete gap before checking the global limits. Any run
+        # that started while the initial inventory was being read protects the whole restore scope.
+        if api.has_any_active_run():
+            skipped.extend(
+                {"id": cache.cache_id, "reason": "active-run"}
+                for cache in candidates
+            )
+            candidates = []
 
     discovered_candidates = list(candidates)
     candidates, deferred = _bounded_batch(
@@ -676,9 +678,9 @@ def prune(
                 continue
 
             if candidate_kind == "absent-branch":
-                # Recheck active work per candidate so a rerun that starts during a large batch
-                # does not lose the branch-scoped cache it may still restore.
-                if api.branch_has_active_run(branch):
+                # Recheck active work per candidate so a run that starts during a large batch
+                # cannot lose any default/base cache it may still restore.
+                if api.has_any_active_run():
                     skipped.append(
                         {"id": cache.cache_id, "reason": "active-run-late"}
                     )
@@ -713,9 +715,9 @@ def prune(
                         {"id": cache.cache_id, "reason": "replacement-changed"}
                     )
                     continue
-                # Keep this as the last policy read before DELETE. Any active workflow may have
-                # restored a branch-scoped fallback, so the whole branch is protected.
-                if api.branch_has_active_run(branch):
+                # Keep this as the last policy read before DELETE. Any active workflow may be
+                # restoring a default/base fallback, so the whole repository is protected.
+                if api.has_any_active_run():
                     skipped.append(
                         {"id": cache.cache_id, "reason": "active-run-late"}
                     )
@@ -740,6 +742,7 @@ def prune(
         },
         "repository_default_branch": default_branch,
         "existing_branch_count": len(existing_branches),
+        "active_run_present": active_run_present,
         "active_run_branches": sorted(active_run_branches),
         "discovered_candidate_count": len(discovered_candidates),
         "discovered_candidate_bytes": sum(

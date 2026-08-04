@@ -94,10 +94,12 @@ See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
   runs, exact successful Build jobs, and caches from paginated GitHub APIs. It revalidates each
   immutable cache before deleting by exact ID. Absent-branch caches are disposable; on a live
   branch, only superseded SHA-bearing Gradle-home generations are eligible after preserving the
-  latest successful generation for each restore family. A family with no proven successful
-  generation, unknown keys, and every branch with a potentially cache-consuming active run are
-  retained. Only the protected pruner's own run is ignored, because that workflow never configures
-  Gradle; an unrecognized workflow fails closed as a potential consumer.
+  latest successful generation for each OS/job/cache-version restore family. A family with no proven
+  successful generation and unknown keys are retained. Any potentially cache-consuming active run
+  protects the complete repository cache inventory because topic runs may restore `master` and pull
+  requests may restore their base branch. Only the protected pruner's own run is ignored, because
+  that workflow never configures Gradle; an unrecognized workflow fails closed as a potential
+  consumer.
 - `scripts/pages/build_site.py` combines exact compact branch bundles and copies their already
   content-addressed WebP assets while rendering the tracked assets under `site/`. `site/` contains
   presentation code, not a support/version inventory; supported versions always come from

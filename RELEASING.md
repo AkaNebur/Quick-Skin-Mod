@@ -82,18 +82,21 @@ publication. Release, Packaged E2E, and every release-branch Build restore Gradl
 only a trusted Build gate push or manual run on protected `master` may publish a Gradle cache.
 Existing branch-scoped release caches remain useful read-only fallbacks. A protected daily cleanup
 discovers live branches directly. It deletes absent-branch caches and superseded, unambiguously
-SHA-bound Gradle-home generations by exact cache ID, while retaining the newest generation per OS/job
-restore family whose SHA completed the real `Build and verify` job successfully. A family without
-that proof is not pruned. Unknown cache formats, non-branch refs, and every cache on a branch with a
-potentially cache-consuming active workflow run are preserved. The protected cleanup run itself is
-ignored because it does not configure Gradle; unknown workflow paths remain protective.
+SHA-bound Gradle-home generations by exact cache ID, while retaining the newest generation per
+OS/job/cache-version restore family whose SHA completed the real `Build and verify` job successfully.
+A family without that proof is not pruned. Unknown cache formats and non-branch refs are preserved.
+Because any workflow may restore the default branch and pull-request workflows may restore their
+base branch, any potentially cache-consuming active run preserves the complete cache inventory for
+that invocation. The protected cleanup run itself is ignored because it does not configure Gradle;
+unknown workflow paths remain protective.
 
 The automatic cache-pruning boundary is deliberately mechanical:
 
 - The only live-branch key shape it recognizes is
   `gradle-home-v<positive>|<platform>|<job>[<32 lowercase hex>]-<40 lowercase hex>`.
-  The restore family is the protocol, platform, and job prefix; content-addressed dependency,
-  transform, wrapper, DSL, and any future/unknown cache keys are not live-branch deletion targets.
+  The restore family is the protocol, platform, job prefix, and GitHub cache `version` (the paths and
+  compression compatibility hash); content-addressed dependency, transform, wrapper, DSL, and any
+  future/unknown cache keys are not live-branch deletion targets.
 - A SHA is successful only when the exact `build-gate.yml` query returns a completed successful
   `push` or `workflow_dispatch` run for the same branch, SHA, and repository and that run contains
   the completed successful `Build and verify` job. Pull-request, other read-only, and successful
@@ -102,8 +105,9 @@ The automatic cache-pruning boundary is deliberately mechanical:
   pages per inventory, 1,000 active runs per status filter, 100 successful Build runs per exact SHA,
   and 100 jobs per run; duplicates, malformed payloads, larger searches, or API errors abort the
   invocation before it can continue deleting.
-- Immediately before each live-branch deletion, the candidate, branch existence, exact protected
-  replacement, and active-run state are checked again. A mismatch preserves the candidate. Deletes
+- Before planning, before bounding the apply batch, and immediately before each deletion, the
+  repository-wide active-run state is checked. The candidate, branch existence, and exact compatible
+  protected replacement are also revalidated per ID. Any mismatch preserves the candidate. Deletes
   use only the immutable numeric cache ID.
 - The protected workflow applies at most 75 IDs and 10 GiB per invocation, serially, with one second
   between deletes. The script remains dry-run unless `--apply` is explicit.

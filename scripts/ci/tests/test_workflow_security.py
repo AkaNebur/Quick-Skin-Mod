@@ -347,7 +347,7 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn("cache.branch not in active_run_branches", implementation)
         self.assertIn("candidates, deferred = _bounded_batch(", implementation)
         self.assertIn("current = api.get_cache(cache)", implementation)
-        self.assertIn("if api.branch_has_active_run(branch):", implementation)
+        self.assertIn("if api.has_any_active_run():", implementation)
         self.assertIn("if api.branch_exists(branch):", implementation)
         self.assertIn("api.has_successful_build(branch, sha)", implementation)
         self.assertIn("replacement_current = api.get_cache(replacement)", implementation)
