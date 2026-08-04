@@ -153,6 +153,16 @@ def extract_branch_facts(data: Mapping[str, Any]) -> BranchFacts:
             )
             + "`"
         )
+        compatibility_patch = runtime.get("compatibility_patch")
+        if compatibility_patch is not None:
+            pieces.append(
+                "compatibility patch `"
+                + _non_empty_string(
+                    compatibility_patch,
+                    name=f"runtime {node}.compatibility_patch",
+                )
+                + "`"
+            )
         runtime_pins.append(", ".join(pieces))
 
     overlays = _mapping(data.get("source_overlays"), name="source_overlays")
