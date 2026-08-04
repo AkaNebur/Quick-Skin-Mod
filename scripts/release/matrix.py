@@ -443,7 +443,10 @@ def validate_matrix(data: dict[str, Any]) -> None:
             raise MatrixError(f"runtime {node} must use a locked Maven Architectury version")
         compatibility_patch = runtime.get("compatibility_patch")
         if compatibility_patch is not None:
-            if compatibility_patch not in KNOWN_COMPATIBILITY_PATCHES:
+            if (
+                not isinstance(compatibility_patch, str)
+                or compatibility_patch not in KNOWN_COMPATIBILITY_PATCHES
+            ):
                 raise MatrixError(
                     f"runtime {node} uses unknown compatibility patch {compatibility_patch!r}"
                 )
