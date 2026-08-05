@@ -10,7 +10,7 @@ import net.fabricmc.api.Environment;
 
 /**
  * Client-side networking initialization
- * Registers client-side packet receivers (S2C) - Architectury 13.x for MC 1.21.1
+ * Registers client-side packet receivers (S2C) - Architectury 14.x for MC 1.21.2
  */
 @Environment(EnvType.CLIENT)
 public class ClientNetworking {

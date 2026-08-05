@@ -13,10 +13,14 @@ Quick Skin treats build plugins and dependencies as executable supply-chain inpu
   Plugin Portal explicitly reject ecosystem groups owned by the specialist repositories.
 - `gradle/repository-policy.gradle.kts` applies to every buildable common/loader node. It limits
   each remote repository to its owned groups, rejects unknown remote hosts, and prevents generated
-  Loom namespaces from ever resolving over the network.
+  Loom namespaces from ever resolving over the network. Mojang's library host has one additional
+  module-scoped exception for `org.lwjgl:lwjgl-freetype`, because Minecraft 1.21.x declares its
+  Mojang-patched macOS classifier there while ordinary LWJGL artifacts remain available centrally.
+  NeoForge's repository also owns the `cpw.mods` launcher components required by its userdev graph.
 - `gradle/verification-metadata.xml` verifies both artifacts and Maven/Gradle metadata with
-  SHA-256. It covers settings and build plugins plus the resolvable common, test, Fabric, Forge,
-  Minecraft, mappings, transform, runtime, native, and E2E classpaths for the active 1.20.1 graph.
+  SHA-256. Before a build or release it must cover settings and build plugins plus the resolvable
+  common, test, Fabric, NeoForge, Minecraft, mappings, transform, runtime, native, and E2E
+  classpaths for the active 1.21.2 graph.
 - `gradle/dependency-locks/` strictly locks only `shadowBundle`, the external graph physically
   embedded in each release JAR. Locking Loom's generated configurations is deliberately avoided;
   their external inputs remain pinned by coordinate-specific verification metadata.
@@ -50,18 +54,15 @@ reason. Exactly four trusted-artifact rules cover those local outputs:
 |---|---|---|
 | `^remapped[.].+$` | any | Loom-remapped mod/API modules |
 | `^loom$` | `^mappings$` | Loom layered mappings |
-| `^net[.]minecraft$` | exact Loom merged Minecraft, Forge, or NeoForge name shapes, optionally ending in `-deobf` | Loom merged game modules |
-| `^net[.]minecraftforge[.][0-9a-f]{64}$` | `^fmlloader$` | Loom transformed Forge loader |
+| `^net[.]minecraft$` | merged Minecraft/NeoForge names only | Loom merged game modules |
+| `^net[.]neoforged[.]fancymodloader[.][0-9a-f]{64}$` | `^loader$` | Loom transformed NeoForge loader |
 
 This is not permission to trust similarly named downloads. The project repository policy excludes
-all four namespaces from Maven Central and excludes the transformed Forge namespace from Forge's
-remote repository; other approved remote repositories have positive group allowlists that cannot
-match them. Only Loom's local file repositories can supply these coordinates. The original Loom,
-Minecraft, loader, API, mappings source, and transform-tool inputs remain SHA-256 verified.
-The optional `-deobf` suffix is required by Loom's unobfuscated NeoForge path: those merged JARs
-are rebuilt locally and are intentionally nondeterministic, so recording a generated checksum
-would make identical clean CI runs disagree. The trust rule remains confined to the synthetic
-`net.minecraft` coordinate shape and does not cover any publisher artifact.
+all four namespaces from Maven Central and excludes the transformed loader namespace from
+NeoForge's remote repository; other approved remote repositories have positive group allowlists
+that cannot match them. Only Loom's local file repositories can supply these coordinates. The
+original Loom, Minecraft, loader, API, mappings source, and transform-tool inputs remain SHA-256
+verified.
 
 Gradle dependency verification does not cover the wrapper download or arbitrary downloads made
 outside Gradle's dependency engine. The wrapper has its separate checksum. Packaged-E2E installer
@@ -76,9 +77,9 @@ the active graph and selective locks in one serialized invocation:
 ```bash
 ./gradlew --no-daemon --no-parallel \
   --write-verification-metadata sha256 --write-locks \
-  :common:1.20.1:dependencies \
-  :fabric:1.20.1:dependencies \
-  :forge:1.20.1:dependencies
+  :common:1.21.2:dependencies \
+  :fabric:1.21.2:dependencies \
+  :neoforge:1.21.2:dependencies
 ```
 
 Review every metadata and lockfile diff. Confirm new coordinates are expected, compare critical

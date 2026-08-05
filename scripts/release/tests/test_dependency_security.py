@@ -16,9 +16,12 @@ EXPECTED_LOCAL_TRUST = {
     (r"^loom$", r"^mappings$"),
     (
         r"^net[.]minecraft$",
-        r"^(minecraft-merged-[0-9a-f]{10}|(?:forge|neoforge)-[0-9A-Za-z.+_-]+-minecraft-merged(?:-deobf)?)$",
+        r"^(minecraft-merged-[0-9a-f]{10}|neoforge-[0-9A-Za-z.+_-]+-minecraft-merged)$",
     ),
-    (r"^net[.]minecraftforge[.][0-9a-f]{64}$", r"^fmlloader$"),
+    (
+        r"^net[.]neoforged[.]fancymodloader[.][0-9a-f]{64}$",
+        r"^loader$",
+    ),
 }
 
 
@@ -117,10 +120,11 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             ("remapped.net.fabricmc.fabric-api", "fabric-api-base-65f153da"),
             ("loom", "mappings"),
             ("net.minecraft", "minecraft-merged-bdabb3aae4"),
-            ("net.minecraft", "forge-1.20.1-47.4.9-minecraft-merged"),
-            ("net.minecraft", "neoforge-21.11.38-beta-minecraft-merged"),
-            ("net.minecraft", "neoforge-26.2.0.6-beta-minecraft-merged-deobf"),
-            ("net.minecraftforge." + "a" * 64, "fmlloader"),
+            ("net.minecraft", "neoforge-21.1.77-minecraft-merged"),
+            (
+                "net.neoforged.fancymodloader." + "a" * 64,
+                "loader",
+            ),
         )
         rejected = (
             ("remapped", "architectury"),
@@ -129,11 +133,10 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             ("loom", "mappings-extra"),
             ("net.minecraft.evil", "minecraft-merged-bdabb3aae4"),
             ("net.minecraft", "minecraft"),
-            ("net.minecraft", "forge-1.20.1-47.4.9-minecraft-merged-deobf-extra"),
-            ("net.minecraft", "neoforged-26.2.0.6-beta-minecraft-merged-deobf"),
-            ("net.minecraftforge." + "a" * 63, "fmlloader"),
-            ("net.minecraftforge." + "g" * 64, "fmlloader"),
-            ("net.minecraftforge." + "a" * 64, "forge"),
+            ("net.minecraft", "forge-1.20.1-47.4.9-minecraft-merged"),
+            ("net.neoforged.fancymodloader." + "a" * 63, "loader"),
+            ("net.neoforged.fancymodloader." + "g" * 64, "loader"),
+            ("net.neoforged.fancymodloader." + "a" * 64, "fmlloader"),
         )
         for coordinate in allowed:
             with self.subTest(allowed=coordinate):
@@ -149,6 +152,34 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             coordinate = (component.attrib["group"], component.attrib["name"])
             with self.subTest(coordinate=coordinate):
                 self.assertFalse(any(_matches_trust(rule, *coordinate) for rule in rules))
+
+    def test_linux_runtime_natives_are_verified_for_actions(self) -> None:
+        root, namespace = _verification_tree()
+        lwjgl_modules = {
+            "lwjgl",
+            "lwjgl-freetype",
+            "lwjgl-glfw",
+            "lwjgl-jemalloc",
+            "lwjgl-openal",
+            "lwjgl-opengl",
+            "lwjgl-stb",
+            "lwjgl-tinyfd",
+        }
+        components = {
+            component.attrib["name"]: component
+            for component in root.findall("v:components/v:component", namespace)
+            if component.attrib["group"] == "org.lwjgl"
+            and component.attrib["name"] in lwjgl_modules
+        }
+        self.assertEqual(set(components), lwjgl_modules)
+        for module, component in components.items():
+            version = component.attrib["version"]
+            artifacts = {
+                artifact.attrib["name"]
+                for artifact in component.findall("v:artifact", namespace)
+            }
+            with self.subTest(module=module, version=version):
+                self.assertIn(f"{module}-{version}-natives-linux.jar", artifacts)
 
     def test_active_direct_graph_is_present_in_verification_metadata(self) -> None:
         root, namespace = _verification_tree()
@@ -166,24 +197,8 @@ class DependencySecurityPolicyTest(unittest.TestCase):
                 key, value = line.split("=", 1)
                 properties[key] = value
 
+        matrix = json.loads((ROOT / "release" / "release-matrix.json").read_text())
         expected = {
-            ("net.fabricmc", "fabric-loader", properties["fabric_loader_version_1_20_1"]),
-            (
-                "net.fabricmc.fabric-api",
-                "fabric-api",
-                properties["fabric_api_version_1_20_1"],
-            ),
-            ("net.minecraftforge", "forge", properties["forge_version_1_20_1"]),
-            (
-                "dev.architectury",
-                "architectury-fabric",
-                properties["architectury_api_version_1_20_1"],
-            ),
-            (
-                "dev.architectury",
-                "architectury-forge",
-                properties["architectury_api_version_1_20_1"],
-            ),
             ("org.sejda.imageio", "webp-imageio", "0.1.6"),
             ("org.junit.jupiter", "junit-jupiter", "5.13.4"),
             ("dev.architectury", "architectury-loom", "1.17.480"),
@@ -191,6 +206,39 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             ("com.gradleup.shadow", "shadow-gradle-plugin", "8.3.11"),
             ("org.gradle.toolchains", "foojay-resolver", "1.0.0"),
         }
+        for artifact in matrix["artifacts"]:
+            loader = artifact["loader"]
+            suffix = artifact["artifact_version"].replace(".", "_")
+            expected.add(
+                (
+                    "dev.architectury",
+                    f"architectury-{loader}",
+                    properties[f"architectury_api_version_{suffix}"],
+                )
+            )
+            if loader == "fabric":
+                expected.update(
+                    {
+                        (
+                            "net.fabricmc",
+                            "fabric-loader",
+                            properties[f"fabric_loader_version_{suffix}"],
+                        ),
+                        (
+                            "net.fabricmc.fabric-api",
+                            "fabric-api",
+                            properties[f"fabric_api_version_{suffix}"],
+                        ),
+                    }
+                )
+            elif loader == "forge":
+                expected.add(
+                    ("net.minecraftforge", "forge", properties[f"forge_version_{suffix}"])
+                )
+            elif loader == "neoforge":
+                expected.add(
+                    ("net.neoforged", "neoforge", properties[f"neoforge_version_{suffix}"])
+                )
         self.assertEqual(expected - coordinates, set())
 
     def test_repository_policy_keeps_trusted_namespaces_local_only(self) -> None:
@@ -202,13 +250,18 @@ class DependencySecurityPolicyTest(unittest.TestCase):
             'excludeGroup("loom")',
             'excludeGroup("net.minecraft")',
             'excludeGroupByRegex("net\\\\.minecraftforge\\\\.[0-9a-f]{64}")',
+            'excludeGroupByRegex("net\\\\.neoforged\\\\.fancymodloader\\\\.[0-9a-f]{64}")',
+            'includeModule("org.lwjgl", "lwjgl-freetype")',
+            'includeGroupByRegex("cpw\\\\.mods(\\\\..*)?")',
             "Unapproved remote dependency repository",
             'repositoryScheme != "https"',
         ):
             with self.subTest(required=required):
                 self.assertIn(required, policy)
 
-        for module in ("common", "fabric", "forge"):
+        matrix = json.loads((ROOT / "release" / "release-matrix.json").read_text())
+        modules = {"common", *(artifact["loader"] for artifact in matrix["artifacts"])}
+        for module in sorted(modules):
             script = (ROOT / module / "build.gradle.kts").read_text(encoding="utf-8")
             self.assertIn(
                 'apply(from = rootProject.file("gradle/repository-policy.gradle.kts"))',
