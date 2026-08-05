@@ -186,7 +186,7 @@ class RepositoryGuidanceTest(unittest.TestCase):
                     r"cancellable = true,\s+require = 0,\s+expect = 1,\s+allow = 1",
                 )
 
-    def test_legacy_star_shader_follows_the_minecraft_api_boundary(self) -> None:
+    def test_background_layers_follow_the_gui_batching_boundary(self) -> None:
         source = (
             ROOT
             / "common"
@@ -207,9 +207,27 @@ class RepositoryGuidanceTest(unittest.TestCase):
             r"//\? if <1\.21\.2 \{\s+"
             r"RenderSystem\.setShader\(net\.minecraft\.client\.renderer\."
             r"GameRenderer::getPositionTexShader\);\s+"
-            r"//\?\} else if <1\.21\.5 \{\s+"
+            r"//\?\} else if <1\.21\.4 \{\s+"
             r"RenderSystem\.setShader\(net\.minecraft\.client\.renderer\."
             r"CoreShaders\.POSITION_TEX\);",
+        )
+        self.assertRegex(
+            source,
+            r"//\? if <1\.21\.4 \{\s+"
+            r"RenderSystem\.enableBlend\(\);[\s\S]*?"
+            r"//\?\} else if <1\.21\.11 \{\s+"
+            r"// GuiGraphics is batched from 1\.21\.4 onward, so keep the tint "
+            r"on each queued vertex\.\s+"
+            r"int vignetteColor = 0xBF000000;\s+"
+            r"graphics\.blit\(RenderType::guiTextured, VIGNETTE_LOCATION,",
+        )
+        self.assertRegex(
+            source,
+            r"//\? if <1\.21\.4 \{\s+"
+            r"var pose = graphics\.pose\(\);[\s\S]*?"
+            r"//\?\} else if <1\.21\.11 \{\s+"
+            r"// Keep the black fill, stars, and vignette in GuiGraphics' ordered buffer\.\s+"
+            r"graphics\.blit\(RenderType::guiTextured, starTexture,",
         )
 
     def test_release_publication_is_recoverable_and_non_destructive(self) -> None:
