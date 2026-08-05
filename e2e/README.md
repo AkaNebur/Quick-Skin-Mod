@@ -5,8 +5,8 @@ compiled `main` output.
 
 The checked-in [release matrix](../release/release-matrix.json) is the lane inventory consumed by
 Stonecutter settings, aggregate Gradle tasks, publication, and E2E. This branch defines two
-Minecraft 1.20.1 release files and two matching runtime rows: Fabric and Forge. Every artifact
-advertises and launches on exactly Minecraft 1.20.1; matrix validation fails if any consumer-facing
+Minecraft 1.21.3 release files and two matching runtime rows: Fabric and NeoForge. Every artifact
+advertises and launches on exactly Minecraft 1.21.3; matrix validation fails if any consumer-facing
 row or task identity disagrees.
 
 ## Local setup
@@ -22,7 +22,7 @@ python -m pip install --only-binary=:all: --requirement e2e/requirements.txt
 `buildAllLanes` also runs the conventional loader-independent JUnit suite on the stable common
 version selected by `unit_test_version` in the release matrix. Run it directly with
 `./gradlew testStableLane` while developing boundary logic. Gradle itself must start on JDK 21 or
-newer for Stonecutter; the packaged Minecraft runtime below remains Java 17.
+newer for Stonecutter; the packaged Minecraft runtime below uses Java 21.
 
 List the resolved matrix without launching Minecraft:
 
@@ -38,23 +38,23 @@ included — run it directly.
 # Headless Linux / CI
 xvfb-run -a python e2e/orchestrator.py \
   --packaged \
-  --artifact-node fabric-1.20.1 \
-  --runtime-version 1.20.1 \
+  --artifact-node fabric-1.21.3 \
+  --runtime-version 1.21.3 \
   --scenarios phase0-smoke
 
 # macOS or any desktop session
 python e2e/orchestrator.py \
   --packaged \
-  --artifact-node fabric-1.20.1 \
-  --runtime-version 1.20.1 \
+  --artifact-node fabric-1.21.3 \
+  --runtime-version 1.21.3 \
   --scenarios phase0-smoke
 ```
 
-The two-client `propagation` and `propagation-live` scenarios and the Forge lane are exercised on
+The two-client `propagation` and `propagation-live` scenarios and the NeoForge lane are exercised on
 Linux CI. Treat local macOS runs as development evidence only; release evidence comes from the CI
 Linux run.
 
-Java 17 is selected from `QUICKSKIN_JAVA_17` or `JAVA_HOME_17_X64`. Gradle's own toolchain
+Java 21 is selected from `QUICKSKIN_JAVA_21` or `JAVA_HOME_21_X64`. Gradle's own toolchain
 downloads under `~/.gradle/jdks/` satisfy this, so a machine that has built the lanes usually
 already has it. Each execution creates an isolated server and client game directory below
 `e2e-out/profiles/`, installs the manifest-bound Quick Skin jar by SHA-256, and adds only the

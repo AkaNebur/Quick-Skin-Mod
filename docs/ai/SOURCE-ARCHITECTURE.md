@@ -8,13 +8,13 @@ These are the primary implementation trees:
 
 - `common/src/main`: shared client, server, networking, storage, and compatibility code.
 - `fabric/src/main`: canonical Fabric entry points and loader integration.
-- `forge/src/main`: the active Forge 1.20.1 integration.
+- `neoforge/src/main`: canonical NeoForge entry points and loader integration.
 - `common/src/e2e` plus each loader's `src/e2e`: the separate packaged-runtime test mod.
-- `common/src/test`: loader-independent JUnit regression tests compiled against the common 1.20.1
+- `common/src/test`: loader-independent JUnit regression tests compiled against the common 1.21.3
   node.
 
 Stonecutter preprocesses each canonical `src/main` tree into detached generated sources. Never edit
-generated or staged output under `common/versions`, `fabric/versions`, `forge/versions`, any
+generated or staged output under `common/versions`, `fabric/versions`, `neoforge/versions`, any
 `build/` directory, `.gradle/`, `.architectury-transformer/`, `e2e-out/`, or `build/release/`. Fix
 the tracked canonical source or active overlay instead.
 
@@ -41,14 +41,16 @@ overlays are:
 
 | Module | Minecraft | Active overlay |
 |---|---|---|
-| common | 1.20.1 | `common/src/legacy1_20_1` |
-| fabric | 1.20.1 | none; canonical output |
-| forge | 1.20.1 | none; `forge/src/main` |
+| common | 1.21.3 | `common/src/legacy1_21_3` |
+| fabric | 1.21.3 | none; canonical output |
+| neoforge | 1.21.3 | `neoforge/src/legacy1_21_3` |
 
-The remaining whole-file canonical replacements are genuine 1.20.1 rewrites:
-`ModNetworking`, `ServerNetworkHandler`, `PlayerInfoMixin`, and
-`MixinAbstractClientPlayer`. Other overlay Java files are additive compatibility classes or thin
-1.20.1 backends.
+The NeoForge whole-file replacements are genuine 1.21.3 rewrites of `CapeLayerMixin`,
+`PlayerRendererMixin`, `PlayerInfoMixin`, `MixinAbstractClientPlayer`, and the thin NeoForge 21.3
+`PlatformHelperImpl` loader adapter. `SkinManagerMixin` deliberately remains canonical so the
+1.21.3 lane retains its `HttpTexture` bridge and `CompletableFuture<PlayerSkin>` contract.
+Common overlay Java files are additive compatibility classes, the exact 1.21.3 cape render-state
+adapter, or thin render/network/platform backends.
 
 Keep overlays narrow. Prefer a small adapter or a Stonecutter version branch over copying an entire
 service, screen, or handler. When a class exists in an active overlay:

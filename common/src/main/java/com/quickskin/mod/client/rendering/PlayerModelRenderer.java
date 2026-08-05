@@ -25,7 +25,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 //?}
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
-//? if <1.21.11 {
+//? if <1.21.2 {
+import net.minecraft.client.model.PlayerModel;
+//?} else if <1.21.11 {
+import net.minecraft.client.model.PlayerCapeModel;
 import net.minecraft.client.model.PlayerModel;
 //?} else if <26.2 {
 import net.minecraft.client.model.player.PlayerCapeModel;
@@ -92,9 +95,13 @@ public class PlayerModelRenderer {
 
     // Grass block caching - cache is built on first use
     private static boolean grassBlockCacheBuilt = false;
-//?} else if <1.21.11 {
+//?} else if <1.21.2 {
     private static PlayerModel<?>  classicModel;
     private static PlayerModel<?> slimModel;
+//?} else if <1.21.11 {
+    private static PlayerModel classicModel;
+    private static PlayerModel slimModel;
+    private static PlayerCapeModel<?> capeModel;
 //?} else if <26.2 {
     private static PlayerModel  classicModel;
     private static PlayerModel slimModel;
@@ -205,21 +212,25 @@ public class PlayerModelRenderer {
         if (classicModel == null) {
             Minecraft mc = Minecraft.getInstance();
             ModelPart classicRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER);
-//? if <1.21.11 {
+//? if <1.21.2 {
             classicModel = new PlayerModel<>(classicRoot, false);
 //?} else {
             classicModel = new PlayerModel(classicRoot, false);
 //?}
 
             ModelPart slimRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER_SLIM);
-//? if <1.21.11 {
+//? if <1.21.2 {
             slimModel = new PlayerModel<>(slimRoot, true);
 //?} else {
             slimModel = new PlayerModel(slimRoot, true);
 
-            // In MC 1.21.11+, the cape is a separate model (PlayerCapeModel)
+            // In MC 1.21.2+, the cape is a separate model (PlayerCapeModel).
             ModelPart capeRoot = mc.getEntityModels().bakeLayer(ModelLayers.PLAYER_CAPE);
+            //? if <1.21.11 {
+            capeModel = new PlayerCapeModel<>(capeRoot);
+            //?} else {
             capeModel = new PlayerCapeModel(capeRoot);
+            //?}
 //?}
         }
 //? if <1.21.11 {
@@ -284,10 +295,23 @@ public class PlayerModelRenderer {
 //? if <1.21.11 {
     private static final PreviewCapeBindings<Object, ResourceLocation> PREVIEW_CAPE_BINDINGS =
             new PreviewCapeBindings<>();
+    /** Inline 1.20.1-1.21.10 renders may replace the entity with a render state before CapeLayer. */
+    private static final ThreadLocal<Object> ACTIVE_PREVIEW_CAPE_KEY = new ThreadLocal<>();
 
     /** Resolve and release the preview cape bound to {@code renderKey}, for the cape layer. */
     public static PreviewCapeBindings.Resolution<ResourceLocation> consumePreviewCape(Object renderKey) {
-        return PREVIEW_CAPE_BINDINGS.consume(renderKey);
+        PreviewCapeBindings.Resolution<ResourceLocation> resolution =
+                PREVIEW_CAPE_BINDINGS.consume(renderKey);
+        if (resolution.decision() == PreviewCapeBindings.Decision.WORN) {
+            Object activeKey = ACTIVE_PREVIEW_CAPE_KEY.get();
+            if (activeKey != null && activeKey != renderKey) {
+                resolution = PREVIEW_CAPE_BINDINGS.consume(activeKey);
+            }
+        }
+        if (resolution.decision() != PreviewCapeBindings.Decision.WORN) {
+            ACTIVE_PREVIEW_CAPE_KEY.remove();
+        }
+        return resolution;
     }
 
     private static void bindPreviewCape(Object renderKey, PreviewPlayerData playerData) {
@@ -298,6 +322,7 @@ public class PlayerModelRenderer {
         PREVIEW_CAPE_BINDINGS.bind(renderKey, capeAtlas == null
                 ? null
                 : CapeAnimationHelper.resolveVisibleFrame(capeAtlas, playerData.getCapeId()));
+        ACTIVE_PREVIEW_CAPE_KEY.set(renderKey);
     }
 //?} else {
     private static final PreviewCapeBindings<Object, Identifier> PREVIEW_CAPE_BINDINGS =
@@ -321,10 +346,18 @@ public class PlayerModelRenderer {
 
     private static void unbindPreviewCape(Object renderKey) {
         PREVIEW_CAPE_BINDINGS.unbind(renderKey);
+//? if <1.21.11 {
+        if (ACTIVE_PREVIEW_CAPE_KEY.get() == renderKey) {
+            ACTIVE_PREVIEW_CAPE_KEY.remove();
+        }
+//?}
     }
 
     private static void clearPreviewCapes() {
         PREVIEW_CAPE_BINDINGS.clear();
+//? if <1.21.11 {
+        ACTIVE_PREVIEW_CAPE_KEY.remove();
+//?}
     }
 
     // Preview-scoped equipment suppression for the entity render path.
@@ -853,7 +886,7 @@ public class PlayerModelRenderer {
         ensureModelsLoaded();
 
         // Select model based on type
-//? if <1.21.11 {
+//? if <1.21.2 {
         PlayerModel<?> model = "slim".equals(playerData.getModelType() != null ? playerData.getModelType().toLowerCase(Locale.ROOT) : null) ? slimModel : classicModel;
 //?} else {
         PlayerModel model = "slim".equals(playerData.getModelType() != null ? playerData.getModelType().toLowerCase(Locale.ROOT) : null) ? slimModel : classicModel;
@@ -1044,7 +1077,7 @@ public class PlayerModelRenderer {
 
                 poseStack.popPose();
             }
-//?} else if <1.21.11 {
+//?} else if <1.21.2 {
 
             if (finalCapeTexture != null) {
                 // Now render the cape using the final texture
@@ -1062,6 +1095,20 @@ public class PlayerModelRenderer {
 
                 PlatformHelper.renderCloak(model, poseStack, capeVertexConsumer, 15728880, OverlayTexture.NO_OVERLAY);
 
+                poseStack.popPose();
+            }
+//?} else if <1.21.11 {
+
+            if (finalCapeTexture != null) {
+                RenderType capeRenderType = RenderType.entityTranslucent(finalCapeTexture);
+                var capeVertexConsumer = bufferSource.getBuffer(capeRenderType);
+
+                poseStack.pushPose();
+                model.body.translateAndRotate(poseStack);
+                poseStack.translate(0.0, 0.0, 0.125);
+                poseStack.mulPose(Axis.XP.rotationDegrees(6.0F));
+                capeModel.body.getChild("cape").render(
+                        poseStack, capeVertexConsumer, 15728880, OverlayTexture.NO_OVERLAY);
                 poseStack.popPose();
             }
 //?} else {
@@ -1241,7 +1288,7 @@ public class PlayerModelRenderer {
         return current + (target - current) * factor;
     }
 
-//? if <1.21.11 {
+//? if <1.21.2 {
     /**
      * Render cape layer similar to vanilla CapeLayer
      * This is called AFTER the player model is rendered
@@ -1251,6 +1298,15 @@ public class PlayerModelRenderer {
             MultiBufferSource.BufferSource bufferSource,
             ResourceLocation capeTexture,
             PlayerModel<?> model
+    ) {
+        poseStack.pushPose();
+//?} else if <1.21.11 {
+    /** Render a cape layer using the immediate 1.21.2-1.21.5 model pipeline. */
+    private static void renderCapeLayer(
+            PoseStack poseStack,
+            MultiBufferSource.BufferSource bufferSource,
+            ResourceLocation capeTexture,
+            PlayerModel model
     ) {
         poseStack.pushPose();
 //?} else if <26.2 {
@@ -1386,7 +1442,7 @@ public class PlayerModelRenderer {
         poseStack.mulPose(Axis.XP.rotationDegrees(capeSwing * 10.0f));
 
         // Get render type and vertex consumer
-        RenderType renderType = RenderType.entityTranslucentCull(capeLocation);
+        RenderType renderType = RenderType.entityTranslucent(capeLocation);
         var vertexConsumer = bufferSource.getBuffer(renderType);
 
         // Get matrices
@@ -1560,7 +1616,7 @@ public class PlayerModelRenderer {
         poseStack.mulPose(Axis.XP.rotationDegrees(capeSwing * 10.0f));
 
         // Get render type and vertex consumer
-        RenderType renderType = RenderType.entityTranslucentCull(capeLocation);
+        RenderType renderType = RenderType.entityTranslucent(capeLocation);
         var vertexConsumer = bufferSource.getBuffer(renderType);
 
         // Get matrices
@@ -1795,7 +1851,7 @@ public class PlayerModelRenderer {
      * Supports idle, walk, run, sneak, sit, jump animations
      */
     private static void setupModelPoseWithAnimation(
-//? if <1.21.11 {
+//? if <1.21.2 {
             PlayerModel<?> model,
 //?} else {
             PlayerModel model,
@@ -1827,7 +1883,7 @@ public class PlayerModelRenderer {
             model.leftPants.copyFrom(model.leftLeg);
             model.rightPants.copyFrom(model.rightLeg);
             model.jacket.copyFrom(model.body);
-//?} else if <1.21.11 {
+//?} else if <1.21.2 {
             // Keep previous pose, just update outer layers to match
             model.hat.copyFrom(model.head);
             model.leftSleeve.copyFrom(model.leftArm);
@@ -1836,7 +1892,7 @@ public class PlayerModelRenderer {
             model.rightPants.copyFrom(model.rightLeg);
             model.jacket.copyFrom(model.body);
 //?} else {
-            // In MC 1.21.11+, outer layers (sleeves, pants, jacket) are children of their
+            // In MC 1.21.2+, outer layers (sleeves, pants, jacket) are children of their
             // corresponding body parts, so they inherit transforms automatically.
             // Just reset their local rotations to zero to avoid doubling.
             resetOuterLayerRotations(model);
@@ -1872,27 +1928,25 @@ public class PlayerModelRenderer {
                 break;
         }
 
-//? if <1.21.11 {
+//? if <1.21.2 {
         // Hat layer (outer layer of head) follows head rotation
         model.hat.copyFrom(model.head);
-//?} else {
-        // In MC 1.21.11+, outer layers are children of their body parts and inherit
-        // transforms automatically. Reset their local rotations to zero.
-        resetOuterLayerRotations(model);
-    }
-//?}
-
-//? if <1.21.11 {
-        // Setup arm rendering
         model.leftSleeve.copyFrom(model.leftArm);
         model.rightSleeve.copyFrom(model.rightArm);
         model.leftPants.copyFrom(model.leftLeg);
         model.rightPants.copyFrom(model.rightLeg);
         model.jacket.copyFrom(model.body);
 //?} else {
+        // In MC 1.21.2+, outer layers are children of their body parts and inherit
+        // transforms automatically. Reset their local rotations to zero.
+        resetOuterLayerRotations(model);
+//?}
+    }
+
+//? if >=1.21.2 {
     /**
      * Reset outer layer rotations to zero.
-     * In MC 1.21.11+, outer layers (hat, sleeves, pants, jacket) are children of their
+     * In MC 1.21.2+, outer layers (hat, sleeves, pants, jacket) are children of their
      * corresponding body parts in the model hierarchy, so they inherit parent transforms.
      * Setting their local rotations to zero ensures they stay aligned with the body.
      */
@@ -1915,13 +1969,13 @@ public class PlayerModelRenderer {
         model.jacket.xRot = 0;
         model.jacket.yRot = 0;
         model.jacket.zRot = 0;
-//?}
     }
+//?}
 
     /**
      * Setup idle pose with subtle bounce animation
      */
-//? if <1.21.11 {
+//? if <1.21.2 {
     private static void setupIdlePose(PlayerModel<?> model, float t, float lerpFactor) {
 //?} else {
     private static void setupIdlePose(PlayerModel model, float t, float lerpFactor) {
@@ -2007,7 +2061,7 @@ public class PlayerModelRenderer {
         MinecraftCompat.INSTANCE.setRiding(model, false);
         MinecraftCompat.INSTANCE.setAttackTime(model, 0.0f);
 //?} else if <1.21.11 {
-    private static void setupWalkingPose(PlayerModel<?> model, float t, float lerpFactor) {
+    private static void setupWalkingPose(PlayerModel model, float t, float lerpFactor) {
         PlatformHelper.setYoung(model, false);
         PlatformHelper.setCrouching(model, false);
         PlatformHelper.setRiding(model, false);
@@ -2067,7 +2121,7 @@ public class PlayerModelRenderer {
         MinecraftCompat.INSTANCE.setRiding(model, true); // Enable riding flag for sitting pose
         MinecraftCompat.INSTANCE.setAttackTime(model, 0.0f);
 //?} else if <1.21.11 {
-    private static void setupSittingPose(PlayerModel<?> model, float t, float lerpFactor) {
+    private static void setupSittingPose(PlayerModel model, float t, float lerpFactor) {
         PlatformHelper.setYoung(model, false);
         PlatformHelper.setCrouching(model, false);
         PlatformHelper.setRiding(model, true); // Enable riding flag for sitting pose
@@ -2468,7 +2522,7 @@ public class PlayerModelRenderer {
     /**
      * Render a debug cube at the chest position to show rotation center
      */
-    private static void renderDebugCube(PoseStack poseStack, MultiBufferSource buffer, PlayerModel<?> model) {
+    private static void renderDebugCube(PoseStack poseStack, MultiBufferSource buffer, PlayerModel model) {
         poseStack.pushPose();
 
         // Get chest position from the model's body part

@@ -3,7 +3,7 @@
   "id": "quickskin",
   "version": "${version}",
   "name": "Quick Skin",
-  "description": "Change, preview, and synchronize local skins, capes, and CPM models in-game across Fabric and Forge.",
+  "description": "Change, preview, and synchronize local skins, capes, and CPM models in-game across Fabric and NeoForge.",
   "authors": [
     "The Plum Team"
   ],
@@ -29,9 +29,9 @@
     "quickskin-ears.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.17.0",
+    "fabricloader": ">=0.16.9",
     "fabric-api": "*",
-    "minecraft": "=1.20.1",
-    "architectury": ">=9.2.14"
+    "minecraft": "=1.21.3",
+    "architectury": ">=14.0.4"
   }
 }

@@ -20,11 +20,12 @@ No `src/v*` content remains. Canonical resources live in each module's `src/main
 The only era-specific resource overrides are the small mixin configurations beside their active
 Java overlays:
 
-- `common/src/legacy1_20_1/resources`: the Java 17 common and optional-integration mixin lists.
+- `common/src/legacy1_21_3/resources`: the 1.21.3 common mixin list.
+- `neoforge/src/legacy1_21_3/resources`: the 1.21.3 NeoForge mixin list.
 
 Gradle consolidates canonical resources with those explicitly matrix-routed overrides. Fabric
-metadata is normalized from one canonical `fabric.mod.json`; Forge metadata is normalized from its
-canonical TOML using release-matrix loader and dependency ranges. FML
+metadata is normalized from one canonical `fabric.mod.json`; NeoForge metadata is normalized from
+its canonical TOML using release-matrix loader and dependency ranges. FML
 `pack.mcmeta` values are also normalized from explicit per-artifact matrix fields, preserving the
 previous lane-specific values without retaining resource snapshots. A new `src/v*` tree is
 rejected by matrix validation.
