@@ -26,7 +26,7 @@
       "step": "skin_menu_screen",
       "title": "Skin menu",
       "review_tier": "key",
-      "expectation": "The Quick Skin player-skin menu is open with its custom panels and controls over a dark, subtly starred background; there is no bright blur, radial wash or other background-compositing artifact."
+      "expectation": "The Quick Skin player-skin menu is open with readable catalog labels and drop-zone instructions over a dark, subtly starred background; there is no bright blur, radial wash or other background-compositing artifact."
     },
     {
       "capture_id": "full.client_a.external_skin_drop",
@@ -62,7 +62,7 @@
       "step": "cape_menu_screen",
       "title": "Cape menu",
       "review_tier": "all",
-      "expectation": "The Quick Skin cape menu is open with its custom panels and controls."
+      "expectation": "The Quick Skin cape menu is open with a readable title and drop-zone instructions alongside its custom panels and controls."
     },
     {
       "capture_id": "full.client_a.known_cape_apply",
@@ -80,7 +80,7 @@
       "step": "cape_adjust_screen",
       "title": "Cape editor",
       "review_tier": "all",
-      "expectation": "The Quick Skin cape-adjustment editor is open with a cape image, grid and editing controls."
+      "expectation": "The Quick Skin cape-adjustment editor is open with a readable title and drag/zoom instructions alongside its cape image, grid and editing controls."
     },
     {
       "capture_id": "full.client_a.cape_preview_selected_a",
@@ -188,7 +188,7 @@
       "step": "settings_screen",
       "title": "Settings screen",
       "review_tier": "all",
-      "expectation": "The Quick Skin settings screen is open with readable toggles or checkboxes."
+      "expectation": "The Quick Skin settings screen is open with a readable Open Skin Menu label, toggles and checkboxes."
     },
     {
       "capture_id": "full.client_a.rename_dialog",
