@@ -355,7 +355,11 @@ public class SettingsScreen extends Screen {
                         this.getMessage(),
                         this.getX(),
                         this.getY() + (this.height - 8) / 2,
+                        //? if <1.21.11 {
+                        0xFFE0E0E0 // Standard opaque light gray text color
+                        //?} else {
                         0xFFE0E0E0 // Standard light gray text color
+                        //?}
                 );
             }
 
@@ -472,7 +476,11 @@ public class SettingsScreen extends Screen {
                         this.getMessage(),
                         this.getX(),
                         this.getY() + (this.height - 8) / 2,
+                        //? if <1.21.11 {
                         0xFFE0E0E0
+                        //?} else {
+                        0xFFE0E0E0
+                        //?}
                 );
             }
 

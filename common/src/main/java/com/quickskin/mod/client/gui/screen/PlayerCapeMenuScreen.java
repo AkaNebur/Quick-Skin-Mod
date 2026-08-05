@@ -1015,7 +1015,9 @@ public class PlayerCapeMenuScreen extends Screen {
         int headerY = startY + HEADER_HEIGHT / 2 - 4;
         if (headerY > gridY - 8 && headerY < gridY + gridHeight + 8) {
             int gridCenterX = this.gridX + (this.gridWidth / 2);
-//? if <26.1.2 {
+//? if <1.21.11 {
+            graphics.drawCenteredString(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFFFF);
+//?} else if <26.1.2 {
             graphics.drawCenteredString(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFFFF);
 //?} else {
             graphics.centeredText(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFFFF);
@@ -1076,8 +1078,13 @@ public class PlayerCapeMenuScreen extends Screen {
         Component mainMessage = Component.translatable("quickskin.dropzone.capes.main");
         Component subMessage = Component.translatable("quickskin.dropzone.capes.sub");
 
+//? if <1.21.11 {
         int mainColor = isHovering ? 0xFFFFFFFF : 0xFFE0E0E0;
         int subColor = isHovering ? 0xFFB0B0B0 : 0xFF909090;
+//?} else {
+        int mainColor = isHovering ? 0xFFFFFFFF : 0xFFE0E0E0;
+        int subColor = isHovering ? 0xFFB0B0B0 : 0xFF909090;
+//?}
 
         if (height > font.lineHeight * 2.5 && width > font.width(subMessage)) {
 //? if <26.1.2 {
@@ -1144,7 +1151,10 @@ public class PlayerCapeMenuScreen extends Screen {
             graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0x90000000);
 
             // Render "None" text centered
-//? if <26.1.2 {
+//? if <1.21.11 {
+            graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.option.none"), x + capeDisplaySize / 2,
+                    y + capeDisplaySize / 2 - 4, 0xFFFFFFFF);
+//?} else if <26.1.2 {
             graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.option.none"), x + capeDisplaySize / 2,
                     y + capeDisplaySize / 2 - 4, 0xFFFFFFFF);
 //?} else {
@@ -1292,7 +1302,10 @@ public class PlayerCapeMenuScreen extends Screen {
     private void renderLoadingTexture(GuiGraphicsExtractor graphics, int x, int y) {
 //?}
         graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0xFF222222);
-//? if <26.1.2 {
+//? if <1.21.11 {
+        graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.loading"),
+                x + capeDisplaySize / 2, y + capeDisplaySize / 2 - 4, 0xFF888888);
+//?} else if <26.1.2 {
         graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.loading"),
                 x + capeDisplaySize / 2, y + capeDisplaySize / 2 - 4, 0xFF888888);
 //?} else {

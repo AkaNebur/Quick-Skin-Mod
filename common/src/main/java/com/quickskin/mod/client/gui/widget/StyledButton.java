@@ -16,7 +16,11 @@ public class StyledButton extends Button {
     private static final int NORMAL_BG = 0xB0000000;         // Dark semi-transparent background
     private static final int HOVER_BG = 0xC0202020;          // Slightly lighter on hover
     private static final int OUTLINE = 0x80FFFFFF;           // White outline
+    //? if <1.21.11 {
     private static final int TEXT_COLOR = 0xFFFFFFFF;        // Opaque white text
+    //?} else {
+    private static final int TEXT_COLOR = 0xFFFFFFFF;        // Opaque white text
+    //?}
 
     public StyledButton(int x, int y, int width, int height, Component label, OnPress onPress) {
         super(x, y, width, height, label, onPress, DEFAULT_NARRATION);
@@ -67,7 +71,11 @@ public class StyledButton extends Button {
                      outlineColor);
 
         // Draw centered text
+        //? if <1.21.11 {
         int textColor = this.active ? TEXT_COLOR : 0xFF666666;
+        //?} else {
+        int textColor = this.active ? TEXT_COLOR : 0xFF666666;
+        //?}
         //? if <26.1.2 {
         graphics.drawCenteredString(
         //?} else {

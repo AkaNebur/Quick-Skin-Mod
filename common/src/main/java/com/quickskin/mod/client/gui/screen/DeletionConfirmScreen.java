@@ -25,9 +25,16 @@ public class DeletionConfirmScreen extends Screen {
     // Panel styling
     private static final int PANEL_BG = 0xB0000000;           // Darker semi-transparent background for frosted glass effect
     private static final int PANEL_OUTLINE = 0x60FFFFFF;      // Subtle white outline
+    // Keep the Stonecutter seam aligned with the release branches; both APIs require opaque ARGB.
+    //? if <1.21.11 {
     private static final int TITLE_COLOR = 0xFFFFFFFF;        // Opaque white title
     private static final int MESSAGE_COLOR = 0xFFFFFFFF;      // Opaque white message
     private static final int WARNING_COLOR = 0xFFFFCC00;      // Opaque orange warning text
+    //?} else {
+    private static final int TITLE_COLOR = 0xFFFFFFFF;        // Opaque white title
+    private static final int MESSAGE_COLOR = 0xFFFFFFFF;      // Opaque white message
+    private static final int WARNING_COLOR = 0xFFFFCC00;      // Opaque orange warning text
+    //?}
 
     // Panel dimensions
     private final int panelWidth = 340;

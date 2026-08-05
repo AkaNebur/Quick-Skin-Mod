@@ -30,11 +30,20 @@ public class UploadToMojangScreen extends Screen {
     // Panel styling
     private static final int PANEL_BG = 0xB0000000;           // Darker semi-transparent background for frosted glass effect
     private static final int PANEL_OUTLINE = 0x60FFFFFF;      // Subtle white outline
+    // Keep the Stonecutter seam aligned with the release branches; both APIs require opaque ARGB.
+    //? if <1.21.11 {
     private static final int TITLE_COLOR = 0xFFFFFFFF;        // Opaque white title
     private static final int MESSAGE_COLOR = 0xFFFFFFFF;      // Opaque white message
     private static final int INFO_COLOR = 0xFF40A040;         // Opaque green info text
     private static final int ERROR_COLOR = 0xFFFF4040;        // Opaque red error text
     private static final int SUCCESS_COLOR = 0xFF40FF40;      // Opaque bright green success text
+    //?} else {
+    private static final int TITLE_COLOR = 0xFFFFFFFF;        // Opaque white title
+    private static final int MESSAGE_COLOR = 0xFFFFFFFF;      // Opaque white message
+    private static final int INFO_COLOR = 0xFF40A040;         // Opaque green info text
+    private static final int ERROR_COLOR = 0xFFFF4040;        // Opaque red error text
+    private static final int SUCCESS_COLOR = 0xFF40FF40;      // Opaque bright green success text
+    //?}
 
     // Panel dimensions
     private final int panelWidth = 380;

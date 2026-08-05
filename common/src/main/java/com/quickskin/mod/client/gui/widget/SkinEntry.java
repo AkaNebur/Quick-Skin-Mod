@@ -189,10 +189,14 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         if (mc.font.width(displayName) > textMaxWidth) {
             displayName = mc.font.plainSubstrByWidth(displayName, textMaxWidth - mc.font.width("...")) + "...";
         }
-        //? if <26.1.2 {
+        //? if <1.21.11 {
         graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
         //?} else {
+            //? if <26.1.2 {
+        graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
+            //?} else {
         graphics.text(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
+            //?}
         //?}
 
         // Model type and resolution
@@ -208,10 +212,16 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             }
             modelTextColor = metadata.resolution().isHD() ? 0xFF55FF55 : 0xFFAAAAAA;
         }
-        //? if <26.1.2 {
+        //? if <1.21.11 {
         graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2, modelTextColor);
         //?} else {
-        graphics.text(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2, modelTextColor);
+            //? if <26.1.2 {
+        graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
+            0xFF000000 | modelTextColor);
+            //?} else {
+        graphics.text(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2,
+            0xFF000000 | modelTextColor);
+            //?}
         //?}
 
         // Render action buttons on hover (but not for player's own skin)
