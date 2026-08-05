@@ -24,7 +24,7 @@ const REVIEW_SCHEMA = {
   properties: {
     visible: { type: 'string', description: 'What you actually see in the image, 1-2 sentences.' },
     matches: { type: 'boolean', description: 'Does the image match the expectation?' },
-    anomalies: { type: 'array', items: { type: 'string' }, description: 'Real visual problems (wrong/garbled texture, cape clipping through elytra, transparency artifacts, missing element, black/empty frame). Empty if none.' },
+    anomalies: { type: 'array', items: { type: 'string' }, description: 'Real visual problems (wrong/garbled texture, cape clipping through elytra, transparency or background-compositing artifacts, missing element, black/empty frame). Empty if none.' },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
   },
   required: ['visible', 'matches', 'anomalies', 'confidence'],
@@ -51,7 +51,8 @@ const results = await pipeline(
     `Use the Read tool to OPEN and LOOK AT the image at this exact path:\n${it.path}\n\n` +
     `It SHOULD show: ${it.expectation || '(describe what is shown)'}\n\n` +
     `Report what you actually see, whether it matches, and any visual anomalies (garbled/wrong textures, ` +
-    `a cape clipping through an elytra, transparency artifacts, missing elements, or a black/empty/crashed frame). ` +
+    `a cape clipping through an elytra, transparency or background-compositing artifacts, missing elements, ` +
+    `or a black/empty/crashed frame). ` +
     `Minor framing/lighting differences are fine — only flag real rendering problems. Note the camera is usually ` +
     `behind the player (3rd-person back), so a front-only feature (e.g. a face patch) not being visible is NOT a defect.`,
     { label: `review:${it.label}`, phase: 'Review', schema: REVIEW_SCHEMA }
