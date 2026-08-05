@@ -45,7 +45,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 //?}
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-//? if <1.21.9 {
+//? if <1.21.11 {
 import net.minecraft.resources.ResourceLocation;
 //?} else {
 import net.minecraft.resources.Identifier;
@@ -744,7 +744,7 @@ public class PlayerSkinMenuScreen extends Screen {
                 this.title,
                 this.width / 2,
                 panelY + 10,
-//? if <1.21.11 {
+//? if <1.21.9 {
                 0xFFFFFFFF
 //?} else {
                 0xFFFFFFFF
