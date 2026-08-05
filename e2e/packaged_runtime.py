@@ -112,6 +112,27 @@ OPAQUE_STARS_SCREENSHOT_REGIONS: dict[
     ("full", "client_a", "skin_menu_screen"): OPAQUE_STARS_BACKGROUND_REGION,
 }
 
+# Required GUI-copy probes are evaluated after normalizing the screenshot to the same 1600x900
+# derivative size used by the public gallery. Each tuple is
+# (human label, half-open pixel box, exclusive luma threshold, minimum matching pixel count).
+# The boxes contain only stable English E2E copy at the fixed window and GUI scale in this harness;
+# they deliberately avoid buttons, panel borders and textures that could hide missing text.
+GUI_TEXT_REFERENCE_SIZE = (1600, 900)
+GuiTextProbe = tuple[str, tuple[int, int, int, int], int, int]
+REQUIRED_GUI_TEXT_PROBES: dict[tuple[str, str, str], tuple[GuiTextProbe, ...]] = {
+    ("full", "client_a", "skin_menu_screen"): (
+        ("skin catalog labels", (480, 195, 850, 300), 175, 500),
+        ("skin drop-zone instructions", (560, 478, 745, 523), 175, 300),
+    ),
+    ("full", "client_a", "cape_adjust_screen"): (
+        ("cape editor title", (675, 20, 925, 50), 75, 400),
+        ("cape editor instructions", (335, 624, 725, 655), 75, 750),
+    ),
+    ("full", "client_a", "settings_screen"): (
+        ("Open Skin Menu setting label", (445, 235, 655, 265), 175, 300),
+    ),
+}
+
 # Fractional (left, top, right, bottom) crop holding the observed player and no HUD: the toasts sit
 # above/right of it, the hotbar below, the held item bottom-right. A whole-frame threshold cannot
 # assert that a PLAYER changed, because an idle HUD animation moves more pixels than a body does --
@@ -792,6 +813,50 @@ def validate_opaque_stars_background(
         )
 
 
+def validate_required_gui_text(
+    path: Path, scenario: str, role: str, step: str
+) -> None:
+    """Require stable bright glyph pixels in GUI regions whose copy must remain readable."""
+
+    probes = REQUIRED_GUI_TEXT_PROBES.get((scenario, role, step))
+    if probes is None:
+        return
+
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError as exc:  # pragma: no cover - CI installs the locked E2E requirements
+        raise RuntimeFailure("Pillow is required for screenshot pixel validation") from exc
+
+    try:
+        with Image.open(path) as image:
+            rgb = image.convert("RGB")
+            if rgb.size != GUI_TEXT_REFERENCE_SIZE:
+                rgb = rgb.resize(GUI_TEXT_REFERENCE_SIZE, Image.Resampling.LANCZOS)
+            for label, box, minimum_luma_exclusive, minimum_pixels in probes:
+                left, top, right, bottom = box
+                if (
+                    left < 0
+                    or top < 0
+                    or right > rgb.width
+                    or bottom > rgb.height
+                    or left >= right
+                    or top >= bottom
+                ):
+                    raise RuntimeFailure(f"invalid required GUI text region {label!r}: {box!r}")
+                histogram = rgb.crop(box).convert("L").histogram()
+                matching_pixels = sum(histogram[minimum_luma_exclusive + 1 :])
+                if matching_pixels < minimum_pixels:
+                    raise RuntimeFailure(
+                        f"required GUI text is missing or unreadable in {path}: {label} "
+                        f"region={box!r}, pixels_luma_gt_{minimum_luma_exclusive}="
+                        f"{matching_pixels}, required>={minimum_pixels}"
+                    )
+    except RuntimeFailure:
+        raise
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise RuntimeFailure(f"cannot inspect required GUI text in screenshot {path}: {exc}") from exc
+
+
 def inspect_screenshot_for_step(
     path: Path, scenario: str, role: str, step: str
 ) -> dict[str, Any]:
@@ -801,6 +866,7 @@ def inspect_screenshot_for_step(
     opaque_stars_region = OPAQUE_STARS_SCREENSHOT_REGIONS.get((scenario, role, step))
     if opaque_stars_region is not None:
         validate_opaque_stars_background(path, opaque_stars_region)
+    validate_required_gui_text(path, scenario, role, step)
     return metrics
 
 
