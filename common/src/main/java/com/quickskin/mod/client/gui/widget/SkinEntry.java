@@ -167,7 +167,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             graphics.fill(faceX, faceY, faceX + faceSize, faceY + faceSize, 0xFF333333);
             //? if <26.1.2 {
             graphics.drawCenteredString(mc.font, "?", faceX + faceSize / 2,
-                faceY + faceSize / 2 - 4, 0xFFFFFF);
+                faceY + faceSize / 2 - 4, 0xFFFFFFFF);
             //?} else {
             graphics.centeredText(mc.font, "?", faceX + faceSize / 2,
                 faceY + faceSize / 2 - 4, 0xFFFFFFFF);
@@ -188,7 +188,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
             displayName = mc.font.plainSubstrByWidth(displayName, textMaxWidth - mc.font.width("...")) + "...";
         }
         //? if <1.21.11 {
-        graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFF);
+        graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
         //?} else {
             //? if <26.1.2 {
         graphics.drawString(mc.font, displayName, textX, top + 6, 0xFFFFFFFF);
@@ -202,13 +202,13 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
         int modelTextColor;
         if (metadata.isCpmModel()) {
             modelText = "CPM Model";
-            modelTextColor = 0x55AAFF;
+            modelTextColor = 0xFF55AAFF;
         } else {
             modelText = "slim".equals(metadata.skinModel() != null ? metadata.skinModel().toLowerCase(Locale.ROOT) : null) ? "Slim" : "Classic";
             if (metadata.resolution().isHD()) {
                 modelText += " • " + metadata.resolution().name();
             }
-            modelTextColor = metadata.resolution().isHD() ? 0x55FF55 : 0xAAAAAA;
+            modelTextColor = metadata.resolution().isHD() ? 0xFF55FF55 : 0xFFAAAAAA;
         }
         //? if <1.21.11 {
         graphics.drawString(mc.font, modelText, textX, top + 6 + mc.font.lineHeight + 2, modelTextColor);
@@ -240,7 +240,7 @@ public class SkinEntry extends ContainerObjectSelectionList.Entry<SkinEntry> {
                 deleteButtonX + actionButtonSize, deleteButtonY + actionButtonSize,
                 deleteHovered ? 0xA0E04040 : 0x80C00000);
             //? if <26.1.2 {
-            graphics.drawString(mc.font, "x", deleteButtonX + 3, deleteButtonY + 1, 0xFFFFFF);
+            graphics.drawString(mc.font, "x", deleteButtonX + 3, deleteButtonY + 1, 0xFFFFFFFF);
             //?} else {
             graphics.text(mc.font, "x", deleteButtonX + 3, deleteButtonY + 1, 0xFFFFFFFF);
             //?}

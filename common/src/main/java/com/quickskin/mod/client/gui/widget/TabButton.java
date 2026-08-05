@@ -20,11 +20,11 @@ public class TabButton extends Button {
     private static final int SELECTED_OUTLINE = 0xFFFFFFFF; // White outline for selected
     private static final int UNSELECTED_OUTLINE = 0x40FFFFFF; // Faint outline for unselected
     //? if <1.21.9 {
-    private static final int SELECTED_TEXT = 0xFFFFFF;      // White text
-    private static final int UNSELECTED_TEXT = 0x999999;    // Gray text
+    private static final int SELECTED_TEXT = 0xFFFFFFFF;    // Opaque white text
+    private static final int UNSELECTED_TEXT = 0xFF999999;  // Opaque gray text
     //?} else {
-    private static final int SELECTED_TEXT = 0xFFFFFFFF;      // White text
-    private static final int UNSELECTED_TEXT = 0xFF999999;    // Gray text
+    private static final int SELECTED_TEXT = 0xFFFFFFFF;    // Opaque white text
+    private static final int UNSELECTED_TEXT = 0xFF999999;  // Opaque gray text
     //?}
 
     public TabButton(int x, int y, int width, int height, Component label, boolean selected, OnPress onPress) {
@@ -59,9 +59,9 @@ public class TabButton extends Button {
         if (!this.selected && this.isHovered()) {
             bgColor = 0x80000000; // Slightly darker on hover
             //? if <1.21.9 {
-            textColor = 0xCCCCCC;  // Slightly brighter text on hover
+            textColor = 0xFFCCCCCC;  // Slightly brighter opaque text on hover
             //?} else {
-            textColor = 0xFFCCCCCC;  // Slightly brighter text on hover
+            textColor = 0xFFCCCCCC;  // Slightly brighter opaque text on hover
             //?}
         }
 
