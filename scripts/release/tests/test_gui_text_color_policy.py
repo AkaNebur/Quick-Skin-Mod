@@ -9,7 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 MATRIX = json.loads((ROOT / "release" / "release-matrix.json").read_text(encoding="utf-8"))
 RGB_LITERAL = re.compile(r"(?<![0-9A-Fa-f])0x[0-9A-Fa-f]{6}(?![0-9A-Fa-f])")
-ALPHA_COMPOSITION = re.compile(r"<<\s*24\s*\|\s*0x[0-9A-Fa-f]{6}\b")
+ALPHA_PREFIX = re.compile(r"<<\s*24\s*\|\s*$")
+RGB_CALLS = ("GuiTextColor.opaqueRgb", ".withColor")
 
 
 def strip_java_comments(source: str) -> str:
@@ -31,11 +32,21 @@ def ambiguous_rgb_literals(source: str) -> list[tuple[int, str]]:
     for match in re.finditer(r";|\Z", clean):
         statement = clean[statement_start : match.start()]
         for literal in RGB_LITERAL.finditer(statement):
-            if (
-                "GuiTextColor.opaqueRgb(" in statement
-                or ".withColor(" in statement
-                or ALPHA_COMPOSITION.search(statement)
-            ):
+            open_parentheses: list[int] = []
+            for index, character in enumerate(statement[: literal.start()]):
+                if character == "(":
+                    open_parentheses.append(index)
+                elif character == ")" and open_parentheses:
+                    open_parentheses.pop()
+
+            enclosed_by_rgb_call = any(
+                statement[:open_index].rstrip().endswith(RGB_CALLS)
+                for open_index in reversed(open_parentheses)
+            )
+            explicitly_composed_alpha = ALPHA_PREFIX.search(
+                statement[: literal.start()]
+            )
+            if enclosed_by_rgb_call or explicitly_composed_alpha:
                 continue
             offset = statement_start + literal.start()
             failures.append((clean.count("\n", 0, offset) + 1, literal.group(0)))
@@ -97,6 +108,20 @@ class GuiTextColorPolicyTest(unittest.TestCase):
         """
 
         self.assertEqual([], ambiguous_rgb_literals(source))
+
+    def test_an_explicit_literal_does_not_hide_an_ambiguous_sibling(self) -> None:
+        source = """
+            int mixed = enabled
+                ? GuiTextColor.opaqueRgb(0xFFFFFF)
+                : 0x55AAFF;
+            component.withStyle(style -> style.withColor(0xCCCCCC));
+            graphics.drawString(font, title, x, y, 0xFFAA00);
+        """
+
+        self.assertEqual(
+            [(4, "0x55AAFF"), (6, "0xFFAA00")],
+            ambiguous_rgb_literals(source),
+        )
 
 
 if __name__ == "__main__":
