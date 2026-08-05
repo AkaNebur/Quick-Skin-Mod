@@ -14,6 +14,8 @@ rendering is clearly wrong against its expectation:
 - the wrong colours on a skin or cape, against the colours the expectation names
 - a cape clipping through an elytra
 - transparency artifacts
+- a custom screen's expected dark or starred backdrop replaced by a bright blur, radial wash, or
+  other obvious background-compositing artifact
 - a black, empty, or crashed frame
 - an "after" frame identical to its "before" when a change was supposed to have happened
 

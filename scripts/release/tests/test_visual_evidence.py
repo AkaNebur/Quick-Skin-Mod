@@ -129,6 +129,13 @@ class VisualEvidenceTest(unittest.TestCase):
         }
         self.assertEqual(runtime, set(catalog.by_key))
 
+    def test_skin_menu_background_remains_in_the_key_visual_review(self) -> None:
+        capture = load_catalog().by_id["full.client_a.skin_menu_screen"]
+
+        self.assertEqual("key", capture["review_tier"])
+        self.assertIn("dark, subtly starred background", capture["expectation"])
+        self.assertIn("radial wash", capture["expectation"])
+
     def test_semantic_identity_keeps_same_filename_in_two_scenarios(self) -> None:
         self.write_catalog(
             [
