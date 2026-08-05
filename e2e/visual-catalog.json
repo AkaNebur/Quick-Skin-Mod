@@ -25,8 +25,8 @@
       "role": "client_a",
       "step": "skin_menu_screen",
       "title": "Skin menu",
-      "review_tier": "all",
-      "expectation": "The Quick Skin player-skin menu is open with its custom panels and controls."
+      "review_tier": "key",
+      "expectation": "The Quick Skin player-skin menu is open with its custom panels and controls over a dark, subtly starred background; there is no bright blur, radial wash or other background-compositing artifact."
     },
     {
       "capture_id": "full.client_a.external_skin_drop",
