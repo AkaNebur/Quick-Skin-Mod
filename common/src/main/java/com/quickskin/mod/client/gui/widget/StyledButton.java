@@ -17,9 +17,9 @@ public class StyledButton extends Button {
     private static final int HOVER_BG = 0xC0202020;          // Slightly lighter on hover
     private static final int OUTLINE = 0x80FFFFFF;           // White outline
     //? if <1.21.9 {
-    private static final int TEXT_COLOR = 0xFFFFFF;          // White text
+    private static final int TEXT_COLOR = 0xFFFFFFFF;        // Opaque white text
     //?} else {
-    private static final int TEXT_COLOR = 0xFFFFFFFF;          // White text
+    private static final int TEXT_COLOR = 0xFFFFFFFF;        // Opaque white text
     //?}
 
     public StyledButton(int x, int y, int width, int height, Component label, OnPress onPress) {
@@ -72,7 +72,7 @@ public class StyledButton extends Button {
 
         // Draw centered text
         //? if <1.21.9 {
-        int textColor = this.active ? TEXT_COLOR : 0x666666;
+        int textColor = this.active ? TEXT_COLOR : 0xFF666666;
         //?} else {
         int textColor = this.active ? TEXT_COLOR : 0xFF666666;
         //?}
