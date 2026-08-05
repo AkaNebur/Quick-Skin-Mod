@@ -64,11 +64,13 @@ loader-specific dependencies and separate E2E harness.
 
 A row fails for a missing or changed package, missing/invalid report, unexpected step, failed or
 corrupt/undersized/effectively blank screenshot, a washed-out OPAQUE_STARS skin-menu background, a
-visually unchanged apply/animation pair, compatibility/error screen, crash report, or fatal
-mixin/access-widener/linkage/`@ExpectPlatform` log evidence. The background check measures luminance
-in a normalized outer region free of the menu and toast UI; other pixel checks use broad
-entropy/color and pairwise-change invariants rather than golden images, so GPU and Minecraft-version
-rendering differences are allowed. Every result records the literal fields
+missing required skin-menu, cape-menu, cape-editor, or settings label, a visually unchanged apply/animation
+pair, compatibility/error screen, crash report, or fatal mixin/access-widener/linkage/
+`@ExpectPlatform` log evidence. The background check measures luminance in a normalized outer
+region free of the menu and toast UI. Required-copy probes normalize to the gallery's 1600x900
+reference size and require bright glyph pixels only in narrow, stable text regions. Other pixel
+checks use broad entropy/color and pairwise-change invariants rather than golden images, so GPU and
+Minecraft-version rendering differences are allowed. Every result records the literal fields
 `artifact_node`, `runtime_version`, `loader`, `scenario`, `jar_sha256`, and `port`. All loader and
 Architectury dependencies are locked directly in the matrix for that exact runtime.
 
