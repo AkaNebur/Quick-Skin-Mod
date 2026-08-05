@@ -17,9 +17,9 @@ public class PrimaryButton extends Button {
     private static final int HOVER_BG = 0xC0007700;          // Brighter green on hover
     private static final int OUTLINE = 0x8000DD00;           // Green outline
     //? if <1.21.9 {
-    private static final int TEXT_COLOR = 0xFFFFFF;          // White text
+    private static final int TEXT_COLOR = 0xFFFFFFFF;        // Opaque white text
     //?} else {
-    private static final int TEXT_COLOR = 0xFFFFFFFF;          // White text
+    private static final int TEXT_COLOR = 0xFFFFFFFF;        // Opaque white text
     //?}
 
     public PrimaryButton(int x, int y, int width, int height, Component label, OnPress onPress) {
