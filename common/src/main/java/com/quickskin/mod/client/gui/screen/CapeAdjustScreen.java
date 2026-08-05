@@ -1036,9 +1036,9 @@ public class CapeAdjustScreen extends Screen {
 
         // Title
         //? if <26.1 {
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, 10, 0xFFFFFF);
+        graphics.drawCenteredString(this.font, this.title, this.width / 2, 10, 0xFFFFFFFF);
         //?} else {
-        graphics.centeredText(this.font, this.title, this.width / 2, 10, 0xFFFFFF);
+        graphics.centeredText(this.font, this.title, this.width / 2, 10, 0xFFFFFFFF);
         //?}
 
         // Instructions (centered under grid, underline only the action phrases)
@@ -1047,9 +1047,9 @@ public class CapeAdjustScreen extends Screen {
                 .append(Component.literal("Scroll to zoom").withStyle(style -> style.withUnderlined(true)));
         int hintX = gridX + (gridW - this.font.width(hintText)) / 2;
         //? if <26.1 {
-        graphics.drawString(this.font, hintText, hintX, gridY + gridH + 8, 0xFFFFFF);
+        graphics.drawString(this.font, hintText, hintX, gridY + gridH + 8, 0xFFFFFFFF);
         //?} else {
-        graphics.text(this.font, hintText, hintX, gridY + gridH + 8, 0xFFFFFF);
+        graphics.text(this.font, hintText, hintX, gridY + gridH + 8, 0xFFFFFFFF);
         //?}
 
         // Draw dark background for the grid area
@@ -1077,7 +1077,7 @@ public class CapeAdjustScreen extends Screen {
         graphics.text(this.font,
         //?}
                 Component.translatable("quickskin.cape.adjust_resolution"),
-                rightPanelX, gridY - 14, 0xFFFF55);
+                rightPanelX, gridY - 14, 0xFFFFFF55);
 
         // Highlight selected resolution by drawing an outline around its button area
         int resBtnX = gridX + (int) (this.width * 0.6) + 15;
@@ -1105,7 +1105,7 @@ public class CapeAdjustScreen extends Screen {
             graphics.textWithWordWrap(this.font,
             //?}
                     Component.literal("Max 4x for animated capes to optimize performance and avoid server lag."),
-                    noteX, noteY, noteMaxW, 0xFFAA00);
+                    noteX, noteY, noteMaxW, 0xFFFFAA00);
         }
 
         // Drawn before the widget pump so the picker's own sliders and hex field land on top of

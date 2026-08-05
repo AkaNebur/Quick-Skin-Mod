@@ -356,7 +356,7 @@ public class SettingsScreen extends Screen {
                         this.getX(),
                         this.getY() + (this.height - 8) / 2,
                         //? if <1.21.11 {
-                        0xE0E0E0 // Standard light gray text color
+                        0xFFE0E0E0 // Standard opaque light gray text color
                         //?} else {
                         0xFFE0E0E0 // Standard light gray text color
                         //?}
@@ -477,7 +477,7 @@ public class SettingsScreen extends Screen {
                         this.getX(),
                         this.getY() + (this.height - 8) / 2,
                         //? if <1.21.11 {
-                        0xE0E0E0
+                        0xFFE0E0E0
                         //?} else {
                         0xFFE0E0E0
                         //?}
@@ -644,7 +644,7 @@ public class SettingsScreen extends Screen {
                 Component notice = Component.translatable("quickskin.settings.server_notice");
                 int noticeWidth = this.font.width(notice);
                 //? if <26.1 {
-                graphics.drawString(this.font, notice, dialogX + (dialogWidth - noticeWidth) / 2, noticeY, 0xFFCC00, false);
+                graphics.drawString(this.font, notice, dialogX + (dialogWidth - noticeWidth) / 2, noticeY, 0xFFFFCC00, false);
                 //?} else {
                 graphics.text(this.font, notice, dialogX + (dialogWidth - noticeWidth) / 2, noticeY, 0xFFFFCC00, false);
                 //?}
