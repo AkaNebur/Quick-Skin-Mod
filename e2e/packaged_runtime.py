@@ -124,6 +124,10 @@ REQUIRED_GUI_TEXT_PROBES: dict[tuple[str, str, str], tuple[GuiTextProbe, ...]] =
         ("skin catalog labels", (480, 195, 850, 300), 175, 500),
         ("skin drop-zone instructions", (560, 478, 745, 523), 175, 300),
     ),
+    ("full", "client_a", "cape_menu_screen"): (
+        ("cape menu title", (590, 100, 735, 140), 159, 174),
+        ("cape drop-zone instructions", (590, 200, 885, 260), 159, 531),
+    ),
     ("full", "client_a", "cape_adjust_screen"): (
         ("cape editor title", (675, 20, 925, 50), 75, 400),
         ("cape editor instructions", (335, 624, 725, 655), 75, 750),

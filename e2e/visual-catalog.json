@@ -62,7 +62,7 @@
       "step": "cape_menu_screen",
       "title": "Cape menu",
       "review_tier": "all",
-      "expectation": "The Quick Skin cape menu is open with its custom panels and controls."
+      "expectation": "The Quick Skin cape menu is open with a readable title and drop-zone instructions alongside its custom panels and controls."
     },
     {
       "capture_id": "full.client_a.known_cape_apply",
