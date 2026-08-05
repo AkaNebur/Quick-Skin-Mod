@@ -16,7 +16,7 @@ public class DangerButton extends Button {
     private static final int NORMAL_BG = 0xB0AA0000;         // Dark red semi-transparent background
     private static final int HOVER_BG = 0xB0DD0000;          // Brighter red on hover
     private static final int OUTLINE = 0x80FF0000;           // Red outline
-    //? if <1.21.11 {
+    //? if <1.21.9 {
     private static final int TEXT_COLOR = 0xFFFFFFFF;        // Opaque white text
     //?} else {
     private static final int TEXT_COLOR = 0xFFFFFFFF;        // Opaque white text
