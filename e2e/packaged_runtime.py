@@ -114,6 +114,19 @@ EXPECTED_SCREENSHOT_STEPS: dict[tuple[str, str], set[str]] = {
     ("full", "client_a"): set(EXPECTED_STEPS[("full", "client_a")]),
 }
 
+# The skin menu's OPAQUE_STARS backdrop is unobstructed in this left-side crop.  Keeping the crop
+# normalized makes the assertion independent of resolution and GUI scale, while avoiding both the
+# centered Quick Skin panel and Minecraft's top-right toast area.
+OPAQUE_STARS_BACKGROUND_REGION = (0.03, 0.20, 0.20, 0.80)
+OPAQUE_STARS_MAXIMUM_MEAN_LUMA = 32.0
+OPAQUE_STARS_BRIGHT_LUMA = 64
+OPAQUE_STARS_MAXIMUM_BRIGHT_FRACTION = 0.10
+OPAQUE_STARS_SCREENSHOT_REGIONS: dict[
+    tuple[str, str, str], tuple[float, float, float, float]
+] = {
+    ("full", "client_a", "skin_menu_screen"): OPAQUE_STARS_BACKGROUND_REGION,
+}
+
 # Fractional (left, top, right, bottom) crop holding the observed player and no HUD: the toasts sit
 # above/right of it, the hotbar below, the held item bottom-right. A whole-frame threshold cannot
 # assert that a PLAYER changed, because an idle HUD animation moves more pixels than a body does --
@@ -739,6 +752,73 @@ def inspect_screenshot(
     }
 
 
+def validate_opaque_stars_background(
+    path: Path, region: tuple[float, float, float, float]
+) -> None:
+    """Reject a bright or washed-out OPAQUE_STARS backdrop in a normalized UI-free region."""
+
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError as exc:  # pragma: no cover - CI installs the locked E2E requirements
+        raise RuntimeFailure("Pillow is required for screenshot pixel validation") from exc
+
+    try:
+        if (
+            len(region) != 4
+            or not all(0.0 <= coordinate <= 1.0 for coordinate in region)
+            or region[0] >= region[2]
+            or region[1] >= region[3]
+        ):
+            raise RuntimeFailure(f"invalid OPAQUE_STARS background region {region!r}")
+        with Image.open(path) as image:
+            width, height = image.size
+            box = (
+                int(region[0] * width),
+                int(region[1] * height),
+                int(region[2] * width),
+                int(region[3] * height),
+            )
+            if box[0] >= box[2] or box[1] >= box[3]:
+                raise RuntimeFailure(
+                    f"OPAQUE_STARS background region {region!r} is empty at {width}x{height}"
+                )
+            luma = image.convert("RGB").crop(box).convert("L")
+            histogram = luma.histogram()
+            pixels = luma.width * luma.height
+            mean_luma = sum(value * count for value, count in enumerate(histogram)) / pixels
+            bright_fraction = sum(histogram[OPAQUE_STARS_BRIGHT_LUMA:]) / pixels
+    except RuntimeFailure:
+        raise
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise RuntimeFailure(
+            f"cannot inspect OPAQUE_STARS background in screenshot {path}: {exc}"
+        ) from exc
+
+    if (
+        mean_luma > OPAQUE_STARS_MAXIMUM_MEAN_LUMA
+        or bright_fraction > OPAQUE_STARS_MAXIMUM_BRIGHT_FRACTION
+    ):
+        raise RuntimeFailure(
+            f"OPAQUE_STARS background is unexpectedly bright or washed out in {path} "
+            f"region={region!r} (mean_luma={mean_luma:.2f}, "
+            f"fraction_luma_gte_{OPAQUE_STARS_BRIGHT_LUMA}={bright_fraction:.3f}; "
+            f"required mean_luma<={OPAQUE_STARS_MAXIMUM_MEAN_LUMA:.2f} and "
+            f"bright_fraction<={OPAQUE_STARS_MAXIMUM_BRIGHT_FRACTION:.3f})"
+        )
+
+
+def inspect_screenshot_for_step(
+    path: Path, scenario: str, role: str, step: str
+) -> dict[str, Any]:
+    """Apply generic image checks plus any semantic pixel contract owned by this report step."""
+
+    metrics = inspect_screenshot(path)
+    opaque_stars_region = OPAQUE_STARS_SCREENSHOT_REGIONS.get((scenario, role, step))
+    if opaque_stars_region is not None:
+        validate_opaque_stars_background(path, opaque_stars_region)
+    return metrics
+
+
 def compare_screenshots(
     first: Path,
     second: Path,
@@ -838,7 +918,9 @@ def validate_report(game_dir: Path, row: dict[str, Any], scenario: str, role: st
             if screenshots_root not in screenshot_path.parents:
                 raise RuntimeFailure(f"{role}/{step['name']} screenshot escapes its profile")
             screenshot_paths[step["name"]] = screenshot_path
-            screenshot_validation[step["name"]] = inspect_screenshot(screenshot_path)
+            screenshot_validation[step["name"]] = inspect_screenshot_for_step(
+                screenshot_path, scenario, role, step["name"]
+            )
     pair_validation: dict[str, dict[str, Any]] = {}
     for pair in DISTINCT_SCREENSHOT_PAIRS.get((scenario, role), []):
         first_step, second_step, minimum_change = pair[0], pair[1], pair[2]
