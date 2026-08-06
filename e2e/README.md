@@ -60,17 +60,30 @@ already has it. Each execution creates an isolated server and client game direct
 `e2e-out/profiles/`, installs the manifest-bound Quick Skin jar by SHA-256, and adds only the
 loader-specific dependencies and separate E2E harness.
 
+The four scenarios in one loader job reuse a client installation only after the runtime has written
+an identity-bound completion marker. New installs are built in a sibling staging directory and
+renamed into the shared cache only after vanilla, the loader, and the normalized launch profile all
+complete. NeoForge client installs receive three bounded attempts with clean staging and short
+backoff; a timeout can therefore neither publish nor poison a partial profile for later scenarios.
+
 ## Fail-closed contract
 
 A row fails for a missing or changed package, missing/invalid report, unexpected step, failed or
 corrupt/undersized/effectively blank screenshot, a washed-out OPAQUE_STARS skin-menu background, a
-visually unchanged apply/animation pair, compatibility/error screen, crash report, or fatal
-mixin/access-widener/linkage/`@ExpectPlatform` log evidence. The background check measures luminance
-in a normalized outer region free of the menu and toast UI; other pixel checks use broad
-entropy/color and pairwise-change invariants rather than golden images, so GPU and Minecraft-version
-rendering differences are allowed. Every result records the literal fields
+missing required skin-menu, cape-menu, cape-editor, or settings label, a visually unchanged apply/animation
+pair, compatibility/error screen, crash report, or fatal mixin/access-widener/linkage/
+`@ExpectPlatform` log evidence. The background check measures luminance in a normalized outer
+region free of the menu and toast UI. Required-copy probes normalize to the gallery's 1600x900
+reference size and require bright glyph pixels only in narrow, stable text regions. Other pixel
+checks use broad entropy/color and pairwise-change invariants rather than golden images, so GPU and
+Minecraft-version rendering differences are allowed. Every result records the literal fields
 `artifact_node`, `runtime_version`, `loader`, `scenario`, `jar_sha256`, and `port`. All loader and
 Architectury dependencies are locked directly in the matrix for that exact runtime.
+
+The title-screen z-order probe replaces vanilla's randomly selected splash in the E2E-only screen
+with fixed yellow text. It still measures vanilla's rendered position and animation, then proves
+that the production preview covers those exact pixels; formatted or seasonal splash selection is
+not part of the mod behavior being tested.
 
 Pull requests run smoke, live propagation, and full behavior on both loader lanes. A release runs
 all four scenarios for both lanes against the manifest-bound bytes from the exact release commit.

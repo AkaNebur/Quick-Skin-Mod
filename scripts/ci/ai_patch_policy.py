@@ -48,6 +48,10 @@ AI_PROTECTED_SOURCE_NAMES = (
     "Security",
     "TransferLimits",
 )
+AI_CONFLICT_ALLOWED_EXACT = {
+    # The workflow separately proves this was an original Git conflict before AI edits.
+    "e2e/README.md",
+}
 
 
 class PolicyError(ValueError):
@@ -58,9 +62,14 @@ def normalize_path(raw: str) -> str:
     if not raw or "\\" in raw or any(ord(char) < 32 for char in raw):
         raise PolicyError(f"unsafe repository path {raw!r}")
     path = PurePosixPath(raw)
-    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+    normalized = path.as_posix()
+    if (
+        path.is_absolute()
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or raw != normalized
+    ):
         raise PolicyError(f"unsafe repository path {raw!r}")
-    return path.as_posix()
+    return normalized
 
 
 def validate_paths(
@@ -80,7 +89,12 @@ def validate_paths(
                 f"AI changed paths outside the approved conflict set: {sorted(unexpected)}"
             )
     if mode != "port":
-        protected = [path for path in normalized if is_ai_protected(path)]
+        protected = [
+            path
+            for path in normalized
+            if is_ai_protected(path)
+            and not (mode == "conflict" and path in AI_CONFLICT_ALLOWED_EXACT)
+        ]
         if protected:
             raise PolicyError(f"AI patch touches protected paths: {protected}")
     return normalized
@@ -179,20 +193,30 @@ def validate_staged(mode: str, allowed: set[str] | None, output: Path | None) ->
         output.write_bytes(patch)
 
 
-def validate_worktree(mode: str, allowed: set[str] | None) -> None:
+def validate_worktree(mode: str, allowed: set[str] | None) -> tuple[str, ...]:
     tracked = run_git("diff", "--name-only", "-z").split(b"\0")
     untracked = run_git("ls-files", "--others", "--exclude-standard", "-z").split(b"\0")
     try:
         paths = [item.decode("utf-8") for item in (*tracked, *untracked) if item]
     except UnicodeDecodeError as exc:
         raise PolicyError("AI changed a non-UTF-8 repository path") from exc
-    validate_paths(paths, mode, allowed)
+    normalized = validate_paths(paths, mode, allowed)
+    if mode == "conflict":
+        validate_conflict_contents(normalized)
+    return normalized
 
 
 def validate_conflict_contents(paths: Iterable[str]) -> None:
     markers = (b"<<<<<<< ", b"||||||| ", b">>>>>>> ")
     for raw in paths:
-        path = Path(normalize_path(raw))
+        normalized = normalize_path(raw)
+        path = Path(normalized)
+        if normalized in AI_CONFLICT_ALLOWED_EXACT and (
+            path.is_symlink() or not path.is_file()
+        ):
+            raise PolicyError(
+                f"protected conflict resolution must remain a regular file: {path}"
+            )
         if not path.exists():
             continue
         try:
