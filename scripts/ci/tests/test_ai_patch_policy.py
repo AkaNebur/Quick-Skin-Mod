@@ -47,8 +47,46 @@ class AiPatchPolicyTest(unittest.TestCase):
                 allowed,
             )
 
+    def test_conflict_accepts_exact_e2e_readme_when_originally_conflicted(self) -> None:
+        path = "e2e/README.md"
+        self.assertEqual(
+            ai_patch_policy.validate_paths([path], "conflict", {path}),
+            (path,),
+        )
+        with self.assertRaisesRegex(ai_patch_policy.PolicyError, "outside"):
+            ai_patch_policy.validate_paths([path], "conflict", {"README.md"})
+        self.assertEqual(
+            ai_patch_policy.validate_paths([path], "conflict"),
+            (path,),
+        )
+
+    def test_e2e_readme_stays_protected_outside_conflict_resolution(self) -> None:
+        with self.assertRaisesRegex(ai_patch_policy.PolicyError, "protected"):
+            ai_patch_policy.validate_paths(["e2e/README.md"], "repair")
+
+    def test_conflict_readme_exception_does_not_expand_e2e_boundary(self) -> None:
+        protected = (
+            "e2e/packaged_runtime.py",
+            "e2e/visual-catalog.json",
+            "e2e/README.md/appendix",
+            "e2e/readme.md",
+        )
+        for path in protected:
+            with self.subTest(path=path), self.assertRaisesRegex(
+                ai_patch_policy.PolicyError, "protected"
+            ):
+                ai_patch_policy.validate_paths([path], "conflict", {path})
+
     def test_rejects_traversal_and_control_characters(self) -> None:
-        for path in ("../escape", "/absolute", "bad\\path", "line\nbreak"):
+        for path in (
+            "../escape",
+            "/absolute",
+            "bad\\path",
+            "line\nbreak",
+            "e2e//README.md",
+            "e2e/./README.md",
+            "e2e/README.md/",
+        ):
             with self.subTest(path=path), self.assertRaisesRegex(
                 ai_patch_policy.PolicyError, "unsafe"
             ):
@@ -88,6 +126,31 @@ class AiPatchPolicyTest(unittest.TestCase):
                 Path("resolved.java").write_bytes(b"class Example {}\0")
                 with self.assertRaisesRegex(ai_patch_policy.PolicyError, "text-only"):
                     ai_patch_policy.validate_conflict_contents(["resolved.java"])
+            finally:
+                os.chdir(previous)
+
+    def test_protected_conflict_readme_must_remain_a_regular_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            previous = Path.cwd()
+            try:
+                import os
+
+                os.chdir(root)
+                Path("e2e").mkdir()
+                readme = Path("e2e/README.md")
+                with self.assertRaisesRegex(ai_patch_policy.PolicyError, "regular"):
+                    ai_patch_policy.validate_conflict_contents([readme.as_posix()])
+
+                target = Path("target.md")
+                target.write_text("outside\n", encoding="utf-8")
+                readme.symlink_to(target.resolve())
+                with self.assertRaisesRegex(ai_patch_policy.PolicyError, "regular"):
+                    ai_patch_policy.validate_conflict_contents([readme.as_posix()])
+
+                readme.unlink()
+                readme.write_text("resolved documentation\n", encoding="utf-8")
+                ai_patch_policy.validate_conflict_contents([readme.as_posix()])
             finally:
                 os.chdir(previous)
 
