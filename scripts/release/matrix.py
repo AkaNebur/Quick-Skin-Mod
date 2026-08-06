@@ -9,18 +9,30 @@ copy of the supported versions.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import os
 import re
+import stat
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "e2e"))
+
+from scenario_contract import (  # noqa: E402
+    ScenarioContract,
+    ScenarioContractError,
+    default_contract,
+)
 
 
 REQUIRED_RUNTIME_FIELDS = {
     "artifact_node",
     "runtime_version",
     "loader",
-    "scenario",
     "jar_sha256",
     "port",
     "java",
@@ -53,16 +65,73 @@ class MatrixError(ValueError):
     pass
 
 
-def load_matrix(path: Path) -> dict[str, Any]:
+LEGACY_E2E_POLICY_FIELDS = frozenset(
+    {"scheduled_scenarios", "pr_scenarios"}
+)
+
+
+def normalize_legacy_e2e_policy(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a deep copy stripped only of matrix-owned legacy E2E policy."""
+
+    if not isinstance(data, dict):
+        raise MatrixError("release matrix root must be an object")
+    normalized = copy.deepcopy(data)
+    for field in LEGACY_E2E_POLICY_FIELDS:
+        normalized.pop(field, None)
+    runtimes = normalized.get("runtimes")
+    if isinstance(runtimes, list):
+        for runtime in runtimes:
+            if isinstance(runtime, dict):
+                runtime.pop("scenario", None)
+    return normalized
+
+
+def write_matrix_atomic(path: Path, data: dict[str, Any]) -> None:
+    """Atomically replace one matrix with deterministic validated JSON."""
+
+    destination = path.resolve()
+    try:
+        mode = stat.S_IMODE(destination.stat().st_mode)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            json.dump(data, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, destination)
+    except OSError as exc:
+        if "temporary" in locals():
+            temporary.unlink(missing_ok=True)
+        raise MatrixError(f"cannot atomically write release matrix {path}: {exc}") from exc
+
+
+def read_matrix_data(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise MatrixError(f"cannot read release matrix {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise MatrixError("release matrix root must be an object")
+    return data
+
+
+def validate_matrix_file(path: Path, data: dict[str, Any]) -> None:
     validate_matrix(data)
     validate_build_properties(path, data)
     validate_source_roots(path, data)
+
+
+def load_matrix(path: Path) -> dict[str, Any]:
+    data = read_matrix_data(path)
+    validate_matrix_file(path, data)
     return data
 
 
@@ -199,9 +268,22 @@ def validate_source_roots(matrix_path: Path, data: dict[str, Any]) -> None:
             )
 
 
-def validate_matrix(data: dict[str, Any]) -> None:
+def validate_matrix(
+    data: dict[str, Any],
+    contract: ScenarioContract | None = None,
+) -> None:
+    try:
+        scenario_contract = contract or default_contract()
+    except ScenarioContractError as exc:
+        raise MatrixError(f"invalid packaged E2E scenario contract: {exc}") from exc
     if data.get("schema_version") != 2:
         raise MatrixError("release matrix schema_version must be 2")
+    legacy_fields = set(data) & LEGACY_E2E_POLICY_FIELDS
+    if legacy_fields:
+        raise MatrixError(
+            "release matrix contains legacy E2E policy fields "
+            f"{sorted(legacy_fields)}; normalize them before validation"
+        )
 
     lane_count = data.get("lane_count")
     if isinstance(lane_count, bool) or not isinstance(lane_count, int) or lane_count <= 0:
@@ -389,12 +471,17 @@ def validate_matrix(data: dict[str, Any]) -> None:
                 f"release lanes disagree on Java/no_remap policy for Minecraft {version}"
             )
 
-    seen_runtime_keys: set[tuple[str, str, str]] = set()
+    seen_runtime_keys: set[tuple[str, str]] = set()
     runtime_nodes: set[str] = set()
     pr_anchor_loaders: set[str] = set()
     for runtime in runtimes:
         if not isinstance(runtime, dict):
             raise MatrixError("every runtime row must be an object")
+        if "scenario" in runtime:
+            raise MatrixError(
+                "runtime rows must not own E2E scenario policy; normalize "
+                "the legacy scenario field"
+            )
         missing = REQUIRED_RUNTIME_FIELDS - runtime.keys()
         if missing:
             raise MatrixError(f"runtime row missing {sorted(missing)}: {runtime}")
@@ -411,8 +498,6 @@ def validate_matrix(data: dict[str, Any]) -> None:
             raise MatrixError(f"runtime {node} must match its exact artifact version")
         if runtime["java"] != artifact["java"]:
             raise MatrixError(f"runtime Java disagrees with artifact {node}")
-        if runtime["scenario"] != "phase0-smoke":
-            raise MatrixError(f"runtime {node} must use the locked phase0-smoke scenario")
         if not isinstance(runtime["loader_version"], str) or not runtime["loader_version"]:
             raise MatrixError(f"runtime {node} must lock a loader version")
         if runtime["jar_sha256"] != "from:artifact-manifest":
@@ -460,7 +545,7 @@ def validate_matrix(data: dict[str, Any]) -> None:
             raise MatrixError(f"runtime {node} pr_anchor must be a boolean")
         if runtime["pr_anchor"]:
             pr_anchor_loaders.add(runtime["loader"])
-        key = (node, runtime["runtime_version"], runtime["scenario"])
+        key = (node, runtime["runtime_version"])
         if key in seen_runtime_keys:
             raise MatrixError(f"duplicate runtime row {key}")
         seen_runtime_keys.add(key)
@@ -524,24 +609,20 @@ def validate_matrix(data: dict[str, Any]) -> None:
         if metadata.get("architectury") != expected_architectury:
             raise MatrixError(f"artifact {node} metadata disagrees with its tested Architectury")
 
-    scenarios = data.get("scheduled_scenarios")
-    if scenarios != ["phase0-smoke", "propagation", "propagation-live", "full"]:
-        raise MatrixError("scheduled_scenarios must contain the four locked E2E scenarios")
-    pr_scenarios = data.get("pr_scenarios")
-    if (
-        not isinstance(pr_scenarios, list)
-        or not pr_scenarios
-        or not all(isinstance(scenario, str) for scenario in pr_scenarios)
-    ):
-        raise MatrixError("pr_scenarios must be a non-empty list")
-    if len(pr_scenarios) != len(set(pr_scenarios)):
-        raise MatrixError("pr_scenarios must not contain duplicates")
-    if any(scenario not in scenarios for scenario in pr_scenarios):
-        raise MatrixError("pr_scenarios must be selected from scheduled_scenarios")
-    if "full" not in pr_scenarios or not any(
-        scenario.startswith("propagation") for scenario in pr_scenarios
-    ):
-        raise MatrixError("PR coverage must include full and a multiplayer propagation scenario")
+    release_scenarios = scenario_contract.scenarios_for_profile("release")
+    pr_scenarios = scenario_contract.scenarios_for_profile("pr")
+    release_orchestrations = {
+        scenario_contract.orchestration_for(scenario).mode
+        for scenario in release_scenarios
+    }
+    pr_orchestrations = {
+        scenario_contract.orchestration_for(scenario).mode
+        for scenario in pr_scenarios
+    }
+    if pr_orchestrations != release_orchestrations:
+        raise MatrixError(
+            "PR execution profile must cover every release E2E orchestration mode"
+        )
 
 
 def re_full_sha256(value: Any) -> bool:
@@ -605,8 +686,12 @@ def release_id(data: dict[str, Any], mod_version: str) -> str:
 
 
 def gha_matrix(
-    data: dict[str, Any], kind: str, mod_version: str
+    data: dict[str, Any],
+    kind: str,
+    mod_version: str,
+    contract: ScenarioContract | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
+    scenario_contract = contract or default_contract()
     if kind in {"artifacts", "publications"}:
         include = []
         identity = release_id(data, mod_version)
@@ -662,10 +747,12 @@ def gha_matrix(
                 f"{row['artifact_node']}--{row['runtime_version']}--{scope}"
                 .replace(".", "_")
             )
-            if kind in {"runtime", "native-anchors"}:
-                expanded["scenarios"] = ",".join(data["scheduled_scenarios"])
-            elif kind == "pr-anchors":
-                expanded["scenarios"] = ",".join(data["pr_scenarios"])
+            execution_profile = (
+                "pr" if kind == "pr-anchors" else "release"
+            )
+            expanded["scenarios"] = ",".join(
+                scenario_contract.scenarios_for_profile(execution_profile)
+            )
             include.append(expanded)
     else:  # pragma: no cover - argparse prevents this
         raise MatrixError(f"unsupported matrix kind {kind}")
@@ -685,20 +772,51 @@ def main() -> int:
         choices=("artifacts", "publications", "runtime", "native-anchors", "pr-anchors"),
         help="emit a compact GitHub Actions matrix",
     )
+    parser.add_argument(
+        "--normalize-e2e-policy",
+        action="store_true",
+        help="strip only legacy matrix-owned E2E scenario policy",
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="atomically write the normalized matrix back to --matrix",
+    )
     parser.add_argument("--pretty", action="store_true", help="pretty-print output")
     args = parser.parse_args()
 
     try:
-        data = load_matrix(args.matrix)
-        output: Any = (
-            gha_matrix(data, args.kind, read_mod_version(args.matrix, data))
-            if args.kind
-            else data
-        )
+        if args.write and not args.normalize_e2e_policy:
+            raise MatrixError("--write requires --normalize-e2e-policy")
+        if args.normalize_e2e_policy:
+            if args.kind is not None:
+                raise MatrixError(
+                    "--normalize-e2e-policy cannot be combined with --kind"
+                )
+            data = normalize_legacy_e2e_policy(
+                read_matrix_data(args.matrix)
+            )
+            validate_matrix_file(args.matrix, data)
+            if args.write:
+                write_matrix_atomic(args.matrix, data)
+            output: Any = None
+        else:
+            data = load_matrix(args.matrix)
+            output = (
+                gha_matrix(
+                    data,
+                    args.kind,
+                    read_mod_version(args.matrix, data),
+                )
+                if args.kind
+                else data
+            )
     except MatrixError as exc:
         print(f"release matrix error: {exc}", file=sys.stderr)
         return 2
 
+    if output is None:
+        return 0
     if args.pretty:
         print(json.dumps(output, indent=2, sort_keys=True))
     else:
