@@ -17,6 +17,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -223,6 +224,12 @@ class RuntimeFailure(RuntimeError):
     pass
 
 
+CLIENT_INSTALL_MARKER = ".quickskin-e2e-client-install.json"
+CLIENT_INSTALL_MARKER_SCHEMA = 1
+NEOFORGE_CLIENT_INSTALL_ATTEMPTS = 3
+NEOFORGE_CLIENT_INSTALL_BACKOFF_SECONDS = (5, 15)
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -360,10 +367,16 @@ def runtime_dependencies(
 
 
 def run_checked(
-    command: list[str], cwd: Path, log_path: Path, env: dict[str, str], timeout: int = 1800
+    command: list[str],
+    cwd: Path,
+    log_path: Path,
+    env: dict[str, str],
+    timeout: int = 1800,
+    *,
+    append: bool = False,
 ) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("wb") as log:
+    with log_path.open("ab" if append else "wb") as log:
         process = subprocess.run(
             command,
             cwd=cwd,
@@ -402,6 +415,37 @@ def installed_version_id(row: dict[str, Any]) -> str:
     if row["loader"] == "neoforge":
         return f"neoforge-{row['loader_version']}"
     raise RuntimeFailure(f"unsupported loader {row['loader']!r}")
+
+
+def client_install_marker_payload(row: dict[str, Any], version_id: str) -> dict[str, Any]:
+    return {
+        "schema_version": CLIENT_INSTALL_MARKER_SCHEMA,
+        "loader": row["loader"],
+        "runtime_version": row["runtime_version"],
+        "loader_version": row["loader_version"],
+        "version_id": version_id,
+    }
+
+
+def client_install_is_complete(
+    directory: Path, row: dict[str, Any], version_id: str
+) -> bool:
+    version_json = directory / "versions" / version_id / f"{version_id}.json"
+    marker = directory / CLIENT_INSTALL_MARKER
+    if not version_json.is_file() or not marker.is_file():
+        return False
+    try:
+        recorded = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return recorded == client_install_marker_payload(row, version_id)
+
+
+def remove_install_path(path: Path) -> None:
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink(missing_ok=True)
 
 
 def normalize_inherited_profile(version_json: Path, loader: str) -> None:
@@ -453,50 +497,98 @@ def prepare_client_install(
     import minecraft_launcher_lib.install  # type: ignore[import-not-found]
 
     key = safe_id(f"{row['loader']}-{row['runtime_version']}-{row['loader_version']}")
-    directory = cache_root / "clients" / key
-    ensure_launcher_files(directory)
+    clients_root = cache_root / "clients"
+    clients_root.mkdir(parents=True, exist_ok=True)
+    directory = clients_root / key
     version_id = installed_version_id(row)
     version_json = directory / "versions" / version_id / f"{version_id}.json"
-    if version_json.is_file():
-        normalize_inherited_profile(version_json, row["loader"])
-        return directory, version_id
+    if client_install_is_complete(directory, row, version_id):
+        try:
+            normalize_inherited_profile(version_json, row["loader"])
+            return directory, version_id
+        except RuntimeFailure:
+            # A marker cannot make later cache damage safe. Rebuild the installation below.
+            pass
+    if directory.exists() or directory.is_symlink():
+        remove_install_path(directory)
 
     install_log = cache_root / "logs" / f"{key}.log"
-    install_log.parent.mkdir(parents=True, exist_ok=True)
-    with install_log.open("a", encoding="utf-8") as log:
-        log.write(f"Installing vanilla Minecraft {row['runtime_version']}\n")
-    minecraft_launcher_lib.install.install_minecraft_version(
-        row["runtime_version"], str(directory)
-    )
     installer = installer_path(matrix, row, cache_root / "installers")
-    if row["loader"] == "fabric":
-        arguments = [
-            java,
-            "-jar",
-            str(installer),
-            "client",
-            "-dir",
-            str(directory),
-            "-mcversion",
-            row["runtime_version"],
-            "-loader",
-            row["loader_version"],
-            "-noprofile",
-            "-snapshot",
-        ]
-    elif row["loader"] == "forge":
-        arguments = [java, "-jar", str(installer), "--installClient", str(directory)]
-    elif row["loader"] == "neoforge":
-        # Direct installer invocation avoids minecraft-launcher-lib's pre-26.x
-        # NeoForge version normalizer while retaining its standard command builder.
-        arguments = [java, "-jar", str(installer), "--install-client", str(directory)]
-    else:
-        raise RuntimeFailure(f"unsupported loader {row['loader']!r}")
-    run_checked(arguments, directory, install_log, process_env(java), timeout=1800)
-    if not version_json.is_file():
-        raise RuntimeFailure(f"loader installer did not create {version_json}")
-    normalize_inherited_profile(version_json, row["loader"])
-    return directory, version_id
+    attempts = NEOFORGE_CLIENT_INSTALL_ATTEMPTS if row["loader"] == "neoforge" else 1
+    last_error: Exception | None = None
+
+    for attempt in range(1, attempts + 1):
+        staging = Path(tempfile.mkdtemp(prefix=f".{key}.installing-", dir=clients_root))
+        staged_version_json = staging / "versions" / version_id / f"{version_id}.json"
+        try:
+            ensure_launcher_files(staging)
+            install_log.parent.mkdir(parents=True, exist_ok=True)
+            with install_log.open("a", encoding="utf-8") as log:
+                log.write(
+                    f"Client install attempt {attempt}/{attempts}: "
+                    f"vanilla Minecraft {row['runtime_version']}\n"
+                )
+            minecraft_launcher_lib.install.install_minecraft_version(
+                row["runtime_version"], str(staging)
+            )
+            if row["loader"] == "fabric":
+                arguments = [
+                    java,
+                    "-jar",
+                    str(installer),
+                    "client",
+                    "-dir",
+                    str(staging),
+                    "-mcversion",
+                    row["runtime_version"],
+                    "-loader",
+                    row["loader_version"],
+                    "-noprofile",
+                    "-snapshot",
+                ]
+            elif row["loader"] == "forge":
+                arguments = [java, "-jar", str(installer), "--installClient", str(staging)]
+            elif row["loader"] == "neoforge":
+                # Direct installer invocation avoids minecraft-launcher-lib's pre-26.x
+                # NeoForge version normalizer while retaining its standard command builder.
+                arguments = [java, "-jar", str(installer), "--install-client", str(staging)]
+            else:
+                raise RuntimeFailure(f"unsupported loader {row['loader']!r}")
+            run_checked(
+                arguments,
+                staging,
+                install_log,
+                process_env(java),
+                timeout=1800,
+                append=True,
+            )
+            if not staged_version_json.is_file():
+                raise RuntimeFailure(f"loader installer did not create {staged_version_json}")
+            normalize_inherited_profile(staged_version_json, row["loader"])
+            marker = staging / CLIENT_INSTALL_MARKER
+            marker.write_text(
+                json.dumps(client_install_marker_payload(row, version_id), sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            # The final cache path has never held an in-progress install. A same-filesystem rename
+            # makes the fully verified staging tree visible to later scenarios in one operation.
+            staging.replace(directory)
+            return directory, version_id
+        except Exception as exc:
+            last_error = exc
+            with install_log.open("a", encoding="utf-8") as log:
+                log.write(f"Client install attempt {attempt}/{attempts} failed: {exc}\n")
+            if attempt < attempts:
+                time.sleep(NEOFORGE_CLIENT_INSTALL_BACKOFF_SECONDS[attempt - 1])
+        finally:
+            if staging.exists() or staging.is_symlink():
+                remove_install_path(staging)
+
+    if last_error is None:
+        raise RuntimeFailure(f"client installation made no attempts for {key}")
+    raise RuntimeFailure(
+        f"client installation failed after {attempts} attempt(s) for {key}: {last_error}"
+    ) from last_error
 
 
 def process_env(java: str) -> dict[str, str]:
