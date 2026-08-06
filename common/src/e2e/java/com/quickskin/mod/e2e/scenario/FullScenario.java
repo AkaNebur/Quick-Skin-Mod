@@ -32,6 +32,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.SplashRenderer;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -962,11 +963,11 @@ public final class FullScenario implements Scenario {
         // moved from behind the model to in front of it" and "the splash string changed" are the
         // same handful of differing pixels. So this step reads pixels, and reads them twice.
         //
-        // Frame 1 is the title screen with the preview left where the mod puts it, away from the
-        // splash. The splash's own pixels are located in that frame - no vanilla layout constant is
-        // assumed - and become the control: they prove a splash is being drawn, and where. Frame 2
-        // is the same screen with the preview moved onto those exact pixels. The model must have
-        // taken the region over completely.
+        // Frame 1 is the title screen with the preview left where the mod puts it, away from a
+        // harness-pinned yellow splash. Its pixels are located in that frame - no vanilla layout
+        // constant is assumed - and become the control: they prove a splash is being drawn, and
+        // where. Frame 2 is the same screen with the preview moved onto those exact pixels. The
+        // model must have taken the region over completely.
         //
         // The pair is what makes it a z-order assertion rather than a "something is drawn" one. A
         // build that never draws the model would fail frame 2's control (the splash would still be
@@ -991,7 +992,10 @@ public final class FullScenario implements Scenario {
                     c.positionOffsetYTitleScreen = 0;
                     c.sizeModelPreviewPercentageTitleScreen = TITLE_PROBE_SIZE_PERCENT;
                     c.save();
-                    VanillaShim.setScreen(mc, new TitleScreen());
+                    TitleScreen probeScreen = new TitleScreen();
+                    String splashFailure = installDeterministicSplash(probeScreen);
+                    if (splashFailure != null) titleFailure.set(splashFailure);
+                    VanillaShim.setScreen(mc, probeScreen);
                 })
                 .minTicks(TITLE_HOLD_TICKS)
                 .ready(() -> titleProbeReady(mc, titlePhase, titleHold, splashRegion, splashPixels,
@@ -1044,8 +1048,57 @@ public final class FullScenario implements Scenario {
     /** Splash pixels the control frame must find, below which the covered frame proves nothing. */
     private static final int MIN_SPLASH_PIXELS = 40;
 
+    /** Plain text deliberately chosen to avoid vanilla's rare formatted or seasonal renderers. */
+    private static final String TITLE_PROBE_SPLASH = "Quick Skin E2E splash probe";
+
     /**
-     * The vanilla splash's colour, and nothing else on the title screen.
+     * Pins the test screen to one saturated-yellow splash before vanilla initializes it.
+     *
+     * <p>Vanilla normally chooses a random splash. One legitimate entry is the section-sign
+     * formatted {@code Colors!}, whose multicoloured glyphs made this yellow-pixel oracle flaky
+     * even though the z-order was correct. The renderer constructor changed from {@code String} to
+     * {@code Component} in 1.21.11, and the private field is remapped in packaged clients, so both
+     * constructor and field selection are type-driven. This code lives only in the separate E2E
+     * harness and never enters the production mod.</p>
+     *
+     * @return {@code null} on success, otherwise a fail-closed diagnostic for the scenario
+     */
+    private static String installDeterministicSplash(TitleScreen screen) {
+        try {
+            Object renderer;
+            try {
+                renderer = SplashRenderer.class.getConstructor(String.class)
+                        .newInstance(TITLE_PROBE_SPLASH);
+            } catch (NoSuchMethodException stringEraEnded) {
+                Component yellow = Component.literal(TITLE_PROBE_SPLASH)
+                        .withStyle(style -> style.withColor(0xFFFF00));
+                renderer = SplashRenderer.class.getConstructor(Component.class)
+                        .newInstance(yellow);
+            }
+
+            Field splashField = null;
+            for (Field candidate : TitleScreen.class.getDeclaredFields()) {
+                if (candidate.getType() != SplashRenderer.class) continue;
+                if (splashField != null) {
+                    return "title screen exposes multiple SplashRenderer fields";
+                }
+                splashField = candidate;
+            }
+            if (splashField == null) return "title screen exposes no SplashRenderer field";
+            splashField.setAccessible(true);
+            splashField.set(screen, renderer);
+            if (splashField.get(screen) != renderer) {
+                return "title screen rejected the deterministic SplashRenderer";
+            }
+            return null;
+        } catch (Throwable failure) {
+            return "could not install deterministic title splash: "
+                    + failure.getClass().getSimpleName() + ": " + failure.getMessage();
+        }
+    }
+
+    /**
+     * The harness-pinned vanilla splash's colour, and nothing else on the title screen.
      *
      * <p>{@code SplashRenderer} draws at {@code 0xFFFF00} with a drop shadow at a quarter of that, so
      * only the glyph cores match; the panorama, the logo and the button chrome are all far away from
@@ -1071,6 +1124,7 @@ public final class FullScenario implements Scenario {
                                     AtomicReference<int[]> region, AtomicReference<int[]> counts,
                                     AtomicReference<String> failure,
                                     String probeBefore, String probeAfter) {
+        if (failure.get() != null) return true;
         if (!(VanillaShim.currentScreen(mc) instanceof TitleScreen)) {
             return false;
         }
@@ -1146,8 +1200,8 @@ public final class FullScenario implements Scenario {
      * The middle of the splash, in GUI coordinates, as {@code {x0, y0, x1, y1}}.
      *
      * <p>Measured rather than assumed: the splash's anchor, rotation and pulsing scale are vanilla
-     * internals that have already been renamed once across the supported eras, and its string is
-     * picked at random per launch.
+     * internals that have already been renamed once across the supported eras. The harness pins
+     * the string and colour, but deliberately keeps measuring vanilla's placement and pulse.
      *
      * <p>The splash is not the only saturated yellow on a title screen, though - the 26.x panorama
      * flies <em>bees</em> through its cherry grove, and a bee halfway down the screen would stretch
