@@ -442,6 +442,24 @@ class WorkflowSecurityTest(unittest.TestCase):
         )
         self.assertLess(propose.index(identity), propose.index(merge))
 
+    def test_version_sync_conflict_policy_uses_original_conflict_paths(self) -> None:
+        propose = job_block("sync-version-branches.yml", "propose")
+        publish = job_block("sync-version-branches.yml", "publish")
+
+        compare_conflicts = (
+            'diff -u "$RUNNER_TEMP/conflicted-paths.txt" '
+            '"$RUNNER_TEMP/current-conflicts.txt"'
+        )
+        enforce_worktree = "scripts/ci/ai_patch_policy.py worktree"
+        self.assertIn(compare_conflicts, propose)
+        self.assertIn(enforce_worktree, propose)
+        self.assertIn(
+            '--allowed-paths "$RUNNER_TEMP/conflicted-paths.txt"',
+            propose,
+        )
+        self.assertLess(propose.index(compare_conflicts), propose.index(enforce_worktree))
+        self.assertEqual(publish.count("--mode conflict --paths-file"), 2)
+
     def test_version_sync_renders_and_revalidates_target_readme(self) -> None:
         propose = job_block("sync-version-branches.yml", "propose")
         publish = job_block("sync-version-branches.yml", "publish")
