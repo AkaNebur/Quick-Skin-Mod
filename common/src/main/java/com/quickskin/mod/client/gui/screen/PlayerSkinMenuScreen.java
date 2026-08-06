@@ -744,8 +744,8 @@ public class PlayerSkinMenuScreen extends Screen {
                 this.title,
                 this.width / 2,
                 panelY + 10,
-//? if <1.21.11 {
-                0xFFFFFF
+//? if <1.21.9 {
+                0xFFFFFFFF
 //?} else {
                 0xFFFFFFFF
 //?}

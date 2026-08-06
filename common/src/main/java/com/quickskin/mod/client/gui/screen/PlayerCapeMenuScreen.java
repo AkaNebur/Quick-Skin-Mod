@@ -5,6 +5,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 //?} else {
 //?}
 import com.quickskin.mod.QuickSkin;
+import com.quickskin.mod.client.gui.GuiTextColor;
 //? if <26.1.2 {
 import com.quickskin.mod.client.gui.util.BackgroundRenderer;
 //?} else {
@@ -154,11 +155,7 @@ public class PlayerCapeMenuScreen extends Screen {
     // Import feedback
     private String importMessage = "";
     private int importMessageTimer = 0;
-//? if <1.21.11 {
-    private int importMessageColor = 0xFFFFFF;
-//?} else {
     private int importMessageColor = 0xFFFFFFFF;
-//?}
     private CapeImportWorkflow capeImportWorkflow;
     private int capeImportGeneration;
 
@@ -608,11 +605,8 @@ public class PlayerCapeMenuScreen extends Screen {
             return;
         }
 
-//? if <1.21.11 {
-        showImportMessage(Component.translatable("quickskin.cape.processing").getString(), 0x55AAFF, 60);
-//?} else {
-        showImportMessage(Component.translatable("quickskin.cape.processing").getString(), 0xFF55AAFF, 60);
-//?}
+        showImportMessage(Component.translatable("quickskin.cape.processing").getString(),
+                GuiTextColor.opaqueRgb(0x55AAFF), 60);
         startCapeImports(List.of(filePath));
     }
 
@@ -672,23 +666,15 @@ public class PlayerCapeMenuScreen extends Screen {
             if (notImported > 0) {
                 message += String.format(" (%d not imported)", notImported);
             }
-//? if <1.21.11 {
-            int color = notImported == 0 ? 0x55FF55 : 0xFFAA00;
-//?} else {
-            int color = notImported == 0 ? 0xFF55FF55 : 0xFFFFAA00;
-//?}
-            showImportMessage(message, color, 200);
+            showImportMessage(message,
+                    GuiTextColor.opaqueRgb(notImported == 0 ? 0x55FF55 : 0xFFAA00), 200);
             return;
         }
 
         String message = summary.firstError() != null
                 ? Component.translatable("quickskin.cape.error", summary.firstError()).getString()
                 : Component.translatable("quickskin.cape.no_valid").getString();
-//? if <1.21.11 {
-        showImportMessage(message, 0xFF5555, 200);
-//?} else {
-        showImportMessage(message, 0xFFFF5555, 200);
-//?}
+        showImportMessage(message, GuiTextColor.opaqueRgb(0xFF5555), 200);
     }
 
     private void removeCape() {
@@ -799,23 +785,17 @@ public class PlayerCapeMenuScreen extends Screen {
                 removeCape();
             }
 
-//? if <1.21.11 {
-            showImportMessage(Component.translatable("quickskin.cape.deleted").getString(), 0x55FF55, 100);
-//?} else {
-            showImportMessage(Component.translatable("quickskin.cape.deleted").getString(), 0xFF55FF55, 100);
-//?}
+            showImportMessage(Component.translatable("quickskin.cape.deleted").getString(),
+                    GuiTextColor.opaqueRgb(0x55FF55), 100);
         } catch (Exception e) {
-//? if <1.21.11 {
-            showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFF5555, 100);
-//?} else {
-            showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(), 0xFFFF5555, 100);
-//?}
+            showImportMessage(Component.translatable("quickskin.cape.error", e.getMessage()).getString(),
+                    GuiTextColor.opaqueRgb(0xFF5555), 100);
         }
     }
 
-    private void showImportMessage(String message, int color, int duration) {
+    private void showImportMessage(String message, int argb, int duration) {
         this.importMessage = message;
-        this.importMessageColor = color;
+        this.importMessageColor = argb;
         this.importMessageTimer = duration;
     }
 
@@ -880,7 +860,7 @@ public class PlayerCapeMenuScreen extends Screen {
 
 //? if <1.21 {
         // Title
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFF);
+        graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFFFF);
 //?} else if <1.21.11 {
         // Flush and ensure clean render state
         graphics.flush();
@@ -899,7 +879,7 @@ public class PlayerCapeMenuScreen extends Screen {
                 0xB0000000);
 //?} else if <1.21.11 {
         // Title
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFF);
+        graphics.drawCenteredString(this.font, this.title, this.width / 2, scaleValue(15), 0xFFFFFFFF);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
@@ -1037,8 +1017,8 @@ public class PlayerCapeMenuScreen extends Screen {
         int headerY = startY + HEADER_HEIGHT / 2 - 4;
         if (headerY > gridY - 8 && headerY < gridY + gridHeight + 8) {
             int gridCenterX = this.gridX + (this.gridWidth / 2);
-//? if <1.21.11 {
-            graphics.drawCenteredString(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFF);
+//? if <1.21.9 {
+            graphics.drawCenteredString(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFFFF);
 //?} else if <26.1.2 {
             graphics.drawCenteredString(this.font, Component.translatable(titleKey), gridCenterX, headerY, 0xFFFFFFFF);
 //?} else {
@@ -1100,9 +1080,9 @@ public class PlayerCapeMenuScreen extends Screen {
         Component mainMessage = Component.translatable("quickskin.dropzone.capes.main");
         Component subMessage = Component.translatable("quickskin.dropzone.capes.sub");
 
-//? if <1.21.11 {
-        int mainColor = isHovering ? 0xFFFFFF : 0xE0E0E0;
-        int subColor = isHovering ? 0xB0B0B0 : 0x909090;
+//? if <1.21.9 {
+        int mainColor = isHovering ? 0xFFFFFFFF : 0xFFE0E0E0;
+        int subColor = isHovering ? 0xFFB0B0B0 : 0xFF909090;
 //?} else {
         int mainColor = isHovering ? 0xFFFFFFFF : 0xFFE0E0E0;
         int subColor = isHovering ? 0xFFB0B0B0 : 0xFF909090;
@@ -1173,9 +1153,9 @@ public class PlayerCapeMenuScreen extends Screen {
             graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0x90000000);
 
             // Render "None" text centered
-//? if <1.21.11 {
+//? if <1.21.9 {
             graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.option.none"), x + capeDisplaySize / 2,
-                    y + capeDisplaySize / 2 - 4, 0xFFFFFF);
+                    y + capeDisplaySize / 2 - 4, 0xFFFFFFFF);
 //?} else if <26.1.2 {
             graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.option.none"), x + capeDisplaySize / 2,
                     y + capeDisplaySize / 2 - 4, 0xFFFFFFFF);
@@ -1324,9 +1304,9 @@ public class PlayerCapeMenuScreen extends Screen {
     private void renderLoadingTexture(GuiGraphicsExtractor graphics, int x, int y) {
 //?}
         graphics.fill(x, y, x + capeDisplaySize, y + capeDisplaySize, 0xFF222222);
-//? if <1.21.11 {
+//? if <1.21.9 {
         graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.loading"),
-                x + capeDisplaySize / 2, y + capeDisplaySize / 2 - 4, 0x888888);
+                x + capeDisplaySize / 2, y + capeDisplaySize / 2 - 4, 0xFF888888);
 //?} else if <26.1.2 {
         graphics.drawCenteredString(this.font, Component.translatable("quickskin.cape.loading"),
                 x + capeDisplaySize / 2, y + capeDisplaySize / 2 - 4, 0xFF888888);
@@ -1395,8 +1375,9 @@ public class PlayerCapeMenuScreen extends Screen {
     private List<Component> getCapeTooltip(CapeEntry cape) {
         List<Component> tooltip = new ArrayList<>();
 
-        int nameColor = cape.isKnown() ? 0xFFD700 : 0x55FF55; // Gold for known, green for local
-        tooltip.add(Component.literal(cape.getFriendlyName()).withStyle(s -> s.withBold(true).withColor(nameColor)));
+        // TextColor intentionally expects 24-bit RGB rather than GuiGraphics ARGB.
+        tooltip.add(Component.literal(cape.getFriendlyName()).withStyle(s -> s.withBold(true)
+                .withColor(cape.isKnown() ? 0xFFD700 : 0x55FF55))); // Gold for known, green for local
 
         tooltip.add(Component.literal(cape.getDescription()).withStyle(s -> s.withColor(0xCCCCCC)));
 
@@ -1776,19 +1757,13 @@ public class PlayerCapeMenuScreen extends Screen {
                 .toList();
 
         if (validFiles.isEmpty()) {
-//? if <1.21.11 {
-            showImportMessage(Component.translatable("quickskin.cape.no_files").getString(), 0xFFAA00, 100);
-//?} else {
-            showImportMessage(Component.translatable("quickskin.cape.no_files").getString(), 0xFFFFAA00, 100);
-//?}
+            showImportMessage(Component.translatable("quickskin.cape.no_files").getString(),
+                    GuiTextColor.opaqueRgb(0xFFAA00), 100);
             return;
         }
 
-//? if <1.21.11 {
-        showImportMessage(Component.translatable("quickskin.cape.processing_count", validFiles.size()).getString(), 0x55AAFF, 60);
-//?} else {
-        showImportMessage(Component.translatable("quickskin.cape.processing_count", validFiles.size()).getString(), 0xFF55AAFF, 60);
-//?}
+        showImportMessage(Component.translatable("quickskin.cape.processing_count", validFiles.size()).getString(),
+                GuiTextColor.opaqueRgb(0x55AAFF), 60);
         startCapeImports(validFiles);
     }
 
