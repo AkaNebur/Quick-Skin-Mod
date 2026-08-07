@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +19,17 @@ from artifact_manifest import (  # noqa: E402
     load_artifact_manifest,
 )
 from matrix import MatrixError, load_matrix  # noqa: E402
-from packaged_runtime import run_packaged_row  # noqa: E402
+from packaged_runtime import (  # noqa: E402
+    PackagedRuntimeSession,
+    RuntimeFailure,
+    run_packaged_row,
+)
 from release_identity import ReleaseIdentityError, derive as derive_release_identity  # noqa: E402
+from runtime_store import RunWorkspace, RuntimeStoreError, WorkspacePromotion  # noqa: E402
+from scenario_contract import default_contract  # noqa: E402
+
+
+SCENARIO_CONTRACT = default_contract()
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--loader", choices=("fabric", "forge", "neoforge"))
     parser.add_argument(
         "--scenarios",
-        help="comma-separated scenario override (scheduled jobs pass all four here)",
+        help="comma-separated scenario selection emitted from the scenario contract",
     )
     parser.add_argument("--output-root", type=Path, default=Path("e2e-out"))
     parser.add_argument("--packaged", action="store_true", help="required acknowledgement")
@@ -85,9 +95,11 @@ def scenarios_for(data: dict[str, Any], row: dict[str, Any], args: argparse.Name
     scenarios = (
         [value.strip() for value in args.scenarios.split(",") if value.strip()]
         if args.scenarios
-        else [row["scenario"]]
+        else list(
+            SCENARIO_CONTRACT.scenarios_for_profile("runtime-default")
+        )
     )
-    known = set(data["scheduled_scenarios"])
+    known = set(SCENARIO_CONTRACT.scenario_ids)
     unknown = [scenario for scenario in scenarios if scenario not in known]
     if unknown:
         raise ValueError(f"unknown E2E scenarios: {unknown}; known: {sorted(known)}")
@@ -147,6 +159,84 @@ def print_rows(
     print(json.dumps({"include": resolved}, indent=2))
 
 
+def execute_packaged_rows(
+    data: dict[str, Any],
+    rows: list[dict[str, Any]],
+    args: argparse.Namespace,
+    manifest: dict[str, Any],
+    manifest_path: Path,
+    output_root: Path,
+) -> tuple[list[dict[str, Any]], WorkspacePromotion]:
+    """Run in disposable scratch space and atomically publish one evidence snapshot."""
+
+    results: list[dict[str, Any]] = []
+    with RunWorkspace.create(output_root, prefix=".evidence-run-") as evidence:
+        with tempfile.TemporaryDirectory(
+            prefix="quick-skin-e2e-scratch-parent-"
+        ) as scratch_parent, RunWorkspace.create(
+            Path(scratch_parent), prefix=".runtime-run-"
+        ) as scratch:
+            runtime_session = PackagedRuntimeSession.from_environment(scratch.path)
+            for row in rows:
+                for scenario in scenarios_for(data, row, args):
+                    print(
+                        f">>> {row['artifact_node']} artifact on {row['runtime_version']} "
+                        f"{row['loader']} / {scenario}",
+                        flush=True,
+                    )
+                    result = run_packaged_row(
+                        REPO,
+                        data,
+                        row,
+                        scenario,
+                        manifest,
+                        manifest_path,
+                        evidence.path,
+                        runtime_session,
+                    )
+                    results.append(result)
+                    print(
+                        f"<<< {result['status'].upper()} ({result['elapsed_s']}s)"
+                        + (f": {result['error']}" if result.get("error") else ""),
+                        flush=True,
+                    )
+
+            runtime_store_metrics = runtime_session.gc()
+
+        resolved = [
+            {
+                key: result[key]
+                for key in (
+                    "artifact_node",
+                    "runtime_version",
+                    "loader",
+                    "scenario",
+                    "jar_sha256",
+                    "port",
+                )
+            }
+            for result in results
+        ]
+        (evidence.path / "resolved-matrix.json").write_text(
+            json.dumps({"rows": resolved}, indent=2) + "\n", encoding="utf-8"
+        )
+        (evidence.path / "summary.json").write_text(
+            json.dumps(
+                {"results": results, "runtime_store": runtime_store_metrics},
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (evidence.path / "runtime-store.json").write_text(
+            json.dumps(runtime_store_metrics, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        promotion = evidence.promote_to(output_root / "current")
+
+    return results, promotion
+
+
 def main() -> int:
     args = parse_args()
     matrix_path = absolute(args.matrix)
@@ -180,55 +270,31 @@ def main() -> int:
         if manifest is None:
             raise ValueError(f"packaged execution requires {manifest_path}")
 
-        results: list[dict[str, Any]] = []
-        for row in rows:
-            for scenario in scenarios_for(data, row, args):
-                print(
-                    f">>> {row['artifact_node']} artifact on {row['runtime_version']} "
-                    f"{row['loader']} / {scenario}",
-                    flush=True,
-                )
-                result = run_packaged_row(
-                    REPO,
-                    data,
-                    row,
-                    scenario,
-                    manifest,
-                    manifest_path,
-                    output_root,
-                )
-                results.append(result)
-                print(
-                    f"<<< {result['status'].upper()} ({result['elapsed_s']}s)"
-                    + (f": {result['error']}" if result.get("error") else ""),
-                    flush=True,
-                )
-
-        output_root.mkdir(parents=True, exist_ok=True)
-        resolved = [
-            {
-                key: result[key]
-                for key in (
-                    "artifact_node",
-                    "runtime_version",
-                    "loader",
-                    "scenario",
-                    "jar_sha256",
-                    "port",
-                )
-            }
-            for result in results
-        ]
-        (output_root / "resolved-matrix.json").write_text(
-            json.dumps({"rows": resolved}, indent=2) + "\n", encoding="utf-8"
-        )
-        (output_root / "summary.json").write_text(
-            json.dumps({"results": results}, indent=2) + "\n", encoding="utf-8"
+        results, promotion = execute_packaged_rows(
+            data,
+            rows,
+            args,
+            manifest,
+            manifest_path,
+            output_root,
         )
         passed = sum(result["status"] == "pass" for result in results)
-        print(f"{passed}/{len(results)} packaged runtime rows passed")
+        action = "replaced" if promotion.replaced else "created"
+        recovery = " after recovering last-good" if promotion.recovered_interrupted else ""
+        print(
+            f"{passed}/{len(results)} packaged runtime rows passed; "
+            f"{action} {promotion.current}{recovery}"
+        )
         return 0 if passed == len(results) else 1
-    except (ArtifactManifestError, MatrixError, ReleaseIdentityError, ValueError, OSError) as exc:
+    except (
+        ArtifactManifestError,
+        MatrixError,
+        ReleaseIdentityError,
+        RuntimeFailure,
+        RuntimeStoreError,
+        ValueError,
+        OSError,
+    ) as exc:
         print(f"E2E configuration failed: {exc}", file=sys.stderr)
         return 2
 

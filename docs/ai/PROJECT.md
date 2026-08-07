@@ -12,8 +12,8 @@ repository root.
   request, including an AI-assisted workflow.
 - `README.md` is for users and builders; focused architecture documents own their subjects.
 - `RELEASING.md` owns immutable identity, publication, recovery, provenance, and GitHub governance.
-- `e2e/README.md`, `e2e/visual-catalog.json`, and `scripts/pages/` own public visual-evidence
-  identity, validation, rendering, and GitHub Pages publication.
+- `e2e/README.md`, `e2e/scenario-contract.json`, and `scripts/pages/` own packaged-scenario and
+  public visual-evidence identity, validation, rendering, and GitHub Pages publication.
 - [`docs/architecture/decisions/`](../architecture/decisions/README.md)
   records evidence-backed architectural decisions that must survive individual worktrees.
 
@@ -22,10 +22,12 @@ instruction file that restates this contract. Add a nested `AGENTS.md` only when
 genuinely needs narrower rules, and keep it limited to imports for those local deltas.
 
 Quick Skin is a client-and-server Minecraft mod built from one Stonecutter-managed source tree. The
-central inventory is `release/release-matrix.json`. It is authoritative for supported versions,
-loaders, Java versions, remap policy, source-overlay routing, Gradle artifact tasks, runtime
-dependencies, E2E lanes, loader ranges, and FML pack formats. Do not create a second lane list in
-Gradle, Python, workflows, or documentation.
+central release inventory is `release/release-matrix.json`. It is authoritative for supported
+versions, loaders, Java versions, remap policy, source-overlay routing, Gradle artifact tasks,
+runtime dependencies, loader ranges, and FML pack formats. The versioned
+`e2e/scenario-contract.json` is separately authoritative for scenario ids, execution profiles,
+orchestration, steps, assertions, captures, probes, and comparisons. Do not duplicate either
+inventory in Gradle, Python, workflows, or documentation.
 
 The active production matrix on this branch contains exactly two artifacts:
 
@@ -52,10 +54,18 @@ immutable workflow and governance activation contract.
 - `.github/workflows/sync-version-branches.yml` discovers release branches from their names. It must
   not contain a Minecraft-version list. The matrix checked into each target remains authoritative.
 - A trusted push to `master` creates a target-specific synchronization branch and PR. Clean merges
-  are mechanical. Claude may resolve a merge conflict while preserving the target matrix and may
-  make one bounded repair after a failed gate. AI jobs have read-only GitHub permissions, check out
-  without persisted credentials, and emit only bounded patch artifacts. A separate job revalidates
-  the patch policy, matrix, and repository tests before receiving write credentials.
+  are mechanical. For a conflicted merge, protected code partitions the original conflict set
+  before any model runs: exact shared guidance/runtime documents use a source-preferred three-way
+  merge, the target matrix remains authoritative, and an inactive loader build file remains
+  absent. Unknown protected conflicts fail closed; Claude receives only the remaining unprotected
+  paths and may make one bounded repair after a failed gate. AI jobs have read-only GitHub
+  permissions, check out without persisted credentials, and emit only bounded patch artifacts. A
+  protected merge controller owns Git's no-commit merge, the original index classification, exact
+  mechanical resolutions, and stable evidence. Both the credentialless validator and the fresh
+  writer rebuild that merge from the authenticated parents. They apply the complete proposal only
+  to an alternate index, authenticate its full tree, import only classifier-approved AI paths, run
+  protected profile renderers, and require the reconstructed tree to equal the proposal exactly.
+  Candidate scripts never run in the writer.
 - GITHUB_TOKEN-created PRs and child runs do not recursively start ordinary PR or completion
   workflows, so synchronization explicitly dispatches `build-gate.yml` and `on-demand-e2e.yml`.
   Each gate reports completion through a trusted `repository_dispatch`; the result handler merges
@@ -67,6 +77,11 @@ immutable workflow and governance activation contract.
 - After merging, the controller publishes lightweight Build and Packaged E2E attestations on the
   final release branch. They must verify the original trusted run IDs, exact tested commit, ancestry,
   and identical Git trees; never rerun Minecraft merely to populate a badge or attest a changed tree.
+- A port may report packaged Minecraft as not applicable only when protected automation computes
+  an exact documentation/site/administration-only diff. Production, loader, overlay, harness,
+  contract, visual oracle, matrix, Gradle, workflow, classifier, mixed, malformed, or unknown
+  changes always execute the complete contract-selected suite. The dispatched workflow and result
+  handler independently revalidate that decision before publishing the stable status context.
 - The marked README release-status table is generated from discovered release branches and each
   branch's matrix. Its workflow updates one idempotent automation PR and never pushes directly to
   `master`. Do not edit its rows manually or add a branch/version list to its workflow.
@@ -74,12 +89,21 @@ immutable workflow and governance activation contract.
   `pages-e2e-<branch>` handoff. The Pages workflow must discover the same release branches, require
   evidence for every exact current head, validate each source PNG, convert it to a protected WebP
   derivative before fan-in, render with protected `master` code, and deploy the whole site
-  atomically. `collected-pages-*` and `pages-cache-*` contain only compact derivatives plus the
+  atomically. The producer sends an authenticated explicit wake-up because token-created runs do
+  not reliably create a recursive completion event. `collected-pages-*` and `pages-cache-*`
+  contain only compact derivatives plus the
   source and derivative proof records, never original PNG bytes. Only after that Pages run reaches
   `completed/success` may protected automation replace the branch's single rolling cache and
   retire older caches plus the consumed handoff.
   Never delete the fallback before its replacement succeeds, introduce a second version list,
   publish logs/crash reports, or make Pages a protected release check.
+- Credential-bearing AI visual judgment runs in its own authenticated advisory workflow. The run
+  pins the exact workflow `github.sha`, authenticates the complete protected job graph, and curates
+  raw artifacts on a secretless runner. Only canonical, content-addressed RGB PNGs, a bounded
+  manifest, and provenance cross the handoff into a fresh model capsule; raw E2E ZIPs never share a
+  runner with the credential. The handoff is revalidated before and after review and deleted by
+  exact artifact id immediately afterward. This advisory path must never delay, weaken, or become
+  part of the required Packaged E2E conclusion.
 - Actions artifacts are handoffs, not an archive. Every ordinary upload is retained for one day;
   the only longer-lived uploads are the SHA-bound Pages cache and the immutable
   `release-<release-id>` bundle, both retained for 90 days. The release bundle spans protected
@@ -87,7 +111,8 @@ immutable workflow and governance activation contract.
   successful Pages replacement, protected rotation deletes by exact artifact ID the superseded
   cache, consumed `pages-e2e-<branch>` handoff, Pages fan-in artifacts, and deploy artifact. Raw
   packaged-E2E proof retains its one-day window because a concurrent branch attestation may still
-  consume it. A protected schedule also deletes by exact cache ID Actions caches scoped to branch
+  consume it; the single-use AI review handoff is deleted as soon as its review job settles. A
+  protected schedule also deletes by exact cache ID Actions caches scoped to branch
   refs that no longer exist. On live branches it recognizes only SHA-bearing `setup-gradle` home
   keys, preserves the newest restorable generation per OS/job/cache-version family that has a
   successful Build job, and protects the complete cache inventory while any potentially
