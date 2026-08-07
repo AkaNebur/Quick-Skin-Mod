@@ -128,6 +128,16 @@ This file is part of the repository-wide instruction set imported by `AGENTS.md`
   Treat stale/unknown/corrupt identity as a miss or fail-closed error. Garbage
   collection is bounded housekeeping, never a correctness mechanism. Dependency hashes come from
   the strict Gradle verification metadata; first-download trust is forbidden.
+- An ingested runtime tree may contain a symbolic link only when it resolves inside that tree and
+  to a regular file; real Java runtimes ship such links. Store the target's bytes, refuse escaping,
+  dangling, and directory links, and never publish or materialize a link. Compare containment by
+  path component against the resolved root, never by string prefix, which would admit a sibling
+  whose name merely extends the root. Install a leased blob under its real artifact name, because
+  loaders discover only `*.jar`; the store's digest name is not an installable identity.
+- The shared Java harness must reference a drifting Minecraft type as a class literal so the
+  harness jar's remapper rewrites it. Resolving a Minecraft name from a string resolves only on
+  Mojang-mapped loaders and fails on Fabric's intermediary runtime, so a string lookup additionally
+  requires an explicit intermediary fallback.
 - Public evidence is bound to source run/branch/SHA and final run/branch/SHA. Pages may select a
   bundle only when its authenticated originating target run and manifest both match the current
   release-branch head; a later protected Pages run may only roll that already validated bundle
