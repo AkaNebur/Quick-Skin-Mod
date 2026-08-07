@@ -1,13 +1,18 @@
 name: Build gate
 
 # The fast lane: everything that can be checked without launching Minecraft. It runs on every
-# push and pull request so a broken compile, a bad matrix, or a build that dirties tracked
-# sources is caught immediately.
+# pull request plus direct pushes to protected/release branches so a broken compile, a bad matrix,
+# or a build that dirties tracked sources is caught immediately without building an in-repository
+# feature commit twice. Automation branches dispatch this workflow explicitly.
 #
 # Packaged E2E remains a separate workflow so version branches can run both gates independently.
 on:
   pull_request:
   push:
+    branches:
+      - master
+      - "fabric-and-neoforge-*"
+      - "forge-and-fabric-*"
   workflow_dispatch:
     inputs:
       attest_run_id:
@@ -137,7 +142,7 @@ jobs:
               --readme README.md \
               --profile-branch master \
               --check 2> /dev/null; then
-            exit 0
+            profile_branch=master
           else
             profile_branch="$(jq -er '.project.release_branch' \
               release/release-matrix.json)"
@@ -147,29 +152,15 @@ jobs:
             --readme README.md \
             --profile-branch "$profile_branch" \
             --check
+          python3 scripts/release/workflow_guidance.py \
+            --matrix release/release-matrix.json \
+            --guidance docs/ai/WORKFLOW.md \
+            --profile-branch "$profile_branch" \
+            --check
 
       - name: Validate release tooling and repository policy
         run: |
-          python -m py_compile \
-            scripts/release/branch_readme.py \
-            scripts/release/matrix.py \
-            scripts/release/github_governance.py \
-            scripts/release/github_release.py \
-            scripts/release/reconcile_publication.py \
-            scripts/release/release_identity.py \
-            scripts/release/status_table.py \
-            scripts/release/verify_release.py \
-            scripts/release/verify_reproducibility.py \
-            scripts/release/version_branches.py \
-            scripts/pages/evidence.py \
-            scripts/pages/build_site.py \
-            scripts/ci/gradle_cache_policy.py \
-            scripts/ci/prune_actions_caches.py \
-            scripts/ci/ai_patch_policy.py \
-            e2e/orchestrator.py \
-            e2e/packaged_runtime.py \
-            e2e/visual_evidence.py \
-            e2e/visual_review.py
+          python -m compileall -q e2e scripts
           node --check site/assets/site.js
           node --check site/assets/gallery.js
           python -m unittest discover -s scripts/release/tests -p 'test_*.py' -v

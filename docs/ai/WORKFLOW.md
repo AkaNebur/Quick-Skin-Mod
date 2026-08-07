@@ -22,6 +22,31 @@ This file is part of the repository-wide instruction set imported by `AGENTS.md`
   but must never package Quick Skin production classes.
 - Do not run multiple Gradle invocations concurrently. Architectury uses JVM-global transform state,
   and this repository intentionally disables parallel Gradle execution for aggregate builds.
+- A workflow step that receives an AI credential must run the pinned CLI with safe mode, no session
+  persistence or prompt history, `dontAsk`, an explicit shell-free `--tools` set, and scoped
+  `Read`/`Edit`/`Write` permission rules. Install that CLI only from package and lock files
+  materialized from the protected workflow SHA, with lifecycle scripts disabled and only the
+  reviewed pinned installer invoked explicitly; never load project hooks, MCP, agent configuration,
+  or package metadata from the release/topic checkout that supplies logs or source for analysis.
+- Treat AI failure evidence as an adversarial payload. Authenticate the source run, cap its log,
+  select only named artifacts by immutable numeric id, bound their count and compressed size, and
+  extract them with the protected traversal/link/entry/expanded-byte validator. Grant the model
+  read-only access to that evidence path; repair writes are positively limited to production
+  `src/main` paths and cannot persist agent configuration.
+- Never place raw visual artifacts in a credential-bearing job. Authenticate them, validate the
+  protected lane graph, extract them with aggregate budgets, enforce exact matrix-row/scenario/JAR
+  coverage, and canonicalize selected images in a prior secretless job. The fresh review capsule
+  may read only its curated manifest and image directory and write one raw report; protected code
+  revalidates the capsule and emits the only normalized report eligible for upload. A final
+  `actions: write` job reauthenticates and deletes the single-use handoff by exact id.
+- Version-port and repair validation must check out candidate code with credentials disabled.
+  For a version port, the complete patch goes only into an alternate index; the protected merge
+  controller reconstructs the original merge and copies only recomputed AI-conflict entries from
+  that authenticated candidate tree. Candidate compilation/tests finish and the reconstructed
+  staged tree is revalidated in a credentialless job. A dependent writer runs on a fresh runner,
+  repeats the reconstruction and exact-tree comparison using only protected policy, creates commits
+  with explicit bot identity through `git commit-tree` (never hooks), rechecks ancestry/remote
+  identity, and only then configures GitHub authentication. It must never execute candidate scripts.
 - Keep each commit to one reviewable concern. Use an imperative conventional subject consistent
   with repository history: `feat:`, `fix:`, `refactor:`, `test:`, `build:`, `docs:`, `ci:`, or
   `chore:`.
@@ -80,24 +105,23 @@ Also run:
 
 ```powershell
 git diff --check
-python -m py_compile scripts/release/branch_readme.py scripts/release/matrix.py `
-  scripts/release/verify_release.py `
-  scripts/release/generate_sbom.py `
-  scripts/release/github_governance.py scripts/release/github_release.py `
-  scripts/release/reconcile_publication.py `
-  scripts/release/release_identity.py scripts/release/status_table.py `
-  scripts/release/verify_reproducibility.py `
-  scripts/release/version_branches.py scripts/ci/ai_patch_policy.py `
-  scripts/ci/gradle_cache_policy.py scripts/ci/prune_actions_caches.py e2e/orchestrator.py `
-  scripts/pages/evidence.py scripts/pages/build_site.py scripts/pages/select_artifact.py `
-  scripts/pages/rotate_artifacts.py `
-  e2e/packaged_runtime.py e2e/visual_evidence.py e2e/visual_review.py `
-  e2e/check_visual_review.py
+python -m compileall -q e2e scripts
+python scripts/release/e2e_readme.py `
+  --matrix release/release-matrix.json `
+  --contract e2e/scenario-contract.json `
+  --readme e2e/README.md `
+  --profile-branch "<master-or-exact-release-branch>" `
+  --check
+python scripts/release/workflow_guidance.py `
+  --matrix release/release-matrix.json `
+  --guidance docs/ai/WORKFLOW.md `
+  --profile-branch "<master-or-exact-release-branch>" `
+  --check
 python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
 python -m unittest discover -s scripts/ci/tests -p "test_*.py" -v
 ```
 
-Packaged Minecraft runtime scenarios require a display and the Java 21 toolchain. Use Xvfb on
+Packaged Minecraft runtime scenarios require a display and the matrix-declared Java toolchain. Use Xvfb on
 headless Linux and in CI; on a desktop session, macOS included, run the orchestrator directly.
 Follow `e2e/README.md` for what is verified on which platform, and do not substitute Loom
 development runs for packaged-JAR E2E evidence. Gradle and Stonecutter must themselves start on
@@ -114,8 +138,9 @@ scope locally, use `scripts/release/verify_reproducibility.py` against the first
   release matrix.
 - Keep oracle preservation and post-retirement resource routing in `ORACLE-RETIREMENT.md`.
 - Keep packaged-runtime behavior in `e2e/README.md`.
-- Keep screenshot semantics in `e2e/visual-catalog.json` and public-site behavior under
-  `scripts/pages/` plus `site/`; never hand-maintain versions in those files.
+- Keep scenario execution and screenshot semantics in `e2e/scenario-contract.json` and public-site
+  behavior under `scripts/pages/` plus `site/`; never hand-maintain scenario or version lists in
+  consumers.
 - Keep the synchronization and thin-branch contract in `VERSION-BRANCHES.md`.
 - Keep immutable release identity, retry semantics, provenance, and protected-environment operation
   in `RELEASING.md`.
@@ -123,6 +148,11 @@ scope locally, use `scripts/release/verify_reproducibility.py` against the first
   renders `master` as integration-only and derives each release branch's Minecraft version,
   loaders, Java target, runtime pins, and overlay routing from that branch's matrix; do not edit the
   generated block by hand.
+- Keep the marked packaged-E2E profile aligned through `scripts/release/e2e_readme.py`. It derives
+  scenario facts from the contract and lane/version/Java facts from the active matrix; the
+  synchronizer regenerates both marked profiles for every release branch.
+- Keep the two active-common test task anchors in this imported guide aligned through
+  `scripts/release/workflow_guidance.py`; their Minecraft version comes from the branch matrix.
 - Keep the generated README status block aligned through `scripts/release/status_table.py`; never
   hand-maintain its version rows.
 - When user-visible behavior, build commands, source layout, or compatibility facts change, adapt
@@ -135,8 +165,10 @@ scope locally, use `scripts/release/verify_reproducibility.py` against the first
   byte-for-byte equivalent to `@AGENTS.md` followed by one newline.
 - Update the appropriate imported file whenever source-set routing, overlay ownership, lifecycle
   composition roots, security boundaries, or mandatory verification commands change.
-- When a packaged scenario adds, renames, or removes a required screenshot step, update the visual
-  catalog, gallery/reviewer tests, and every affected release branch in the same shared delivery.
+- When a packaged scenario adds, renames, or removes a step, edit the scenario contract and its Java
+  executable action together, update independent probe canaries where intentional, and let derived
+  gallery/reviewer/README consumers follow the contract. Deliver that shared change to every
+  affected release branch.
 
 When matrix-owned profile facts change, regenerate the marked README block instead of editing it:
 

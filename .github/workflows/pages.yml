@@ -6,29 +6,162 @@ name: Project site
 on:
   schedule:
     - cron: "43 4 1 * *"
-  workflow_dispatch:
-  workflow_run:
-    workflows:
-      - Packaged E2E
+  repository_dispatch:
     types:
-      - completed
-
+      - pages-evidence-ready
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Internal controller operation; use manual from the Actions UI
+        required: true
+        default: manual
+        type: choice
+        options:
+          - manual
+          - deploy
+          - rotate
+      evidence_run_id:
+        description: Internal exact E2E handoff owner
+        required: false
+        type: string
+      evidence_branch:
+        description: Internal exact release branch
+        required: false
+        type: string
+      evidence_sha:
+        description: Internal exact release commit
+        required: false
+        type: string
+      pages_run_id:
+        description: Internal successful Pages run to rotate
+        required: false
+        type: string
+      pages_run_sha:
+        description: Internal protected implementation commit to rotate
+        required: false
+        type: string
 permissions: {}
 
 concurrency:
-  group: quick-skin-github-pages
+  # GitHub keeps at most one running and one pending member of a concurrency group. A burst of
+  # release attestations therefore retains the running wake-up plus the newest pending wake-up;
+  # every actual deploy still rediscovers all current release heads.
+  group: >-
+    ${{ github.event_name == 'repository_dispatch' && 'quick-skin-pages-wake' ||
+    (github.event_name == 'workflow_dispatch' && inputs.operation == 'rotate' &&
+    'quick-skin-pages-evidence-rotation' || 'quick-skin-github-pages') }}
   cancel-in-progress: false
 
 jobs:
+  wake:
+    name: Authenticate and coalesce new release evidence
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      implementation_sha: ${{ steps.request.outputs.implementation_sha }}
+
+    steps:
+      # The source run may still be settling because its final advisory notification created this
+      # event. Authenticate it before checking out or executing any repository code.
+      - name: Authenticate the exact release-branch handoff
+        id: request
+        shell: bash
+        env:
+          EVIDENCE_BRANCH: ${{ github.event.client_payload.evidence_branch }}
+          EVIDENCE_REPOSITORY: ${{ github.event.client_payload.evidence_repository }}
+          EVIDENCE_RUN_ID: ${{ github.event.client_payload.evidence_run_id }}
+          EVIDENCE_SHA: ${{ github.event.client_payload.evidence_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$EVIDENCE_REPOSITORY" == "$GITHUB_REPOSITORY" ]]
+          [[ "$EVIDENCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EVIDENCE_BRANCH" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$EVIDENCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+          source_run=''
+          for attempt in {1..30}; do
+            source_run="$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$EVIDENCE_RUN_ID")"
+            if [[ "$(jq -r .status <<< "$source_run")" == completed ]]; then
+              break
+            fi
+            sleep 2
+          done
+          workflow_id="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/on-demand-e2e.yml" --jq .id)"
+          jq -e \
+            --arg branch "$EVIDENCE_BRANCH" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg sha "$EVIDENCE_SHA" \
+            --argjson run_id "$EVIDENCE_RUN_ID" \
+            --argjson workflow_id "$workflow_id" \
+            '.id == $run_id and .workflow_id == $workflow_id and
+             .status == "completed" and .conclusion == "success" and
+             .event == "workflow_dispatch" and .head_branch == $branch and
+             .head_sha == $sha and .path == ".github/workflows/on-demand-e2e.yml" and
+             .head_repository.full_name == $repository' \
+            <<< "$source_run" > /dev/null
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/$EVIDENCE_BRANCH" \
+            --jq .commit.sha)" == "$EVIDENCE_SHA" ]]
+
+          handoff_name="pages-e2e-$EVIDENCE_BRANCH"
+          artifacts="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$EVIDENCE_RUN_ID/artifacts?per_page=100")"
+          [[ "$(jq \
+            --arg branch "$EVIDENCE_BRANCH" \
+            --arg name "$handoff_name" \
+            --arg sha "$EVIDENCE_SHA" \
+            --argjson run_id "$EVIDENCE_RUN_ID" \
+            '[.[].artifacts[] | select(
+              .name == $name and (.expired | not) and .size_in_bytes > 0 and
+              .workflow_run.id == $run_id and
+              .workflow_run.head_branch == $branch and
+              .workflow_run.head_sha == $sha)] | length' <<< "$artifacts")" == 1 ]]
+
+          implementation_sha="$(gh api \
+            "repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha)"
+          [[ "$implementation_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'implementation_sha=%s\n' "$implementation_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the exact protected dispatcher
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.request.outputs.implementation_sha }}
+          persist-credentials: false
+
+      - name: Dispatch one protected all-branch deployment
+        shell: bash
+        env:
+          EVIDENCE_BRANCH: ${{ github.event.client_payload.evidence_branch }}
+          EVIDENCE_RUN_ID: ${{ github.event.client_payload.evidence_run_id }}
+          EVIDENCE_SHA: ${{ github.event.client_payload.evidence_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${{ steps.request.outputs.implementation_sha }}" ]]
+          python3 scripts/release/version_branches.py \
+            --target "$EVIDENCE_BRANCH" > /dev/null
+          gh workflow run pages.yml --ref master \
+            -f operation=deploy \
+            -f evidence_run_id="$EVIDENCE_RUN_ID" \
+            -f evidence_branch="$EVIDENCE_BRANCH" \
+            -f evidence_sha="$EVIDENCE_SHA"
+
   discover:
     name: Discover exact release heads
     if: >-
       (github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') ||
-      github.event.workflow_run.conclusion == 'success')
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/master' && inputs.operation != 'rotate'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
+      actions: read
       contents: read
     outputs:
       branches: ${{ steps.inventory.outputs.branches }}
@@ -46,10 +179,11 @@ jobs:
         id: inventory
         shell: bash
         env:
+          DISPATCH_BRANCH: ${{ inputs.evidence_branch }}
+          DISPATCH_OPERATION: ${{ inputs.operation }}
+          DISPATCH_RUN_ID: ${{ inputs.evidence_run_id }}
+          DISPATCH_SHA: ${{ inputs.evidence_sha }}
           GH_TOKEN: ${{ github.token }}
-          TRIGGER_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          TRIGGER_EVENT: ${{ github.event_name }}
-          TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
           printf 'branches=[]\n' >> "$GITHUB_OUTPUT"
@@ -58,24 +192,56 @@ jobs:
           default_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha)"
           [[ "$(git rev-parse HEAD)" == "$default_sha" ]]
           printf 'implementation_sha=%s\n' "$default_sha" >> "$GITHUB_OUTPUT"
-          if [[ "$TRIGGER_EVENT" == workflow_run ]]; then
-            if ! python3 scripts/release/version_branches.py \
-                --target "$TRIGGER_BRANCH" > /dev/null 2>&1; then
-              printf 'Ignoring packaged run from non-release branch %s\n' "$TRIGGER_BRANCH"
-              exit 0
-            fi
-            trigger_run="$(gh api \
-              "repos/$GITHUB_REPOSITORY/actions/runs/$TRIGGER_RUN_ID")"
-            if ! jq -e \
-                --arg branch "$TRIGGER_BRANCH" \
-                '.status == "completed" and .conclusion == "success" and
-                 .event == "workflow_dispatch" and .head_branch == $branch and
-                 .path == ".github/workflows/on-demand-e2e.yml" and
-                 .head_repository.full_name == env.GITHUB_REPOSITORY' \
-                <<< "$trigger_run" > /dev/null; then
-              printf 'Ignoring unauthenticated packaged run %s\n' "$TRIGGER_RUN_ID"
-              exit 0
-            fi
+
+          workflow_id="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/on-demand-e2e.yml" --jq .id)"
+          authenticate_handoff() {
+            local source_run_id="$1"
+            local source_branch="$2"
+            local source_sha="$3"
+            [[ "$source_run_id" =~ ^[1-9][0-9]*$ ]]
+            [[ "$source_branch" =~ ^[A-Za-z0-9._-]+$ ]]
+            [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+            python3 scripts/release/version_branches.py \
+              --target "$source_branch" > /dev/null
+
+            local source_run
+            source_run="$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$source_run_id")"
+            jq -e \
+              --arg branch "$source_branch" \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg sha "$source_sha" \
+              --argjson run_id "$source_run_id" \
+              --argjson expected_workflow_id "$workflow_id" \
+              '.id == $run_id and .workflow_id == $expected_workflow_id and
+               .status == "completed" and .conclusion == "success" and
+               .event == "workflow_dispatch" and .head_branch == $branch and
+               .head_sha == $sha and .path == ".github/workflows/on-demand-e2e.yml" and
+               .head_repository.full_name == $repository' \
+              <<< "$source_run" > /dev/null
+            [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/$source_branch" \
+              --jq .commit.sha)" == "$source_sha" ]]
+
+            local artifacts handoff_name
+            handoff_name="pages-e2e-$source_branch"
+            artifacts="$(gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$source_run_id/artifacts?per_page=100")"
+            [[ "$(jq \
+              --arg branch "$source_branch" \
+              --arg name "$handoff_name" \
+              --arg sha "$source_sha" \
+              --argjson run_id "$source_run_id" \
+              '[.[].artifacts[] | select(
+                .name == $name and (.expired | not) and .size_in_bytes > 0 and
+                .workflow_run.id == $run_id and
+                .workflow_run.head_branch == $branch and
+                .workflow_run.head_sha == $sha)] | length' <<< "$artifacts")" == 1 ]]
+          }
+
+          if [[ "$DISPATCH_OPERATION" == deploy ]]; then
+            authenticate_handoff \
+              "$DISPATCH_RUN_ID" "$DISPATCH_BRANCH" "$DISPATCH_SHA"
           fi
 
           branches="$(gh api --paginate \
@@ -83,6 +249,56 @@ jobs:
             | python3 scripts/release/version_branches.py)"
           [[ "$(jq 'length' <<< "$branches")" -gt 0 ]]
           printf 'branches=%s\n' "$branches" >> "$GITHUB_OUTPUT"
+
+          # Duplicate dispatches and burst replacements are harmless. An automatic run exits
+          # before fan-out only when every exact current head already has a cache owned by a
+          # completed successful protected Pages run.
+          if [[ "$DISPATCH_OPERATION" == deploy ]]; then
+            pages_workflow_id="$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/pages.yml" --jq .id)"
+            all_current=true
+            while IFS= read -r branch; do
+              current_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/$branch" \
+                --jq .commit.sha)"
+              cache_name="pages-cache-$branch--$current_sha"
+              cache_artifacts="$(gh api --paginate --slurp \
+                "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$cache_name&per_page=100")"
+              cached=false
+              while IFS=$'\t' read -r cache_run_id cache_branch cache_sha expired; do
+                [[ -n "$cache_run_id" ]] || continue
+                [[ "$expired" == false && "$cache_branch" == master ]] || continue
+                [[ "$cache_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+                if owner_run="$(gh api \
+                    "repos/$GITHUB_REPOSITORY/actions/runs/$cache_run_id" 2>/dev/null)" \
+                    && jq -e \
+                      --arg repository "$GITHUB_REPOSITORY" \
+                      --arg sha "$cache_sha" \
+                      --argjson expected_workflow_id "$pages_workflow_id" \
+                      '.workflow_id == $expected_workflow_id and
+                       .status == "completed" and .conclusion == "success" and
+                       (.event == "schedule" or .event == "workflow_dispatch" or
+                        .event == "workflow_run") and
+                       .head_branch == "master" and .head_sha == $sha and
+                       .path == ".github/workflows/pages.yml" and
+                       .head_repository.full_name == $repository' \
+                      <<< "$owner_run" > /dev/null; then
+                  cached=true
+                  break
+                fi
+              done < <(jq -r --arg name "$cache_name" \
+                '.[].artifacts[] | select(.name == $name) |
+                 [.workflow_run.id, .workflow_run.head_branch,
+                  .workflow_run.head_sha, .expired] | @tsv' <<< "$cache_artifacts")
+              if [[ "$cached" != true ]]; then
+                all_current=false
+                break
+              fi
+            done < <(jq -r '.[]' <<< "$branches")
+            if [[ "$all_current" == true ]]; then
+              printf 'Every release head already belongs to a successful deployed cache.\n'
+              exit 0
+            fi
+          fi
           printf 'eligible=true\n' >> "$GITHUB_OUTPUT"
 
   collect:
@@ -357,8 +573,8 @@ jobs:
 
     steps:
       # Only a completely successful deploy reaches this job, so future selectors may require the
-      # cache artifact's owning Pages run to have a successful final conclusion. A separate
-      # workflow rotates generations only after this complete Pages run reaches success.
+      # cache artifact's owning Pages run to have a successful final conclusion. The protected
+      # rotate operation starts only after this complete Pages run reaches success.
       - name: Check out the exact protected evidence validator
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -416,3 +632,151 @@ jobs:
           if-no-files-found: error
           compression-level: 6
           retention-days: 90
+
+  request-rotation:
+    name: Request post-success evidence rotation
+    needs:
+      - discover
+      - refresh-cache
+    if: >-
+      always() &&
+      needs.discover.outputs.eligible == 'true' &&
+      needs.refresh-cache.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+
+    steps:
+      # The explicit follow-up uses another protected workflow_dispatch run and authenticates this
+      # owner only after it has reached completed/success.
+      - name: Dispatch the exact cache-owning Pages run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/master ]]
+          [[ "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          gh workflow run pages.yml --ref master \
+            -f operation=rotate \
+            -f pages_run_id="$GITHUB_RUN_ID" \
+            -f pages_run_sha="$GITHUB_SHA"
+
+  rotate:
+    name: Rotate the authenticated successful generation
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/master' &&
+      inputs.operation == 'rotate'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: Authenticate the successful cache-owning Pages run
+        id: owner
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGES_RUN_ID: ${{ inputs.pages_run_id }}
+          PAGES_RUN_SHA: ${{ inputs.pages_run_sha }}
+        run: |
+          set -euo pipefail
+          printf 'eligible=false\n' >> "$GITHUB_OUTPUT"
+          [[ "$PAGES_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$PAGES_RUN_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PAGES_RUN_ID" != "$GITHUB_RUN_ID" ]]
+
+          pages_run=''
+          for attempt in {1..30}; do
+            pages_run="$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$PAGES_RUN_ID")"
+            if [[ "$(jq -r .status <<< "$pages_run")" == completed ]]; then
+              break
+            fi
+            sleep 2
+          done
+          workflow_id="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/pages.yml" --jq .id)"
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg sha "$PAGES_RUN_SHA" \
+            --argjson run_id "$PAGES_RUN_ID" \
+            --argjson workflow_id "$workflow_id" \
+            '.id == $run_id and .workflow_id == $workflow_id and
+             .status == "completed" and .conclusion == "success" and
+             (.event == "schedule" or .event == "workflow_dispatch" or
+              .event == "workflow_run") and
+             .head_branch == "master" and .head_sha == $sha and
+             .path == ".github/workflows/pages.yml" and
+             .head_repository.full_name == $repository' \
+            <<< "$pages_run" > /dev/null
+
+          artifacts="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$PAGES_RUN_ID/artifacts?per_page=100")"
+          cache_count="$(jq --argjson run_id "$PAGES_RUN_ID" \
+            '[.[].artifacts[] | select(
+              (.expired | not) and .size_in_bytes > 0 and
+              .workflow_run.id == $run_id and
+              (.name | startswith("pages-cache-")))] | length' <<< "$artifacts")"
+          if [[ "$cache_count" -eq 0 ]]; then
+            printf 'Pages run %s owns no cache generation; nothing to rotate.\n' \
+              "$PAGES_RUN_ID"
+            exit 0
+          fi
+
+          implementation_sha="$(gh api \
+            "repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha)"
+          [[ "$implementation_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'eligible=true\n' >> "$GITHUB_OUTPUT"
+          printf 'implementation_sha=%s\n' "$implementation_sha" >> "$GITHUB_OUTPUT"
+          printf 'pages_run_id=%s\n' "$PAGES_RUN_ID" >> "$GITHUB_OUTPUT"
+          printf 'pages_run_sha=%s\n' "$PAGES_RUN_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the exact protected rotation implementation
+        if: steps.owner.outputs.eligible == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.owner.outputs.implementation_sha }}
+          persist-credentials: false
+
+      - name: Install Python
+        if: steps.owner.outputs.eligible == 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install the hash-locked evidence validator dependency
+        if: steps.owner.outputs.eligible == 'true'
+        run: >-
+          python -m pip install
+          --only-binary=:all:
+          --require-hashes
+          --requirement scripts/pages/requirements.txt
+
+      - name: Download only the successful owner's cache generation
+        if: steps.owner.outputs.eligible == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: pages-cache-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/pages-cache
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.owner.outputs.pages_run_id }}
+          digest-mismatch: error
+
+      - name: Rotate the exact validated generation by artifact ID
+        if: steps.owner.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/pages/rotate_artifacts.py
+          --evidence-root "$RUNNER_TEMP/pages-cache"
+          --repository "$GITHUB_REPOSITORY"
+          --pages-run-id "${{ steps.owner.outputs.pages_run_id }}"
+          --pages-run-sha "${{ steps.owner.outputs.pages_run_sha }}"
