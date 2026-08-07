@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -12,29 +13,54 @@ sys.path.insert(0, str(ROOT / "e2e"))
 from dependency_integrity import DependencyIntegrityError, verified_sha256  # noqa: E402
 
 
+def runtime_dependency_coordinates(matrix_path: Path) -> set[tuple[str, str, str, str]]:
+    """Mirror e2e/packaged_runtime.py's runtime_dependencies for the active matrix.
+
+    The identities are derived rather than pinned so this stays a real invariant on
+    every release branch instead of only on the branch whose matrix was current.
+    """
+
+    data = json.loads(matrix_path.read_text(encoding="utf-8"))
+    coordinates: set[tuple[str, str, str, str]] = set()
+    for runtime in data["runtimes"]:
+        loader = runtime["loader"]
+        if loader == "fabric":
+            version = runtime["fabric_api"]
+            coordinates.add(
+                (
+                    "net.fabricmc.fabric-api",
+                    "fabric-api",
+                    version,
+                    f"fabric-api-{version}.jar",
+                )
+            )
+        module = f"architectury-{loader}"
+        version = runtime["architectury"]["version"]
+        coordinates.add(
+            ("dev.architectury", module, version, f"{module}-{version}.jar")
+        )
+    return coordinates
+
+
 class E2EDependencyIntegrityTest(unittest.TestCase):
     def test_checked_in_runtime_dependencies_have_exact_gradle_hashes(self) -> None:
         metadata = ROOT / "gradle" / "verification-metadata.xml"
-        self.assertEqual(
-            verified_sha256(
-                metadata,
-                group="net.fabricmc.fabric-api",
-                name="fabric-api",
-                version="0.92.6+1.20.1",
-                artifact="fabric-api-0.92.6+1.20.1.jar",
-            ),
-            "0ece50476da3692111ab04b75945c5458e70d98cd069eefc044ab3e57977deeb",
+        coordinates = runtime_dependency_coordinates(
+            ROOT / "release" / "release-matrix.json"
         )
-        self.assertEqual(
-            verified_sha256(
-                metadata,
-                group="dev.architectury",
-                name="architectury-forge",
-                version="9.2.14",
-                artifact="architectury-forge-9.2.14.jar",
-            ),
-            "47d5eca3d83aae1ac1d4a70116727715bd7ef4c077d228fee873065cbca94687",
-        )
+        self.assertTrue(coordinates, "matrix declares no runtime dependencies")
+        for group, name, version, artifact in sorted(coordinates):
+            with self.subTest(artifact=artifact):
+                self.assertRegex(
+                    verified_sha256(
+                        metadata,
+                        group=group,
+                        name=name,
+                        version=version,
+                        artifact=artifact,
+                    ),
+                    r"\A[0-9a-f]{64}\Z",
+                )
 
     def test_missing_duplicate_or_non_sha256_authority_fails_closed(self) -> None:
         template = """<?xml version='1.0' encoding='UTF-8'?>
@@ -60,13 +86,18 @@ class E2EDependencyIntegrityTest(unittest.TestCase):
                     )
 
     def test_artifact_identity_cannot_escape(self) -> None:
+        # Derive a component that really exists here, so the rejection is the traversal
+        # guard rather than an incidentally absent coordinate on this branch.
+        group, name, version, artifact = sorted(
+            runtime_dependency_coordinates(ROOT / "release" / "release-matrix.json")
+        )[0]
         with self.assertRaises(DependencyIntegrityError):
             verified_sha256(
                 ROOT / "gradle" / "verification-metadata.xml",
-                group="dev.architectury",
-                name="architectury-forge",
-                version="9.2.14",
-                artifact="../architectury-forge-9.2.14.jar",
+                group=group,
+                name=name,
+                version=version,
+                artifact=f"../{artifact}",
             )
 
 
