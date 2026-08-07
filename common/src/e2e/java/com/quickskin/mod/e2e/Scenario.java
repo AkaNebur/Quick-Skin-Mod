@@ -1,5 +1,6 @@
 package com.quickskin.mod.e2e;
 
+import com.quickskin.mod.e2e.generated.ScenarioContract.ScenarioId;
 import net.minecraft.client.Minecraft;
 
 import java.util.List;
@@ -11,7 +12,7 @@ import java.util.List;
 public interface Scenario {
 
     /** Stable id, also used as the {@code -Dquickskin.e2e.scenario} selector value. */
-    String id();
+    ScenarioId id();
 
     /** Build the ordered steps. Called once, after the client has joined a world. */
     List<Step> build(Minecraft mc);

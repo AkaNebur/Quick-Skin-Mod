@@ -8,6 +8,7 @@ import tempfile
 import unittest
 import zlib
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -15,14 +16,17 @@ sys.path.insert(0, str(ROOT / "e2e"))
 sys.path.insert(0, str(ROOT / "scripts" / "pages"))
 sys.path.insert(0, str(ROOT / "scripts" / "release"))
 
-import packaged_runtime  # noqa: E402
 from build_site import SiteBuildError, build  # noqa: E402
+import evidence as evidence_module  # noqa: E402
 from evidence import (  # noqa: E402
+    MAX_MANIFEST_BYTES,
     PublicEvidenceError,
     compact_bundle,
+    load_matrix_inventory,
     prepare,
     validate_bundle,
 )
+import packaged_runtime  # noqa: E402
 from version_branches import parse_version_branch  # noqa: E402
 from visual_evidence import load_catalog  # noqa: E402
 
@@ -97,12 +101,171 @@ class PagesSiteTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def write_valid_matrix(self, branch: str, version: str) -> Path:
+        parsed = parse_version_branch(branch)
+        assert parsed is not None
+        java = 17 if version == "1.20.1" else 21
+        architectury_version = "9.2.14" if version == "1.20.1" else "13.0.8"
+        fabric_api_version = (
+            "0.92.6+1.20.1" if version == "1.20.1" else f"0.116.5+{version}"
+        )
+        loader_versions = {
+            "fabric": "0.17.3",
+            "forge": f"{version}-47.4.9",
+            "neoforge": "21.1.200",
+        }
+        version_parts = [int(part) for part in version.split(".")]
+        version_parts[-1] += 1
+        upper_version = ".".join(str(part) for part in version_parts)
+
+        artifacts: list[dict[str, object]] = []
+        runtimes: list[dict[str, object]] = []
+        installers: dict[str, dict[str, str]] = {}
+        properties = {
+            "mod_version": "1.0.0-test",
+            f"minecraft_version_{version.replace('.', '_')}": version,
+            f"java_version_{version.replace('.', '_')}": str(java),
+            f"architectury_api_version_{version.replace('.', '_')}": (
+                architectury_version
+            ),
+        }
+        for loader in parsed.loaders:
+            node = f"{loader}-{version}"
+            loader_version = loader_versions[loader]
+            installer = (
+                "fabric-1.1.0"
+                if loader == "fabric"
+                else f"{loader}-{loader_version}"
+            )
+            installers[installer] = {
+                "url": f"https://example.invalid/{installer}.jar",
+                "sha256": hashlib.sha256(installer.encode()).hexdigest(),
+            }
+            metadata: dict[str, object] = {
+                "file": (
+                    "fabric.mod.json"
+                    if loader == "fabric"
+                    else (
+                        "META-INF/mods.toml"
+                        if loader == "forge"
+                        else "META-INF/neoforge.mods.toml"
+                    )
+                ),
+                "loader": ">=0.17.0" if loader == "fabric" else "[1,)",
+                "architectury": (
+                    f">={architectury_version}"
+                    if loader == "fabric"
+                    else f"[{architectury_version},)"
+                ),
+            }
+            if loader != "fabric":
+                metadata.update(
+                    {
+                        "loader_api": "[1,)",
+                        "pack_format": 15,
+                        "server_data_pack_format": 15,
+                    }
+                )
+            artifacts.append(
+                {
+                    "artifact_node": node,
+                    "artifact_version": version,
+                    "loader": loader,
+                    "java": java,
+                    "no_remap": False,
+                    "metadata_range": (
+                        f"={version}"
+                        if loader == "fabric"
+                        else f"[{version},{upper_version})"
+                    ),
+                    "gradle_task": f":{loader}:{version}:remapJar",
+                    "harness_task": f":{loader}:{version}:remapE2EHarnessJar",
+                    "jar": (
+                        f"{loader}/versions/{version}/build/libs/"
+                        f"Quick Skin - {loader.title()} - {version}-{{mod_version}}.jar"
+                    ),
+                    "harness_jar": (
+                        f"{loader}/versions/{version}/build/libs/"
+                        f"Quick Skin E2E - {loader.title()} - {version}-0.0.0.jar"
+                    ),
+                    "game_versions": [version],
+                    "metadata": metadata,
+                }
+            )
+            runtime: dict[str, object] = {
+                "artifact_node": node,
+                "runtime_version": version,
+                "loader": loader,
+                "jar_sha256": "from:artifact-manifest",
+                "port": 0,
+                "java": java,
+                "loader_version": loader_version,
+                "installer": installer,
+                "architectury": {
+                    "kind": "maven",
+                    "version": architectury_version,
+                },
+                "scheduled_anchor": True,
+                "pr_anchor": True,
+            }
+            suffix = version.replace(".", "_")
+            if loader == "fabric":
+                runtime["fabric_api"] = fabric_api_version
+                properties[f"fabric_loader_version_{suffix}"] = loader_version
+                properties[f"fabric_api_version_{suffix}"] = fabric_api_version
+            else:
+                properties[f"{loader}_version_{suffix}"] = loader_version
+            runtimes.append(runtime)
+
+        repository = self.root / "matrix-repositories" / branch
+        matrix = repository / "release" / "release-matrix.json"
+        matrix.parent.mkdir(parents=True, exist_ok=True)
+        source_modules = ("common", *parsed.loaders)
+        for module in source_modules:
+            (repository / module / "src" / "main" / "java").mkdir(
+                parents=True, exist_ok=True
+            )
+        (repository / "gradle.properties").write_text(
+            "".join(f"{key}={value}\n" for key, value in sorted(properties.items())),
+            encoding="utf-8",
+        )
+        matrix.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "lane_count": len(parsed.loaders),
+                    "unit_test_version": version,
+                    "project": {
+                        "name": "Quick Skin",
+                        "mod_id": "quickskin",
+                        "description": "Change and synchronize Minecraft appearances.",
+                        "mod_version_property": "mod_version",
+                        "release_branch": branch,
+                        "modrinth_id": "zAIE84Ch",
+                        "curseforge_id": 1323980,
+                        "homepage": "https://modrinth.com/mod/quick-skin",
+                        "sources": "https://github.com/AkaNebur/Quick-Skin-Mod",
+                        "issues": "https://github.com/AkaNebur/Quick-Skin-Mod/issues",
+                        "license": "All Rights Reserved",
+                    },
+                    "source_overlays": {
+                        module: {} for module in source_modules
+                    },
+                    "installers": installers,
+                    "artifacts": artifacts,
+                    "runtimes": runtimes,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return matrix
+
     def write_branch(self, branch: str, version: str) -> Path:
         self.next_run_id += 10
         parsed = parse_version_branch(branch)
         assert parsed is not None
         e2e_root = self.root / f"e2e-{version}"
-        scenarios = ["phase0-smoke", "propagation", "propagation-live", "full"]
+        scenarios = list(self.catalog.contract.scenarios_for_profile("pr"))
         for loader in parsed.loaders:
             artifact_node = f"{loader}-{version}"
             jar_sha256 = hashlib.sha256(f"jar:{artifact_node}".encode()).hexdigest()
@@ -112,54 +275,61 @@ class PagesSiteTest(unittest.TestCase):
                 )
                 profile = e2e_root / profile_relative
                 reports: dict[str, object] = {}
-                roles = sorted(
-                    {
-                        capture["role"]
-                        for capture in self.catalog.captures
-                        if capture["scenario"] == scenario
-                    }
-                )
+                roles = list(self.catalog.contract.expected_roles(scenario))
                 for role in roles:
-                    captures = [
-                        capture
-                        for capture in self.catalog.captures
-                        if capture["scenario"] == scenario and capture["role"] == role
-                    ]
-                    pairs = packaged_runtime.DISTINCT_SCREENSHOT_PAIRS.get(
-                        (scenario, role), []
-                    )
-                    second_steps = {pair[1] for pair in pairs}
+                    role_contract = self.catalog.contract.role(scenario, role)
+                    pairs = role_contract.comparisons
+                    second_steps = {
+                        comparison.second_step for comparison in pairs
+                    }
                     steps = []
                     metrics = {}
                     screenshots = profile / role / "screenshots"
                     screenshots.mkdir(parents=True, exist_ok=True)
-                    for capture in captures:
-                        filename = f"{capture['step']}.png"
-                        variant = 1 if capture["step"] in second_steps else 0
-                        (screenshots / filename).write_bytes(PNGS[variant])
+                    for step_contract in role_contract.steps:
+                        screenshot = None
+                        if step_contract.capture is not None:
+                            screenshot = f"{step_contract.id}.png"
+                            variant = (
+                                1 if step_contract.id in second_steps else 0
+                            )
+                            (screenshots / screenshot).write_bytes(PNGS[variant])
+                            metrics[step_contract.id] = dict(
+                                PIXEL_METRICS[variant]
+                            )
                         steps.append(
                             {
-                                "name": capture["step"],
+                                "name": step_contract.id,
                                 "status": "pass",
-                                "screenshot": filename,
+                                "message": "assertion passed",
+                                "screenshot": screenshot,
                             }
                         )
-                        metrics[capture["step"]] = dict(PIXEL_METRICS[variant])
                     comparison_metrics: dict[str, dict[str, object]] = {}
-                    for pair in pairs:
-                        first_step, second_step, required_change = pair[:3]
+                    for comparison_contract in pairs:
+                        first_step = comparison_contract.first_step
+                        second_step = comparison_contract.second_step
                         comparison = {
                             "changed_fraction": 1.0,
-                            "rms_difference": 71.573 if len(pair) == 4 else 98.694,
-                            "required_changed_fraction": required_change,
+                            "rms_difference": (
+                                71.573
+                                if comparison_contract.region is not None
+                                else 98.694
+                            ),
+                            "required_changed_fraction": (
+                                comparison_contract.minimum_changed_fraction
+                            ),
                         }
-                        if len(pair) == 4:
-                            comparison["region"] = list(pair[3])
+                        if comparison_contract.region is not None:
+                            comparison["region"] = list(
+                                comparison_contract.region
+                            )
                         comparison_metrics[f"{first_step}->{second_step}"] = comparison
                     reports[role] = {
                         "version": version,
                         "role": role,
                         "scenario": scenario,
+                        "contract_sha256": self.catalog.contract_sha256,
                         "status": "pass",
                         "steps": steps,
                         "pixel_validation": {
@@ -172,7 +342,15 @@ class PagesSiteTest(unittest.TestCase):
                     "runtime_version": version,
                     "loader": loader,
                     "scenario": scenario,
+                    "contract_sha256": self.catalog.contract_sha256,
                     "jar_sha256": jar_sha256,
+                    "installed_quickskin": [
+                        {
+                            "path": f"{install_root}/mods/quick-skin.jar",
+                            "sha256": jar_sha256,
+                        }
+                        for install_root in ["server", *roles]
+                    ],
                     "port": 12345,
                     "status": "pass",
                     "profile": profile_relative.as_posix(),
@@ -183,45 +361,11 @@ class PagesSiteTest(unittest.TestCase):
                     json.dumps(result), encoding="utf-8"
                 )
 
-        matrix = self.root / f"matrix-{version}.json"
-        matrix.write_text(
-            json.dumps(
-                {
-                    "schema_version": 2,
-                    "project": {
-                        "name": "Quick Skin",
-                        "description": "Change and synchronize Minecraft appearances.",
-                        "homepage": "https://modrinth.com/mod/quick-skin",
-                        "sources": "https://github.com/AkaNebur/Quick-Skin-Mod",
-                        "issues": "https://github.com/AkaNebur/Quick-Skin-Mod/issues",
-                        "license": "All Rights Reserved",
-                        "release_branch": branch,
-                    },
-                    "artifacts": [
-                        {
-                            "artifact_node": f"{loader}-{version}",
-                            "artifact_version": version,
-                            "loader": loader,
-                        }
-                        for loader in parsed.loaders
-                    ],
-                    "runtimes": [
-                        {
-                            "artifact_node": f"{loader}-{version}",
-                            "runtime_version": version,
-                            "loader": loader,
-                        }
-                        for loader in parsed.loaders
-                    ],
-                    "pr_scenarios": scenarios,
-                }
-            ),
-            encoding="utf-8",
-        )
+        matrix = self.write_valid_matrix(branch, version)
         prepare(
             e2e_root=e2e_root,
             matrix_path=matrix,
-            catalog_path=ROOT / "e2e" / "visual-catalog.json",
+            catalog_path=ROOT / "e2e" / "scenario-contract.json",
             output_root=self.evidence_root,
             repository="AkaNebur/Quick-Skin-Mod",
             source_run_id=str(self.next_run_id),
@@ -248,8 +392,202 @@ class PagesSiteTest(unittest.TestCase):
 
         self.assertEqual(72, len(manifest["frames"]))
         self.assertEqual(8, len(manifest["lanes"]))
+        self.assertEqual(
+            self.catalog.contract_sha256,
+            manifest["contract_sha256"],
+        )
         self.assertEqual(2, len(list((self.evidence_root / branch / "images").glob("*.png"))))
         self.assertNotIn("source_path", json.dumps(manifest))
+
+    def test_prepare_uses_the_complete_canonical_release_matrix_validator(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        matrix_path = self.write_valid_matrix(branch, "1.20.1")
+        original = json.loads(matrix_path.read_text(encoding="utf-8"))
+
+        cases: list[tuple[str, dict[str, object]]] = []
+        missing_lane_count = json.loads(json.dumps(original))
+        del missing_lane_count["lane_count"]
+        cases.append(("missing lane_count", missing_lane_count))
+        boolean_lane_count = json.loads(json.dumps(original))
+        boolean_lane_count["lane_count"] = True
+        cases.append(("boolean lane_count", boolean_lane_count))
+        legacy_root_policy = json.loads(json.dumps(original))
+        legacy_root_policy["pr_scenarios"] = ["full"]
+        cases.append(("legacy root policy", legacy_root_policy))
+        legacy_runtime_policy = json.loads(json.dumps(original))
+        legacy_runtime_policy["runtimes"][0]["scenario"] = "full"
+        cases.append(("legacy runtime policy", legacy_runtime_policy))
+        malformed_runtime = json.loads(json.dumps(original))
+        malformed_runtime["runtimes"][0]["port"] = 1
+        cases.append(("malformed runtime", malformed_runtime))
+
+        for label, mutation in cases:
+            with self.subTest(label=label):
+                matrix_path.write_text(json.dumps(mutation), encoding="utf-8")
+                with self.assertRaises(PublicEvidenceError):
+                    load_matrix_inventory(matrix_path, branch, self.catalog.contract)
+        matrix_path.write_text(json.dumps(original), encoding="utf-8")
+
+    def test_matrix_preflight_rejects_duplicate_keys_and_nonfinite_numbers(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        matrix_path = self.write_valid_matrix(branch, "1.20.1")
+        original = matrix_path.read_text(encoding="utf-8")
+
+        duplicate = original.rstrip()[:-1] + ', "lane_count": 2}'
+        matrix_path.write_text(duplicate, encoding="utf-8")
+        with self.assertRaisesRegex(PublicEvidenceError, "duplicate JSON object key"):
+            load_matrix_inventory(matrix_path, branch, self.catalog.contract)
+
+        nonfinite = json.loads(original)
+        nonfinite["runtimes"][0]["port"] = float("inf")
+        matrix_path.write_text(json.dumps(nonfinite), encoding="utf-8")
+        with self.assertRaisesRegex(PublicEvidenceError, "non-finite JSON number"):
+            load_matrix_inventory(matrix_path, branch, self.catalog.contract)
+
+    def test_manifest_rejects_duplicate_nonfinite_boolean_and_oversized_json(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        manifest_path = self.evidence_root / branch / "manifest.json"
+        original_text = manifest_path.read_text(encoding="utf-8")
+        original = json.loads(original_text)
+
+        duplicate = original_text.rstrip()[:-1] + ', "schema_version": 1}'
+        manifest_path.write_text(duplicate, encoding="utf-8")
+        with self.assertRaisesRegex(PublicEvidenceError, "duplicate JSON object key"):
+            validate_bundle(self.evidence_root, branch)
+
+        nonfinite = json.loads(json.dumps(original))
+        nonfinite["lanes"][0]["elapsed_s"] = float("nan")
+        manifest_path.write_text(json.dumps(nonfinite), encoding="utf-8")
+        with self.assertRaisesRegex(PublicEvidenceError, "non-finite JSON number"):
+            validate_bundle(self.evidence_root, branch)
+
+        overflow = original_text.replace('"elapsed_s": 2.5', '"elapsed_s": 1e999')
+        manifest_path.write_text(overflow, encoding="utf-8")
+        with self.assertRaisesRegex(PublicEvidenceError, "non-finite JSON number"):
+            validate_bundle(self.evidence_root, branch)
+
+        boolean_schema = json.loads(json.dumps(original))
+        boolean_schema["schema_version"] = True
+        manifest_path.write_text(json.dumps(boolean_schema), encoding="utf-8")
+        with self.assertRaisesRegex(PublicEvidenceError, "schema_version"):
+            validate_bundle(self.evidence_root, branch)
+
+        manifest_path.write_bytes(b" " * (MAX_MANIFEST_BYTES + 1))
+        with self.assertRaisesRegex(PublicEvidenceError, "size limit"):
+            validate_bundle(self.evidence_root, branch)
+
+    def test_manifest_rejects_unknown_fields_at_each_container_level(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        manifest_path = self.evidence_root / branch / "manifest.json"
+        original = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        mutations: list[tuple[str, dict[str, object]]] = []
+        root_extra = json.loads(json.dumps(original))
+        root_extra["private"] = True
+        mutations.append(("manifest", root_extra))
+        release_extra = json.loads(json.dumps(original))
+        release_extra["release"]["private"] = True
+        mutations.append(("release", release_extra))
+        provenance_extra = json.loads(json.dumps(original))
+        provenance_extra["provenance"]["private"] = True
+        mutations.append(("provenance", provenance_extra))
+        provenance_record_extra = json.loads(json.dumps(original))
+        provenance_record_extra["provenance"]["source"]["private"] = True
+        mutations.append(("provenance record", provenance_record_extra))
+        artifact_extra = json.loads(json.dumps(original))
+        artifact_extra["release"]["artifacts"][0]["private"] = True
+        mutations.append(("artifact", artifact_extra))
+        lane_extra = json.loads(json.dumps(original))
+        lane_extra["lanes"][0]["private"] = True
+        mutations.append(("lane", lane_extra))
+        frame_extra = json.loads(json.dumps(original))
+        frame_extra["frames"][0]["private"] = True
+        mutations.append(("frame", frame_extra))
+        comparison_extra = json.loads(json.dumps(original))
+        comparison_extra["comparisons"][0]["private"] = True
+        mutations.append(("comparison", comparison_extra))
+
+        for label, mutation in mutations:
+            with self.subTest(label=label):
+                manifest_path.write_text(json.dumps(mutation), encoding="utf-8")
+                with self.assertRaises(PublicEvidenceError):
+                    validate_bundle(self.evidence_root, branch)
+
+    def test_public_image_limits_match_export_and_stop_before_expensive_validation(self) -> None:
+        self.assertEqual(
+            packaged_runtime.MAX_EVIDENCE_SCREENSHOT_BYTES,
+            evidence_module.MAX_IMAGE_BYTES,
+        )
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        bundle = self.evidence_root / branch
+        manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+        assets = sorted({frame["asset"] for frame in manifest["frames"]})
+        self.assertEqual(2, len(assets))
+        total_size = sum((bundle / asset).stat().st_size for asset in assets)
+        real_sha256_file = evidence_module.sha256_file
+        real_inspect_screenshot = evidence_module.inspect_screenshot
+
+        with (
+            patch.object(evidence_module, "MAX_TOTAL_IMAGE_BYTES", total_size - 1),
+            patch.object(
+                evidence_module,
+                "sha256_file",
+                wraps=real_sha256_file,
+            ) as hash_image,
+            patch.object(
+                evidence_module,
+                "inspect_screenshot",
+                wraps=real_inspect_screenshot,
+            ) as decode_image,
+        ):
+            with self.assertRaisesRegex(PublicEvidenceError, "total image byte limit"):
+                validate_bundle(self.evidence_root, branch)
+        self.assertEqual(1, hash_image.call_count)
+        self.assertEqual(1, decode_image.call_count)
+
+    def test_image_directory_and_bundle_walk_have_explicit_entry_limits(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+
+        with patch.object(evidence_module, "MAX_IMAGE_ENTRIES", 1):
+            with self.assertRaisesRegex(PublicEvidenceError, "image directory.*entry limit"):
+                validate_bundle(self.evidence_root, branch)
+
+        with patch.object(evidence_module, "MAX_BUNDLE_ENTRIES", 3):
+            with self.assertRaisesRegex(PublicEvidenceError, "bundle.*entry limit"):
+                validate_bundle(self.evidence_root, branch)
+
+    def test_compaction_snapshots_the_exact_validated_source_before_encoding(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        compact_root = self.root / "compact-toctou"
+        snapshot = evidence_module._snapshot_verified_image
+        mutated = False
+
+        def mutate_before_snapshot(
+            source: Path,
+            destination: Path,
+            **kwargs: object,
+        ) -> None:
+            nonlocal mutated
+            if not mutated:
+                source.write_bytes(source.read_bytes() + b"post-validation mutation")
+                mutated = True
+            snapshot(source, destination, **kwargs)
+
+        with patch.object(
+            evidence_module,
+            "_snapshot_verified_image",
+            side_effect=mutate_before_snapshot,
+        ):
+            with self.assertRaisesRegex(PublicEvidenceError, "digest changed after validation"):
+                compact_bundle(self.evidence_root, compact_root, branch)
+
+        self.assertTrue(mutated)
+        self.assertFalse((compact_root / branch).exists())
 
     def test_compacts_validated_pngs_and_preserves_both_image_identities(self) -> None:
         branch = "forge-and-fabric-1.20.1"
@@ -518,6 +856,9 @@ class PagesSiteTest(unittest.TestCase):
         original = json.loads(manifest_path.read_text(encoding="utf-8"))
 
         cases: list[tuple[str, object]] = []
+        contract_drift = json.loads(json.dumps(original))
+        contract_drift["contract_sha256"] = "f" * 64
+        cases.append(("scenario contract hash", contract_drift))
         reduced = json.loads(json.dumps(original))
         reduced["frames"].pop()
         cases.append(("missing frame", reduced))
@@ -567,6 +908,44 @@ class PagesSiteTest(unittest.TestCase):
                 with self.assertRaises(PublicEvidenceError):
                     validate_bundle(self.evidence_root, branch)
         manifest_path.write_text(json.dumps(original), encoding="utf-8")
+
+    def test_raw_and_compact_bundles_require_the_exact_ordered_public_scenarios(self) -> None:
+        branch = "forge-and-fabric-1.20.1"
+        self.write_branch(branch, "1.20.1")
+        compact_root = self.root / "compact-scenario-policy"
+        compact_bundle(self.evidence_root, compact_root, branch)
+
+        for kind, root in (("raw", self.evidence_root), ("compact", compact_root)):
+            manifest_path = root / branch / "manifest.json"
+            original = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+            reordered = json.loads(json.dumps(original))
+            reordered["release"]["scenarios"][0:2] = reversed(
+                reordered["release"]["scenarios"][0:2]
+            )
+
+            reduced = json.loads(json.dumps(original))
+            removed = reduced["release"]["scenarios"].pop()
+            reduced["lanes"] = [
+                lane for lane in reduced["lanes"] if lane["scenario"] != removed
+            ]
+            reduced["frames"] = [
+                frame for frame in reduced["frames"] if frame["scenario"] != removed
+            ]
+            reduced["comparisons"] = [
+                comparison
+                for comparison in reduced["comparisons"]
+                if comparison["scenario"] != removed
+            ]
+
+            for mutation, manifest in (("reordered", reordered), ("reduced", reduced)):
+                with self.subTest(kind=kind, mutation=mutation):
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        PublicEvidenceError, "exact protected public profile"
+                    ):
+                        validate_bundle(root, branch, expected_kind=kind)
+            manifest_path.write_text(json.dumps(original), encoding="utf-8")
 
     def test_rejects_every_extra_entry_in_curated_bundle(self) -> None:
         branch = "forge-and-fabric-1.20.1"
