@@ -79,7 +79,6 @@
       "artifact_node": "fabric-1.20.1",
       "runtime_version": "1.20.1",
       "loader": "fabric",
-      "scenario": "phase0-smoke",
       "jar_sha256": "from:artifact-manifest",
       "port": 0,
       "java": 17,
@@ -97,7 +96,6 @@
       "artifact_node": "forge-1.20.1",
       "runtime_version": "1.20.1",
       "loader": "forge",
-      "scenario": "phase0-smoke",
       "jar_sha256": "from:artifact-manifest",
       "port": 0,
       "java": 17,
@@ -110,17 +108,5 @@
       "scheduled_anchor": true,
       "pr_anchor": true
     }
-  ],
-  "scheduled_scenarios": [
-    "phase0-smoke",
-    "propagation",
-    "propagation-live",
-    "full"
-  ],
-  "pr_scenarios": [
-    "phase0-smoke",
-    "propagation",
-    "propagation-live",
-    "full"
   ]
 }
