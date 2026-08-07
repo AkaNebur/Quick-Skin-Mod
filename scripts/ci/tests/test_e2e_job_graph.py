@@ -115,6 +115,43 @@ class E2EJobGraphTest(unittest.TestCase):
                 partial, policy="not-applicable", expected_scenarios=self.expected
             )
 
+    def test_not_applicable_accepts_the_unexpanded_matrix_placeholder(self) -> None:
+        """A non-runtime port reports the literal template name, not zero jobs."""
+
+        placeholder = self.payload((graph.UNEXPANDED_SCENARIO_JOB,))
+        placeholder["jobs"][1]["conclusion"] = "skipped"  # type: ignore[index]
+        placeholder["jobs"][2]["conclusion"] = "skipped"  # type: ignore[index]
+        graph.validate_job_graph(
+            placeholder, policy="not-applicable", expected_scenarios=self.expected
+        )
+
+        # It still may not have executed, and it is not a licence to run a lane.
+        executed = self.payload((graph.UNEXPANDED_SCENARIO_JOB,))
+        executed["jobs"][1]["conclusion"] = "skipped"  # type: ignore[index]
+        executed["jobs"][2]["conclusion"] = "success"  # type: ignore[index]
+        with self.assertRaises(graph.JobGraphError):
+            graph.validate_job_graph(
+                executed, policy="not-applicable", expected_scenarios=self.expected
+            )
+
+        # The placeholder is never acceptable when real lanes were required.
+        with self.assertRaises(graph.JobGraphError):
+            graph.validate_job_graph(
+                self.payload((graph.UNEXPANDED_SCENARIO_JOB,)),
+                policy="full",
+                expected_scenarios=self.expected,
+            )
+
+        # Mixing the placeholder with a concrete lane is still a partial matrix.
+        mixed = self.payload((graph.UNEXPANDED_SCENARIO_JOB, self.expected[0]))
+        mixed["jobs"][1]["conclusion"] = "skipped"  # type: ignore[index]
+        for job in mixed["jobs"][2:-1]:  # type: ignore[index]
+            job["conclusion"] = "skipped"
+        with self.assertRaises(graph.JobGraphError):
+            graph.validate_job_graph(
+                mixed, policy="not-applicable", expected_scenarios=self.expected
+            )
+
     def test_rejects_missing_or_duplicated_control_jobs(self) -> None:
         missing = self.payload()
         missing["jobs"] = [  # type: ignore[index]
