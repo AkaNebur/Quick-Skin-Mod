@@ -210,6 +210,11 @@ need the aggregate gate:
   buildAllLanes buildAllE2EHarnesses
 ```
 
+The unit suites can be entirely green while a packaged scenario is broken, because they stand in
+for the filesystem and loader contracts that only a real remapped Minecraft run exercises. For
+harness, runtime-store, or dependency-installation changes, treat the packaged gate as the
+authority rather than evidence that the Python tests pass.
+
 Run the repository-level checks before handing work off:
 
 ```bash
