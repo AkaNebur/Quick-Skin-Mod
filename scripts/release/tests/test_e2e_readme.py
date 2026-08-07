@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts" / "release"))
 
+import branch_readme  # noqa: E402
 import e2e_readme  # noqa: E402
 import matrix  # noqa: E402
 
@@ -25,8 +26,8 @@ class E2EReadmeTest(unittest.TestCase):
         rendered = e2e_readme.render_profile(
             self.matrix, profile_branch="master", contract_path=self.contract
         )
-        self.assertIn("`fabric-1.20.1`", rendered)
-        self.assertIn("`forge-1.20.1`", rendered)
+        for artifact in self.matrix["artifacts"]:
+            self.assertIn(f"`{artifact['artifact_node']}`", rendered)
         self.assertIn("`concurrent-two-client`", rendered)
         self.assertIn("`40`", rendered)
         self.assertIn("`36`", rendered)
@@ -56,10 +57,13 @@ class E2EReadmeTest(unittest.TestCase):
         self.assertIn("| `full` | `release`, `pr` |", rendered)
 
     def test_release_profile_rejects_a_branch_matrix_disagreement(self) -> None:
+        # Derived from this branch's own matrix so the disagreement is real everywhere,
+        # instead of only on a branch whose matrix names a different release branch.
+        release_branch = branch_readme.extract_branch_facts(self.matrix).release_branch
         with self.assertRaises(e2e_readme.E2EReadmeError):
             e2e_readme.render_profile(
                 self.matrix,
-                profile_branch="fabric-and-neoforge-1.21.11",
+                profile_branch=f"{release_branch}-disagreement",
                 contract_path=self.contract,
             )
 
@@ -70,7 +74,15 @@ class E2EReadmeTest(unittest.TestCase):
         rendered = e2e_readme.render_profile(
             changed, profile_branch="master", contract_path=self.contract
         )
-        self.assertIn("| `fabric-1.20.1` | `1.20.1` | Fabric | `21` |", rendered)
+        for artifact in changed["artifacts"]:
+            loader = matrix.LOADER_DISPLAY_NAMES.get(
+                artifact["loader"], artifact["loader"]
+            )
+            self.assertIn(
+                f"| `{artifact['artifact_node']}` | "
+                f"`{artifact['artifact_version']}` | {loader} | `21` |",
+                rendered,
+            )
 
     def test_replacement_owns_only_the_marked_section(self) -> None:
         original = f"before\n{e2e_readme.START_MARKER}\nold\n{e2e_readme.END_MARKER}\nafter\n"
