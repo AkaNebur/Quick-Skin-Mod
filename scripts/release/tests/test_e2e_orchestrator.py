@@ -6,13 +6,177 @@ import json
 import sys
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "e2e"))
 
-from orchestrator import manifest_hash, read_manifest  # noqa: E402
+import orchestrator  # noqa: E402
+from orchestrator import (  # noqa: E402
+    execute_packaged_rows,
+    manifest_hash,
+    read_manifest,
+    scenarios_for,
+)
+from packaged_runtime import RuntimeFailure  # noqa: E402
+from scenario_contract import default_contract  # noqa: E402
+
+
+class FakeRuntimeSession:
+    instances: list["FakeRuntimeSession"] = []
+
+    def __init__(self, scratch: Path) -> None:
+        self.scratch = scratch
+        self.gc_calls = 0
+        type(self).instances.append(self)
+
+    @classmethod
+    def from_environment(cls, scratch: Path) -> "FakeRuntimeSession":
+        return cls(scratch)
+
+    def gc(self) -> dict[str, int]:
+        self.gc_calls += 1
+        return {
+            "hits": 2,
+            "misses": 1,
+            "pruned_entries": 3,
+            "pruned_bytes": 4,
+            "total_bytes": 5,
+        }
+
+
+class E2EAtomicWorkspaceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.output = self.root / "e2e-out"
+        self.row = {
+            "artifact_node": "fabric-1.20.1",
+            "runtime_version": "1.20.1",
+            "loader": "fabric",
+        }
+        self.args = Namespace(scenarios="phase0-smoke")
+        self.manifest_path = self.root / "stage" / "artifacts.json"
+        self.manifest_path.parent.mkdir()
+        self.manifest_path.write_text("{}", encoding="utf-8")
+        FakeRuntimeSession.instances.clear()
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def result(self, *, status: str = "pass", marker: str = "new") -> dict[str, object]:
+        return {
+            "artifact_node": self.row["artifact_node"],
+            "runtime_version": self.row["runtime_version"],
+            "loader": self.row["loader"],
+            "scenario": "phase0-smoke",
+            "jar_sha256": "a" * 64,
+            "port": 25565,
+            "elapsed_s": 1.5,
+            "status": status,
+            "marker": marker,
+        }
+
+    def run_once(self, result: dict[str, object]) -> tuple[list[dict[str, object]], object]:
+        def packaged_row(
+            _repo: Path,
+            _data: dict[str, object],
+            _row: dict[str, object],
+            _scenario: str,
+            _manifest: dict[str, object],
+            _manifest_path: Path,
+            evidence: Path,
+            session: FakeRuntimeSession,
+        ) -> dict[str, object]:
+            profile = evidence / "profiles" / "fabric-1.20.1--phase0-smoke"
+            profile.mkdir(parents=True)
+            (profile / "result.json").write_text(
+                json.dumps(result) + "\n", encoding="utf-8"
+            )
+            self.assertEqual(session.scratch, Path(session.scratch))
+            return result
+
+        with mock.patch.object(
+            orchestrator, "PackagedRuntimeSession", FakeRuntimeSession
+        ), mock.patch.object(orchestrator, "run_packaged_row", side_effect=packaged_row):
+            return execute_packaged_rows(
+                {},
+                [self.row],
+                self.args,
+                {},
+                self.manifest_path,
+                self.output,
+            )
+
+    def test_promotes_only_current_and_replaces_the_previous_complete_snapshot(self) -> None:
+        unrelated = self.output / "keep.txt"
+        unrelated.parent.mkdir(parents=True)
+        unrelated.write_text("untouched", encoding="utf-8")
+
+        _results, first = self.run_once(self.result(marker="first"))
+        first_summary = json.loads((self.output / "current" / "summary.json").read_text())
+        self.assertFalse(first.replaced)
+        self.assertEqual("first", first_summary["results"][0]["marker"])
+
+        _results, second = self.run_once(self.result(marker="second"))
+        second_summary = json.loads((self.output / "current" / "summary.json").read_text())
+        self.assertTrue(second.replaced)
+        self.assertEqual("second", second_summary["results"][0]["marker"])
+        self.assertEqual("untouched", unrelated.read_text(encoding="utf-8"))
+        self.assertEqual([], list(self.output.glob(".evidence-run-*")))
+        self.assertFalse((self.output / ".current.last-good").exists())
+        self.assertEqual(
+            {
+                "hits": 2,
+                "misses": 1,
+                "pruned_entries": 3,
+                "pruned_bytes": 4,
+                "total_bytes": 5,
+            },
+            second_summary["runtime_store"],
+        )
+        self.assertEqual(
+            second_summary["runtime_store"],
+            json.loads((self.output / "current" / "runtime-store.json").read_text()),
+        )
+
+    def test_failed_scenario_is_still_promoted_for_diagnostics(self) -> None:
+        results, _promotion = self.run_once(self.result(status="fail"))
+
+        self.assertEqual("fail", results[0]["status"])
+        self.assertTrue((self.output / "current" / "profiles").is_dir())
+        self.assertEqual(1, FakeRuntimeSession.instances[-1].gc_calls)
+
+    def test_escaped_configuration_failure_preserves_previous_current(self) -> None:
+        self.run_once(self.result(marker="last-good"))
+        before = (self.output / "current" / "summary.json").read_bytes()
+        scratch_paths: list[Path] = []
+
+        def explode(*args: object, **kwargs: object) -> dict[str, object]:
+            del args, kwargs
+            scratch_paths.append(FakeRuntimeSession.instances[-1].scratch)
+            raise RuntimeFailure("configuration escaped the row")
+
+        with mock.patch.object(
+            orchestrator, "PackagedRuntimeSession", FakeRuntimeSession
+        ), mock.patch.object(orchestrator, "run_packaged_row", side_effect=explode):
+            with self.assertRaisesRegex(RuntimeFailure, "configuration escaped"):
+                execute_packaged_rows(
+                    {},
+                    [self.row],
+                    self.args,
+                    {},
+                    self.manifest_path,
+                    self.output,
+                )
+
+        self.assertEqual(before, (self.output / "current" / "summary.json").read_bytes())
+        self.assertEqual([], list(self.output.glob(".evidence-run-*")))
+        self.assertTrue(scratch_paths)
+        self.assertTrue(all(not path.exists() for path in scratch_paths))
 
 
 class E2EManifestContractTest(unittest.TestCase):
@@ -156,6 +320,16 @@ class E2EManifestContractTest(unittest.TestCase):
 
         expected = self.digest(self.production_payloads["fabric-1.20.1"], "sha256")
         self.assertEqual(expected, manifest_hash(manifest, "fabric-1.20.1"))
+
+    def test_runtime_default_scenarios_come_only_from_contract_profile(self) -> None:
+        stale_matrix = {"scheduled_scenarios": ["full"]}
+        stale_runtime = {"scenario": "propagation"}
+        args = Namespace(scenarios="")
+
+        self.assertEqual(
+            list(default_contract().scenarios_for_profile("runtime-default")),
+            scenarios_for(stale_matrix, stale_runtime, args),
+        )
 
     def test_rejects_legacy_schema_matrix_drift_and_duplicate_nodes(self) -> None:
         valid = json.loads(self.write_manifest().read_text(encoding="utf-8"))
