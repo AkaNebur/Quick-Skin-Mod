@@ -1726,10 +1726,8 @@ class RuntimeStore:
             source_tree.rglob("*"),
             key=lambda item: item.relative_to(source_tree).as_posix(),
         ):
-            path_stat = path.lstat()
             relative = path.relative_to(source_tree).as_posix()
-            if _is_link_or_reparse(path_stat):
-                raise InvalidRuntimeTreeError(f"runtime tree contains a symbolic link: {relative}")
+            real, path_stat = self._resolve_source_entry(source_tree, path, relative)
             if stat.S_ISDIR(path_stat.st_mode):
                 continue
             if not stat.S_ISREG(path_stat.st_mode):
@@ -1738,9 +1736,54 @@ class RuntimeStore:
                 _validate_manifest_path(relative)
             except StoreCorruptionError as exc:
                 raise InvalidRuntimeTreeError(str(exc)) from exc
-            digest, size, mode = self._hash_source_file(path)
+            digest, size, mode = self._hash_source_file(real)
             entries.append(TreeEntry(relative, size, digest, mode))
         return TreeManifest(tuple(entries))
+
+    @classmethod
+    def _resolve_source_entry(
+        cls, source_tree: Path, path: Path, relative: str
+    ) -> tuple[Path, os.stat_result]:
+        """Map one scanned runtime path to the real file the store must read.
+
+        Mojang's bundled Java runtimes ship internal relative symbolic links, so a
+        link is dereferenced only when its target stays inside the runtime tree and
+        is itself a regular file.  Everything the store then opens, hashes, and
+        materializes is a real file, so no link is ever published or restored.
+        """
+
+        path_stat = path.lstat()
+        if not _is_link_or_reparse(path_stat):
+            return path, path_stat
+        root = cls._resolved_source_root(source_tree)
+        try:
+            real = path.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise InvalidRuntimeTreeError(
+                f"runtime tree contains an unresolvable symbolic link: {relative}"
+            ) from exc
+        try:
+            real.relative_to(root)
+        except ValueError as exc:
+            raise InvalidRuntimeTreeError(
+                f"runtime tree contains an escaping symbolic link: {relative}"
+            ) from exc
+        real_stat = real.lstat()
+        if _is_link_or_reparse(real_stat) or not stat.S_ISREG(real_stat.st_mode):
+            raise InvalidRuntimeTreeError(
+                "runtime tree symbolic link does not resolve to a regular file: "
+                f"{relative}"
+            )
+        return real, real_stat
+
+    @staticmethod
+    def _resolved_source_root(source_tree: Path) -> Path:
+        try:
+            return source_tree.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise InvalidRuntimeTreeError(
+                f"runtime source tree is not resolvable: {source_tree}"
+            ) from exc
 
     @staticmethod
     def _require_source_root(source_tree: Path) -> None:
@@ -1803,7 +1846,10 @@ class RuntimeStore:
     def _publish_blobs(self, source_tree: Path, manifest: TreeManifest) -> None:
         published: set[str] = set()
         for entry in manifest.entries:
-            source = source_tree.joinpath(*PurePosixPath(entry.path).parts)
+            linked = source_tree.joinpath(*PurePosixPath(entry.path).parts)
+            source, _source_stat = self._resolve_source_entry(
+                source_tree, linked, entry.path
+            )
             if entry.sha256 in published:
                 digest, size, _mode = self._hash_source_file(source)
                 if digest != entry.sha256 or size != entry.size:
@@ -1857,10 +1903,8 @@ class RuntimeStore:
         expected = {entry.path: (entry.size, entry.mode) for entry in manifest.entries}
         actual: dict[str, tuple[int, int]] = {}
         for path in source_tree.rglob("*"):
-            path_stat = path.lstat()
             relative = path.relative_to(source_tree).as_posix()
-            if _is_link_or_reparse(path_stat):
-                raise InvalidRuntimeTreeError(f"runtime tree contains a symbolic link: {relative}")
+            _real, path_stat = self._resolve_source_entry(source_tree, path, relative)
             if stat.S_ISDIR(path_stat.st_mode):
                 continue
             if not stat.S_ISREG(path_stat.st_mode):

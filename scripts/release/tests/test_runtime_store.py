@@ -917,21 +917,87 @@ class RuntimeStoreTest(unittest.TestCase):
         self.assertEqual([], list(self.store.tmp_dir.glob(f"build-{recipe.digest()}-*")))
         self.assertIsNone(self.store.lookup(recipe))
 
-    def test_symlink_source_is_rejected_without_publishing_a_recipe(self) -> None:
-        source = self.source_tree("source", {"real.txt": b"data"})
-        link = source / "linked.txt"
+    def test_contained_symlink_is_materialized_as_a_regular_file(self) -> None:
+        """Mojang's bundled Java runtimes ship internal relative links."""
+
+        source = self.source_tree("source", {"legal/java.base/LICENSE": b"data"})
+        link = source / "legal" / "java.compiler"
+        link.mkdir(parents=True, exist_ok=True)
         try:
-            link.symlink_to(source / "real.txt")
+            (link / "LICENSE").symlink_to(Path("..") / "java.base" / "LICENSE")
         except (OSError, NotImplementedError):
             self.skipTest("symbolic links are unavailable")
         recipe = self.recipe()
 
-        with self.assertRaisesRegex(runtime_store.InvalidRuntimeTreeError, "symbolic link"):
+        stored = self.store.publish(recipe, source)
+
+        entries = {entry.path: entry for entry in stored.manifest.entries}
+        self.assertIn("legal/java.compiler/LICENSE", entries)
+        self.assertEqual(
+            entries["legal/java.base/LICENSE"].sha256,
+            entries["legal/java.compiler/LICENSE"].sha256,
+            "identical link content must deduplicate onto one blob",
+        )
+
+        destination = self.store.materialize(stored, self.root / "run" / "client")
+        restored = destination / "legal" / "java.compiler" / "LICENSE"
+        self.assertFalse(restored.is_symlink(), "store must never restore a link")
+        self.assertEqual(b"data", restored.read_bytes())
+
+    def test_escaping_symlink_is_rejected_without_publishing_a_recipe(self) -> None:
+        outside = self.root / "outside.txt"
+        outside.write_bytes(b"secret")
+        source = self.source_tree("source", {"real.txt": b"data"})
+        try:
+            (source / "escape.txt").symlink_to(outside)
+        except (OSError, NotImplementedError):
+            self.skipTest("symbolic links are unavailable")
+        recipe = self.recipe()
+
+        with self.assertRaisesRegex(
+            runtime_store.InvalidRuntimeTreeError, "escaping symbolic link"
+        ):
             self.store.publish(recipe, source)
 
         self.assertFalse(self.store.path_for_recipe(recipe).exists())
         with self.assertRaises(runtime_store.StoreCorruptionError):
             runtime_store.TreeEntry("../escape", 1, "0" * 64, 0o644)
+
+    def test_escaping_symlink_containment_is_component_wise_not_lexical(self) -> None:
+        """A sibling whose name merely extends the root is still outside it."""
+
+        sibling = self.root / "source-evil"
+        sibling.mkdir()
+        (sibling / "id_rsa").write_bytes(b"PRIVATE KEY MATERIAL")
+        source = self.source_tree("source", {"real.txt": b"data"})
+        try:
+            (source / "leak.txt").symlink_to(Path("..") / "source-evil" / "id_rsa")
+        except (OSError, NotImplementedError):
+            self.skipTest("symbolic links are unavailable")
+        recipe = self.recipe()
+
+        with self.assertRaisesRegex(
+            runtime_store.InvalidRuntimeTreeError, "escaping symbolic link"
+        ):
+            self.store.publish(recipe, source)
+
+        self.assertFalse(self.store.path_for_recipe(recipe).exists())
+        self.assertEqual([], self.blob_files())
+
+    def test_symlink_to_a_directory_is_rejected(self) -> None:
+        source = self.source_tree("source", {"real/file.txt": b"data"})
+        try:
+            (source / "linkdir").symlink_to(source / "real")
+        except (OSError, NotImplementedError):
+            self.skipTest("symbolic links are unavailable")
+        recipe = self.recipe()
+
+        with self.assertRaisesRegex(
+            runtime_store.InvalidRuntimeTreeError, "does not resolve to a regular file"
+        ):
+            self.store.publish(recipe, source)
+
+        self.assertFalse(self.store.path_for_recipe(recipe).exists())
 
     def test_corrupt_blob_is_a_miss_and_can_be_repaired_atomically(self) -> None:
         source = self.source_tree("source", {"profile.json": b"valid profile"})
