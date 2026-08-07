@@ -80,27 +80,6 @@ tasks.matching { it.name == "sourcesJar" }.configureEach {
     dependsOn(prepareConsolidatedJava)
 }
 
-// The harness compiles against the selected node's named main output, but its JAR contains only the
-// separate test mod. Production runtime profiles install this harness beside the exact release JAR;
-// they never put main output or a development Quick Skin JAR on the runtime classpath.
-val mainSourceSet = sourceSets.named("main").get()
-val e2eSourceSet = sourceSets.create("e2e") {
-    java.setSrcDirs(
-        listOf(
-            rootProject.file("fabric/src/e2e/java"),
-            rootProject.file("common/src/e2e/java"),
-        )
-    )
-    resources.setSrcDirs(
-        listOf(
-            rootProject.file("fabric/src/e2e/resources"),
-            rootProject.file("common/src/e2e/resources"),
-        )
-    )
-    compileClasspath += mainSourceSet.output + mainSourceSet.compileClasspath
-    runtimeClasspath += output + compileClasspath
-}
-
 extensions.configure<LoomGradleExtensionAPI>("loom") {
     if (isNoRemap) {
         val awFile = rootProject.file("fabric/src/main/resources/quick-skin.accesswidener")
@@ -232,8 +211,4 @@ if (isNoRemap) {
     }
 }
 
-extensions.extraProperties["quickSkinE2ESourceSet"] = e2eSourceSet
-extensions.extraProperties["quickSkinE2ELoaderLabel"] = "Fabric"
-extensions.extraProperties["quickSkinE2ENoRemap"] = isNoRemap
-extensions.extraProperties["quickSkinE2EMinecraftVersion"] = minecraftVersion
 apply(from = rootProject.file("gradle/e2e-harness-conventions.gradle.kts"))

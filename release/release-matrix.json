@@ -44,7 +44,9 @@
       "harness_task": ":fabric:26.1.1:e2eHarnessJar",
       "jar": "fabric/versions/26.1.1/build/libs/Quick Skin - Fabric - 26.1.1-{mod_version}.jar",
       "harness_jar": "fabric/versions/26.1.1/build/libs/Quick Skin E2E - Fabric - 26.1.1-0.0.0.jar",
-      "game_versions": ["26.1.1"],
+      "game_versions": [
+        "26.1.1"
+      ],
       "metadata": {
         "file": "fabric.mod.json",
         "loader": ">=0.18.0",
@@ -62,7 +64,9 @@
       "harness_task": ":neoforge:26.1.1:e2eHarnessJar",
       "jar": "neoforge/versions/26.1.1/build/libs/Quick Skin - NeoForge - 26.1.1-{mod_version}.jar",
       "harness_jar": "neoforge/versions/26.1.1/build/libs/Quick Skin E2E - NeoForge - 26.1.1-0.0.0.jar",
-      "game_versions": ["26.1.1"],
+      "game_versions": [
+        "26.1.1"
+      ],
       "metadata": {
         "file": "META-INF/neoforge.mods.toml",
         "loader_api": "[1,)",
@@ -78,7 +82,6 @@
       "artifact_node": "fabric-26.1.1",
       "runtime_version": "26.1.1",
       "loader": "fabric",
-      "scenario": "phase0-smoke",
       "jar_sha256": "from:artifact-manifest",
       "port": 0,
       "java": 25,
@@ -96,7 +99,6 @@
       "artifact_node": "neoforge-26.1.1",
       "runtime_version": "26.1.1",
       "loader": "neoforge",
-      "scenario": "phase0-smoke",
       "jar_sha256": "from:artifact-manifest",
       "port": 0,
       "java": 25,
@@ -110,17 +112,5 @@
       "scheduled_anchor": true,
       "pr_anchor": true
     }
-  ],
-  "scheduled_scenarios": [
-    "phase0-smoke",
-    "propagation",
-    "propagation-live",
-    "full"
-  ],
-  "pr_scenarios": [
-    "phase0-smoke",
-    "propagation",
-    "propagation-live",
-    "full"
   ]
 }

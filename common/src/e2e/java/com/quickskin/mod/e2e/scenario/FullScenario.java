@@ -27,12 +27,12 @@ import com.quickskin.mod.e2e.Scenario;
 import com.quickskin.mod.e2e.Step;
 import com.quickskin.mod.e2e.TestAssets;
 import com.quickskin.mod.e2e.VanillaShim;
+import com.quickskin.mod.e2e.generated.ScenarioContract.ScenarioId;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.SplashRenderer;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -124,7 +124,7 @@ public final class FullScenario implements Scenario {
     private volatile Boolean deleteResult;
 
     @Override
-    public String id() { return "full"; }
+    public ScenarioId id() { return ScenarioId.FULL; }
 
     @Override
     public List<Step> build(Minecraft mc) {
@@ -993,7 +993,9 @@ public final class FullScenario implements Scenario {
                     c.sizeModelPreviewPercentageTitleScreen = TITLE_PROBE_SIZE_PERCENT;
                     c.save();
                     TitleScreen probeScreen = new TitleScreen();
-                    String splashFailure = installDeterministicSplash(probeScreen);
+                    String splashFailure = VanillaShim.installDeterministicSplash(
+                            probeScreen, TITLE_PROBE_SPLASH
+                    );
                     if (splashFailure != null) titleFailure.set(splashFailure);
                     VanillaShim.setScreen(mc, probeScreen);
                 })
@@ -1050,52 +1052,6 @@ public final class FullScenario implements Scenario {
 
     /** Plain text deliberately chosen to avoid vanilla's rare formatted or seasonal renderers. */
     private static final String TITLE_PROBE_SPLASH = "Quick Skin E2E splash probe";
-
-    /**
-     * Pins the test screen to one saturated-yellow splash before vanilla initializes it.
-     *
-     * <p>Vanilla normally chooses a random splash. One legitimate entry is the section-sign
-     * formatted {@code Colors!}, whose multicoloured glyphs made this yellow-pixel oracle flaky
-     * even though the z-order was correct. The renderer constructor changed from {@code String} to
-     * {@code Component} in 1.21.11, and the private field is remapped in packaged clients, so both
-     * constructor and field selection are type-driven. This code lives only in the separate E2E
-     * harness and never enters the production mod.</p>
-     *
-     * @return {@code null} on success, otherwise a fail-closed diagnostic for the scenario
-     */
-    private static String installDeterministicSplash(TitleScreen screen) {
-        try {
-            Object renderer;
-            try {
-                renderer = SplashRenderer.class.getConstructor(String.class)
-                        .newInstance(TITLE_PROBE_SPLASH);
-            } catch (NoSuchMethodException stringEraEnded) {
-                Component yellow = Component.literal(TITLE_PROBE_SPLASH)
-                        .withStyle(style -> style.withColor(0xFFFF00));
-                renderer = SplashRenderer.class.getConstructor(Component.class)
-                        .newInstance(yellow);
-            }
-
-            Field splashField = null;
-            for (Field candidate : TitleScreen.class.getDeclaredFields()) {
-                if (candidate.getType() != SplashRenderer.class) continue;
-                if (splashField != null) {
-                    return "title screen exposes multiple SplashRenderer fields";
-                }
-                splashField = candidate;
-            }
-            if (splashField == null) return "title screen exposes no SplashRenderer field";
-            splashField.setAccessible(true);
-            splashField.set(screen, renderer);
-            if (splashField.get(screen) != renderer) {
-                return "title screen rejected the deterministic SplashRenderer";
-            }
-            return null;
-        } catch (Throwable failure) {
-            return "could not install deterministic title splash: "
-                    + failure.getClass().getSimpleName() + ": " + failure.getMessage();
-        }
-    }
 
     /**
      * The harness-pinned vanilla splash's colour, and nothing else on the title screen.
