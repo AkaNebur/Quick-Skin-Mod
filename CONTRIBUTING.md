@@ -49,6 +49,23 @@ current branch's identity, compatibility pins, and source-routing differences fr
 matrix-owned profile facts change, run that helper with `--profile-branch master` or the matrix's
 exact `project.release_branch` and `--write`.
 
+The marked profile in `e2e/README.md` is generated too. `scripts/release/e2e_readme.py` combines
+lane facts from the active release matrix with suite facts from `e2e/scenario-contract.json`; the
+version synchronizer regenerates it for each target branch. Edit the matrix or contract, not the
+marked block.
+
+The two active-common test commands in `docs/ai/WORKFLOW.md` are matrix-owned as well.
+`scripts/release/workflow_guidance.py` renders their exact Minecraft version for each branch; the
+synchronizer applies that protected renderer after any shared guidance merge.
+
+Merge conflicts in protected version-owned files are not delegated to AI. The synchronizer uses a
+reviewed merge controller and classifier to preserve the target matrix, keep inactive loader
+modules absent, and merge shared runtime/guidance documents with source preference only at
+conflicting hunks. It then regenerates all matrix-owned profiles. The complete proposal is opened
+only in an alternate Git index; validator and writer independently reconstruct the original merge,
+copy only recomputed AI-conflict entries, and require an exact final-tree match. Unknown protected
+conflicts stop the port; Claude can see only the remaining unprotected conflict paths.
+
 The current synchronizer attempts to port every new `master` change to every release branch. A
 change described as “all versions except one” therefore needs an explicit design decision before
 coding. Open an issue or draft PR stating the exclusion; do not let an AI hide the policy in many
@@ -156,6 +173,7 @@ architecture document imported by `AGENTS.md`.
 | Version API replacements | Matrix-declared `src/legacy*` overlays |
 | Loader-independent regression tests | `common/src/test` |
 | Packaged Minecraft test mod | `common/src/e2e` and loader `src/e2e` |
+| E2E loader/bootstrap integrity | `e2e/loader-bootstrap-contract.json` |
 | Supported artifacts and E2E lanes | `release/release-matrix.json` |
 
 Do not edit or commit anything below generated `versions/` trees, `build/`, `.gradle/`,
@@ -170,6 +188,9 @@ rg "ClassName|methodName" --glob "*.java" .
 ```
 
 Missing loader directories are normal on branches whose matrix does not support that loader.
+Changing an active loader's `src/e2e` entrypoint, manifest, or complete `build.gradle.kts` also
+requires an intentional digest update in `e2e/loader-bootstrap-contract.json` on `master`; do not
+weaken the validator or treat the final convention-apply line alone as sufficient.
 
 ## 5. Run proportional checks
 
@@ -193,27 +214,20 @@ Run the repository-level checks before handing work off:
 
 ```bash
 git diff --check
-python -m py_compile \
-  scripts/release/branch_readme.py \
-  scripts/release/github_governance.py \
-  scripts/release/github_release.py \
-  scripts/release/matrix.py \
-  scripts/release/reconcile_publication.py \
-  scripts/release/release_identity.py \
-  scripts/release/status_table.py \
-  scripts/release/verify_release.py \
-  scripts/release/verify_reproducibility.py \
-  scripts/release/version_branches.py \
-  scripts/pages/evidence.py \
-  scripts/pages/build_site.py \
-  scripts/pages/select_artifact.py \
-  scripts/pages/rotate_artifacts.py \
-  e2e/orchestrator.py \
-  e2e/packaged_runtime.py \
-  e2e/visual_evidence.py \
-  e2e/check_visual_review.py \
-  e2e/visual_review.py
+python -m compileall -q e2e scripts
+python scripts/release/e2e_readme.py \
+  --matrix release/release-matrix.json \
+  --contract e2e/scenario-contract.json \
+  --readme e2e/README.md \
+  --profile-branch "<master-or-exact-release-branch>" \
+  --check
+python scripts/release/workflow_guidance.py \
+  --matrix release/release-matrix.json \
+  --guidance docs/ai/WORKFLOW.md \
+  --profile-branch "<master-or-exact-release-branch>" \
+  --check
 python -m unittest discover -s scripts/release/tests -p "test_*.py" -v
+python -m unittest discover -s scripts/ci/tests -p "test_*.py" -v
 ```
 
 Do not run multiple Gradle commands at the same time. Architectury's transforms share JVM-global

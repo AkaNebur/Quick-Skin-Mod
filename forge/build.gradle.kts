@@ -49,26 +49,6 @@ sourceSets {
     }
 }
 
-// Build the automation as a physically separate mod. Main output is compile-only input here and is
-// never copied into the harness JAR installed by packaged-runtime E2E.
-val mainSourceSet = sourceSets.named("main").get()
-val e2eSourceSet = sourceSets.create("e2e") {
-    java.setSrcDirs(
-        listOf(
-            rootProject.file("forge/src/e2e/java"),
-            rootProject.file("common/src/e2e/java"),
-        )
-    )
-    resources.setSrcDirs(
-        listOf(
-            rootProject.file("forge/src/e2e/resources"),
-            rootProject.file("common/src/e2e/resources"),
-        )
-    )
-    compileClasspath += mainSourceSet.output + mainSourceSet.compileClasspath
-    runtimeClasspath += output + compileClasspath
-}
-
 extensions.configure<LoomGradleExtensionAPI>("loom") {
     forge {
         mixinConfig("quickskin.mixins.json")
@@ -139,8 +119,4 @@ tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
     inputFile.set(shadowJar.get().archiveFile)
 }
 
-extensions.extraProperties["quickSkinE2ESourceSet"] = e2eSourceSet
-extensions.extraProperties["quickSkinE2ELoaderLabel"] = "Forge"
-extensions.extraProperties["quickSkinE2ENoRemap"] = false
-extensions.extraProperties["quickSkinE2EMinecraftVersion"] = minecraftVersion
 apply(from = rootProject.file("gradle/e2e-harness-conventions.gradle.kts"))
