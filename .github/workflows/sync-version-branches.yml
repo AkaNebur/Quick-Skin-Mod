@@ -966,14 +966,31 @@ jobs:
             --description 'Trusted master-to-version synchronization' \
             --force
           if [[ "$EXISTING_PORT" == true ]]; then
-            pr_json="$(gh pr list --state open --head "$SYNC_BRANCH" --limit 2 \
-              --json url,baseRefName,headRefName,headRefOid,isCrossRepository,labels,state)"
-            jq -e \
-              --arg branch "$SYNC_BRANCH" \
-              --arg head "$PORT_COMMIT" \
-              --arg target "$TARGET_BRANCH" \
-              'length == 1 and .[0].state == "OPEN" and .[0].baseRefName == $target and .[0].headRefName == $branch and .[0].headRefOid == $head and (.[0].isCrossRepository | not) and ([.[0].labels[].name] | index("automated-version-sync")) != null' \
-              <<< "$pr_json" > /dev/null
+            # GitHub publishes the pull request head asynchronously, so the commit pushed
+            # above can still be invisible for a moment. Poll the same exact identity
+            # instead of deciding on one read, which previously aborted the port before it
+            # could dispatch its gates. The predicate is unchanged: only the pushed head on
+            # the expected branch, base, repository and label is ever accepted.
+            pr_converged=false
+            for attempt in $(seq 1 30); do
+              pr_json="$(gh pr list --state open --head "$SYNC_BRANCH" --limit 2 \
+                --json url,baseRefName,headRefName,headRefOid,isCrossRepository,labels,state)"
+              if jq -e \
+                  --arg branch "$SYNC_BRANCH" \
+                  --arg head "$PORT_COMMIT" \
+                  --arg target "$TARGET_BRANCH" \
+                  'length == 1 and .[0].state == "OPEN" and .[0].baseRefName == $target and .[0].headRefName == $branch and .[0].headRefOid == $head and (.[0].isCrossRepository | not) and ([.[0].labels[].name] | index("automated-version-sync")) != null' \
+                  <<< "$pr_json" > /dev/null; then
+                pr_converged=true
+                break
+              fi
+              sleep 2
+            done
+            if [[ "$pr_converged" != true ]]; then
+              echo "Open port never converged on the pushed head $PORT_COMMIT" >&2
+              jq -r '.[0].headRefOid // "no open port"' <<< "$pr_json" >&2
+              exit 1
+            fi
             pr_url="$(jq -r '.[0].url' <<< "$pr_json")"
             gh pr comment "$pr_url" --body \
               "Updated this open port with the latest \`master\`; redispatching both exact-head gates."
