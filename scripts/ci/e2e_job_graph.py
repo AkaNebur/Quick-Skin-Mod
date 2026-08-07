@@ -24,6 +24,9 @@ POLICY_JOB = "Classify packaged runtime impact"
 BUILD_JOB = "Build immutable E2E input bundle"
 GATE_JOB = "Packaged E2E gate"
 SCENARIO_SUFFIX = " - contract scenarios"
+# A matrix job whose matrix never expanded is reported once under its literal template
+# name, so a non-runtime port observes this instead of zero scenario jobs.
+UNEXPANDED_SCENARIO_JOB = "${{ matrix.id }}" + SCENARIO_SUFFIX
 MAX_JOBS = 1000
 SHA = re.compile(r"^[0-9a-f]{40}$")
 BLOB_SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -480,7 +483,14 @@ def validate_job_graph(
             _require_conclusion(job, str(job["name"]), "success")
     else:
         _require_conclusion(build_job, BUILD_JOB, "skipped")
-        if observed_names not in {(), expected_scenarios}:
+        # The unexpanded placeholder means the matrix produced no lane at all, which is
+        # exactly what a non-runtime port must show; every observed job is still required
+        # to be skipped below, so this admits no executed scenario.
+        if observed_names not in {
+            (),
+            expected_scenarios,
+            (UNEXPANDED_SCENARIO_JOB,),
+        }:
             raise JobGraphError(
                 "not-applicable run exposed a partial scenario matrix: "
                 f"{observed_names!r}"
