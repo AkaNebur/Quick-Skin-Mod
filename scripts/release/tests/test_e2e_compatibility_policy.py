@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+import re
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[3]
+E2E_JAVA = ROOT / "common" / "src" / "e2e" / "java" / "com" / "quickskin" / "mod" / "e2e"
+SHIM = E2E_JAVA / "VanillaShim.java"
+
+
+class E2ECompatibilityPolicyTest(unittest.TestCase):
+    def test_known_vanilla_drift_stays_in_the_compatibility_driver(self) -> None:
+        forbidden = (
+            re.compile(r"^import net\.minecraft\.client\.gui\.components\.SplashRenderer;", re.M),
+            re.compile(r"Class\.forName\(\"net\.minecraft\."),
+            re.compile(r"\.getMainRenderTarget\s*\("),
+            re.compile(r"\.getSkinTextureLocation\s*\("),
+            re.compile(r"\.getCloakTextureLocation\s*\("),
+        )
+        offenders: list[str] = []
+        for source in sorted(E2E_JAVA.rglob("*.java")):
+            if source == SHIM:
+                continue
+            text = source.read_text(encoding="utf-8")
+            for pattern in forbidden:
+                if pattern.search(text):
+                    offenders.append(f"{source.relative_to(ROOT)}: {pattern.pattern}")
+        self.assertEqual(
+            offenders,
+            [],
+            "Minecraft API drift must be absorbed by VanillaShim, not scenario code",
+        )
+
+    def test_driver_documents_and_owns_the_title_splash_adapter(self) -> None:
+        text = SHIM.read_text(encoding="utf-8")
+        self.assertIn("installDeterministicSplash", text)
+        self.assertIn("net.minecraft.client.gui.components.SplashRenderer", text)
+        self.assertIn(
+            "SplashRenderer.class",
+            text,
+            "the splash type must be a class literal so the remapper rewrites it",
+        )
+
+    def test_string_class_lookups_declare_an_intermediary_fallback(self) -> None:
+        """Fabric serves intermediary names at runtime; a Mojang name alone resolves only on Forge."""
+
+        text = SHIM.read_text(encoding="utf-8")
+        looked_up = set(re.findall(r'loadNamedClass\(\s*"([^"]+)"', text))
+        guarded = set(re.findall(r'namedClass\.equals\(\s*"([^"]+)"\s*\)', text))
+        self.assertEqual(
+            set(),
+            looked_up - guarded,
+            "every string-resolved Minecraft class needs an intermediary fallback; "
+            "prefer a class literal so the harness jar's remapper rewrites it",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
