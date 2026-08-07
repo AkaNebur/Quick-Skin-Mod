@@ -2,8 +2,10 @@ package com.quickskin.mod.e2e;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.SplashRenderer;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.network.chat.Component;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -16,7 +18,11 @@ import java.util.function.Consumer;
  * Isolates the handful of vanilla calls whose signature drifts across Minecraft versions, so the rest
  * of the harness stays a single version-agnostic source set. Everything here is reflection-based and
  * returns only version-stable types ({@link String}, {@link Screen}), importing no type that was
- * renamed/moved across versions.
+ * renamed/moved across versions. {@link SplashRenderer} is the one deliberate exception: its
+ * package is identical on every supported version and only its constructor drifts, and it must be
+ * referenced as a class literal so the harness jar's remapper rewrites it for Fabric's
+ * intermediary runtime. Resolving a Minecraft name as a string only works on Mojang-mapped
+ * loaders, so keep string lookups for classes that genuinely move.
  *
  * <p>Drift absorbed (1.20.1 / 1.21.x / 26.x):</p>
  * <ul>
@@ -35,10 +41,12 @@ import java.util.function.Consumer;
  *   <li><b>main render target</b> (for screenshots): {@code Minecraft.getMainRenderTarget()} vs
  *       {@code mc.gameRenderer.mainRenderTarget()} (26.x).</li>
  *   <li><b>Screenshot.grab</b>: classic Fabric exposes intermediary class/method names at runtime,
- *       and an {@code int downscale} param was inserted after 1.20.1; both mappings and shapes are
+ *       and an {@code int downscale} param was inserted in 1.21.6; both mappings and shapes are
  *       handled.</li>
  *   <li><b>widget press</b>: {@code AbstractWidget.onPress()} (no-arg) vs
  *       {@code onPress(InputWithModifiers)} (26.x).</li>
+ *   <li><b>title splash construction</b>: {@code SplashRenderer(String)} vs
+ *       {@code SplashRenderer(Component)}, plus its remapped private field on {@code TitleScreen}.</li>
  * </ul>
  *
  * <p>GL-touching calls (screenshot) must run on the render thread, after at least one full frame.</p>
@@ -222,6 +230,49 @@ public final class VanillaShim {
     }
 
     /**
+     * Install one deterministic title-screen splash without exposing constructor or remapping drift
+     * to a scenario. The return value is {@code null} on success and a fail-closed diagnostic on
+     * failure.
+     */
+    public static String installDeterministicSplash(Screen screen, String text) {
+        if (screen == null || text == null || text.isEmpty()) {
+            return "title splash requires a screen and non-empty text";
+        }
+        try {
+            // A class literal is remapped with the harness jar; the same name resolved as a string
+            // only works on Mojang-mapped loaders and fails on Fabric's intermediary runtime.
+            Class<?> rendererType = SplashRenderer.class;
+            Object renderer;
+            try {
+                renderer = rendererType.getConstructor(String.class).newInstance(text);
+            } catch (NoSuchMethodException stringEraEnded) {
+                Component yellow = Component.literal(text)
+                        .withStyle(style -> style.withColor(0xFFFF00));
+                renderer = rendererType.getConstructor(Component.class).newInstance(yellow);
+            }
+
+            Field splashField = null;
+            for (Field candidate : screen.getClass().getDeclaredFields()) {
+                if (candidate.getType() != rendererType) continue;
+                if (splashField != null) {
+                    return "title screen exposes multiple SplashRenderer fields";
+                }
+                splashField = candidate;
+            }
+            if (splashField == null) return "title screen exposes no SplashRenderer field";
+            splashField.setAccessible(true);
+            splashField.set(screen, renderer);
+            if (splashField.get(screen) != renderer) {
+                return "title screen rejected the deterministic SplashRenderer";
+            }
+            return null;
+        } catch (Throwable failure) {
+            return "could not install deterministic title splash: "
+                    + failure.getClass().getSimpleName() + ": " + failure.getMessage();
+        }
+    }
+
+    /**
      * Capture the current main framebuffer to {@code <runDir>/screenshots/<name>}.
      * @return true if the grab call was dispatched.
      */
@@ -236,14 +287,14 @@ public final class VanillaShim {
             for (Method m : screenshot.getDeclaredMethods()) {
                 if (!Modifier.isStatic(m.getModifiers())) continue;
                 Class<?>[] p = m.getParameterTypes();
-                // 1.20.1: (File dir, String name, RenderTarget fb, Consumer<Component> msg)
+                // 1.20.1-1.21.5: (File dir, String name, RenderTarget fb, Consumer<Component> msg)
                 if (p.length == 4 && p[0] == File.class && p[1] == String.class
                         && p[2].isInstance(fb) && p[3] == Consumer.class) {
                     m.setAccessible(true);
                     m.invoke(null, gameDir, name, fb, noop);
                     return true;
                 }
-                // 1.21.x/26.x: (File dir, String name, RenderTarget fb, int downscale, Consumer<Component> msg)
+                // 1.21.6+/26.x: (File dir, String name, RenderTarget fb, int downscale, Consumer<Component> msg)
                 if (p.length == 5 && p[0] == File.class && p[1] == String.class
                         && p[2].isInstance(fb) && p[3] == int.class && p[4] == Consumer.class) {
                     m.setAccessible(true);
@@ -311,7 +362,7 @@ public final class VanillaShim {
      * The window's current GUI scale factor, or {@code 0} if it could not be read.
      *
      * <p>Called straight through rather than reflected, unlike its neighbours here: the drift is in
-     * the <em>type</em>, not the name - {@code double} through 1.21.1 and {@code int} from 1.21.11 -
+     * the <em>type</em>, not the name - {@code double} through 1.21.5 and {@code int} from 1.21.6 -
      * and a widening conversion absorbs that at compile time, which reflection could not do without
      * knowing each era's obfuscated name for it. Kept in this class anyway because it is exactly the
      * kind of per-era drift the rest of the harness must not have to know about.

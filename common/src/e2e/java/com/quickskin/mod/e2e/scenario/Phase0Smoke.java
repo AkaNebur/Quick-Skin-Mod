@@ -9,6 +9,7 @@ import com.quickskin.mod.e2e.Scenario;
 import com.quickskin.mod.e2e.Step;
 import com.quickskin.mod.e2e.TestAssets;
 import com.quickskin.mod.e2e.VanillaShim;
+import com.quickskin.mod.e2e.generated.ScenarioContract.ScenarioId;
 import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
@@ -30,7 +31,7 @@ public final class Phase0Smoke implements Scenario {
     private volatile String skinHash;
 
     @Override
-    public String id() { return "phase0-smoke"; }
+    public ScenarioId id() { return ScenarioId.PHASE0_SMOKE; }
 
     @Override
     public List<Step> build(Minecraft mc) {
