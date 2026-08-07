@@ -50,6 +50,7 @@ public class ClientEvents {
     private static boolean initialized;
     private static volatile boolean closed;
     private static java.util.concurrent.CompletableFuture<?> playerOwnSkinTask;
+    private static volatile boolean playerOwnSkinBootstrapped;
 
     private static int tickCounter = 0;
     private static PlayerWidget playerWidget;
@@ -109,6 +110,10 @@ public class ClientEvents {
 
         // Client tick (fires every game tick, ~20 times per second)
         ClientTickEvent.CLIENT_POST.register(client -> {
+            // The session user is not readable from every platform's client entry point, so retry
+            // the own-skin bootstrap from the first tick that runs. It disarms itself once started.
+            ensurePlayerOwnSkinExists();
+
             // This also ensures the singleton instance is created.
             com.quickskin.mod.client.storage.NetworkTextureCache.getInstance()
                     .tickWorkingSet();
@@ -162,7 +167,8 @@ public class ClientEvents {
             }
         });
 
-        // Download player's own skin on startup (async, won't block)
+        // Download player's own skin on startup (async, won't block). Platforms whose client entry
+        // point runs before Minecraft exists retry this from the client tick registered above.
         ensurePlayerOwnSkinExists();
 
         // Player joins world (client-side)
@@ -880,19 +886,39 @@ public class ClientEvents {
      * Ensure player's own skin exists in the list
      * Downloads it from Mojang if not present
      * Can be called at any time (even before joining a world)
+     *
+     * <p>Idempotent and cheap to call repeatedly: it runs at most one bootstrap per client
+     * session. Client entry points do not agree on when the session user becomes readable -
+     * FML constructs mods before {@link Minecraft} exists, so the very first attempt has no
+     * user to look up - therefore the attempt stays pending instead of being consumed, and the
+     * client tick retries it as soon as the session is available.
      */
     private static void ensurePlayerOwnSkinExists() {
+        if (playerOwnSkinBootstrapped || closed) {
+            return;
+        }
+        startPlayerOwnSkinBootstrap();
+    }
+
+    private static synchronized void startPlayerOwnSkinBootstrap() {
+        if (playerOwnSkinBootstrapped || closed) {
+            return;
+        }
+
         com.quickskin.mod.config.ClientConfig config = com.quickskin.mod.config.ClientConfig.getInstance();
         if (!config.enablePlayerOwnSkinSystem) {
+            playerOwnSkinBootstrapped = true;
             return;
         }
 
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft == null || minecraft.getUser() == null) {
+            // No session yet; leave the bootstrap pending for the next client tick.
             return;
         }
 
         String playerName = minecraft.getUser().getName();
+        playerOwnSkinBootstrapped = true;
 
         // Check if we already have the player's skin hash and it exists
         if (!config.playerOwnSkinHash.isEmpty()) {
