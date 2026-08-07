@@ -11,6 +11,7 @@ import com.quickskin.mod.e2e.Scenario;
 import com.quickskin.mod.e2e.Step;
 import com.quickskin.mod.e2e.TestAssets;
 import com.quickskin.mod.e2e.VanillaShim;
+import com.quickskin.mod.e2e.generated.ScenarioContract.ScenarioId;
 import com.quickskin.mod.networking.NetworkSyncService;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -74,7 +75,7 @@ public final class PropagationLiveScenario implements Scenario {
     private volatile boolean sawBefore = false;
 
     @Override
-    public String id() { return "propagation-live"; }
+    public ScenarioId id() { return ScenarioId.PROPAGATION_LIVE; }
 
     @Override
     public List<Step> build(Minecraft mc) {
