@@ -113,6 +113,11 @@ read only `e2e-out/current`; stale files from earlier invocations cannot enter a
 - recipe locks, same-filesystem staging, verified tree manifests, and atomic publication prevent a
   partial installation from becoming reusable;
 - active recipe, tree, and blob leases protect material from age-and-size garbage collection;
+- an installed tree may carry a symbolic link only when it resolves inside that same tree and to a
+  regular file, which is how Mojang's bundled Java runtimes are admitted; the entry is stored as
+  its target's bytes, and escaping, dangling, and directory links are refused, so the store never
+  publishes or restores a link. Containment is compared component by component, never by string
+  prefix, so a sibling whose name merely extends the root stays outside it;
 - materialization copies and rehashes an immutable tree into caller-owned scratch before Minecraft
   can mutate it; and
 - missing, corrupt, or recipe-mismatched content is always a cache miss. Garbage collection is
@@ -120,7 +125,10 @@ read only `e2e-out/current`; stale files from earlier invocations cannot enter a
 
 Loader and Architectury Maven JAR hashes come from the strict SHA-256 entries in
 [`gradle/verification-metadata.xml`](../gradle/verification-metadata.xml), rather than a second
-checksum inventory. Installer hashes and runtime/version facts remain matrix-owned; the staged
+checksum inventory. A leased dependency is installed into a game directory under its real Maven
+artifact name rather than the store blob's digest name, because loaders discover only `*.jar`;
+installing a content-addressed name is refused instead of silently producing a mod the loader
+ignores. Installer hashes and runtime/version facts remain matrix-owned; the staged
 production and harness JAR hashes remain manifest-owned. GitHub-hosted jobs do not upload
 `RuntimeStore`; persistence is useful only on a developer machine or an explicitly managed
 self-hosted runner.
