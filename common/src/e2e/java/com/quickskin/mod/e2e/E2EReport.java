@@ -1,5 +1,7 @@
 package com.quickskin.mod.e2e;
 
+import com.quickskin.mod.e2e.generated.ScenarioContract;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -61,6 +63,7 @@ public final class E2EReport {
         sb.append("  \"version\": ").append(q(version)).append(",\n");
         sb.append("  \"role\": ").append(q(role)).append(",\n");
         sb.append("  \"scenario\": ").append(q(scenario)).append(",\n");
+        sb.append("  \"contract_sha256\": ").append(q(ScenarioContract.SHA256)).append(",\n");
         sb.append("  \"status\": ").append(q(allPassed() ? "pass" : "fail")).append(",\n");
         sb.append("  \"steps\": [\n");
         for (int i = 0; i < steps.size(); i++) {

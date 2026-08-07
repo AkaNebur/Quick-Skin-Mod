@@ -94,6 +94,23 @@ The current design already obtains the most valuable consolidation: one
 canonical source tree, small version overlays, content-addressed Git storage,
 and automated synchronization while releases remain isolated.
 
+## Revalidation on 2026-08-06
+
+The repository now supports enough exact-version branches to meet the first reconsideration
+threshold, so the premise was checked again before the E2E-platform refactor. The old
+`codex/consolidation-pilot-1.21` reference is 53 `master` commits behind and is evidence only; it
+must not be revived as an implementation branch. The current 1.21.1 and 1.21.11 release trees no
+longer have identical relevant source/build inputs: 15 canonical, loader, metadata, build, or
+packaged-runtime files differ, including mixins and `e2e/packaged_runtime.py`.
+
+A train topology could reduce synchronization PRs, branch build jobs, final attestations, and
+release administration. It would not remove the 32 loader/version runtime lanes or 128 scenario
+executions across the current sixteen branches, which dominate measured propagation time, and it
+would still couple hotfix, publication, and rollback boundaries. The decision therefore remains
+postponed. A future evaluation must build a fresh neutral prototype for each candidate cohort
+(not the stale pilot), prove byte-for-byte JAR parity, run every packaged scenario, and dry-run
+Release and Pages before changing branch topology.
+
 ## Reconsideration thresholds
 
 Reopen this decision when at least one of these conditions is measured:

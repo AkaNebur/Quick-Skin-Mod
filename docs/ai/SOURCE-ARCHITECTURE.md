@@ -18,6 +18,14 @@ generated or staged output under `common/versions`, `fabric/versions`, `neoforge
 `build/` directory, `.gradle/`, `.architectury-transformer/`, `e2e-out/`, or `build/release/`. Fix
 the tracked canonical source or active overlay instead.
 
+`gradle/e2e-harness-conventions.gradle.kts` owns the exact E2E source roots, classpaths, generated
+contract source, and harness archive tasks for every active loader node. Loader build scripts may
+only bind that protected convention and are authenticated byte-for-byte for their release branch by
+`e2e/loader-bootstrap-contract.json`, together with the exact loader entrypoint and manifest tree.
+The contract is an integrity allowlist selected by the branch's matrix, not a support-discovery
+inventory. Any deliberate edit below `<loader>/src/e2e` or to an active loader build script must
+update its protected digest contract and mutation tests on `master` in the same change.
+
 ## Active `legacy*` overlays
 
 `legacy` means an active era-specific compatibility overlay, not dead or unsupported code. For an
@@ -70,15 +78,48 @@ reference, then make the effective change in canonical sources or an active over
 validation rejects reintroduced `src/v*` content and live Java classes with more than two copies.
 See `ORACLE-RETIREMENT.md` for the retirement gate and resource-routing details.
 
+## Version-port control plane
+
+- `scripts/ci/version_port_merge.py` is the sole protected owner of version-port Git merge
+  semantics. Given exact clean target/source commits, it runs a hook-free no-commit merge,
+  authenticates `MERGE_HEAD`, snapshots the complete original index, applies the classifier's
+  mechanical policies, and emits stable evidence. For an AI resolution it accepts an external
+  candidate index only with its exact tree id and copies only the recomputed `ai_paths`; it never
+  imports another candidate entry.
+- `scripts/ci/version_port_conflicts.py` is the pure, fail-closed classifier for the original Git
+  conflict set. It may assign a protected path only to an exact reviewed mechanical policy. Shared
+  guidance and runtime documents use a source-preferred three-way merge, the release matrix uses
+  the target version, and a build script may be deleted only when its loader is inactive in that
+  target matrix. Unknown protected paths and active-loader build conflicts abort the port; only
+  unprotected residual conflicts may reach AI.
+- `scripts/release/branch_readme.py`, `scripts/release/e2e_readme.py`, and
+  `scripts/release/workflow_guidance.py` are the protected renderers for matrix-owned branch
+  profiles. The synchronizer runs them after conflict resolution, stages their exact outputs, and
+  reruns them in both the credentialless validator and the narrow writer. Do not hand-maintain
+  their marked blocks or version-specific test-task anchors.
+
 ## Visual evidence and static-site sources
 
-- `e2e/visual-catalog.json` is the semantic catalog for screenshot checkpoints. Its identity is
+- `e2e/scenario-contract.json` is the sole packaged-suite control-plane source. It owns execution
+  profiles, scenario orchestration, roles, ordered steps, mandatory assertions, screenshot
+  checkpoints, review metadata, semantic probes, and comparisons. Capture identity is derived as
   scenario + client role + report step; filenames and ordinals are payload details only.
-- `e2e/visual_evidence.py` reads successful `result.json` reports, verifies the catalog contract,
-  PNG containment, dimensions, and SHA-256, and exposes the shared evidence model used by the AI
-  review and public site.
+- `e2e/scenario_contract.py` is the fail-closed typed Python reader.
+  `e2e/generate_contract_java.py` reuses that exact parser when Gradle generates typed Java ids and
+  expected graphs under `build/generated`; generated Java is never tracked. Do not add a second
+  partial JSON parser to Gradle.
+- `e2e/runtime_store.py` separates immutable reusable runtime blobs/trees from mutable run state.
+  Its content-addressed recipes include every compatibility input, and callers materialize a fresh
+  copy before launch. `RuntimeStore` is never uploaded as evidence.
+- `e2e/visual_evidence.py` reads successful `result.json` reports, verifies the scenario-contract
+  hash and exact graph, PNG containment, full decode, dimensions, SHA-256, probes, and comparisons,
+  and exposes the shared evidence model used by the AI review and public site.
+- `e2e/visual_review.py` binds each raw artifact to exactly one protected matrix row and its complete
+  scenario product, requires one production JAR digest, and atomically re-encodes selected frames as
+  metadata-free RGB PNGs. `e2e/check_visual_review.py` validates the bounded capsule and normalizes
+  bounded model output; raw model output is never uploaded.
 - `scripts/pages/evidence.py` creates and validates a small branch-scoped raw handoff, then
-  atomically compacts a validated bundle to protected WebP derivatives. It may copy only catalogued
+  atomically compacts a validated bundle to protected WebP derivatives. It may copy only contracted
   screenshots and structured provenance—never runtime logs or arbitrary HTML. The compact schema
   preserves separate source and derivative identities, hashes, dimensions, pixel metrics, and
   comparison metrics; raw PNG bytes stop at the one-day E2E handoff.
