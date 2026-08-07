@@ -2,8 +2,10 @@ package com.quickskin.mod.e2e;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.SplashRenderer;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.network.chat.Component;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -16,7 +18,11 @@ import java.util.function.Consumer;
  * Isolates the handful of vanilla calls whose signature drifts across Minecraft versions, so the rest
  * of the harness stays a single version-agnostic source set. Everything here is reflection-based and
  * returns only version-stable types ({@link String}, {@link Screen}), importing no type that was
- * renamed/moved across versions.
+ * renamed/moved across versions. {@link SplashRenderer} is the one deliberate exception: its
+ * package is identical on every supported version and only its constructor drifts, and it must be
+ * referenced as a class literal so the harness jar's remapper rewrites it for Fabric's
+ * intermediary runtime. Resolving a Minecraft name as a string only works on Mojang-mapped
+ * loaders, so keep string lookups for classes that genuinely move.
  *
  * <p>Drift absorbed (1.20.1 / 1.21.x / 26.x):</p>
  * <ul>
@@ -39,6 +45,8 @@ import java.util.function.Consumer;
  *       handled.</li>
  *   <li><b>widget press</b>: {@code AbstractWidget.onPress()} (no-arg) vs
  *       {@code onPress(InputWithModifiers)} (26.x).</li>
+ *   <li><b>title splash construction</b>: {@code SplashRenderer(String)} vs
+ *       {@code SplashRenderer(Component)}, plus its remapped private field on {@code TitleScreen}.</li>
  * </ul>
  *
  * <p>GL-touching calls (screenshot) must run on the render thread, after at least one full frame.</p>
@@ -219,6 +227,49 @@ public final class VanillaShim {
             E2ELog.warn("press: " + t);
         }
         return false;
+    }
+
+    /**
+     * Install one deterministic title-screen splash without exposing constructor or remapping drift
+     * to a scenario. The return value is {@code null} on success and a fail-closed diagnostic on
+     * failure.
+     */
+    public static String installDeterministicSplash(Screen screen, String text) {
+        if (screen == null || text == null || text.isEmpty()) {
+            return "title splash requires a screen and non-empty text";
+        }
+        try {
+            // A class literal is remapped with the harness jar; the same name resolved as a string
+            // only works on Mojang-mapped loaders and fails on Fabric's intermediary runtime.
+            Class<?> rendererType = SplashRenderer.class;
+            Object renderer;
+            try {
+                renderer = rendererType.getConstructor(String.class).newInstance(text);
+            } catch (NoSuchMethodException stringEraEnded) {
+                Component yellow = Component.literal(text)
+                        .withStyle(style -> style.withColor(0xFFFF00));
+                renderer = rendererType.getConstructor(Component.class).newInstance(yellow);
+            }
+
+            Field splashField = null;
+            for (Field candidate : screen.getClass().getDeclaredFields()) {
+                if (candidate.getType() != rendererType) continue;
+                if (splashField != null) {
+                    return "title screen exposes multiple SplashRenderer fields";
+                }
+                splashField = candidate;
+            }
+            if (splashField == null) return "title screen exposes no SplashRenderer field";
+            splashField.setAccessible(true);
+            splashField.set(screen, renderer);
+            if (splashField.get(screen) != renderer) {
+                return "title screen rejected the deterministic SplashRenderer";
+            }
+            return null;
+        } catch (Throwable failure) {
+            return "could not install deterministic title splash: "
+                    + failure.getClass().getSimpleName() + ": " + failure.getMessage();
+        }
     }
 
     /**
