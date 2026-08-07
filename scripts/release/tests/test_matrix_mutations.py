@@ -6,12 +6,15 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts" / "release"))
+sys.path.insert(0, str(ROOT / "e2e"))
 
 import matrix as release_matrix  # noqa: E402
+import scenario_contract  # noqa: E402
 
 
 class ReleaseMatrixMutationTest(unittest.TestCase):
@@ -91,6 +94,135 @@ class ReleaseMatrixMutationTest(unittest.TestCase):
 
     def test_checked_in_matrix_is_valid(self) -> None:
         release_matrix.validate_matrix(self.mutated())
+
+    def test_legacy_e2e_policy_is_rejected_and_narrowly_normalized(self) -> None:
+        legacy = self.mutated()
+        legacy["scheduled_scenarios"] = ["fabricated"]
+        legacy["pr_scenarios"] = ["also-fabricated"]
+        for runtime in legacy["runtimes"]:
+            runtime["scenario"] = "stale-default"
+        untouched = copy.deepcopy(legacy)
+
+        normalized = release_matrix.normalize_legacy_e2e_policy(legacy)
+
+        self.assertEqual(untouched, legacy)
+        expected = copy.deepcopy(legacy)
+        del expected["scheduled_scenarios"]
+        del expected["pr_scenarios"]
+        for runtime in expected["runtimes"]:
+            del runtime["scenario"]
+        self.assertEqual(expected, normalized)
+        release_matrix.validate_matrix(normalized)
+        self.assert_invalid(legacy, "legacy E2E policy fields")
+
+        runtime_only = self.mutated()
+        runtime_only["runtimes"][0]["scenario"] = "stale-default"
+        self.assert_invalid(runtime_only, "runtime rows must not own E2E scenario policy")
+
+    def test_scenario_addition_and_order_come_only_from_contract(self) -> None:
+        contract_payload = json.loads(
+            (ROOT / "e2e" / "scenario-contract.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        extra = copy.deepcopy(contract_payload["scenarios"][0])
+        extra["scenario"] = "contract-only-extra"
+        extra["execution_profiles"] = ["pr", "release"]
+        contract_payload["scenarios"].append(extra)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            contract_path = Path(temporary) / "scenario-contract.json"
+            contract_path.write_text(
+                json.dumps(contract_payload) + "\n",
+                encoding="utf-8",
+            )
+            added_contract = scenario_contract.load_contract(contract_path)
+            release_matrix.validate_matrix(
+                self.mutated(),
+                contract=added_contract,
+            )
+            emitted = release_matrix.gha_matrix(
+                self.mutated(),
+                "pr-anchors",
+                "3.0.0",
+                contract=added_contract,
+            )
+            self.assertTrue(emitted["include"])
+            self.assertEqual(
+                ",".join(added_contract.scenarios_for_profile("pr")),
+                emitted["include"][0]["scenarios"],
+            )
+
+            contract_payload["scenarios"].reverse()
+            contract_path.write_text(
+                json.dumps(contract_payload) + "\n",
+                encoding="utf-8",
+            )
+            reordered_contract = scenario_contract.load_contract(
+                contract_path
+            )
+            reordered = release_matrix.gha_matrix(
+                self.mutated(),
+                "runtime",
+                "3.0.0",
+                contract=reordered_contract,
+            )
+            self.assertEqual(
+                ",".join(
+                    reordered_contract.scenarios_for_profile("release")
+                ),
+                reordered["include"][0]["scenarios"],
+            )
+
+        matrix_source = Path(release_matrix.__file__).read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('startswith("propagation")', matrix_source)
+        self.assertNotIn("scheduled_scenarios", self.base)
+        self.assertNotIn("pr_scenarios", self.base)
+        self.assertTrue(
+            all("scenario" not in runtime for runtime in self.base["runtimes"])
+        )
+
+    def test_normalize_cli_atomically_writes_validated_matrix(self) -> None:
+        legacy = self.mutated()
+        legacy["scheduled_scenarios"] = ["ignored"]
+        legacy["pr_scenarios"] = ["ignored"]
+        for runtime in legacy["runtimes"]:
+            runtime["scenario"] = "ignored"
+        with tempfile.TemporaryDirectory() as temporary:
+            matrix_path = Path(temporary) / "release-matrix.json"
+            matrix_path.write_text(
+                json.dumps(legacy),
+                encoding="utf-8",
+            )
+            argv = [
+                "matrix.py",
+                "--matrix",
+                str(matrix_path),
+                "--normalize-e2e-policy",
+                "--write",
+            ]
+            with (
+                patch.object(sys, "argv", argv),
+                patch.object(
+                    release_matrix,
+                    "validate_matrix_file",
+                    side_effect=lambda _path, data: (
+                        release_matrix.validate_matrix(data)
+                    ),
+                ),
+                patch("builtins.print") as print_mock,
+            ):
+                self.assertEqual(0, release_matrix.main())
+                print_mock.assert_not_called()
+
+            written = json.loads(matrix_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                release_matrix.normalize_legacy_e2e_policy(legacy),
+                written,
+            )
+            release_matrix.validate_matrix(written)
 
     def test_runtime_compatibility_patch_is_known_neoforge_only_and_exact(self) -> None:
         release_matrix.validate_matrix(self.neoforge_compatibility_matrix())

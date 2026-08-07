@@ -1,0 +1,323 @@
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+
+ROOT = Path(__file__).resolve().parents[3]
+MODULE_PATH = ROOT / "scripts" / "ci" / "e2e_job_graph.py"
+SPEC = importlib.util.spec_from_file_location("e2e_job_graph", MODULE_PATH)
+assert SPEC and SPEC.loader
+graph = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = graph
+SPEC.loader.exec_module(graph)
+
+
+class E2EJobGraphTest(unittest.TestCase):
+    expected = (
+        "fabric-1_20_1--1_20_1--pr-behavior - contract scenarios",
+        "forge-1_20_1--1_20_1--pr-behavior - contract scenarios",
+    )
+
+    def test_protected_controller_covers_both_required_gate_implementations(self) -> None:
+        protected = set(graph.PROTECTED_CONTROLLER_PATHS)
+        self.assertIn(".github/workflows/build-gate.yml", protected)
+        self.assertIn(".github/workflows/on-demand-e2e.yml", protected)
+        self.assertIn(".github/actions/run-packaged-e2e", protected)
+        self.assertIn("common/src/e2e", protected)
+        self.assertIn("e2e/loader-bootstrap-contract.json", protected)
+        self.assertIn("e2e/scenario-contract.json", protected)
+        self.assertIn("scripts/release/artifact_manifest.py", protected)
+        self.assertIn("scripts/release/matrix.py", protected)
+        self.assertIn("scripts/release/version_branches.py", protected)
+        self.assertIn(".github/workflows/verify-gate-attestation.yml", protected)
+        self.assertIn("build.gradle.kts", protected)
+        self.assertIn("settings.gradle.kts", protected)
+        self.assertIn("stonecutter.gradle.kts", protected)
+        self.assertIn("gradlew", protected)
+        self.assertIn("gradle/wrapper", protected)
+        self.assertEqual(
+            {"common/src/e2e/resources/pack.mcmeta"},
+            set(graph.VERSION_SPECIFIC_CONTROLLER_PATHS),
+        )
+        self.assertIn("e2e/packaged_runtime.py", protected)
+        self.assertEqual(
+            {"fabric", "forge", "neoforge"},
+            set(graph.load_bootstrap_contract(graph.DEFAULT_BOOTSTRAP_CONTRACT).loaders),
+        )
+
+    @staticmethod
+    def job(name: str, conclusion: str = "success") -> dict[str, str]:
+        return {"name": name, "status": "completed", "conclusion": conclusion}
+
+    def payload(self, scenarios: tuple[str, ...] | None = None) -> dict[str, object]:
+        selected = self.expected if scenarios is None else scenarios
+        return {
+            "jobs": [
+                self.job(graph.POLICY_JOB),
+                self.job(graph.BUILD_JOB),
+                *(self.job(name) for name in selected),
+                self.job(graph.GATE_JOB),
+            ]
+        }
+
+    def test_full_requires_every_exact_anchor_and_success(self) -> None:
+        validated = graph.validate_job_graph(
+            self.payload(), policy="full", expected_scenarios=self.expected
+        )
+        self.assertEqual(list(self.expected), validated["observed_scenario_jobs"])
+
+        cases = {
+            "missing": self.expected[:1],
+            "extra": self.expected + ("fabricated - contract scenarios",),
+            "duplicate": self.expected + self.expected[:1],
+        }
+        for label, jobs in cases.items():
+            with self.subTest(label=label), self.assertRaises(graph.JobGraphError):
+                graph.validate_job_graph(
+                    self.payload(jobs), policy="full", expected_scenarios=self.expected
+                )
+
+        failed = self.payload()
+        failed["jobs"][2]["conclusion"] = "failure"  # type: ignore[index]
+        with self.assertRaises(graph.JobGraphError):
+            graph.validate_job_graph(
+                failed, policy="full", expected_scenarios=self.expected
+            )
+
+    def test_not_applicable_allows_no_matrix_or_the_exact_skipped_matrix(self) -> None:
+        empty = self.payload(())
+        empty["jobs"][1]["conclusion"] = "skipped"  # type: ignore[index]
+        graph.validate_job_graph(
+            empty, policy="not-applicable", expected_scenarios=self.expected
+        )
+
+        skipped = self.payload()
+        skipped["jobs"][1]["conclusion"] = "skipped"  # type: ignore[index]
+        for job in skipped["jobs"][2:-1]:  # type: ignore[index]
+            job["conclusion"] = "skipped"
+        graph.validate_job_graph(
+            skipped, policy="not-applicable", expected_scenarios=self.expected
+        )
+
+        partial = self.payload(self.expected[:1])
+        partial["jobs"][1]["conclusion"] = "skipped"  # type: ignore[index]
+        partial["jobs"][2]["conclusion"] = "skipped"  # type: ignore[index]
+        with self.assertRaises(graph.JobGraphError):
+            graph.validate_job_graph(
+                partial, policy="not-applicable", expected_scenarios=self.expected
+            )
+
+    def test_rejects_missing_or_duplicated_control_jobs(self) -> None:
+        missing = self.payload()
+        missing["jobs"] = [  # type: ignore[index]
+            job for job in missing["jobs"] if job["name"] != graph.GATE_JOB  # type: ignore[index]
+        ]
+        with self.assertRaises(graph.JobGraphError):
+            graph.validate_job_graph(
+                missing, policy="full", expected_scenarios=self.expected
+            )
+
+        duplicated = self.payload()
+        duplicated["jobs"].append(self.job(graph.GATE_JOB))  # type: ignore[union-attr]
+        with self.assertRaises(graph.JobGraphError):
+            graph.validate_job_graph(
+                duplicated, policy="full", expected_scenarios=self.expected
+            )
+
+    def test_controller_parity_is_bound_to_the_exact_checkout_and_protected_blob(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+
+            def git(*arguments: str) -> str:
+                completed = subprocess.run(
+                    ("git", *arguments),
+                    cwd=repository,
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    text=True,
+                )
+                return completed.stdout.strip()
+
+            git("init", "--quiet")
+            git("config", "user.name", "E2E test")
+            git("config", "user.email", "e2e@example.invalid")
+            controller = repository / "controller.txt"
+            variant = repository / "variant.txt"
+            unrelated = repository / "README.md"
+            controller.write_text("protected\n", encoding="utf-8")
+            variant.write_text("version one\n", encoding="utf-8")
+            unrelated.write_text("one\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "--quiet", "-m", "protected")
+            protected_sha = git("rev-parse", "HEAD")
+
+            unrelated.write_text("two\n", encoding="utf-8")
+            variant.write_text("version two\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "--quiet", "-m", "unrelated")
+            unrelated_sha = git("rev-parse", "HEAD")
+            self.assertEqual(
+                ("controller.txt", "variant.txt"),
+                graph.validate_controller_parity(
+                    repository,
+                    protected_sha=protected_sha,
+                    head_sha=unrelated_sha,
+                    paths=("controller.txt", "variant.txt"),
+                    version_specific_paths=("variant.txt",),
+                ),
+            )
+
+            controller.write_text("weakened\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "--quiet", "-m", "weaken controller")
+            weakened_sha = git("rev-parse", "HEAD")
+            with self.assertRaisesRegex(graph.JobGraphError, "controller.txt"):
+                graph.validate_controller_parity(
+                    repository,
+                    protected_sha=protected_sha,
+                    head_sha=weakened_sha,
+                    paths=("controller.txt", "variant.txt"),
+                    version_specific_paths=("variant.txt",),
+                )
+
+            with self.assertRaisesRegex(graph.JobGraphError, "checked-out head"):
+                graph.validate_controller_parity(
+                    repository,
+                    protected_sha=protected_sha,
+                    head_sha=unrelated_sha,
+                    paths=("controller.txt", "variant.txt"),
+                    version_specific_paths=("variant.txt",),
+                )
+
+            with self.assertRaisesRegex(graph.JobGraphError, "outside protected roots"):
+                graph.validate_controller_parity(
+                    repository,
+                    protected_sha=protected_sha,
+                    head_sha=weakened_sha,
+                    paths=("controller.txt",),
+                    version_specific_paths=("variant.txt",),
+                )
+
+    def test_active_loader_bootstrap_and_final_gradle_binding_are_exact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+
+            def git(*arguments: str) -> str:
+                completed = subprocess.run(
+                    ("git", *arguments),
+                    cwd=repository,
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    text=True,
+                )
+                return completed.stdout.strip()
+
+            git("init", "--quiet")
+            git("config", "user.name", "E2E test")
+            git("config", "user.email", "e2e@example.invalid")
+            source = repository / "fabric/src/e2e/java/Bootstrap.java"
+            manifest = repository / "fabric/src/e2e/resources/fabric.mod.json"
+            build = repository / "fabric/build.gradle.kts"
+            source.parent.mkdir(parents=True)
+            manifest.parent.mkdir(parents=True)
+            source.write_text("class Bootstrap {}\n", encoding="utf-8")
+            manifest.write_text("{}\n", encoding="utf-8")
+            build.write_text(graph.HARNESS_CONVENTION_BINDING + "\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "--quiet", "-m", "bootstrap")
+            valid_sha = git("rev-parse", "HEAD")
+            contract = repository / "bootstrap.json"
+            contract.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "loaders": {
+                            "fabric": {
+                                "files": {
+                                    "fabric/src/e2e/java/Bootstrap.java": hashlib.sha256(
+                                        source.read_bytes()
+                                    ).hexdigest(),
+                                    "fabric/src/e2e/resources/fabric.mod.json": hashlib.sha256(
+                                        manifest.read_bytes()
+                                    ).hexdigest(),
+                                }
+                            },
+                            "forge": {
+                                "files": {
+                                    "forge/src/e2e/placeholder": "0" * 64,
+                                }
+                            },
+                            "neoforge": {
+                                "files": {
+                                    "neoforge/src/e2e/placeholder": "0" * 64,
+                                }
+                            },
+                        },
+                        "release_build_scripts": {
+                            "fabric-1.0": {
+                                "fabric": hashlib.sha256(build.read_bytes()).hexdigest(),
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            matrix = {
+                "project": {"release_branch": "fabric-1.0"},
+                "artifacts": [{"loader": "fabric"}],
+            }
+            with mock.patch.object(graph, "load_matrix", return_value=matrix):
+                self.assertEqual(
+                    ("fabric",),
+                    graph.validate_loader_bootstraps(
+                        repository,
+                        head_sha=valid_sha,
+                        matrix_path=repository / "unused.json",
+                        contract_path=contract,
+                    ),
+                )
+
+                source.write_text("class Weakened {}\n", encoding="utf-8")
+                git("add", ".")
+                git("commit", "--quiet", "-m", "weaken source")
+                weakened_sha = git("rev-parse", "HEAD")
+                with self.assertRaisesRegex(graph.JobGraphError, "differs"):
+                    graph.validate_loader_bootstraps(
+                        repository,
+                        head_sha=weakened_sha,
+                        matrix_path=repository / "unused.json",
+                        contract_path=contract,
+                    )
+
+                source.write_text("class Bootstrap {}\n", encoding="utf-8")
+                build.write_text(
+                    'tasks.withType<org.gradle.jvm.tasks.Jar>().configureEach { '
+                    'from("untrusted") }\n'
+                    + graph.HARNESS_CONVENTION_BINDING
+                    + "\n",
+                    encoding="utf-8",
+                )
+                git("add", ".")
+                git("commit", "--quiet", "-m", "weaken binding")
+                binding_sha = git("rev-parse", "HEAD")
+                with self.assertRaisesRegex(graph.JobGraphError, "build script differs"):
+                    graph.validate_loader_bootstraps(
+                        repository,
+                        head_sha=binding_sha,
+                        matrix_path=repository / "unused.json",
+                        contract_path=contract,
+                    )
+
+
+if __name__ == "__main__":
+    unittest.main()
