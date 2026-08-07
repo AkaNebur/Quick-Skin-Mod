@@ -4,15 +4,32 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
+import stat
 import sys
+import tempfile
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 
 
 VERDICT_KEYS = {"label", "matches", "visible", "anomalies", "defect"}
 MANIFEST_KEYS = {"path", "label", "capture_id", "kind", "expectation"}
+SHA256_PNG = re.compile(r"^(?P<digest>[0-9a-f]{64})\.png$")
+MAX_REVIEW_FRAMES = 512
+MAX_REVIEW_IMAGE_BYTES = 32 * 1024 * 1024
+MAX_REVIEW_TOTAL_BYTES = 512 * 1024 * 1024
+MAX_JSON_BYTES = 4 * 1024 * 1024
+MAX_LABEL_LENGTH = 512
+MAX_PATH_LENGTH = 512
+MAX_CAPTURE_ID_LENGTH = 128
+MAX_EXPECTATION_LENGTH = 4096
+MAX_VISIBLE_LENGTH = 2048
+MAX_ANOMALY_LENGTH = 1024
+MAX_ANOMALIES = 16
 
 
 class ReviewError(ValueError):
@@ -28,67 +45,264 @@ def emit(summary: str) -> None:
             handle.write(summary + "\n")
 
 
-def load(path: Path, what: str) -> Any:
-    if not path.is_file():
-        raise ReviewError(f"the {what} is missing at {path}")
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        value[key] = item
+    return value
+
+
+def _reject_nonfinite(value: str) -> Any:
+    raise ValueError(f"non-finite JSON number {value}")
+
+
+def load(path: Path, what: str, *, maximum_bytes: int = MAX_JSON_BYTES) -> Any:
+    descriptor = -1
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        metadata = path.lstat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_size <= 0
+            or metadata.st_size > maximum_bytes
+        ):
+            raise ValueError(
+                f"file must be regular and contain between 1 and {maximum_bytes} bytes"
+            )
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_dev != metadata.st_dev
+            or opened.st_ino != metadata.st_ino
+            or opened.st_size != metadata.st_size
+        ):
+            raise ValueError("file changed while opening")
+        with os.fdopen(descriptor, "rb", closefd=True) as handle:
+            descriptor = -1
+            payload = handle.read(maximum_bytes + 1)
+        if len(payload) != metadata.st_size:
+            raise ValueError("file changed while reading")
+        return json.loads(
+            payload.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_nonfinite,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise ReviewError(f"the {what} at {path} is not valid JSON: {exc}") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
-def _text(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ReviewError(f"{label} must be a non-empty string")
+def _text(value: Any, label: str, *, maximum: int) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value) > maximum:
+        raise ReviewError(
+            f"{label} must be a non-empty string of at most {maximum} characters"
+        )
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ReviewError(f"{label} contains forbidden control characters")
     return value.strip()
 
 
-def validate(manifest: Any, report: Any) -> list[dict[str, Any]]:
-    if not isinstance(manifest, list) or not manifest:
-        raise ReviewError("review manifest must be a non-empty JSON array")
+def validate_manifest(manifest: Any) -> tuple[list[dict[str, Any]], list[str]]:
+    if (
+        not isinstance(manifest, list)
+        or not manifest
+        or len(manifest) > MAX_REVIEW_FRAMES
+    ):
+        raise ReviewError(
+            f"review manifest must contain between 1 and {MAX_REVIEW_FRAMES} entries"
+        )
     labels: list[str] = []
     for index, item in enumerate(manifest):
         if not isinstance(item, dict) or set(item) != MANIFEST_KEYS:
             raise ReviewError(
                 f"manifest entry {index} must contain exactly {sorted(MANIFEST_KEYS)}"
             )
-        labels.append(_text(item.get("label"), f"manifest entry {index}.label"))
-        _text(item.get("path"), f"manifest entry {index}.path")
-        capture_id = _text(
-            item.get("capture_id"), f"manifest entry {index}.capture_id"
+        labels.append(
+            _text(
+                item.get("label"),
+                f"manifest entry {index}.label",
+                maximum=MAX_LABEL_LENGTH,
+            )
         )
-        if _text(item.get("kind"), f"manifest entry {index}.kind") != capture_id:
+        _text(
+            item.get("path"),
+            f"manifest entry {index}.path",
+            maximum=MAX_PATH_LENGTH,
+        )
+        capture_id = _text(
+            item.get("capture_id"),
+            f"manifest entry {index}.capture_id",
+            maximum=MAX_CAPTURE_ID_LENGTH,
+        )
+        if _text(
+            item.get("kind"),
+            f"manifest entry {index}.kind",
+            maximum=MAX_CAPTURE_ID_LENGTH,
+        ) != capture_id:
             raise ReviewError(f"manifest entry {index}.kind must equal capture_id")
-        _text(item.get("expectation"), f"manifest entry {index}.expectation")
+        _text(
+            item.get("expectation"),
+            f"manifest entry {index}.expectation",
+            maximum=MAX_EXPECTATION_LENGTH,
+        )
     if len(set(labels)) != len(labels):
         raise ReviewError("review manifest contains duplicate labels")
+    return manifest, labels
 
-    if not isinstance(report, list) or not report:
-        raise ReviewError("review report must be a non-empty JSON array")
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def validate_input(manifest: Any, input_root: Path) -> int:
+    """Validate the exact bounded, content-addressed handoff before revealing a secret."""
+
+    entries, _labels = validate_manifest(manifest)
+    try:
+        root_metadata = input_root.lstat()
+    except OSError as exc:
+        raise ReviewError(f"cannot inspect review input root {input_root}: {exc}") from exc
+    if not stat.S_ISDIR(root_metadata.st_mode) or input_root.is_symlink():
+        raise ReviewError("review input root must be a real directory")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", input_root.name):
+        raise ReviewError("review input root must have a portable directory name")
+
+    manifest_path = input_root / "visual-review-manifest.json"
+    images = input_root / "images"
+    try:
+        manifest_metadata = manifest_path.lstat()
+        images_metadata = images.lstat()
+        top_level = {item.name for item in input_root.iterdir()}
+    except OSError as exc:
+        raise ReviewError(f"cannot inspect curated review input: {exc}") from exc
+    if top_level != {"visual-review-manifest.json", "images"}:
+        raise ReviewError("curated review input has unexpected top-level entries")
+    if not stat.S_ISREG(manifest_metadata.st_mode) or manifest_path.is_symlink():
+        raise ReviewError("curated review manifest must be a regular file")
+    if not stat.S_ISDIR(images_metadata.st_mode) or images.is_symlink():
+        raise ReviewError("curated review images must be a real directory")
+
+    expected_images: set[str] = set()
+    for index, item in enumerate(entries):
+        raw_path = item["path"]
+        path = PurePosixPath(raw_path)
+        if (
+            len(path.parts) != 3
+            or path.parts[:2] != (input_root.name, "images")
+            or raw_path != path.as_posix()
+        ):
+            raise ReviewError(f"manifest entry {index}.path escapes the curated image root")
+        match = SHA256_PNG.fullmatch(path.name)
+        if match is None:
+            raise ReviewError(f"manifest entry {index}.path is not content-addressed")
+        expected_images.add(path.name)
+
+    observed_images: set[str] = set()
+    total_bytes = 0
+    try:
+        image_paths = list(images.iterdir())
+    except OSError as exc:
+        raise ReviewError(f"cannot list curated review images: {exc}") from exc
+    if not image_paths or len(image_paths) > MAX_REVIEW_FRAMES:
+        raise ReviewError(
+            f"curated review must contain between 1 and {MAX_REVIEW_FRAMES} images"
+        )
+    for image in image_paths:
+        match = SHA256_PNG.fullmatch(image.name)
+        try:
+            metadata = image.lstat()
+        except OSError as exc:
+            raise ReviewError(f"cannot inspect curated image {image}: {exc}") from exc
+        if (
+            match is None
+            or not stat.S_ISREG(metadata.st_mode)
+            or image.is_symlink()
+            or metadata.st_size <= 0
+            or metadata.st_size > MAX_REVIEW_IMAGE_BYTES
+        ):
+            raise ReviewError(f"curated image is invalid: {image}")
+        total_bytes += metadata.st_size
+        if total_bytes > MAX_REVIEW_TOTAL_BYTES:
+            raise ReviewError("curated review images exceed the total byte limit")
+        try:
+            actual_digest = _sha256(image)
+        except OSError as exc:
+            raise ReviewError(f"cannot hash curated image {image}: {exc}") from exc
+        if actual_digest != match.group("digest"):
+            raise ReviewError(f"curated image digest disagrees with its name: {image}")
+        observed_images.add(image.name)
+    if observed_images != expected_images:
+        raise ReviewError(
+            "curated image inventory disagrees with the manifest: "
+            f"missing={sorted(expected_images - observed_images)}, "
+            f"extra={sorted(observed_images - expected_images)}"
+        )
+    return len(entries)
+
+
+def validate(manifest: Any, report: Any) -> list[dict[str, Any]]:
+    _entries, labels = validate_manifest(manifest)
+
+    if (
+        not isinstance(report, list)
+        or not report
+        or len(report) > MAX_REVIEW_FRAMES
+    ):
+        raise ReviewError(
+            f"review report must contain between 1 and {MAX_REVIEW_FRAMES} verdicts"
+        )
     verdicts: dict[str, dict[str, Any]] = {}
     for index, verdict in enumerate(report):
         if not isinstance(verdict, dict) or set(verdict) != VERDICT_KEYS:
             raise ReviewError(
                 f"report verdict {index} must contain exactly {sorted(VERDICT_KEYS)}"
             )
-        label = _text(verdict["label"], f"report verdict {index}.label")
-        _text(verdict["visible"], f"report verdict {index}.visible")
+        label = _text(
+            verdict["label"],
+            f"report verdict {index}.label",
+            maximum=MAX_LABEL_LENGTH,
+        )
+        visible = _text(
+            verdict["visible"],
+            f"report verdict {index}.visible",
+            maximum=MAX_VISIBLE_LENGTH,
+        )
         if not isinstance(verdict["matches"], bool) or not isinstance(verdict["defect"], bool):
             raise ReviewError(f"report verdict {index} matches/defect must be booleans")
         anomalies = verdict["anomalies"]
-        if not isinstance(anomalies, list) or any(
-            not isinstance(item, str) or not item.strip() for item in anomalies
-        ):
+        if not isinstance(anomalies, list) or len(anomalies) > MAX_ANOMALIES:
             raise ReviewError(f"report verdict {index}.anomalies must be an array of strings")
+        normalized_anomalies = [
+            _text(
+                item,
+                f"report verdict {index}.anomalies[{anomaly_index}]",
+                maximum=MAX_ANOMALY_LENGTH,
+            )
+            for anomaly_index, item in enumerate(anomalies)
+        ]
         if verdict["matches"] == verdict["defect"]:
             raise ReviewError(
                 f"report verdict {index} must set exactly one of matches or defect"
             )
-        if verdict["defect"] and not anomalies:
+        if verdict["defect"] and not normalized_anomalies:
             raise ReviewError(f"defect verdict {index} must describe at least one anomaly")
         if label in verdicts:
             raise ReviewError(f"review report contains duplicate label {label!r}")
-        verdicts[label] = verdict
+        verdicts[label] = {
+            "label": label,
+            "visible": visible,
+            "matches": verdict["matches"],
+            "anomalies": normalized_anomalies,
+            "defect": verdict["defect"],
+        }
 
     expected = set(labels)
     reviewed = set(verdicts)
@@ -136,16 +350,53 @@ def render(verdicts: list[dict[str, Any]]) -> tuple[str, bool]:
     return "\n".join(lines), bool(defects)
 
 
+def write_normalized_report(path: Path, verdicts: list[dict[str, Any]]) -> None:
+    """Atomically publish only the bounded, schema-normalized model output."""
+
+    destination = path.absolute()
+    if destination.exists() or destination.is_symlink():
+        raise ReviewError(f"normalized report destination already exists: {destination}")
+    try:
+        parent = destination.parent.resolve(strict=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=parent,
+        )
+        temporary = Path(temporary_name)
+        with os.fdopen(descriptor, "w", encoding="utf-8", closefd=True) as handle:
+            json.dump(verdicts, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, destination)
+    except OSError as exc:
+        if "temporary" in locals():
+            temporary.unlink(missing_ok=True)
+        raise ReviewError(f"cannot write normalized review report: {exc}") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", default="visual-review-report.json")
     parser.add_argument("--manifest", default="visual-review-manifest.json")
+    parser.add_argument("--input-root", default="review-input")
+    parser.add_argument("--validate-input-only", action="store_true")
+    parser.add_argument("--normalized-report")
     args = parser.parse_args(argv)
     try:
+        manifest = load(Path(args.manifest), "review manifest")
+        if args.validate_input_only:
+            count = validate_input(manifest, Path(args.input_root))
+            print(f"Validated {count} curated visual review frames")
+            return 0
         verdicts = validate(
-            load(Path(args.manifest), "review manifest"),
+            manifest,
             load(Path(args.report), "review report"),
         )
+        if args.normalized_report is not None:
+            write_normalized_report(Path(args.normalized_report), verdicts)
     except ReviewError as exc:
         emit(f"## Advisory visual review: invalid\n\n{markdown_text(exc)}")
         return 1

@@ -4,6 +4,7 @@ import com.quickskin.mod.e2e.scenario.FullScenario;
 import com.quickskin.mod.e2e.scenario.Phase0Smoke;
 import com.quickskin.mod.e2e.scenario.PropagationLiveScenario;
 import com.quickskin.mod.e2e.scenario.PropagationScenario;
+import com.quickskin.mod.e2e.generated.ScenarioContract.ScenarioId;
 import dev.architectury.event.events.client.ClientTickEvent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -72,13 +73,19 @@ public final class E2EHarness {
     }
 
     private Scenario resolveScenario() {
-        return switch (scenarioId) {
-            case "propagation" -> new PropagationScenario();
-            case "propagation-live" -> new PropagationLiveScenario();
-            case "full" -> new FullScenario();
-            case "phase0-smoke" -> new Phase0Smoke();
-            default -> throw new IllegalArgumentException("unknown E2E scenario: " + scenarioId);
+        ScenarioId selected = ScenarioId.fromExternal(scenarioId);
+        Scenario scenario = switch (selected) {
+            case PROPAGATION -> new PropagationScenario();
+            case PROPAGATION_LIVE -> new PropagationLiveScenario();
+            case FULL -> new FullScenario();
+            case PHASE0_SMOKE -> new Phase0Smoke();
         };
+        if (scenario.id() != selected) {
+            throw new IllegalStateException("scenario implementation id drift: requested "
+                    + selected.externalId() + ", implementation returned "
+                    + scenario.id().externalId());
+        }
+        return scenario;
     }
 
     private void onTick(Minecraft mc) {
@@ -122,7 +129,9 @@ public final class E2EHarness {
             }
         }
         if (mc.player != null && mc.level != null) {
-            steps = resolveScenario().build(mc);
+            Scenario scenario = resolveScenario();
+            steps = scenario.build(mc);
+            E2EContractValidator.validate(scenario, role, steps);
             E2ELog.info("joined world; running " + steps.size() + " steps");
             state = State.RUN_STEPS;
             return;
