@@ -505,7 +505,29 @@ def leased_verified_blob(
         lease_stack.close()
 
 
-def copy_verified(source: Path, destination_dir: Path, expected_sha256: str) -> Path:
+_CONTENT_ADDRESSED_NAME = re.compile(r"[0-9a-f]{64}")
+
+
+def copy_verified(
+    source: Path,
+    destination_dir: Path,
+    expected_sha256: str,
+    *,
+    name: str | None = None,
+) -> Path:
+    """Install one verified file, optionally renaming a content-addressed blob.
+
+    Store blobs are named by digest, but loaders only discover ``*.jar``, so a
+    leased dependency must be installed under its real Maven artifact name.
+    """
+
+    if name is not None and (name != Path(name).name or name in {"", ".", ".."}):
+        raise RuntimeFailure(f"unsafe installed package name: {name!r}")
+    if name is None and _CONTENT_ADDRESSED_NAME.fullmatch(source.name):
+        raise RuntimeFailure(
+            "refusing to install content-addressed blob under its digest name; "
+            f"pass the real artifact name for {source}"
+        )
     if not source.is_file():
         raise RuntimeFailure(f"package source does not exist: {source}")
     actual = sha256(source)
@@ -514,7 +536,7 @@ def copy_verified(source: Path, destination_dir: Path, expected_sha256: str) -> 
             f"package source hash mismatch for {source.name}: expected {expected_sha256}, got {actual}"
         )
     destination_dir.mkdir(parents=True, exist_ok=True)
-    destination = destination_dir / source.name
+    destination = destination_dir / (name or source.name)
     shutil.copy2(source, destination)
     if sha256(destination) != expected_sha256:
         raise RuntimeFailure(f"installed package hash mismatch for {destination}")
@@ -1754,6 +1776,7 @@ def run_packaged_row(
                         dependency.path,
                         game_dir / "mods",
                         dependency.sha256,
+                        name=dependency.filename,
                     )
             for game_dir in (client_directories[role] for role in roles):
                 copy_verified(

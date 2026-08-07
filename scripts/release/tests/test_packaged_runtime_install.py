@@ -440,6 +440,63 @@ class PackagedRuntimeDependencyTest(unittest.TestCase):
         self.assertEqual([], list((self.store.leases_dir / "active").glob("*.json")))
         self.assertEqual(2, len(list((self.store.blobs_dir / "sha256").rglob("?" * 64))))
 
+    def test_leased_dependencies_install_under_their_maven_jar_names(self) -> None:
+        """Loaders only discover ``*.jar``; store blobs are named by digest."""
+
+        mods = self.root / "game" / "mods"
+        with mock.patch.object(
+            packaged_runtime, "download", side_effect=self.download_exact
+        ):
+            with packaged_runtime.runtime_dependencies(
+                self.row, self.store, self.metadata
+            ) as dependencies:
+                for dependency in dependencies:
+                    self.assertEqual(
+                        64,
+                        len(dependency.path.name),
+                        "store blob is expected to be content-addressed",
+                    )
+                    packaged_runtime.copy_verified(
+                        dependency.path,
+                        mods,
+                        dependency.sha256,
+                        name=dependency.filename,
+                    )
+
+        with mock.patch.object(
+            packaged_runtime, "download", side_effect=self.download_exact
+        ):
+            with packaged_runtime.runtime_dependencies(
+                self.row, self.store, self.metadata
+            ) as leased:
+                for dependency in leased:
+                    with self.assertRaisesRegex(
+                        packaged_runtime.RuntimeFailure, "content-addressed"
+                    ):
+                        packaged_runtime.copy_verified(
+                            dependency.path, mods, dependency.sha256
+                        )
+
+        installed = sorted(path.name for path in mods.iterdir())
+        self.assertTrue(
+            all(name.endswith(".jar") for name in installed),
+            f"loaders would ignore these mods: {installed}",
+        )
+        self.assertEqual(
+            sorted(item.filename for item in dependencies), installed
+        )
+
+    def test_copy_verified_rejects_a_name_that_escapes_the_destination(self) -> None:
+        source = self.root / "payload.jar"
+        source.write_bytes(b"payload")
+        digest = packaged_runtime.sha256(source)
+
+        for unsafe in ("../escape.jar", "nested/escape.jar", ".."):
+            with self.assertRaisesRegex(packaged_runtime.RuntimeFailure, "unsafe"):
+                packaged_runtime.copy_verified(
+                    source, self.root / "mods", digest, name=unsafe
+                )
+
     def test_altered_dependency_is_rejected_before_store_admission(self) -> None:
         def altered_download(
             _url: str, destination: Path, _expected_sha256: str
