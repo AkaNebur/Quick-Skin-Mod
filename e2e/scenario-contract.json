@@ -1,0 +1,651 @@
+{
+  "schema_version": 1,
+  "gui_text_reference_size": [
+    1600,
+    900
+  ],
+  "scenarios": [
+    {
+      "scenario": "phase0-smoke",
+      "execution_profiles": [
+        "runtime-default",
+        "pr",
+        "release"
+      ],
+      "orchestration": {
+        "mode": "single-client"
+      },
+      "roles": [
+        {
+          "role": "client_a",
+          "steps": [
+            {
+              "id": "baseline",
+              "assertion_required": true,
+              "capture": {
+                "title": "Smoke baseline",
+                "review_tier": "all",
+                "expectation": "A normal first-person flat-world view before the local skin is applied.",
+                "probes": []
+              }
+            },
+            {
+              "id": "apply_local_skin",
+              "assertion_required": true,
+              "capture": {
+                "title": "Smoke local skin",
+                "review_tier": "all",
+                "expectation": "A normal first-person world view whose small HUD preview shows the brown-haired, navy-plaid custom skin.",
+                "probes": []
+              }
+            }
+          ],
+          "comparisons": [
+            {
+              "first_step": "baseline",
+              "second_step": "apply_local_skin",
+              "minimum_changed_fraction": 1e-05
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "propagation",
+      "execution_profiles": [
+        "pr",
+        "release"
+      ],
+      "orchestration": {
+        "mode": "sequential-two-client",
+        "role_order": [
+          "client_a",
+          "client_b"
+        ]
+      },
+      "roles": [
+        {
+          "role": "client_a",
+          "steps": [
+            {
+              "id": "baseline",
+              "assertion_required": true,
+              "capture": {
+                "title": "Propagation subject baseline",
+                "review_tier": "all",
+                "expectation": "The subject starts in a normal first-person flat-world view with the default appearance.",
+                "probes": []
+              }
+            },
+            {
+              "id": "apply_local_look",
+              "assertion_required": true,
+              "capture": {
+                "title": "Propagation subject applied",
+                "review_tier": "all",
+                "expectation": "The subject remains in first person while the lower-corner HUD preview shows the custom navy-plaid appearance.",
+                "probes": []
+              }
+            }
+          ],
+          "comparisons": [
+            {
+              "first_step": "baseline",
+              "second_step": "apply_local_look",
+              "minimum_changed_fraction": 1e-05
+            }
+          ]
+        },
+        {
+          "role": "client_b",
+          "steps": [
+            {
+              "id": "baseline",
+              "assertion_required": true,
+              "capture": {
+                "title": "Propagation observer baseline",
+                "review_tier": "all",
+                "expectation": "The observer starts in a normal first-person world view before inspecting the subject.",
+                "probes": []
+              }
+            },
+            {
+              "id": "confirm_self",
+              "assertion_required": true
+            },
+            {
+              "id": "await_propagation",
+              "assertion_required": true
+            },
+            {
+              "id": "observe_a",
+              "assertion_required": true,
+              "capture": {
+                "title": "Propagation observed remotely",
+                "review_tier": "key",
+                "expectation": "The observer sees Alice wearing the custom navy-plaid skin and the orange or green face of a deep-blue cape.",
+                "probes": []
+              }
+            }
+          ],
+          "comparisons": [
+            {
+              "first_step": "baseline",
+              "second_step": "observe_a",
+              "minimum_changed_fraction": 1e-05
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "propagation-live",
+      "execution_profiles": [
+        "pr",
+        "release"
+      ],
+      "orchestration": {
+        "mode": "concurrent-two-client",
+        "start_after": {
+          "role": "client_a",
+          "server_log_marker": "Alice joined the game",
+          "timeout_seconds": 300
+        }
+      },
+      "roles": [
+        {
+          "role": "client_a",
+          "steps": [
+            {
+              "id": "baseline",
+              "assertion_required": true,
+              "capture": {
+                "title": "Live subject baseline",
+                "review_tier": "all",
+                "expectation": "The subject starts in a normal first-person flat-world view with the default appearance.",
+                "probes": []
+              }
+            },
+            {
+              "id": "await_observer_settled",
+              "assertion_required": true
+            },
+            {
+              "id": "apply_live",
+              "assertion_required": true,
+              "capture": {
+                "title": "Live subject applied",
+                "review_tier": "all",
+                "expectation": "The subject's first-person view includes a lower-corner preview of the newly applied custom navy-plaid appearance.",
+                "probes": []
+              }
+            }
+          ],
+          "comparisons": [
+            {
+              "first_step": "baseline",
+              "second_step": "apply_live",
+              "minimum_changed_fraction": 1e-05
+            }
+          ]
+        },
+        {
+          "role": "client_b",
+          "steps": [
+            {
+              "id": "baseline",
+              "assertion_required": true,
+              "capture": {
+                "title": "Live observer baseline",
+                "review_tier": "all",
+                "expectation": "The observer starts in a normal first-person world view after joining.",
+                "probes": []
+              }
+            },
+            {
+              "id": "confirm_self",
+              "assertion_required": true
+            },
+            {
+              "id": "observe_before",
+              "assertion_required": true,
+              "capture": {
+                "title": "Live observer before",
+                "review_tier": "key",
+                "expectation": "The observer sees Alice with a plain default skin and no cape before the live change.",
+                "probes": []
+              }
+            },
+            {
+              "id": "await_live_change",
+              "assertion_required": true,
+              "capture": {
+                "title": "Live observer after",
+                "review_tier": "key",
+                "expectation": "The observer sees the same Alice changed to the brown-haired navy-plaid skin with a custom orange or green cape.",
+                "probes": []
+              }
+            }
+          ],
+          "comparisons": [
+            {
+              "first_step": "observe_before",
+              "second_step": "await_live_change",
+              "minimum_changed_fraction": 0.03,
+              "region": [
+                0.3,
+                0.28,
+                0.6,
+                0.85
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "full",
+      "execution_profiles": [
+        "pr",
+        "release"
+      ],
+      "orchestration": {
+        "mode": "single-client"
+      },
+      "roles": [
+        {
+          "role": "client_a",
+          "steps": [
+            {
+              "id": "baseline",
+              "assertion_required": true,
+              "capture": {
+                "title": "Full-suite baseline",
+                "review_tier": "all",
+                "expectation": "A default player in a flat daytime world before Quick Skin applies a custom appearance.",
+                "probes": []
+              }
+            },
+            {
+              "id": "local_skin_apply",
+              "assertion_required": true,
+              "capture": {
+                "title": "Local skin applied",
+                "review_tier": "key",
+                "expectation": "The centered third-person player wears the custom skin: brown hair, a dark navy plaid jacket and blue trousers.",
+                "probes": []
+              }
+            },
+            {
+              "id": "skin_menu_screen",
+              "assertion_required": true,
+              "capture": {
+                "title": "Skin menu",
+                "review_tier": "key",
+                "expectation": "The Quick Skin player-skin menu is open with readable catalog labels and drop-zone instructions over a dark, subtly starred background; there is no bright blur, radial wash or other background-compositing artifact.",
+                "probes": [
+                  {
+                    "kind": "opaque-stars-background",
+                    "region": [
+                      0.03,
+                      0.2,
+                      0.2,
+                      0.8
+                    ],
+                    "maximum_mean_luma": 32.0,
+                    "bright_luma": 64,
+                    "maximum_bright_fraction": 0.1
+                  },
+                  {
+                    "kind": "required-gui-text",
+                    "label": "skin catalog labels",
+                    "box": [
+                      480,
+                      195,
+                      850,
+                      300
+                    ],
+                    "minimum_luma_exclusive": 175,
+                    "minimum_pixels": 500
+                  },
+                  {
+                    "kind": "required-gui-text",
+                    "label": "skin drop-zone instructions",
+                    "box": [
+                      560,
+                      478,
+                      745,
+                      523
+                    ],
+                    "minimum_luma_exclusive": 175,
+                    "minimum_pixels": 300
+                  }
+                ]
+              }
+            },
+            {
+              "id": "external_skin_drop",
+              "assertion_required": true,
+              "capture": {
+                "title": "External skin imported",
+                "review_tier": "all",
+                "expectation": "The skin menu shows the externally dropped skin as an available catalog entry without a broken texture.",
+                "probes": []
+              }
+            },
+            {
+              "id": "model_slim",
+              "assertion_required": true,
+              "capture": {
+                "title": "Slim model",
+                "review_tier": "key",
+                "expectation": "The custom navy-plaid skin is rendered on the slim Alex-style arm model.",
+                "probes": []
+              }
+            },
+            {
+              "id": "model_classic",
+              "assertion_required": true,
+              "capture": {
+                "title": "Classic model",
+                "review_tier": "key",
+                "expectation": "The custom navy-plaid skin is rendered on the wider classic Steve-style arm model.",
+                "probes": []
+              }
+            },
+            {
+              "id": "cape_menu_screen",
+              "assertion_required": true,
+              "capture": {
+                "title": "Cape menu",
+                "review_tier": "all",
+                "expectation": "The Quick Skin cape menu is open with a readable title and drop-zone instructions alongside its custom panels and controls.",
+                "probes": [
+                  {
+                    "kind": "required-gui-text",
+                    "label": "cape menu title",
+                    "box": [
+                      590,
+                      100,
+                      735,
+                      140
+                    ],
+                    "minimum_luma_exclusive": 159,
+                    "minimum_pixels": 174
+                  },
+                  {
+                    "kind": "required-gui-text",
+                    "label": "cape drop-zone instructions",
+                    "box": [
+                      590,
+                      200,
+                      885,
+                      260
+                    ],
+                    "minimum_luma_exclusive": 159,
+                    "minimum_pixels": 531
+                  }
+                ]
+              }
+            },
+            {
+              "id": "known_cape_apply",
+              "assertion_required": true,
+              "capture": {
+                "title": "Bundled cape applied",
+                "review_tier": "key",
+                "expectation": "The player is seen from behind wearing the bundled orange or gold cape over the custom skin.",
+                "probes": []
+              }
+            },
+            {
+              "id": "cape_adjust_screen",
+              "assertion_required": true,
+              "capture": {
+                "title": "Cape editor",
+                "review_tier": "all",
+                "expectation": "The Quick Skin cape-adjustment editor is open with a readable title and drag/zoom instructions alongside its cape image, grid and editing controls.",
+                "probes": [
+                  {
+                    "kind": "required-gui-text",
+                    "label": "cape editor title",
+                    "box": [
+                      675,
+                      20,
+                      925,
+                      50
+                    ],
+                    "minimum_luma_exclusive": 75,
+                    "minimum_pixels": 400
+                  },
+                  {
+                    "kind": "required-gui-text",
+                    "label": "cape editor instructions",
+                    "box": [
+                      335,
+                      624,
+                      725,
+                      655
+                    ],
+                    "minimum_luma_exclusive": 75,
+                    "minimum_pixels": 750
+                  }
+                ]
+              }
+            },
+            {
+              "id": "cape_preview_selected_a",
+              "assertion_required": true,
+              "capture": {
+                "title": "Cape preview A",
+                "review_tier": "all",
+                "expectation": "The cape editor previews the first selected cape while keeping the currently worn cape state distinct.",
+                "probes": []
+              }
+            },
+            {
+              "id": "cape_preview_selected_b",
+              "assertion_required": true,
+              "capture": {
+                "title": "Cape preview B",
+                "review_tier": "all",
+                "expectation": "The cape editor visibly previews the second selected cape, different from preview A.",
+                "probes": []
+              }
+            },
+            {
+              "id": "cape_adjust_opaque_off",
+              "assertion_required": true,
+              "capture": {
+                "title": "Cape transparency enabled",
+                "review_tier": "all",
+                "expectation": "The cape editor displays the transparent form of the test cape with the opaque toggle disabled.",
+                "probes": []
+              }
+            },
+            {
+              "id": "cape_adjust_opaque_on",
+              "assertion_required": true,
+              "capture": {
+                "title": "Cape forced opaque",
+                "review_tier": "all",
+                "expectation": "The cape editor displays the opaque form of the test cape with the opaque toggle enabled.",
+                "probes": []
+              }
+            },
+            {
+              "id": "cape_adjust_zoom_out",
+              "assertion_required": true,
+              "capture": {
+                "title": "Cape zoomed out",
+                "review_tier": "all",
+                "expectation": "The cape editor preview shows the cape at the low zoom position.",
+                "probes": []
+              }
+            },
+            {
+              "id": "cape_adjust_zoom_in",
+              "assertion_required": true,
+              "capture": {
+                "title": "Cape zoomed in",
+                "review_tier": "all",
+                "expectation": "The cape editor preview shows a visibly different crop at the high zoom position.",
+                "probes": []
+              }
+            },
+            {
+              "id": "animated_cape_apply",
+              "assertion_required": true,
+              "capture": {
+                "title": "Animated cape frame A",
+                "review_tier": "key",
+                "expectation": "The player wears a real light animated cape with a red circular motif; the surface is not blank, black or garbled.",
+                "probes": []
+              }
+            },
+            {
+              "id": "animated_cape_advance",
+              "assertion_required": true,
+              "capture": {
+                "title": "Animated cape frame B",
+                "review_tier": "key",
+                "expectation": "A later frame of the same light cape is visible and the red motif has moved or changed from frame A.",
+                "probes": []
+              }
+            },
+            {
+              "id": "hd_cape_no_downscale",
+              "assertion_required": true,
+              "capture": {
+                "title": "HD cape preserved",
+                "review_tier": "key",
+                "expectation": "The player wears a crisp custom HD cape with a bright magenta front panel and teal base or trim.",
+                "probes": []
+              }
+            },
+            {
+              "id": "elytra_hides_cape",
+              "assertion_required": true,
+              "capture": {
+                "title": "Elytra hides cape",
+                "review_tier": "key",
+                "expectation": "The centered player has angled elytra wings and no flat rectangular cape hanging behind the main body.",
+                "probes": []
+              }
+            },
+            {
+              "id": "cape_editor_ignores_elytra",
+              "assertion_required": true,
+              "capture": {
+                "title": "Editor preview ignores equipped elytra",
+                "review_tier": "all",
+                "expectation": "The cape editor continues to render its cape preview even while the player has an elytra equipped.",
+                "probes": []
+              }
+            },
+            {
+              "id": "settings_screen",
+              "assertion_required": true,
+              "capture": {
+                "title": "Settings screen",
+                "review_tier": "all",
+                "expectation": "The Quick Skin settings screen is open with a readable Open Skin Menu label, toggles and checkboxes.",
+                "probes": [
+                  {
+                    "kind": "required-gui-text",
+                    "label": "Open Skin Menu setting label",
+                    "box": [
+                      445,
+                      235,
+                      655,
+                      265
+                    ],
+                    "minimum_luma_exclusive": 175,
+                    "minimum_pixels": 300
+                  }
+                ]
+              }
+            },
+            {
+              "id": "rename_dialog",
+              "assertion_required": true,
+              "capture": {
+                "title": "Rename dialog",
+                "review_tier": "all",
+                "expectation": "A compact rename dialog is open with a text input and confirmation control.",
+                "probes": []
+              }
+            },
+            {
+              "id": "delete_dialog",
+              "assertion_required": true,
+              "capture": {
+                "title": "Delete confirmation",
+                "review_tier": "all",
+                "expectation": "A compact delete-confirmation dialog is open with cancel and delete controls.",
+                "probes": []
+              }
+            },
+            {
+              "id": "hud_preview_overlay",
+              "assertion_required": true,
+              "capture": {
+                "title": "HUD player preview",
+                "review_tier": "key",
+                "expectation": "An in-world view includes a small, distinct player-preview thumbnail in a lower corner.",
+                "probes": []
+              }
+            },
+            {
+              "id": "title_screen_splash_order",
+              "assertion_required": true,
+              "capture": {
+                "title": "Title-screen layer order",
+                "review_tier": "key",
+                "expectation": "On the Minecraft title screen, the enlarged 3D player preview occludes the yellow splash text instead of the text crossing the model.",
+                "probes": []
+              }
+            }
+          ],
+          "comparisons": [
+            {
+              "first_step": "baseline",
+              "second_step": "local_skin_apply",
+              "minimum_changed_fraction": 1e-05
+            },
+            {
+              "first_step": "model_slim",
+              "second_step": "model_classic",
+              "minimum_changed_fraction": 1e-05
+            },
+            {
+              "first_step": "animated_cape_apply",
+              "second_step": "animated_cape_advance",
+              "minimum_changed_fraction": 1e-05
+            },
+            {
+              "first_step": "known_cape_apply",
+              "second_step": "hd_cape_no_downscale",
+              "minimum_changed_fraction": 1e-05
+            },
+            {
+              "first_step": "cape_preview_selected_a",
+              "second_step": "cape_preview_selected_b",
+              "minimum_changed_fraction": 1e-05
+            },
+            {
+              "first_step": "cape_adjust_opaque_off",
+              "second_step": "cape_adjust_opaque_on",
+              "minimum_changed_fraction": 1e-05
+            },
+            {
+              "first_step": "cape_adjust_zoom_out",
+              "second_step": "cape_adjust_zoom_in",
+              "minimum_changed_fraction": 1e-05
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
