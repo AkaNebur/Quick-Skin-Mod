@@ -1,10 +1,10 @@
 name: Packaged E2E
 
 # The slow lane, and the only one that launches Minecraft: it builds the inputs once, fans the
-# four packaged scenarios out across both loaders, then has Claude look at the frames that
-# actually rendered. Pull requests run it automatically against only the two lanes declared by
-# their target version branch. Version synchronization also dispatches it explicitly because
-# events created with GITHUB_TOKEN do not recursively trigger ordinary pull-request workflows.
+# contract-selected packaged scenarios out across both loaders. Pull requests run it automatically
+# against only the lanes declared by their target version branch. Version synchronization also
+# dispatches it explicitly because events created with GITHUB_TOKEN do not recursively trigger
+# ordinary pull-request workflows. Secret-bearing visual review runs separately from this gate.
 on:
   pull_request:
   schedule:
@@ -27,6 +27,11 @@ on:
         description: Internal final release commit
         required: false
         type: string
+      runtime_policy:
+        description: Internal version-port runtime policy; ordinary runs must use full
+        required: false
+        default: full
+        type: string
 
 permissions:
   actions: read
@@ -43,11 +48,135 @@ env:
   __GLX_VENDOR_LIBRARY_NAME: mesa
 
 jobs:
-  build:
-    name: Build immutable E2E input bundle
+  runtime-policy:
+    name: Classify packaged runtime impact
     if: >-
       github.event_name != 'workflow_dispatch' ||
       inputs.attest_run_id == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      effective: ${{ steps.policy.outputs.effective }}
+      manifest: ${{ steps.policy.outputs.manifest }}
+
+    steps:
+      - name: Check out the exact requested head without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Revalidate any not-applicable request from protected policy
+        id: candidate-policy
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_POLICY: ${{ inputs.runtime_policy || 'full' }}
+        run: |
+          set -euo pipefail
+          if [[ "$REQUESTED_POLICY" == full ]]; then
+            printf 'effective=full\n' >> "$GITHUB_OUTPUT"
+            printf 'manifest={}\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$REQUESTED_POLICY" == not-applicable ]]
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+          [[ "$GITHUB_REF_TYPE" == branch ]]
+          [[ "$GITHUB_REF_NAME" == automation/sync/* ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+
+          pr_numbers="$(gh pr list --state open --head "$GITHUB_REF_NAME" --limit 2 \
+            --json number --jq '.[].number')"
+          [[ "$(wc -l <<< "$pr_numbers" | tr -d ' ')" == 1 ]]
+          pr_number="$(head -n 1 <<< "$pr_numbers")"
+          [[ "$pr_number" =~ ^[0-9]+$ ]]
+          pr_json="$(gh pr view "$pr_number" \
+            --json baseRefName,baseRefOid,headRefName,headRefOid,isCrossRepository,labels,state)"
+          jq -e \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg head "$GITHUB_SHA" \
+            '.state == "OPEN" and .headRefName == $branch and .headRefOid == $head and (.isCrossRepository | not) and ([.labels[].name] | index("automated-version-sync")) != null' \
+            <<< "$pr_json" > /dev/null
+          base_branch="$(jq -r .baseRefName <<< "$pr_json")"
+          base_sha="$(jq -r .baseRefOid <<< "$pr_json")"
+          [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]
+          target_slug="${base_branch//[^A-Za-z0-9._-]/-}"
+          [[ "$GITHUB_REF_NAME" == "automation/sync/$target_slug/"* ]]
+
+          protected_sha="$(gh api \
+            "repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha)"
+          [[ "$protected_sha" =~ ^[0-9a-f]{40}$ ]]
+          git fetch --no-tags origin \
+            "+refs/heads/$GITHUB_REF_NAME:refs/remotes/origin/$GITHUB_REF_NAME" \
+            "+refs/heads/$base_branch:refs/remotes/origin/$base_branch" \
+            "$protected_sha"
+          [[ "$(git rev-parse "refs/remotes/origin/$GITHUB_REF_NAME")" == "$GITHUB_SHA" ]]
+          [[ "$(git rev-parse "refs/remotes/origin/$base_branch")" == "$base_sha" ]]
+
+          policy_dir="$RUNNER_TEMP/protected-e2e-policy"
+          mkdir -p "$policy_dir"
+          git show "$protected_sha:scripts/ci/e2e_impact.py" \
+            > "$policy_dir/e2e_impact.py"
+          git show "$protected_sha:scripts/release/version_branches.py" \
+            > "$policy_dir/version_branches.py"
+          python3 "$policy_dir/version_branches.py" \
+            --target "$base_branch" > /dev/null
+
+          read -r -a parents <<< "$(git rev-list --parents -n 1 "$GITHUB_SHA")"
+          [[ "${#parents[@]}" == 3 ]]
+          [[ "${parents[1]}" == "$base_sha" ]]
+          git merge-base --is-ancestor "${parents[2]}" "$protected_sha"
+
+          impact_output="$RUNNER_TEMP/e2e-impact-output"
+          : > "$impact_output"
+          python3 "$policy_dir/e2e_impact.py" \
+            --repository . \
+            --base "$base_sha" \
+            --head "$GITHUB_SHA" \
+            --github-output "$impact_output"
+          runtime_required="$(sed -n 's/^runtime_required=//p' "$impact_output")"
+          manifest="$(sed -n 's/^manifest=//p' "$impact_output")"
+          [[ "$runtime_required" == false ]]
+          jq -e \
+            '.schema_version == 1 and .runtime_required == false and (.paths | type == "array" and length > 0) and (.runtime_paths == [])' \
+            <<< "$manifest" > /dev/null
+          printf 'effective=not-applicable\n' >> "$GITHUB_OUTPUT"
+          printf 'manifest=%s\n' "$manifest" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve failures to the full runtime policy
+        id: policy
+        if: always()
+        shell: bash
+        env:
+          CANDIDATE_MANIFEST: ${{ steps.candidate-policy.outputs.manifest }}
+          CANDIDATE_OUTCOME: ${{ steps.candidate-policy.outcome }}
+          CANDIDATE_POLICY: ${{ steps.candidate-policy.outputs.effective }}
+        run: |
+          set -euo pipefail
+          if [[ "$CANDIDATE_OUTCOME" == success \
+              && ("$CANDIDATE_POLICY" == full \
+              || "$CANDIDATE_POLICY" == not-applicable) ]]; then
+            printf 'effective=%s\n' "$CANDIDATE_POLICY" >> "$GITHUB_OUTPUT"
+            printf 'manifest=%s\n' "${CANDIDATE_MANIFEST:-{}}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf 'effective=full\n' >> "$GITHUB_OUTPUT"
+          printf 'manifest={}\n' >> "$GITHUB_OUTPUT"
+          printf 'The requested runtime policy could not be authenticated; running full Packaged E2E.\n' \
+            >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build immutable E2E input bundle
+    needs: runtime-policy
+    if: >-
+      needs.runtime-policy.result == 'success' &&
+      needs.runtime-policy.outputs.effective == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
@@ -132,8 +261,14 @@ jobs:
           retention-days: 1
 
   e2e:
-    name: ${{ matrix.id }} - four scenarios
-    needs: build
+    name: ${{ matrix.id }} - contract scenarios
+    needs:
+      - runtime-policy
+      - build
+    if: >-
+      needs.runtime-policy.result == 'success' &&
+      needs.runtime-policy.outputs.effective == 'full' &&
+      needs.build.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
@@ -148,93 +283,18 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Install all required JDKs
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - name: Run contract-selected packaged-JAR scenarios
+        uses: ./.github/actions/run-packaged-e2e
         with:
-          distribution: temurin
-          java-version: |
-            17
-            21
-            25
-
-      - name: Install Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-
-      - name: Install locked packaged-runtime launcher
-        run: >-
-          python -m pip install --only-binary=:all:
-          --requirement e2e/requirements.txt
-
-      - name: Install software-rendering runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            xvfb \
-            xauth \
-            mesa-utils \
-            libgl1-mesa-dri \
-            libglx-mesa0 \
-            libasound2t64 \
-            libopenal1 \
-            libx11-6 \
-            libxcursor1 \
-            libxext6 \
-            libxi6 \
-            libxinerama1 \
-            libxrandr2 \
-            libxrender1 \
-            libxtst6 \
-            libxxf86vm1
-
-      - name: Download immutable E2E input bundle
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: e2e-input-bundle
-          path: build/release
-
-      - name: Reverify staged bytes, matrix, and source commit
-        run: python scripts/release/verify_release.py --verify-staged
-
-      - name: Run four packaged-JAR scenarios
-        shell: bash
-        env:
-          E2E_ROW_JSON: ${{ toJSON(matrix) }}
-          E2E_SCENARIOS: ${{ matrix.scenarios }}
-        run: |
-          set -euo pipefail
-          xvfb-run --auto-servernum \
-            --server-args="-screen 0 1920x1080x24 -ac +extension GLX +render -noreset" \
-            python e2e/orchestrator.py \
-              --matrix release/release-matrix.json \
-              --row-json "$E2E_ROW_JSON" \
-              --artifacts-manifest build/release/artifacts.json \
-              --packaged \
-              --scenarios "$E2E_SCENARIOS"
-
-      - name: Upload E2E evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: packaged-e2e-${{ matrix.id }}
-          path: |
-            e2e-out/summary.json
-            e2e-out/resolved-matrix.json
-            e2e-out/profiles/**/result.json
-            e2e-out/profiles/**/logs/**
-            e2e-out/profiles/**/e2e-report/**
-            e2e-out/profiles/**/screenshots/**
-            e2e-out/profiles/**/crash-reports/**
-          if-no-files-found: warn
-          compression-level: 6
-          retention-days: 1
+          bundle-name: e2e-input-bundle
+          row-json: ${{ toJSON(matrix) }}
+          scenarios: ${{ matrix.scenarios }}
+          evidence-name: packaged-e2e-${{ matrix.id }}
 
   required-gate:
     name: Packaged E2E gate
     needs:
+      - runtime-policy
       - build
       - e2e
     if: >-
@@ -247,98 +307,30 @@ jobs:
       - name: Require build and packaged behavior
         shell: bash
         env:
+          POLICY_RESULT: ${{ needs.runtime-policy.result }}
+          RUNTIME_POLICY: ${{ needs.runtime-policy.outputs.effective }}
           BUILD_RESULT: ${{ needs.build.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
         run: |
           set -euo pipefail
-          [[ "$BUILD_RESULT" == success ]]
-          [[ "$E2E_RESULT" == success ]]
-
-  visual-review:
-    name: AI visual review (advisory)
-    needs: e2e
-    continue-on-error: true
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      actions: read
-
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
-      # Every anchor uploads its own evidence artifact; merge them so the manifest sees the
-      # frames from both loaders in one e2e-out tree, which is where visual_review.py looks.
-      - name: Fetch packaged behavior evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: packaged-e2e-*
-          merge-multiple: true
-          path: e2e-out
-
-      - name: Build the review manifest
-        run: |
-          echo "screenshots: $(find e2e-out -name '*.png' | wc -l)"
-          python3 e2e/visual_review.py > visual-review-manifest.json
-          python3 -c "import json;print('frames to review:', len(json.load(open('visual-review-manifest.json'))))"
-          sha256sum visual-review-manifest.json > \
-            "$RUNNER_TEMP/visual-review-manifest.sha256"
-          cp e2e/check_visual_review.py "$RUNNER_TEMP/visual-review-checker.py"
-          sha256sum "$RUNNER_TEMP/visual-review-checker.py" > \
-            "$RUNNER_TEMP/visual-review-checker.sha256"
-
-      # The tracked npm lock fixes both the CLI and its platform-specific binary by integrity.
-      - name: Install Node for the locked Claude CLI
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-
-      - name: Install locked Claude Code
-        run: |
-          mkdir -p "$RUNNER_TEMP/claude-cli"
-          cp .github/claude/package.json .github/claude/package-lock.json \
-            "$RUNNER_TEMP/claude-cli/"
-          (cd "$RUNNER_TEMP/claude-cli" && npm ci)
-
-      # The programmatic E2E assertions verify mod state and pixel deltas. This step is the
-      # only thing in the pipeline that judges whether a frame shows what it should.
-      - name: Review rendered frames
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          "$RUNNER_TEMP/claude-cli/node_modules/.bin/claude" \
-            --print "$(cat e2e/visual_review_prompt.md)" \
-            --model claude-opus-5 \
-            --allowedTools Read,Write \
-            --permission-mode acceptEdits
-
-      - name: Check the advisory review
-        run: |
-          sha256sum --check "$RUNNER_TEMP/visual-review-manifest.sha256"
-          sha256sum --check "$RUNNER_TEMP/visual-review-checker.sha256"
-          git diff --exit-code
-          python3 "$RUNNER_TEMP/visual-review-checker.py" \
-            --report visual-review-report.json \
-            --manifest visual-review-manifest.json
-
-      - name: Upload the review report
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: visual-review
-          path: |
-            visual-review-manifest.json
-            visual-review-report.json
-          if-no-files-found: warn
-          retention-days: 1
+          [[ "$POLICY_RESULT" == success ]]
+          case "$RUNTIME_POLICY" in
+            full)
+              [[ "$BUILD_RESULT" == success ]]
+              [[ "$E2E_RESULT" == success ]]
+              printf 'Packaged Minecraft was required and passed.\n' \
+                >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            not-applicable)
+              [[ "$BUILD_RESULT" == skipped ]]
+              [[ "$E2E_RESULT" == skipped ]]
+              printf 'Packaged Minecraft was not applicable to this authenticated non-runtime port.\n' \
+                >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
 
   attest:
     name: Attest tested E2E on release branch
@@ -359,18 +351,25 @@ jobs:
   prepare-pages-evidence:
     name: Prepare public visual evidence (advisory)
     needs:
+      - runtime-policy
       - required-gate
       - attest
     if: >-
       always() &&
-      ((inputs.attest_run_id == '' && needs.required-gate.result == 'success') ||
-      (inputs.attest_run_id != '' && needs.attest.result == 'success'))
+      ((inputs.attest_run_id == '' &&
+      needs.runtime-policy.outputs.effective == 'full' &&
+      needs.required-gate.result == 'success') ||
+      (inputs.attest_run_id != '' &&
+      inputs.runtime_policy == 'full' &&
+      needs.attest.result == 'success'))
     continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       actions: read
       contents: read
+    outputs:
+      published: ${{ steps.published.outputs.published }}
 
     steps:
       - name: Check out the final candidate tree without credentials
@@ -451,7 +450,7 @@ jobs:
           python3 scripts/pages/evidence.py prepare
           --e2e-root e2e-out
           --matrix release/release-matrix.json
-          --catalog e2e/visual-catalog.json
+          --contract e2e/scenario-contract.json
           --output public-evidence
           --repository "$GITHUB_REPOSITORY"
           --source-run-id "${{ steps.identity.outputs.source_run_id }}"
@@ -475,11 +474,47 @@ jobs:
           # rolling cache for this branch, then the rotation workflow deletes the consumed copy.
           retention-days: 1
 
+      - name: Confirm the exact handoff was published
+        id: published
+        if: steps.identity.outputs.publish == 'true'
+        run: printf 'published=true\n' >> "$GITHUB_OUTPUT"
+
+  notify-pages:
+    name: Wake the protected project site (advisory)
+    needs: prepare-pages-evidence
+    if: >-
+      always() &&
+      needs.prepare-pages-evidence.outputs.published == 'true'
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Dispatch the exact release-branch handoff
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg evidence_branch "$GITHUB_REF_NAME" \
+            --arg evidence_repository "$GITHUB_REPOSITORY" \
+            --arg evidence_run_id "$GITHUB_RUN_ID" \
+            --arg evidence_sha "$GITHUB_SHA" \
+            '{event_type:"pages-evidence-ready",client_payload:{evidence_branch:$evidence_branch,evidence_repository:$evidence_repository,evidence_run_id:$evidence_run_id,evidence_sha:$evidence_sha}}' \
+            | gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches" --input -
+
   notify-version-port:
     name: Notify version port controller
+    # Wait only for local advisory handoff jobs, never for the separate AI review workflow. This
+    # makes the notification the settled tail of the source run while its conclusion still derives
+    # exclusively from the required gate.
     needs:
+      - runtime-policy
       - required-gate
-      - visual-review
+      - prepare-pages-evidence
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
@@ -496,6 +531,7 @@ jobs:
         env:
           GATE_RESULT: ${{ needs.required-gate.result }}
           GH_TOKEN: ${{ github.token }}
+          RUNTIME_POLICY: ${{ needs.runtime-policy.outputs.effective || inputs.runtime_policy }}
         run: |
           set -euo pipefail
           conclusion=success
@@ -508,7 +544,29 @@ jobs:
             --arg head_branch "$GITHUB_REF_NAME" \
             --arg head_sha "$GITHUB_SHA" \
             --arg run_id "$GITHUB_RUN_ID" \
+            --arg runtime_policy "$RUNTIME_POLICY" \
             --arg source_event "$GITHUB_EVENT_NAME" \
             --arg source_repository "$GITHUB_REPOSITORY" \
-            '{event_type:"version-port-gate-completed",client_payload:{gate:$gate,conclusion:$conclusion,head_branch:$head_branch,head_sha:$head_sha,run_id:$run_id,source_event:$source_event,source_repository:$source_repository}}' \
+            '{event_type:"version-port-gate-completed",client_payload:{gate:$gate,conclusion:$conclusion,head_branch:$head_branch,head_sha:$head_sha,run_id:$run_id,runtime_policy:$runtime_policy,source_event:$source_event,source_repository:$source_repository}}' \
             | gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches" --input -
+
+      - name: Request the separate AI visual review
+        if: >-
+          needs.required-gate.result == 'success' &&
+          needs.runtime-policy.outputs.effective == 'full'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          payload="$RUNNER_TEMP/visual-review-dispatch.json"
+          jq -n \
+            --arg source_branch "$GITHUB_REF_NAME" \
+            --arg source_repository "$GITHUB_REPOSITORY" \
+            --arg source_run_id "$GITHUB_RUN_ID" \
+            --arg source_sha "$GITHUB_SHA" \
+            '{event_type:"visual-review-requested",client_payload:{source_branch:$source_branch,source_repository:$source_repository,source_run_id:$source_run_id,source_sha:$source_sha}}' \
+            > "$payload"
+          timeout 20s gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/dispatches" --input "$payload"
