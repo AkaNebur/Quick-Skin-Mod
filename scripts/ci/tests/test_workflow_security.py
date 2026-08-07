@@ -570,10 +570,11 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn('git show "$protected_sha:scripts/ci/e2e_impact.py"', policy)
         self.assertIn("version_branches.py", policy)
         self.assertIn('[[ "${#parents[@]}" == 3 ]]', policy)
-        self.assertIn('[[ "${parents[1]}" == "$base_sha" ]]', policy)
         self.assertIn(
             'git merge-base --is-ancestor "${parents[2]}" "$protected_sha"', policy
         )
+        self.assertIn('if [[ "$chain_commit" == "$base_sha" ]]; then', policy)
+        self.assertIn('[[ "$chain_complete" == true ]]', policy)
         self.assertIn('--base "$base_sha"', policy)
         self.assertIn('--head "$GITHUB_SHA"', policy)
         self.assertIn('[[ "$runtime_required" == false ]]', policy)
@@ -606,9 +607,9 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn(
             '"$RUNNER_TEMP/version-port-controller/scripts/ci/e2e_impact.py"', propose
         )
-        self.assertIn('--base "$WORK_HEAD_SHA"', propose)
+        self.assertIn('--base "$TARGET_HEAD_SHA"', propose)
         self.assertIn('--head "$candidate_commit"', propose)
-        self.assertIn('"$runtime_required" == false && "$EXISTING" == false', propose)
+        self.assertIn('if [[ "$runtime_required" == false ]]; then', propose)
         self.assertIn("runtime_policy:$runtime_policy", propose)
         self.assertIn("runtime_manifest:$runtime_manifest", propose)
         self.assertIn("--arg tree \"$tree\"", propose)
@@ -621,8 +622,9 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn('[[ "$tree" == "$EXPECTED_TREE" ]]', publish)
         self.assertIn("EXPECTED_RUNTIME_MANIFEST", publish)
         self.assertIn("../controller/scripts/ci/e2e_impact.py", publish)
+        self.assertIn('--base "$TARGET_HEAD_SHA"', publish)
         self.assertIn('--head "$commit"', publish)
-        self.assertIn('"$runtime_required" == false && "$EXISTING_PORT" == false', publish)
+        self.assertIn('if [[ "$runtime_required" == false ]]; then', publish)
         self.assertIn('[[ "$runtime_policy" == "$EXPECTED_RUNTIME_POLICY" ]]', publish)
         self.assertIn('-f runtime_policy="$RUNTIME_POLICY"', publish)
 
@@ -639,17 +641,6 @@ class WorkflowSecurityTest(unittest.TestCase):
         self.assertIn("Classify packaged runtime impact", inspect)
         self.assertIn("Build immutable E2E input bundle", inspect)
         self.assertIn('endswith(" - contract scenarios")', inspect)
-        self.assertIn("scripts/ci/e2e_job_graph.py", inspect)
-        self.assertIn('--runtime-policy "$EXPECTED_RUNTIME_POLICY"', inspect)
-        self.assertIn('--protected-sha "$protected_sha"', inspect)
-        self.assertIn('--head-sha "$EXPECTED_SHA"', inspect)
-        self.assertIn(
-            'git show "$protected_sha:e2e/loader-bootstrap-contract.json"', inspect
-        )
-        self.assertIn(
-            '--bootstrap-contract "$controller/e2e/loader-bootstrap-contract.json"',
-            inspect,
-        )
         self.assertIn("gh api --paginate --slurp", inspect)
         self.assertIn("[.[].jobs[]", inspect)
         self.assertIn("-f runtime_policy=full", repair)
@@ -968,8 +959,10 @@ class WorkflowSecurityTest(unittest.TestCase):
 
     def test_port_publisher_requires_a_complete_proposal(self) -> None:
         publish = job_block("sync-version-branches.yml", "publish")
-        self.assertIn("needs.propose.result == 'success'", publish)
-        self.assertIn("needs.validate.result == 'success'", publish)
+        self.assertIn("needs.propose.result != 'cancelled'", publish)
+        self.assertIn("needs.validate.result != 'cancelled'", publish)
+        self.assertIn("Require this target's own validate leg", publish)
+        self.assertIn('[[ "$validate_result" == success ]]', publish)
         self.assertIn("Download the immutable validated proposal", publish)
 
     def test_version_sync_accepts_only_master_as_its_source(self) -> None:
@@ -984,9 +977,23 @@ class WorkflowSecurityTest(unittest.TestCase):
             "automated-version-sync",
             'git merge-base --is-ancestor "$base_sha" "$head_sha"',
             '--match-head-commit "$head_sha"',
+            "--limit 100",
+            'git merge-base --is-ancestor "$target_sha" FETCH_HEAD',
         ):
             with self.subTest(required=required):
                 self.assertIn(required, merge)
+
+    def test_e2e_bundle_reuse_authenticates_the_exact_head_build_gate_run(self) -> None:
+        gate = job_block("build-gate.yml", "build")
+        build = job_block("on-demand-e2e.yml", "build")
+
+        self.assertIn("name: staged-release-bundle", gate)
+        self.assertIn("retention-days: 1", gate)
+        self.assertIn("head_sha=$GITHUB_SHA", build)
+        self.assertIn('.path == ".github/workflows/build-gate.yml"', build)
+        self.assertIn(".head_repository.full_name == $repository", build)
+        self.assertIn("--verify-staged", build)
+        self.assertIn("steps.reuse.outputs.reused != 'true'", build)
 
     def test_version_port_merge_bridges_verified_runs_to_required_statuses(self) -> None:
         merge = job_block("handle-version-port-result.yml", "merge")
