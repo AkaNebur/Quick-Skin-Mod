@@ -15,6 +15,10 @@ objects as `master`. Only changed blobs, trees, and commits add repository stora
   runtimes. No workflow or script keeps a second Minecraft-version list.
 - Version-specific differences stay in the active `legacy*` overlays, loader module, Gradle
   properties, metadata, and narrow API adapters selected by that matrix.
+- `e2e/loader-bootstrap-contract.json` is the protected integrity allowlist for exact active-loader
+  E2E entrypoints/manifests and complete branch loader build scripts. It does not discover support;
+  adding a release branch or deliberately changing those files requires updating its bound digests
+  on `master`, after which the ordinary exact-head port gates deliver it.
 - Generated Stonecutter output, runtime directories, staged jars, screenshots, and caches never
   belong in a branch.
 
@@ -25,12 +29,27 @@ exact target. It discovers remote release branches from the naming contract, the
 
 1. creates an isolated `automation/sync/...` branch from the target, or updates its existing open
    synchronization PR in place;
-2. merges `master`, invoking Claude only if semantic conflict resolution is required;
-3. validates the target matrix and release mutation tests;
-4. opens a PR and explicitly dispatches both `Build gate` and `Packaged E2E` for its exact head;
-5. receives a trusted `repository_dispatch` when each gate settles;
-6. merges and deletes the automation branch only after both exact-head gates pass;
-7. dispatches lightweight Build and Packaged E2E attestations on the final release branch.
+2. gives the exact target/source commits to a protected merge controller, which authenticates the
+   no-commit merge and gives its complete original conflict set to a deterministic classifier;
+3. resolves only exact reviewed protected cases: shared guidance/runtime documents use a
+   source-preferred three-way merge, the target matrix is retained, and a build script remains
+   deleted only when that loader is inactive in the target matrix;
+4. fails closed on an unknown protected conflict and invokes Claude only for the remaining
+   unprotected paths;
+5. packages a bounded proposal, then applies it only to an alternate index; the credentialless
+   validator reconstructs the merge from its parents, imports only recomputed AI paths, normalizes
+   the target matrix, regenerates all matrix-owned profiles, requires the exact candidate tree, and
+   runs the release mutation tests;
+6. opens a PR and explicitly dispatches both `Build gate` and `Packaged E2E` for its exact head;
+7. receives a trusted `repository_dispatch` when each gate settles;
+8. merges and deletes the automation branch only after both exact-head gates pass;
+9. dispatches lightweight Build and Packaged E2E attestations on the final release branch.
+
+The source-preferred policy in step 3 is a three-way file merge, not a whole-file checkout from
+`master`: non-conflicting target-only hunks survive. The credentialless validator and the narrow
+writer independently rerun the protected controller from the exact original parents, compare its
+stable evidence, authenticate the full alternate-index tree, and copy only classifier-approved AI
+entries before accepting the exact reconstructed tree. The writer never executes candidate code.
 
 GitHub deliberately suppresses recursive workflow events produced with `GITHUB_TOKEN`, which is
 why the gates are explicitly dispatched instead of relying on the PR-opened event. Each gate emits
@@ -57,6 +76,16 @@ The marked branch-profile block is also generated. `scripts/release/branch_readm
 loaders, Java target, locked runtime/API versions, and source overlays from that branch's matrix.
 The synchronizer regenerates and validates it after merging, so a release README cannot silently
 inherit another branch's badge or compatibility profile.
+
+The synchronizer likewise regenerates the marked block in `e2e/README.md` with
+`scripts/release/e2e_readme.py`. Version/loader/Java rows come from the target matrix, while
+scenario ids, execution profiles, orchestration, roles, steps, captures, and the contract hash come
+only from `e2e/scenario-contract.json`. Legacy scenario-list fields are removed from each target
+matrix during a port; they are shared suite policy, not version-specific release facts.
+
+It also runs `scripts/release/workflow_guidance.py` so the two active-common Gradle test anchors in
+`docs/ai/WORKFLOW.md` use the target matrix's exact Minecraft version. All three generated profiles
+are rechecked after applying the proposal and again before the writer authenticates.
 
 If either gate fails, the trusted result workflow gives Claude one bounded repair attempt using the
 failed logs and evidence. Claude has no Git or GitHub write credentials and can only upload a

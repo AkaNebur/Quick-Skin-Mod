@@ -97,12 +97,37 @@ This file is part of the repository-wide instruction set imported by `AGENTS.md`
 - A public screenshot is valid only when a successful packaged `result.json` references it and its
   recorded SHA-256 and dimensions match the PNG. Do not infer scenario, role, or step from a
   filename, and do not let sets or duplicate labels collapse two frames into false coverage.
-- `e2e/visual-catalog.json` and `EXPECTED_SCREENSHOT_STEPS` must cover exactly the same semantic
-  checkpoints. Add or remove a capture in both places and update its expectation in the same
-  change.
-- The current catalog is deliberately a cross-version parity contract: every supported loader and
+- `e2e/scenario-contract.json` is the only authored source for scenario ids, execution profiles,
+  orchestration, roles, ordered steps, mandatory assertions, captures, expectations, review tiers,
+  probes, and comparisons. Capture ids and all consumer views must be derived. Add or remove a
+  semantic checkpoint in the contract and its Java action only; never create another catalog or
+  workflow scenario list.
+- The current contract is deliberately a cross-version parity contract: every supported loader and
   version publishes every checkpoint. Do not add a version-only capture without first extending
-  the catalog schema and protected validator with explicit applicability rules.
+  the contract schema and protected validator with explicit applicability rules.
+- Java harness reports, packaged results, raw handoffs, compact caches, and public manifests must
+  carry the exact validated contract SHA-256. Reject missing, extra, reordered, hash-mismatched, or
+  assertion-free steps and reject a screenshot both when a capture is missing and when a
+  non-capture step emits one. Keep independent fixed probe canaries; do not generate calibration
+  fixtures from the oracle values under test.
+- Every orchestrator invocation writes into a fresh owned workspace and promotes only its bounded
+  evidence snapshot to `current`. Replacing `current` may remove only a marker-authenticated prior
+  snapshot; promotion to one target is serialized across processes and retains the workspace's
+  device/inode identity through every rename and rollback. An interrupted swap must roll back or
+  recover without touching a replacement or sibling path. Runtime installation, game directories,
+  and dependency caches never enter the promoted evidence tree.
+- Reusable Minecraft installations and downloads belong to `RuntimeStore/v1`, not an evidence
+  directory. Recipe identity includes schema, host OS/architecture, Java major, Minecraft and
+  loader versions, exact installer hash, launcher-library revision, and normalizer revision.
+  Publish verified immutable trees under a recipe lock, hold an OS-backed lease continuously from
+  lookup/build through materialization, and materialize a fresh mutable copy. Collection
+  non-blockingly probes the paired lock, preserves live cross-process builders/leases, and reaps
+  abandoned staging after a crashed owner; timestamps alone never prove liveness. Cleanup first
+  renames authenticated objects to identity-bearing quarantine, then performs retryable bounded
+  deletion (including read-only files), so a partial delete cannot poison the active namespace.
+  Treat stale/unknown/corrupt identity as a miss or fail-closed error. Garbage
+  collection is bounded housekeeping, never a correctness mechanism. Dependency hashes come from
+  the strict Gradle verification metadata; first-download trust is forbidden.
 - Public evidence is bound to source run/branch/SHA and final run/branch/SHA. Pages may select a
   bundle only when its authenticated originating target run and manifest both match the current
   release-branch head; a later protected Pages run may only roll that already validated bundle
@@ -119,11 +144,18 @@ This file is part of the repository-wide instruction set imported by `AGENTS.md`
 - Discovery records one protected `master` SHA for the Pages run. Every collection and render job
   checks out that exact implementation revision; an advancing `master` may affect only a later run.
 - Treat downloaded artifacts and their JSON as untrusted. Require the exact curated tree, exact
-  schemas, complete catalog and comparison products, canonical identities, one loader per branch
-  loader, and one JAR digest per artifact. Reject traversal, symlinks, unknown catalog entries,
+  schemas, complete contract and comparison products, canonical identities, one loader per branch
+  loader, and one JAR digest per artifact. Reject traversal, symlinks, unknown contract entries,
   duplicate identities, non-pass lanes, stale SHAs, invalid PNGs, arbitrary nested fields, and
   size-limit violations. Protected rendering must decode and recompute screenshot/comparison pixel
   metrics before publishing. Presentation code must use escaped/text DOM APIs and local assets.
+- Secret-bearing visual review has the fixed boundary `authenticate -> curate without secrets ->
+  review in a fresh capsule -> exact-id cleanup`. Curating must authenticate every source artifact
+  by numeric id, size, digest, run, protected matrix row, complete scenario product, and one JAR;
+  fully decode and canonically re-encode bounded RGB PNGs without source metadata; and emit a
+  source/implementation/artifact-bound proof. The review runner accepts only that immutable
+  handoff, exposes only its manifest/images to the model, revalidates it after the model exits,
+  publishes only a bounded normalized report, and immediately deletes the intermediate artifact.
 - Optimized gallery images are derivatives, not the source proof. Publish separate source and
   derivative hashes/dimensions, and content-address each public image URL with the bytes actually
   served. Original PNGs may exist only in the one-day `pages-e2e-*` handoff. Protected conversion
@@ -132,3 +164,22 @@ This file is part of the repository-wide instruction set imported by `AGENTS.md`
   derivative metrics, and derivative comparisons.
 - Pages is an advisory, atomic publication surface. Failure must preserve the previous site and
   must not weaken or replace the required Build and Packaged E2E gates.
+- A version port must classify the complete original unmerged path set before AI runs. Exact
+  protected paths may use only their reviewed mechanical resolution: source-preferred three-way
+  merge for shared guidance/runtime documents, target retention for the release matrix, or deletion
+  of a build script whose loader is absent from that target matrix. Any unknown protected conflict
+  or active-loader build conflict fails closed. Recompute the partition from the original paths and
+  target matrix in every downstream trust boundary; never let AI receive a protected path.
+- Treat a proposed version-port patch as untrusted even after policy validation. Apply it first to
+  an isolated alternate index and authenticate its complete tree id. The credentialless validator
+  and credentialed writer must each rerun the protected merge controller from the exact original
+  parents, compare its stable evidence byte-for-byte, import only the recomputed AI-conflict paths
+  from that index, rerun protected generators, and require the final real index tree to equal both
+  the isolated candidate tree and the plan tree. Never apply the full patch to the real index.
+- A successful automated version port may publish the stable Packaged E2E status only after the
+  protected evaluator sees exactly one successful control job, the exact target-branch PR-anchor
+  lane set, and byte-identical protected workflow, attestation workflow, composite action, contract,
+  Python controller, common Java E2E harness, Gradle bootstrap/wrapper, and contract-generation
+  paths. Each active loader's entire `src/e2e` bootstrap and full loader build script must also
+  match the exact protected digest selected for that release branch. A green subset or a final
+  convention-apply line attached to an otherwise unknown build script is never sufficient.

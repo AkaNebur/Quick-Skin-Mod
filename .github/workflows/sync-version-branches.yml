@@ -94,23 +94,36 @@ jobs:
           TARGET_BRANCH: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          python3 scripts/release/version_branches.py --target "$TARGET_BRANCH" > /dev/null
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
           git fetch --no-tags origin "$GITHUB_SHA"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$GITHUB_SHA" ]]
           source_sha="$GITHUB_SHA"
-
-          existing_branch="$(gh pr list --state open --base "$TARGET_BRANCH" --limit 100 \
-            --json headRefName,labels \
-            --jq '[.[] | select(.headRefName | startswith("automation/sync/")) | select([.labels[].name] | index("automated-version-sync"))][0].headRefName // ""')"
-          if [[ -n "$existing_branch" ]]; then
-            sync_branch="$existing_branch"
+          controller="$RUNNER_TEMP/version-port-controller"
+          test ! -e "$controller"
+          mkdir -p "$controller"
+          git archive "$source_sha" | tar -x -C "$controller"
+          python3 "$controller/scripts/release/version_branches.py" \
+            --target "$TARGET_BRANCH" > /dev/null
+          target_slug="${TARGET_BRANCH//[^A-Za-z0-9._-]/-}"
+          open_ports="$(gh pr list --state open --base "$TARGET_BRANCH" --limit 100 \
+            --json number,baseRefName,baseRefOid,headRefName,headRefOid,isCrossRepository,labels,state \
+            --jq '[.[] | select(.headRefName | startswith("automation/sync/")) | select([.labels[].name] | index("automated-version-sync"))]')"
+          [[ "$(jq length <<< "$open_ports")" -le 1 ]]
+          if [[ "$(jq length <<< "$open_ports")" -eq 1 ]]; then
+            jq -e \
+              --arg base "$TARGET_BRANCH" \
+              --arg head_prefix "automation/sync/$target_slug/" \
+              --arg target_head "$(git rev-parse HEAD)" \
+              '.[0].state == "OPEN" and .[0].baseRefName == $base and .[0].baseRefOid == $target_head and (.[0].headRefName | startswith($head_prefix)) and (.[0].headRefOid | test("^[0-9a-f]{40}$")) and (.[0].isCrossRepository | not) and ([.[0].labels[].name] | index("automated-version-sync")) != null' \
+              <<< "$open_ports" > /dev/null
+            sync_branch="$(jq -r '.[0].headRefName' <<< "$open_ports")"
+            expected_port_sha="$(jq -r '.[0].headRefOid' <<< "$open_ports")"
             git fetch --no-tags origin "$sync_branch"
+            [[ "$(git rev-parse FETCH_HEAD)" == "$expected_port_sha" ]]
             git switch --detach FETCH_HEAD
             existing=true
           else
-            slug="${TARGET_BRANCH//[^A-Za-z0-9._-]/-}"
-            sync_branch="automation/sync/${slug}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            sync_branch="automation/sync/${target_slug}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             existing=false
           fi
           work_head_sha="$(git rev-parse HEAD)"
@@ -123,29 +136,60 @@ jobs:
           if git merge-base --is-ancestor "$source_sha" "$work_head_sha"; then
             printf 'needed=false\n' >> "$GITHUB_OUTPUT"
             printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
+            printf 'conflicts=[]\n' >> "$GITHUB_OUTPUT"
+            printf 'ai_conflicted=false\n' >> "$GITHUB_OUTPUT"
+            printf 'ai_conflicts=[]\n' >> "$GITHUB_OUTPUT"
+            printf 'merge_evidence={}\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          set +e
-          git merge --no-ff --no-commit "$source_sha"
-          merge_status=$?
-          set -e
           printf 'needed=true\n' >> "$GITHUB_OUTPUT"
-          if [[ $merge_status -eq 0 ]]; then
-            printf 'conflicted=false\n' >> "$GITHUB_OUTPUT"
-          else
-            conflicts="$(git diff --name-only --diff-filter=U \
-              | jq --raw-input --slurp --compact-output 'split("\n")[:-1]')"
-            [[ "$conflicts" != '[]' ]]
-            index_sha="$(git diff --cached --binary --full-index HEAD \
-              | sha256sum | cut -d ' ' -f 1)"
-            printf 'conflicts=%s\n' "$conflicts" >> "$GITHUB_OUTPUT"
-            printf 'index_sha=%s\n' "$index_sha" >> "$GITHUB_OUTPUT"
-            printf 'conflicted=true\n' >> "$GITHUB_OUTPUT"
-          fi
+          merge_evidence_file="$RUNNER_TEMP/version-port-merge-evidence.json"
+          python3 "$controller/scripts/ci/version_port_merge.py" \
+            --repository . \
+            --work-head "$work_head_sha" \
+            --source "$source_sha" \
+            --mode prepare \
+            > "$merge_evidence_file"
+          jq -e \
+            --arg source "$source_sha" \
+            --arg work_head "$work_head_sha" \
+            '(keys | sort) == (["ai_conflicts", "conflicted", "conflicts",
+              "mechanical_index", "merge_bases", "protected_resolutions",
+              "schema_version", "source_sha", "target_matrix",
+              "work_head_sha"] | sort) and
+             .schema_version == 1 and
+             .source_sha == $source and .work_head_sha == $work_head and
+             (.conflicted | type == "boolean") and
+             (.conflicts | type == "array") and
+             (.ai_conflicts | type == "array") and
+             (.conflicts == (.conflicts | sort | unique)) and
+             (.ai_conflicts == (.ai_conflicts | sort | unique)) and
+             ((.ai_conflicts - .conflicts) | length == 0) and
+             (if .conflicted then (.conflicts | length > 0)
+              else (.conflicts == [] and .ai_conflicts == []) end) and
+             (.merge_bases | type == "array" and length > 0) and
+             (.protected_resolutions | type == "array") and
+             (.mechanical_index.entry_count | type == "number") and
+             (.mechanical_index.sha256 | test("^[0-9a-f]{64}$")) and
+             (.target_matrix.active_loaders | type == "array" and length > 0)' \
+            "$merge_evidence_file" > /dev/null
+          merge_evidence="$(jq -c . "$merge_evidence_file")"
+          conflicts="$(jq -c .conflicts "$merge_evidence_file")"
+          ai_conflicts="$(jq -c .ai_conflicts "$merge_evidence_file")"
+          conflicted="$(jq -r .conflicted "$merge_evidence_file")"
+          ai_conflicted="$(jq -r '.ai_conflicts | length > 0' \
+            "$merge_evidence_file")"
+          index_sha="$(jq -r .mechanical_index.sha256 "$merge_evidence_file")"
+          printf 'merge_evidence=%s\n' "$merge_evidence" >> "$GITHUB_OUTPUT"
+          printf 'conflicted=%s\n' "$conflicted" >> "$GITHUB_OUTPUT"
+          printf 'conflicts=%s\n' "$conflicts" >> "$GITHUB_OUTPUT"
+          printf 'ai_conflicted=%s\n' "$ai_conflicted" >> "$GITHUB_OUTPUT"
+          printf 'ai_conflicts=%s\n' "$ai_conflicts" >> "$GITHUB_OUTPUT"
+          printf 'index_sha=%s\n' "$index_sha" >> "$GITHUB_OUTPUT"
 
       - name: Install all supported JDKs for conflict analysis
-        if: steps.merge.outputs.conflicted == 'true'
+        if: steps.merge.outputs.ai_conflicted == 'true'
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
@@ -155,24 +199,38 @@ jobs:
             25
 
       - name: Install Node for the locked Claude CLI
-        if: steps.merge.outputs.conflicted == 'true'
+        if: steps.merge.outputs.ai_conflicted == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
 
-      - name: Install locked Claude Code
-        if: steps.merge.outputs.conflicted == 'true'
+      - name: Install locked Claude Code from protected master
+        if: steps.merge.outputs.ai_conflicted == 'true'
+        env:
+          TRUSTED_SHA: ${{ github.sha }}
         run: |
+          set -euo pipefail
+          [[ "$TRUSTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git fetch --no-tags origin "$TRUSTED_SHA"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$TRUSTED_SHA" ]]
           mkdir -p "$RUNNER_TEMP/claude-cli"
-          cp .github/claude/package.json .github/claude/package-lock.json \
-            "$RUNNER_TEMP/claude-cli/"
-          (cd "$RUNNER_TEMP/claude-cli" && npm ci)
+          git show "${TRUSTED_SHA}:.github/claude/package.json" \
+            > "$RUNNER_TEMP/claude-cli/package.json"
+          git show "${TRUSTED_SHA}:.github/claude/package-lock.json" \
+            > "$RUNNER_TEMP/claude-cli/package-lock.json"
+          (
+            cd "$RUNNER_TEMP/claude-cli"
+            npm ci --ignore-scripts
+            node node_modules/@anthropic-ai/claude-code/install.cjs
+            node_modules/.bin/claude --version
+          )
 
       - name: Resolve conflict contents without repository credentials
-        if: steps.merge.outputs.conflicted == 'true'
+        if: steps.merge.outputs.ai_conflicted == 'true'
         shell: bash
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_SKIP_PROMPT_HISTORY: "1"
           TARGET_BRANCH: ${{ matrix.target }}
         run: |
           set -euo pipefail
@@ -187,14 +245,17 @@ jobs:
             conflicted. Do not alter workflows, tests, matrices, guardrails or build configuration. \
             Leave the resolved tracked files in the worktree for the deterministic patch packager." \
             --model claude-opus-5 \
-            --allowedTools Read,Edit,Write,Bash \
-            --permission-mode acceptEdits
+            --safe-mode \
+            --no-session-persistence \
+            --tools "Read,Edit,Write" \
+            --allowedTools "Read(./**)" "Edit(./**)" "Write(./**)" \
+            --permission-mode dontAsk
 
       - name: Enforce the AI conflict boundary
-        if: steps.merge.outputs.conflicted == 'true'
+        if: steps.merge.outputs.ai_conflicted == 'true'
         shell: bash
         env:
-          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+          CONFLICTS: ${{ steps.merge.outputs.ai_conflicts }}
           EXPECTED_INDEX_SHA: ${{ steps.merge.outputs.index_sha }}
           WORK_HEAD_SHA: ${{ steps.merge.outputs.work_head_sha }}
           SOURCE_SHA: ${{ steps.merge.outputs.source_sha }}
@@ -205,10 +266,10 @@ jobs:
           jq -r '.[]' <<< "$CONFLICTS" > "$RUNNER_TEMP/conflicted-paths.txt"
           git diff --name-only --diff-filter=U > "$RUNNER_TEMP/current-conflicts.txt"
           diff -u "$RUNNER_TEMP/conflicted-paths.txt" "$RUNNER_TEMP/current-conflicts.txt"
-          actual_index_sha="$(git diff --cached --binary --full-index HEAD \
-            | sha256sum | cut -d ' ' -f 1)"
+          actual_index_sha="$(git ls-files --stage -z \
+              | sha256sum | cut -d ' ' -f 1)"
           [[ "$actual_index_sha" == "$EXPECTED_INDEX_SHA" ]]
-          python3 scripts/ci/ai_patch_policy.py worktree \
+          python3 "$RUNNER_TEMP/version-port-controller/scripts/ci/ai_patch_policy.py" worktree \
             --mode conflict \
             --allowed-paths "$RUNNER_TEMP/conflicted-paths.txt"
           mapfile -t conflict_paths < "$RUNNER_TEMP/conflicted-paths.txt"
@@ -218,9 +279,11 @@ jobs:
       - name: Package the proposed port
         shell: bash
         env:
+          AI_CONFLICTS: ${{ steps.merge.outputs.ai_conflicts || '[]' }}
           CONFLICTED: ${{ steps.merge.outputs.conflicted }}
           CONFLICTS: ${{ steps.merge.outputs.conflicts || '[]' }}
           EXISTING: ${{ steps.merge.outputs.existing }}
+          MERGE_EVIDENCE: ${{ steps.merge.outputs.merge_evidence || '{}' }}
           NEEDED: ${{ steps.merge.outputs.needed }}
           SOURCE_SHA: ${{ steps.merge.outputs.source_sha }}
           SYNC_BRANCH: ${{ steps.merge.outputs.branch }}
@@ -228,46 +291,111 @@ jobs:
           WORK_HEAD_SHA: ${{ steps.merge.outputs.work_head_sha }}
         run: |
           set -euo pipefail
+          proposal_dir="$RUNNER_TEMP/version-port-proposal"
+          test ! -e "$proposal_dir"
+          mkdir -p "$proposal_dir"
+          tree=''
           if [[ "$NEEDED" == true ]]; then
-            python3 scripts/release/branch_readme.py \
+            # The scenario contract is the sole coverage policy. Normalize legacy target matrices
+            # deterministically before README rendering so old branches migrate in the same port.
+            python3 "$RUNNER_TEMP/version-port-controller/scripts/release/matrix.py" \
+              --matrix release/release-matrix.json \
+              --normalize-e2e-policy \
+              --write > /dev/null
+            python3 "$RUNNER_TEMP/version-port-controller/scripts/release/branch_readme.py" \
               --matrix release/release-matrix.json \
               --readme README.md \
               --profile-branch "$TARGET_BRANCH" \
               --bootstrap \
               --write
-            git add -- README.md
-            python3 scripts/release/branch_readme.py \
+            python3 "$RUNNER_TEMP/version-port-controller/scripts/release/e2e_readme.py" \
+              --matrix release/release-matrix.json \
+              --contract e2e/scenario-contract.json \
+              --readme e2e/README.md \
+              --profile-branch "$TARGET_BRANCH" \
+              --write
+            python3 "$RUNNER_TEMP/version-port-controller/scripts/release/workflow_guidance.py" \
+              --matrix release/release-matrix.json \
+              --guidance docs/ai/WORKFLOW.md \
+              --profile-branch "$TARGET_BRANCH" \
+              --write
+            git add -- README.md docs/ai/WORKFLOW.md e2e/README.md \
+              release/release-matrix.json
+            python3 "$RUNNER_TEMP/version-port-controller/scripts/release/branch_readme.py" \
               --matrix release/release-matrix.json \
               --readme README.md \
               --profile-branch "$TARGET_BRANCH" \
               --check
-            python3 scripts/ci/ai_patch_policy.py staged \
-              --mode port --write-patch version-port.patch
+            python3 "$RUNNER_TEMP/version-port-controller/scripts/release/e2e_readme.py" \
+              --matrix release/release-matrix.json \
+              --contract e2e/scenario-contract.json \
+              --readme e2e/README.md \
+              --profile-branch "$TARGET_BRANCH" \
+              --check
+            python3 "$RUNNER_TEMP/version-port-controller/scripts/release/workflow_guidance.py" \
+              --matrix release/release-matrix.json \
+              --guidance docs/ai/WORKFLOW.md \
+              --profile-branch "$TARGET_BRANCH" \
+              --check
+            python3 "$RUNNER_TEMP/version-port-controller/scripts/ci/ai_patch_policy.py" staged \
+              --mode port --write-patch "$proposal_dir/version-port.patch"
+
+            # Classify the exact tree and parent topology that the writer will reproduce. The
+            # classifier itself comes from the protected synchronization source, never the target.
+            tree="$(git write-tree)"
+            candidate_commit="$(printf 'classify port to %s\n' "$TARGET_BRANCH" \
+              | git -c user.name='github-actions[bot]' \
+                -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+                commit-tree "$tree" -p "$WORK_HEAD_SHA" -p "$SOURCE_SHA")"
+            impact_output="$RUNNER_TEMP/e2e-impact-output"
+            : > "$impact_output"
+            python3 "$RUNNER_TEMP/version-port-controller/scripts/ci/e2e_impact.py" \
+              --repository . \
+              --base "$WORK_HEAD_SHA" \
+              --head "$candidate_commit" \
+              --github-output "$impact_output"
+            runtime_required="$(sed -n 's/^runtime_required=//p' "$impact_output")"
+            runtime_manifest="$(sed -n 's/^manifest=//p' "$impact_output")"
+            jq -e \
+              '.schema_version == 1 and (.runtime_required | type == "boolean") and (.paths | type == "array" and length > 0) and (.runtime_paths | type == "array")' \
+              <<< "$runtime_manifest" > /dev/null
+            runtime_policy=full
+            if [[ "$runtime_required" == false && "$EXISTING" == false ]]; then
+              runtime_policy=not-applicable
+            fi
+          else
+            runtime_policy=full
+            runtime_manifest='{}'
           fi
           jq -n \
             --arg target "$TARGET_BRANCH" \
             --arg branch "$SYNC_BRANCH" \
             --arg work_head_sha "$WORK_HEAD_SHA" \
             --arg source_sha "$SOURCE_SHA" \
+            --arg tree "$tree" \
+            --arg runtime_policy "$runtime_policy" \
+            --argjson ai_conflicts "$AI_CONFLICTS" \
             --argjson conflicts "$CONFLICTS" \
+            --argjson merge_evidence "$MERGE_EVIDENCE" \
             --argjson needed "$NEEDED" \
             --argjson conflicted "$CONFLICTED" \
             --argjson existing "$EXISTING" \
-            '{target:$target,branch:$branch,work_head_sha:$work_head_sha,source_sha:$source_sha,needed:$needed,conflicted:$conflicted,conflicts:$conflicts,existing:$existing}' \
-            > version-port-plan.json
+            --argjson runtime_manifest "$runtime_manifest" \
+            '{target:$target,branch:$branch,work_head_sha:$work_head_sha,source_sha:$source_sha,tree:$tree,needed:$needed,conflicted:$conflicted,conflicts:$conflicts,ai_conflicts:$ai_conflicts,merge_evidence:$merge_evidence,existing:$existing,runtime_policy:$runtime_policy,runtime_manifest:$runtime_manifest}' \
+            > "$proposal_dir/version-port-plan.json"
 
       - name: Upload the read-only port proposal
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: version-port-${{ matrix.target }}
           path: |
-            version-port-plan.json
-            version-port.patch
+            ${{ runner.temp }}/version-port-proposal/version-port-plan.json
+            ${{ runner.temp }}/version-port-proposal/version-port.patch
           if-no-files-found: error
           retention-days: 1
 
-  publish:
-    name: Validate and publish port to ${{ matrix.target }}
+  validate:
+    name: Validate port to ${{ matrix.target }} without credentials
     needs:
       - discover
       - propose
@@ -279,10 +407,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
-      actions: write
-      contents: write
-      issues: write
-      pull-requests: write
+      actions: read
+      contents: read
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -306,12 +432,73 @@ jobs:
           jq -e \
             --arg target "$TARGET_BRANCH" \
             --arg source "$GITHUB_SHA" \
-            '.target == $target and .source_sha == $source and (.work_head_sha | test("^[0-9a-f]{40}$")) and (.branch | startswith("automation/sync/")) and (.conflicted | type == "boolean") and (.conflicts | type == "array")' \
+            'def sha: type == "string" and test("^[0-9a-f]{40}$");
+             def merge_evidence:
+               (keys | sort) == (["ai_conflicts", "conflicted", "conflicts",
+                 "mechanical_index", "merge_bases", "protected_resolutions",
+                 "schema_version", "source_sha", "target_matrix",
+                 "work_head_sha"] | sort) and
+               .schema_version == 1 and
+               (.work_head_sha | sha) and (.source_sha | sha) and
+               (.conflicted | type == "boolean") and
+               (.conflicts | type == "array") and
+               (.ai_conflicts | type == "array") and
+               (.conflicts == (.conflicts | sort | unique)) and
+               (.ai_conflicts == (.ai_conflicts | sort | unique)) and
+               ((.ai_conflicts - .conflicts) | length == 0) and
+               (.merge_bases | type == "array" and length > 0) and
+               (.protected_resolutions | type == "array") and
+               (.mechanical_index |
+                 (keys | sort) == ["entry_count", "sha256"] and
+                 (.entry_count | type == "number" and . >= 0 and floor == .) and
+                 (.sha256 | test("^[0-9a-f]{64}$"))) and
+               (.target_matrix |
+                 (keys | sort) == ["active_loaders", "mode", "oid"] and
+                 (.active_loaders | type == "array" and length > 0) and
+                 (.mode | test("^100(644|755)$")) and (.oid | sha));
+             (keys | sort) == (["ai_conflicts", "branch", "conflicted",
+               "conflicts", "existing", "merge_evidence", "needed",
+               "runtime_manifest", "runtime_policy", "source_sha", "target",
+               "tree", "work_head_sha"] | sort) and
+             .target == $target and .source_sha == $source and
+             (.work_head_sha | sha) and
+             (.branch | type == "string" and length <= 240 and
+               test("^automation/sync/[A-Za-z0-9._/-]+$") and
+               startswith("automation/sync/" + $target + "/")) and
+             (.conflicted | type == "boolean") and
+             (.conflicts | type == "array") and
+             (.ai_conflicts | type == "array") and
+             (.conflicts == (.conflicts | sort | unique)) and
+             (.ai_conflicts == (.ai_conflicts | sort | unique)) and
+             ((.ai_conflicts - .conflicts) | length == 0) and
+             (if .conflicted then (.conflicts | length > 0)
+              else (.conflicts == [] and .ai_conflicts == []) end) and
+             (.existing | type == "boolean") and (.needed | type == "boolean") and
+             (.runtime_policy == "full" or .runtime_policy == "not-applicable") and
+             (.runtime_manifest | type == "object") and
+             (if .needed then
+                (.tree | sha) and .runtime_manifest.schema_version == 1 and
+                (.runtime_manifest.runtime_required | type == "boolean") and
+                (.runtime_manifest.paths | type == "array" and length > 0) and
+                (.runtime_manifest.runtime_paths | type == "array") and
+                (.merge_evidence | merge_evidence) and
+                .merge_evidence.work_head_sha == .work_head_sha and
+                .merge_evidence.source_sha == .source_sha and
+                .merge_evidence.conflicted == .conflicted and
+                .merge_evidence.conflicts == .conflicts and
+                .merge_evidence.ai_conflicts == .ai_conflicts
+              else
+                .tree == "" and .runtime_policy == "full" and
+                .runtime_manifest == {} and .merge_evidence == {}
+              end)' \
             proposal/version-port-plan.json > /dev/null
-          for key in branch conflicted existing needed source_sha work_head_sha; do
+          for key in branch conflicted existing needed runtime_policy source_sha tree work_head_sha; do
             printf '%s=%s\n' "$key" "$(jq -r ".$key" proposal/version-port-plan.json)" \
               >> "$GITHUB_OUTPUT"
           done
+          printf 'runtime_manifest=%s\n' \
+            "$(jq -c .runtime_manifest proposal/version-port-plan.json)" \
+            >> "$GITHUB_OUTPUT"
 
       - name: Check out trusted controller policy
         if: steps.plan.outputs.needed == 'true'
@@ -321,14 +508,14 @@ jobs:
           path: controller
           persist-credentials: false
 
-      - name: Check out exact port base with writer credentials
+      - name: Check out exact port base without credentials
         if: steps.plan.outputs.needed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.plan.outputs.work_head_sha }}
           fetch-depth: 0
           path: port
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Install Python
         if: steps.plan.outputs.needed == 'true'
@@ -344,11 +531,15 @@ jobs:
           --require-hashes
           --requirement controller/scripts/pages/requirements.txt
 
-      - name: Apply and deterministically validate the proposal
+      - name: Reconstruct and deterministically validate the proposal
         if: steps.plan.outputs.needed == 'true'
         working-directory: port
         shell: bash
         env:
+          EXISTING_PORT: ${{ steps.plan.outputs.existing }}
+          EXPECTED_RUNTIME_MANIFEST: ${{ steps.plan.outputs.runtime_manifest }}
+          EXPECTED_RUNTIME_POLICY: ${{ steps.plan.outputs.runtime_policy }}
+          EXPECTED_TREE: ${{ steps.plan.outputs.tree }}
           HEAD_BRANCH: ${{ steps.plan.outputs.branch }}
           SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
           TARGET_BRANCH: ${{ matrix.target }}
@@ -360,76 +551,430 @@ jobs:
           fi
           [[ "$(git rev-parse HEAD)" == "$WORK_HEAD_SHA" ]]
           git fetch --no-tags origin "$SOURCE_SHA"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$SOURCE_SHA" ]]
           git cat-file -e "${SOURCE_SHA}^{commit}"
-          if [[ "$(jq -r .conflicted ../proposal/version-port-plan.json)" == true ]]; then
-            jq -r '.conflicts[]' ../proposal/version-port-plan.json \
-              > "$RUNNER_TEMP/conflicted-paths.txt"
-            python3 ../controller/scripts/ci/ai_patch_policy.py paths \
-              --mode conflict --paths-file "$RUNNER_TEMP/conflicted-paths.txt"
-          fi
           python3 ../controller/scripts/ci/ai_patch_policy.py patch \
             --mode port --patch ../proposal/version-port.patch
-          git apply --check --index ../proposal/version-port.patch
-          git apply --index ../proposal/version-port.patch
-          python3 scripts/release/branch_readme.py \
+          candidate_index="$RUNNER_TEMP/version-port-candidate.index"
+          test ! -e "$candidate_index"
+          GIT_INDEX_FILE="$candidate_index" git read-tree "$WORK_HEAD_SHA"
+          GIT_INDEX_FILE="$candidate_index" git apply --cached --check \
+            ../proposal/version-port.patch
+          GIT_INDEX_FILE="$candidate_index" git apply --cached \
+            ../proposal/version-port.patch
+          candidate_tree="$(GIT_INDEX_FILE="$candidate_index" git write-tree)"
+          [[ "$candidate_tree" == "$EXPECTED_TREE" ]]
+
+          ai_paths_file="$RUNNER_TEMP/ai-conflicted-paths.txt"
+          jq -r '.ai_conflicts[]' ../proposal/version-port-plan.json \
+            > "$ai_paths_file"
+          merge_command=(
+            python3 ../controller/scripts/ci/version_port_merge.py
+            --repository .
+            --work-head "$WORK_HEAD_SHA"
+            --source "$SOURCE_SHA"
+            --mode prepare
+          )
+          if [[ -s "$ai_paths_file" ]]; then
+            python3 ../controller/scripts/ci/ai_patch_policy.py paths \
+              --mode conflict --paths-file "$ai_paths_file"
+            merge_command+=(
+              --candidate-index "$candidate_index"
+              --candidate-tree "$candidate_tree"
+            )
+          fi
+          recomputed_evidence="$RUNNER_TEMP/recomputed-merge-evidence.json"
+          "${merge_command[@]}" > "$recomputed_evidence"
+          [[ "$(jq -S -c . "$recomputed_evidence")" \
+            == "$(jq -S -c .merge_evidence \
+              ../proposal/version-port-plan.json)" ]]
+
+          python3 ../controller/scripts/release/matrix.py \
+            --matrix release/release-matrix.json \
+            --normalize-e2e-policy \
+            --write > /dev/null
+          python3 ../controller/scripts/release/branch_readme.py \
+            --matrix release/release-matrix.json \
+            --readme README.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --bootstrap \
+            --write
+          python3 ../controller/scripts/release/e2e_readme.py \
+            --matrix release/release-matrix.json \
+            --contract e2e/scenario-contract.json \
+            --readme e2e/README.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --write
+          python3 ../controller/scripts/release/workflow_guidance.py \
+            --matrix release/release-matrix.json \
+            --guidance docs/ai/WORKFLOW.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --write
+          git add -- README.md docs/ai/WORKFLOW.md e2e/README.md \
+            release/release-matrix.json
+          python3 ../controller/scripts/release/branch_readme.py \
             --matrix release/release-matrix.json \
             --readme README.md \
             --profile-branch "$TARGET_BRANCH" \
             --check
-          if [[ "$(jq -r .conflicted ../proposal/version-port-plan.json)" == true ]]; then
-            python3 ../controller/scripts/ci/ai_patch_policy.py paths \
-              --mode conflict --paths-file "$RUNNER_TEMP/conflicted-paths.txt"
-          fi
+          python3 ../controller/scripts/release/e2e_readme.py \
+            --matrix release/release-matrix.json \
+            --contract e2e/scenario-contract.json \
+            --readme e2e/README.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --check
+          python3 ../controller/scripts/release/workflow_guidance.py \
+            --matrix release/release-matrix.json \
+            --guidance docs/ai/WORKFLOW.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --check
           python3 ../controller/scripts/ci/ai_patch_policy.py staged --mode port
           git diff --cached --check
-          python3 -m py_compile \
-            scripts/ci/ai_patch_policy.py \
-            scripts/release/branch_readme.py \
-            scripts/release/github_governance.py \
-            scripts/release/github_release.py \
-            scripts/release/matrix.py \
-            scripts/release/reconcile_publication.py \
-            scripts/release/release_identity.py \
-            scripts/release/status_table.py \
-            scripts/release/verify_release.py \
-            scripts/release/verify_reproducibility.py \
-            scripts/release/version_branches.py
+          validated_tree="$(git write-tree)"
+          [[ "$validated_tree" == "$candidate_tree" ]]
+          python3 -m compileall -q e2e scripts
           python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
           python3 -m unittest discover -s scripts/release/tests -p 'test_*.py' -v
           python3 scripts/release/matrix.py \
             --matrix release/release-matrix.json > /dev/null
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git diff --exit-code
+          [[ "$(git write-tree)" == "$validated_tree" ]]
+          [[ "$validated_tree" == "$EXPECTED_TREE" ]]
+          python3 ../controller/scripts/ci/ai_patch_policy.py staged --mode port
           tree="$(git write-tree)"
           commit="$(printf 'chore: sync master into %s\n' "$TARGET_BRANCH" \
-            | git commit-tree "$tree" -p "$WORK_HEAD_SHA" -p "$SOURCE_SHA")"
+            | git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit-tree "$tree" -p "$WORK_HEAD_SHA" -p "$SOURCE_SHA")"
           [[ "$(git rev-parse "${commit}^{tree}")" == "$tree" ]]
           [[ "$(git rev-parse "${commit}^1")" == "$WORK_HEAD_SHA" ]]
           [[ "$(git rev-parse "${commit}^2")" == "$SOURCE_SHA" ]]
+
+          # Recompute the manifest from the actual commit before granting a skip. A mismatch with
+          # the read-only proposal is a hard failure, never an implicit not-applicable decision.
+          impact_output="$RUNNER_TEMP/published-e2e-impact-output"
+          : > "$impact_output"
+          python3 ../controller/scripts/ci/e2e_impact.py \
+            --repository . \
+            --base "$WORK_HEAD_SHA" \
+            --head "$commit" \
+            --github-output "$impact_output"
+          runtime_required="$(sed -n 's/^runtime_required=//p' "$impact_output")"
+          runtime_manifest="$(sed -n 's/^manifest=//p' "$impact_output")"
+          [[ "$(jq -S -c . <<< "$runtime_manifest")" \
+            == "$(jq -S -c . <<< "$EXPECTED_RUNTIME_MANIFEST")" ]]
+          runtime_policy=full
+          if [[ "$runtime_required" == false && "$EXISTING_PORT" == false ]]; then
+            runtime_policy=not-applicable
+          fi
+          [[ "$runtime_policy" == "$EXPECTED_RUNTIME_POLICY" ]]
           printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+          printf 'runtime_policy=%s\n' "$runtime_policy" >> "$GITHUB_OUTPUT"
         id: validated
 
-      - name: Push the validated port and open or update its PR
+  publish:
+    name: Publish validated port to ${{ matrix.target }}
+    needs:
+      - discover
+      - propose
+      - validate
+    if: >-
+      always() &&
+      needs.discover.result == 'success' &&
+      needs.propose.result == 'success' &&
+      needs.validate.result == 'success' &&
+      needs.discover.outputs.targets != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: write
+      issues: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        target: ${{ fromJSON(needs.discover.outputs.targets) }}
+
+    steps:
+      - name: Download the immutable validated proposal
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: version-port-${{ matrix.target }}
+          path: proposal
+
+      - name: Authenticate proposal identity
+        id: plan
+        shell: bash
+        env:
+          TARGET_BRANCH: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          jq -e \
+            --arg target "$TARGET_BRANCH" \
+            --arg source "$GITHUB_SHA" \
+            'def sha: type == "string" and test("^[0-9a-f]{40}$");
+             def merge_evidence:
+               (keys | sort) == (["ai_conflicts", "conflicted", "conflicts",
+                 "mechanical_index", "merge_bases", "protected_resolutions",
+                 "schema_version", "source_sha", "target_matrix",
+                 "work_head_sha"] | sort) and
+               .schema_version == 1 and
+               (.work_head_sha | sha) and (.source_sha | sha) and
+               (.conflicted | type == "boolean") and
+               (.conflicts | type == "array") and
+               (.ai_conflicts | type == "array") and
+               (.conflicts == (.conflicts | sort | unique)) and
+               (.ai_conflicts == (.ai_conflicts | sort | unique)) and
+               ((.ai_conflicts - .conflicts) | length == 0) and
+               (.merge_bases | type == "array" and length > 0) and
+               (.protected_resolutions | type == "array") and
+               (.mechanical_index |
+                 (keys | sort) == ["entry_count", "sha256"] and
+                 (.entry_count | type == "number" and . >= 0 and floor == .) and
+                 (.sha256 | test("^[0-9a-f]{64}$"))) and
+               (.target_matrix |
+                 (keys | sort) == ["active_loaders", "mode", "oid"] and
+                 (.active_loaders | type == "array" and length > 0) and
+                 (.mode | test("^100(644|755)$")) and (.oid | sha));
+             (keys | sort) == (["ai_conflicts", "branch", "conflicted",
+               "conflicts", "existing", "merge_evidence", "needed",
+               "runtime_manifest", "runtime_policy", "source_sha", "target",
+               "tree", "work_head_sha"] | sort) and
+             .target == $target and .source_sha == $source and
+             (.work_head_sha | sha) and
+             (.branch | type == "string" and length <= 240 and
+               test("^automation/sync/[A-Za-z0-9._/-]+$") and
+               startswith("automation/sync/" + $target + "/")) and
+             (.conflicted | type == "boolean") and
+             (.conflicts | type == "array") and
+             (.ai_conflicts | type == "array") and
+             (.conflicts == (.conflicts | sort | unique)) and
+             (.ai_conflicts == (.ai_conflicts | sort | unique)) and
+             ((.ai_conflicts - .conflicts) | length == 0) and
+             (if .conflicted then (.conflicts | length > 0)
+              else (.conflicts == [] and .ai_conflicts == []) end) and
+             (.existing | type == "boolean") and (.needed | type == "boolean") and
+             (.runtime_policy == "full" or .runtime_policy == "not-applicable") and
+             (.runtime_manifest | type == "object") and
+             (if .needed then
+                (.tree | sha) and .runtime_manifest.schema_version == 1 and
+                (.runtime_manifest.runtime_required | type == "boolean") and
+                (.runtime_manifest.paths | type == "array" and length > 0) and
+                (.runtime_manifest.runtime_paths | type == "array") and
+                (.merge_evidence | merge_evidence) and
+                .merge_evidence.work_head_sha == .work_head_sha and
+                .merge_evidence.source_sha == .source_sha and
+                .merge_evidence.conflicted == .conflicted and
+                .merge_evidence.conflicts == .conflicts and
+                .merge_evidence.ai_conflicts == .ai_conflicts
+              else
+                .tree == "" and .runtime_policy == "full" and
+                .runtime_manifest == {} and .merge_evidence == {}
+              end)' \
+            proposal/version-port-plan.json > /dev/null
+          for key in branch existing needed runtime_policy source_sha tree work_head_sha; do
+            printf '%s=%s\n' "$key" "$(jq -r ".$key" proposal/version-port-plan.json)" \
+              >> "$GITHUB_OUTPUT"
+          done
+          printf 'runtime_manifest=%s\n' \
+            "$(jq -c .runtime_manifest proposal/version-port-plan.json)" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Check out protected controller policy
+        if: steps.plan.outputs.needed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.plan.outputs.source_sha }}
+          path: controller
+          persist-credentials: false
+
+      - name: Check out exact port base without persisted credentials
+        if: steps.plan.outputs.needed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.plan.outputs.work_head_sha }}
+          fetch-depth: 0
+          path: port
+          persist-credentials: false
+
+      - name: Reproduce only the protected validated tree
+        if: steps.plan.outputs.needed == 'true'
+        id: reproduced
+        working-directory: port
+        shell: bash
+        env:
+          EXISTING_PORT: ${{ steps.plan.outputs.existing }}
+          EXPECTED_RUNTIME_MANIFEST: ${{ steps.plan.outputs.runtime_manifest }}
+          EXPECTED_RUNTIME_POLICY: ${{ steps.plan.outputs.runtime_policy }}
+          EXPECTED_TREE: ${{ steps.plan.outputs.tree }}
+          HEAD_BRANCH: ${{ steps.plan.outputs.branch }}
+          SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
+          TARGET_BRANCH: ${{ matrix.target }}
+          WORK_HEAD_SHA: ${{ steps.plan.outputs.work_head_sha }}
+        run: |
+          set -euo pipefail
+          if git fetch --no-tags origin "$HEAD_BRANCH"; then
+            [[ "$(git rev-parse FETCH_HEAD)" == "$WORK_HEAD_SHA" ]]
+          fi
+          [[ "$(git rev-parse HEAD)" == "$WORK_HEAD_SHA" ]]
+          git fetch --no-tags origin "$SOURCE_SHA"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$SOURCE_SHA" ]]
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          python3 ../controller/scripts/ci/ai_patch_policy.py patch \
+            --mode port --patch ../proposal/version-port.patch
+          candidate_index="$RUNNER_TEMP/version-port-candidate.index"
+          test ! -e "$candidate_index"
+          GIT_INDEX_FILE="$candidate_index" git read-tree "$WORK_HEAD_SHA"
+          GIT_INDEX_FILE="$candidate_index" git apply --cached --check \
+            ../proposal/version-port.patch
+          GIT_INDEX_FILE="$candidate_index" git apply --cached \
+            ../proposal/version-port.patch
+          candidate_tree="$(GIT_INDEX_FILE="$candidate_index" git write-tree)"
+          [[ "$candidate_tree" == "$EXPECTED_TREE" ]]
+
+          ai_paths_file="$RUNNER_TEMP/ai-conflicted-paths.txt"
+          jq -r '.ai_conflicts[]' ../proposal/version-port-plan.json \
+            > "$ai_paths_file"
+          merge_command=(
+            python3 ../controller/scripts/ci/version_port_merge.py
+            --repository .
+            --work-head "$WORK_HEAD_SHA"
+            --source "$SOURCE_SHA"
+            --mode prepare
+          )
+          if [[ -s "$ai_paths_file" ]]; then
+            python3 ../controller/scripts/ci/ai_patch_policy.py paths \
+              --mode conflict --paths-file "$ai_paths_file"
+            merge_command+=(
+              --candidate-index "$candidate_index"
+              --candidate-tree "$candidate_tree"
+            )
+          fi
+          recomputed_evidence="$RUNNER_TEMP/recomputed-merge-evidence.json"
+          "${merge_command[@]}" > "$recomputed_evidence"
+          [[ "$(jq -S -c . "$recomputed_evidence")" \
+            == "$(jq -S -c .merge_evidence \
+              ../proposal/version-port-plan.json)" ]]
+
+          python3 ../controller/scripts/release/matrix.py \
+            --matrix release/release-matrix.json \
+            --normalize-e2e-policy \
+            --write > /dev/null
+          python3 ../controller/scripts/release/branch_readme.py \
+            --matrix release/release-matrix.json \
+            --readme README.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --bootstrap \
+            --write
+          python3 ../controller/scripts/release/e2e_readme.py \
+            --matrix release/release-matrix.json \
+            --contract e2e/scenario-contract.json \
+            --readme e2e/README.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --write
+          python3 ../controller/scripts/release/workflow_guidance.py \
+            --matrix release/release-matrix.json \
+            --guidance docs/ai/WORKFLOW.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --write
+          git add -- README.md docs/ai/WORKFLOW.md e2e/README.md \
+            release/release-matrix.json
+          python3 ../controller/scripts/release/branch_readme.py \
+            --matrix release/release-matrix.json \
+            --readme README.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --check
+          python3 ../controller/scripts/release/e2e_readme.py \
+            --matrix release/release-matrix.json \
+            --contract e2e/scenario-contract.json \
+            --readme e2e/README.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --check
+          python3 ../controller/scripts/release/workflow_guidance.py \
+            --matrix release/release-matrix.json \
+            --guidance docs/ai/WORKFLOW.md \
+            --profile-branch "$TARGET_BRANCH" \
+            --check
+          python3 ../controller/scripts/ci/ai_patch_policy.py staged --mode port
+          git diff --cached --check
+          tree="$(git write-tree)"
+          [[ "$tree" == "$candidate_tree" ]]
+          [[ "$tree" == "$EXPECTED_TREE" ]]
+          commit="$(printf 'chore: sync master into %s\n' "$TARGET_BRANCH" \
+            | git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit-tree "$tree" -p "$WORK_HEAD_SHA" -p "$SOURCE_SHA")"
+          [[ "$(git rev-parse "${commit}^{tree}")" == "$EXPECTED_TREE" ]]
+          [[ "$(git rev-parse "${commit}^1")" == "$WORK_HEAD_SHA" ]]
+          [[ "$(git rev-parse "${commit}^2")" == "$SOURCE_SHA" ]]
+
+          impact_output="$RUNNER_TEMP/writer-e2e-impact-output"
+          : > "$impact_output"
+          python3 ../controller/scripts/ci/e2e_impact.py \
+            --repository . \
+            --base "$WORK_HEAD_SHA" \
+            --head "$commit" \
+            --github-output "$impact_output"
+          runtime_required="$(sed -n 's/^runtime_required=//p' "$impact_output")"
+          runtime_manifest="$(sed -n 's/^manifest=//p' "$impact_output")"
+          [[ "$(jq -S -c . <<< "$runtime_manifest")" \
+            == "$(jq -S -c . <<< "$EXPECTED_RUNTIME_MANIFEST")" ]]
+          runtime_policy=full
+          if [[ "$runtime_required" == false && "$EXISTING_PORT" == false ]]; then
+            runtime_policy=not-applicable
+          fi
+          [[ "$runtime_policy" == "$EXPECTED_RUNTIME_POLICY" ]]
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+          printf 'runtime_policy=%s\n' "$runtime_policy" >> "$GITHUB_OUTPUT"
+
+      - name: Push the reproduced tree and open or update its PR
         if: steps.plan.outputs.needed == 'true'
         working-directory: port
         shell: bash
         env:
           EXISTING_PORT: ${{ steps.plan.outputs.existing }}
           GH_TOKEN: ${{ github.token }}
-          PORT_COMMIT: ${{ steps.validated.outputs.commit }}
+          PORT_COMMIT: ${{ steps.reproduced.outputs.commit }}
+          RUNTIME_POLICY: ${{ steps.reproduced.outputs.runtime_policy }}
           SYNC_BRANCH: ${{ steps.plan.outputs.branch }}
           TARGET_BRANCH: ${{ matrix.target }}
+          WORK_HEAD_SHA: ${{ steps.plan.outputs.work_head_sha }}
         run: |
           set -euo pipefail
-          git push origin "$PORT_COMMIT:refs/heads/$SYNC_BRANCH"
+          [[ "$PORT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse "${PORT_COMMIT}^1")" == "$WORK_HEAD_SHA" ]]
+          if [[ "$EXISTING_PORT" == true ]]; then
+            remote_sha="$(gh api \
+              "repos/$GITHUB_REPOSITORY/git/ref/heads/$SYNC_BRANCH" \
+              --jq .object.sha)"
+            [[ "$remote_sha" == "$WORK_HEAD_SHA" ]]
+          else
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$SYNC_BRANCH" \
+                > /dev/null 2>&1; then
+              echo "Refusing to overwrite an unexpected synchronization branch" >&2
+              exit 1
+            fi
+          fi
+          git remote set-url origin \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          gh auth setup-git
+          git push --no-verify origin "$PORT_COMMIT:refs/heads/$SYNC_BRANCH"
           gh label create automated-version-sync \
             --color 1D76DB \
             --description 'Trusted master-to-version synchronization' \
             --force
           if [[ "$EXISTING_PORT" == true ]]; then
-            pr_url="$(gh pr list --state open --head "$SYNC_BRANCH" \
-              --json url --jq '.[0].url')"
-            test -n "$pr_url"
+            pr_json="$(gh pr list --state open --head "$SYNC_BRANCH" --limit 2 \
+              --json url,baseRefName,headRefName,headRefOid,isCrossRepository,labels,state)"
+            jq -e \
+              --arg branch "$SYNC_BRANCH" \
+              --arg head "$PORT_COMMIT" \
+              --arg target "$TARGET_BRANCH" \
+              'length == 1 and .[0].state == "OPEN" and .[0].baseRefName == $target and .[0].headRefName == $branch and .[0].headRefOid == $head and (.[0].isCrossRepository | not) and ([.[0].labels[].name] | index("automated-version-sync")) != null' \
+              <<< "$pr_json" > /dev/null
+            pr_url="$(jq -r '.[0].url' <<< "$pr_json")"
             gh pr comment "$pr_url" --body \
               "Updated this open port with the latest \`master\`; redispatching both exact-head gates."
           else
@@ -441,5 +986,6 @@ jobs:
               --body "Automated semantic port of master into \`$TARGET_BRANCH\`. The branch's own release matrix selects every build and packaged E2E lane. Build gate and Packaged E2E are dispatched explicitly; the PR merges only after both pass.")"
           fi
           gh workflow run build-gate.yml --ref "$SYNC_BRANCH"
-          gh workflow run on-demand-e2e.yml --ref "$SYNC_BRANCH"
+          gh workflow run on-demand-e2e.yml --ref "$SYNC_BRANCH" \
+            -f runtime_policy="$RUNTIME_POLICY"
           printf 'Prepared %s\n' "$pr_url"
