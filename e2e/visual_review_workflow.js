@@ -2,8 +2,8 @@
 //
 // Run with:  Workflow({ scriptPath: "<repo>/e2e/visual_review_workflow.js", args: <manifest> })
 // where <manifest> is the JSON array produced by `python3 e2e/visual_review.py [--all]`
-// (items: {path, label, capture_id, kind, expectation}). Expectations live in visual-catalog.json and
-// are passed through per item — this script does not duplicate them.
+// (items: {path, label, capture_id, kind, expectation}). Expectations come from the canonical
+// scenario-contract.json and are passed through per item — this script does not duplicate them.
 //
 // One vision agent per screenshot opens the image (Read tool) and checks it against its expectation;
 // any frame it flags (mismatch or anomaly) is re-examined by an independent skeptic before it is
