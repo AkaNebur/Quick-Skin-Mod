@@ -4,16 +4,19 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
 import re
 import shutil
+import stat
 import sys
 import tempfile
 from datetime import datetime
+from itertools import islice
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -21,11 +24,13 @@ sys.path.insert(0, str(REPO / "e2e"))
 sys.path.insert(0, str(REPO / "scripts" / "release"))
 
 from packaged_runtime import (  # noqa: E402
-    DISTINCT_SCREENSHOT_PAIRS,
+    MAX_EVIDENCE_SCREENSHOT_BYTES,
     RuntimeFailure,
     compare_screenshots,
     inspect_screenshot,
 )
+from matrix import MatrixError, load_matrix  # noqa: E402
+from scenario_contract import ScenarioContract  # noqa: E402
 from version_branches import parse_version_branch  # noqa: E402
 from visual_evidence import (  # noqa: E402
     DEFAULT_CATALOG,
@@ -34,6 +39,7 @@ from visual_evidence import (  # noqa: E402
     VisualEvidenceError,
     collect_evidence,
     load_catalog,
+    parse_finite_json_float,
     reject_symlinks,
     sha256_file,
     validate_comparison_metrics,
@@ -49,11 +55,23 @@ REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 MAX_FRAMES = 1000
 MAX_MANIFEST_BYTES = 10 * 1024 * 1024
-MAX_IMAGE_BYTES = 20 * 1024 * 1024
+MAX_MATRIX_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_BYTES = MAX_EVIDENCE_SCREENSHOT_BYTES
 MAX_TOTAL_IMAGE_BYTES = 1024 * 1024 * 1024
 MAX_IMAGE_PIXELS = 20_000_000
+MAX_IMAGE_ENTRIES = MAX_FRAMES
+MAX_BUNDLE_ENTRIES = MAX_IMAGE_ENTRIES + 2
 MANIFEST_FIELDS = frozenset(
-    {"schema_version", "repository", "release", "provenance", "lanes", "frames", "comparisons"}
+    {
+        "schema_version",
+        "contract_sha256",
+        "repository",
+        "release",
+        "provenance",
+        "lanes",
+        "frames",
+        "comparisons",
+    }
 )
 RELEASE_FIELDS = frozenset({"branch", "version", "artifacts", "scenarios"})
 LANE_FIELDS = frozenset(
@@ -114,11 +132,50 @@ class PublicEvidenceError(ValueError):
     pass
 
 
-def _read_json(path: Path, label: str) -> Any:
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON object key {key!r}")
+        value[key] = item
+    return value
+
+
+def _reject_nonfinite_constant(value: str) -> None:
+    raise ValueError(f"non-finite JSON number {value!r}")
+
+
+def _read_json(path: Path, label: str, *, maximum_bytes: int) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        with path.open("rb") as handle:
+            payload = handle.read(maximum_bytes + 1)
+        if not payload or len(payload) > maximum_bytes:
+            raise ValueError(
+                f"file must contain between 1 and {maximum_bytes} bytes"
+            )
+        return json.loads(
+            payload.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_nonfinite_constant,
+            parse_float=parse_finite_json_float,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise PublicEvidenceError(f"cannot read {label} {path}: {exc}") from exc
+
+
+def _bounded_entries(
+    entries: Iterable[Path],
+    *,
+    maximum: int,
+    label: str,
+) -> list[Path]:
+    try:
+        bounded = list(islice(entries, maximum + 1))
+    except OSError as exc:
+        raise PublicEvidenceError(f"cannot inspect {label}: {exc}") from exc
+    if len(bounded) > maximum:
+        raise PublicEvidenceError(f"{label} exceeds its {maximum}-entry limit")
+    return bounded
 
 
 def _text(value: Any, label: str) -> str:
@@ -187,10 +244,22 @@ def _branch(value: Any, label: str, *, release: bool = False) -> str:
     return text
 
 
-def load_matrix_inventory(path: Path, target_branch: str) -> dict[str, Any]:
-    matrix = _read_json(path, "release matrix")
-    if not isinstance(matrix, dict) or matrix.get("schema_version") != 2:
-        raise PublicEvidenceError("release matrix schema_version must be 2")
+def load_matrix_inventory(
+    path: Path,
+    target_branch: str,
+    contract: ScenarioContract,
+) -> dict[str, Any]:
+    strict_matrix = _read_json(
+        path,
+        "release matrix",
+        maximum_bytes=MAX_MATRIX_BYTES,
+    )
+    try:
+        matrix = load_matrix(path)
+    except MatrixError as exc:
+        raise PublicEvidenceError(f"invalid canonical release matrix: {exc}") from exc
+    if matrix != strict_matrix:
+        raise PublicEvidenceError("release matrix changed while it was being validated")
     project = matrix.get("project")
     if not isinstance(project, dict) or project.get("release_branch") != target_branch:
         raise PublicEvidenceError(
@@ -198,17 +267,11 @@ def load_matrix_inventory(path: Path, target_branch: str) -> dict[str, Any]:
         )
     artifacts = matrix.get("artifacts")
     runtimes = matrix.get("runtimes")
-    scenarios = matrix.get("pr_scenarios")
     if not isinstance(artifacts, list) or not artifacts:
         raise PublicEvidenceError("release matrix artifacts must be non-empty")
     if not isinstance(runtimes, list) or not runtimes:
         raise PublicEvidenceError("release matrix runtimes must be non-empty")
-    if not isinstance(scenarios, list) or not scenarios or any(
-        not isinstance(item, str) or not item for item in scenarios
-    ):
-        raise PublicEvidenceError("release matrix pr_scenarios must be non-empty strings")
-    if len(set(scenarios)) != len(scenarios):
-        raise PublicEvidenceError("release matrix pr_scenarios contains duplicates")
+    scenarios = list(contract.scenarios_for_profile("pr"))
 
     artifact_rows: list[dict[str, str]] = []
     artifact_ids: set[str] = set()
@@ -301,8 +364,12 @@ def prepare(
     target_sha = _sha(target_sha, "target_sha")
     source_created_at = _timestamp(source_created_at, "source_created_at")
     target_created_at = _timestamp(target_created_at, "target_created_at")
-    inventory = load_matrix_inventory(matrix_path, target_branch)
     catalog = load_catalog(catalog_path)
+    inventory = load_matrix_inventory(
+        matrix_path,
+        target_branch,
+        catalog.contract,
+    )
     try:
         lanes, frames, comparisons = collect_evidence(e2e_root, catalog)
     except VisualEvidenceError as exc:
@@ -348,6 +415,7 @@ def prepare(
 
     manifest = {
         "schema_version": RAW_SCHEMA_VERSION,
+        "contract_sha256": catalog.contract_sha256,
         "repository": repository,
         "release": {
             "branch": target_branch,
@@ -437,11 +505,15 @@ def validate_bundle(
         raise PublicEvidenceError(f"cannot stat public evidence manifest: {exc}") from exc
     if manifest_size <= 0 or manifest_size > MAX_MANIFEST_BYTES:
         raise PublicEvidenceError("public evidence manifest exceeds its size limit")
-    manifest = _read_json(manifest_path, "public evidence manifest")
+    manifest = _read_json(
+        manifest_path,
+        "public evidence manifest",
+        maximum_bytes=MAX_MANIFEST_BYTES,
+    )
     if not isinstance(manifest, dict) or set(manifest) != MANIFEST_FIELDS:
         raise PublicEvidenceError("public evidence manifest fields are invalid")
     schema_version = manifest.get("schema_version")
-    if schema_version not in SCHEMA_VERSIONS:
+    if type(schema_version) is not int or schema_version not in SCHEMA_VERSIONS:
         raise PublicEvidenceError(
             f"public evidence schema_version must be one of {sorted(SCHEMA_VERSIONS)}"
         )
@@ -513,12 +585,15 @@ def validate_bundle(
         raise PublicEvidenceError("evidence loaders do not match the release branch name")
 
     catalog = load_catalog(catalog_path)
-    catalog_scenarios = {capture["scenario"] for capture in catalog.captures}
-    if set(scenarios) != catalog_scenarios:
+    if manifest.get("contract_sha256") != catalog.contract_sha256:
         raise PublicEvidenceError(
-            "evidence scenarios disagree with the protected visual catalog: "
-            f"missing={sorted(catalog_scenarios - set(scenarios))}, "
-            f"extra={sorted(set(scenarios) - catalog_scenarios)}"
+            "public evidence scenario contract hash does not match the protected contract"
+        )
+    contract_scenarios = list(catalog.contract.scenarios_for_profile("pr"))
+    if scenarios != contract_scenarios:
+        raise PublicEvidenceError(
+            "evidence scenarios disagree with the exact protected public profile: "
+            f"{scenarios!r} != {contract_scenarios!r}"
         )
 
     provenance = manifest.get("provenance")
@@ -633,6 +708,7 @@ def validate_bundle(
         f"{artifact['artifact_node']}/{capture['scenario']}/{capture['role']}/{capture['step']}"
         for artifact in artifacts
         for capture in catalog.captures
+        if capture["scenario"] in scenarios
     }
     if len(expected_frame_ids) > MAX_FRAMES:
         raise PublicEvidenceError("protected visual catalog exceeds the public frame limit")
@@ -766,6 +842,10 @@ def validate_bundle(
             size = image.stat().st_size
             if size <= 0 or size > MAX_IMAGE_BYTES:
                 raise PublicEvidenceError(f"public frame asset exceeds its size limit: {asset}")
+            if total_bytes + size > MAX_TOTAL_IMAGE_BYTES:
+                raise PublicEvidenceError(
+                    "public evidence exceeds the total image byte limit"
+                )
             total_bytes += size
             if sha256_file(image) != expected_metrics["file_sha256"]:
                 raise PublicEvidenceError(f"public frame asset digest mismatch: {asset}")
@@ -780,17 +860,20 @@ def validate_bundle(
             raise PublicEvidenceError(f"public frame asset pixel metadata mismatch: {asset}")
         frame_by_id[frame_id] = frame
         asset_path_by_frame_id[frame_id] = (bundle / asset).resolve()
-    if total_bytes > MAX_TOTAL_IMAGE_BYTES:
-        raise PublicEvidenceError("public evidence exceeds the total image byte limit")
     if frame_ids != expected_frame_ids:
         raise PublicEvidenceError(
             "public evidence frames disagree with the protected visual catalog: "
             f"missing={sorted(expected_frame_ids - frame_ids)}, "
             f"extra={sorted(frame_ids - expected_frame_ids)}"
         )
+    image_entries = _bounded_entries(
+        (bundle / "images").iterdir(),
+        maximum=MAX_IMAGE_ENTRIES,
+        label="public evidence image directory",
+    )
     actual_assets = {
         path.relative_to(bundle).as_posix()
-        for path in (bundle / "images").iterdir()
+        for path in image_entries
         if path.is_file()
     }
     if actual_assets != expected_assets:
@@ -801,7 +884,12 @@ def validate_bundle(
         )
     expected_tree = {"manifest.json", "images", *expected_assets}
     actual_tree: set[str] = set()
-    for path in bundle.rglob("*"):
+    bundle_entries = _bounded_entries(
+        bundle.rglob("*"),
+        maximum=MAX_BUNDLE_ENTRIES,
+        label="public evidence bundle",
+    )
+    for path in bundle_entries:
         relative = path.relative_to(bundle).as_posix()
         if path.is_symlink():
             raise PublicEvidenceError(f"public evidence contains a symlink: {relative}")
@@ -816,20 +904,35 @@ def validate_bundle(
     expected_comparisons: dict[str, dict[str, Any]] = {}
     for artifact in artifacts:
         artifact_node = artifact["artifact_node"]
-        for (scenario, role), pairs in DISTINCT_SCREENSHOT_PAIRS.items():
+        for scenario_contract in catalog.contract.scenarios:
+            scenario = scenario_contract.scenario
             if scenario not in scenarios:
                 continue
-            for pair in pairs:
-                first_step, second_step, required_change = pair[:3]
-                comparison_id = (
-                    f"{artifact_node}/{scenario}/{role}/{first_step}->{second_step}"
-                )
-                expected_comparisons[comparison_id] = {
-                    "first_frame_id": f"{artifact_node}/{scenario}/{role}/{first_step}",
-                    "second_frame_id": f"{artifact_node}/{scenario}/{role}/{second_step}",
-                    "required_changed_fraction": required_change,
-                    "region": list(pair[3]) if len(pair) == 4 else None,
-                }
+            for role_contract in scenario_contract.roles:
+                role = role_contract.role
+                for comparison in role_contract.comparisons:
+                    first_step = comparison.first_step
+                    second_step = comparison.second_step
+                    comparison_id = (
+                        f"{artifact_node}/{scenario}/{role}/"
+                        f"{first_step}->{second_step}"
+                    )
+                    expected_comparisons[comparison_id] = {
+                        "first_frame_id": (
+                            f"{artifact_node}/{scenario}/{role}/{first_step}"
+                        ),
+                        "second_frame_id": (
+                            f"{artifact_node}/{scenario}/{role}/{second_step}"
+                        ),
+                        "required_changed_fraction": (
+                            comparison.minimum_changed_fraction
+                        ),
+                        "region": (
+                            list(comparison.region)
+                            if comparison.region is not None
+                            else None
+                        ),
+                    }
 
     comparison_ids: set[str] = set()
     for comparison in comparisons:
@@ -933,6 +1036,77 @@ def validate_bundle(
     return manifest
 
 
+def _snapshot_verified_image(
+    source: Path,
+    destination: Path,
+    *,
+    expected_sha256: str,
+    boundary: Path,
+) -> None:
+    """Copy one untrusted image through a verified descriptor into owned staging."""
+
+    try:
+        reject_symlinks(source, boundary, "compact source image")
+    except VisualEvidenceError as exc:
+        raise PublicEvidenceError(str(exc)) from exc
+    try:
+        source_stat = source.lstat()
+    except OSError as exc:
+        raise PublicEvidenceError(f"cannot stat compact source image {source}: {exc}") from exc
+    if stat.S_ISLNK(source_stat.st_mode) or not stat.S_ISREG(source_stat.st_mode):
+        raise PublicEvidenceError(f"compact source image is not a regular file: {source}")
+    if source_stat.st_size <= 0 or source_stat.st_size > MAX_IMAGE_BYTES:
+        raise PublicEvidenceError(f"compact source image exceeds its size limit: {source}")
+
+    descriptor = -1
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(source, flags)
+        opened_stat = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened_stat.st_mode)
+            or opened_stat.st_dev != source_stat.st_dev
+            or opened_stat.st_ino != source_stat.st_ino
+            or opened_stat.st_size != source_stat.st_size
+        ):
+            raise PublicEvidenceError(
+                f"compact source image changed while it was being opened: {source}"
+            )
+        digest = hashlib.sha256()
+        copied = 0
+        input_stream = os.fdopen(descriptor, "rb")
+        descriptor = -1
+        with input_stream, destination.open("xb") as output:
+            for chunk in iter(lambda: input_stream.read(1024 * 1024), b""):
+                copied += len(chunk)
+                if copied > MAX_IMAGE_BYTES:
+                    raise PublicEvidenceError(
+                        f"compact source image grew beyond its size limit: {source}"
+                    )
+                digest.update(chunk)
+                output.write(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+        if copied != source_stat.st_size:
+            raise PublicEvidenceError(
+                f"compact source image changed while it was being copied: {source}"
+            )
+        if digest.hexdigest() != expected_sha256:
+            raise PublicEvidenceError(
+                f"compact source image digest changed after validation: {source}"
+            )
+        os.chmod(destination, 0o644)
+    except PublicEvidenceError:
+        destination.unlink(missing_ok=True)
+        raise
+    except OSError as exc:
+        destination.unlink(missing_ok=True)
+        raise PublicEvidenceError(f"cannot snapshot compact source image {source}: {exc}") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
 def _encode_webp(source: Path, destination: Path) -> None:
     try:
         from PIL import Image, UnidentifiedImageError
@@ -1012,7 +1186,17 @@ def compact_bundle(
                 if derivative is None:
                     source = input_root / branch / source_asset
                     rendering = images / f".{frame['file_sha256']}.rendering.webp"
-                    _encode_webp(source, rendering)
+                    snapshot = temporary_root / f".{frame['file_sha256']}.source.png"
+                    _snapshot_verified_image(
+                        source,
+                        snapshot,
+                        expected_sha256=frame["file_sha256"],
+                        boundary=input_root / branch,
+                    )
+                    try:
+                        _encode_webp(snapshot, rendering)
+                    finally:
+                        snapshot.unlink(missing_ok=True)
                     try:
                         derivative_metrics = inspect_screenshot(
                             rendering, expected_format="WEBP"
@@ -1103,7 +1287,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     prepare_parser = subparsers.add_parser("prepare")
     prepare_parser.add_argument("--e2e-root", type=Path, required=True)
     prepare_parser.add_argument("--matrix", type=Path, default=REPO / "release/release-matrix.json")
-    prepare_parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
+    prepare_parser.add_argument(
+        "--contract",
+        "--catalog",
+        dest="catalog",
+        type=Path,
+        default=DEFAULT_CATALOG,
+    )
     prepare_parser.add_argument("--output", type=Path, required=True)
     prepare_parser.add_argument("--repository", required=True)
     prepare_parser.add_argument("--source-run-id", required=True)
@@ -1125,7 +1315,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     compact_parser.add_argument("--source-run-id")
     compact_parser.add_argument("--target-run-id")
     compact_parser.add_argument("--target-sha")
-    compact_parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
+    compact_parser.add_argument(
+        "--contract",
+        "--catalog",
+        dest="catalog",
+        type=Path,
+        default=DEFAULT_CATALOG,
+    )
 
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("--evidence-root", type=Path, required=True)
@@ -1136,7 +1332,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     validate_parser.add_argument("--target-run-id")
     validate_parser.add_argument("--target-sha")
     validate_parser.add_argument("--kind", choices=("raw", "compact"))
-    validate_parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
+    validate_parser.add_argument(
+        "--contract",
+        "--catalog",
+        dest="catalog",
+        type=Path,
+        default=DEFAULT_CATALOG,
+    )
     return parser.parse_args(argv)
 
 
