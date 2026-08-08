@@ -63,7 +63,12 @@ jobs:
       manifest: ${{ steps.policy.outputs.manifest }}
 
     steps:
+      # Only the not-applicable revalidation reads Git history below; the full-policy
+      # path short-circuits before touching the repository, so skip the full clone there.
       - name: Check out the exact requested head without credentials
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.runtime_policy == 'not-applicable'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -91,18 +96,34 @@ jobs:
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
 
-          pr_numbers="$(gh pr list --state open --head "$GITHUB_REF_NAME" --limit 2 \
-            --json number --jq '.[].number')"
-          [[ "$(wc -l <<< "$pr_numbers" | tr -d ' ')" == 1 ]]
-          pr_number="$(head -n 1 <<< "$pr_numbers")"
-          [[ "$pr_number" =~ ^[0-9]+$ ]]
-          pr_json="$(gh pr view "$pr_number" \
-            --json baseRefName,baseRefOid,headRefName,headRefOid,isCrossRepository,labels,state)"
-          jq -e \
-            --arg branch "$GITHUB_REF_NAME" \
-            --arg head "$GITHUB_SHA" \
-            '.state == "OPEN" and .headRefName == $branch and .headRefOid == $head and (.isCrossRepository | not) and ([.labels[].name] | index("automated-version-sync")) != null' \
-            <<< "$pr_json" > /dev/null
+          # This run is dispatched seconds after `gh pr create`, so retry a bounded number
+          # of times: a not-yet-indexed automation PR must not silently degrade an
+          # authenticated non-runtime port to a full Minecraft run.
+          pr_json=""
+          for attempt in $(seq 1 10); do
+            pr_list="$(gh pr list --state open --head "$GITHUB_REF_NAME" --limit 2 \
+              --json number)"
+            if [[ "$(jq length <<< "$pr_list")" == 1 ]]; then
+              pr_number="$(jq -r '.[0].number' <<< "$pr_list")"
+              [[ "$pr_number" =~ ^[0-9]+$ ]]
+              candidate_json="$(gh pr view "$pr_number" \
+                --json baseRefName,baseRefOid,headRefName,headRefOid,isCrossRepository,labels,state)"
+              if jq -e \
+                  --arg branch "$GITHUB_REF_NAME" \
+                  --arg head "$GITHUB_SHA" \
+                  '.state == "OPEN" and .headRefName == $branch and .headRefOid == $head and (.isCrossRepository | not) and ([.labels[].name] | index("automated-version-sync")) != null' \
+                  <<< "$candidate_json" > /dev/null; then
+                pr_json="$candidate_json"
+                break
+              fi
+            fi
+            printf 'The open automation PR for %s is not yet consistent (attempt %s of 10).\n' \
+              "$GITHUB_REF_NAME" "$attempt"
+            if [[ "$attempt" -lt 10 ]]; then
+              sleep 3
+            fi
+          done
+          [[ -n "$pr_json" ]]
           base_branch="$(jq -r .baseRefName <<< "$pr_json")"
           base_sha="$(jq -r .baseRefOid <<< "$pr_json")"
           [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]
@@ -128,10 +149,22 @@ jobs:
           python3 "$policy_dir/version_branches.py" \
             --target "$base_branch" > /dev/null
 
-          read -r -a parents <<< "$(git rev-list --parents -n 1 "$GITHUB_SHA")"
-          [[ "${#parents[@]}" == 3 ]]
-          [[ "${parents[1]}" == "$base_sha" ]]
-          git merge-base --is-ancestor "${parents[2]}" "$protected_sha"
+          # The head must be a chain of synchronization merges over the exact PR base: every
+          # first-parent hop is a two-parent merge whose second parent is protected master
+          # content. A new port is one hop; an updated open port adds one hop per wave.
+          chain_commit="$GITHUB_SHA"
+          chain_complete=false
+          for chain_hop in $(seq 1 32); do
+            read -r -a parents <<< "$(git rev-list --parents -n 1 "$chain_commit")"
+            [[ "${#parents[@]}" == 3 ]]
+            git merge-base --is-ancestor "${parents[2]}" "$protected_sha"
+            chain_commit="${parents[1]}"
+            if [[ "$chain_commit" == "$base_sha" ]]; then
+              chain_complete=true
+              break
+            fi
+          done
+          [[ "$chain_complete" == true ]]
 
           impact_output="$RUNNER_TEMP/e2e-impact-output"
           : > "$impact_output"
@@ -225,12 +258,83 @@ jobs:
       - name: Validate central release matrix
         run: python scripts/release/matrix.py --matrix release/release-matrix.json > /dev/null
 
+      # A version-port dispatch starts an exact-head Build gate run concurrently. When that
+      # run has already finished successfully, reuse its verified staged bundle instead of
+      # repeating the identical Gradle build. Every discovery, download, or verification
+      # failure falls back to building from source; only a fully reverified bundle skips it.
+      - name: Discover the exact-head Build gate staged bundle
+        id: gate-bundle
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.attest_run_id == ''
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/build-gate.yml/runs?event=workflow_dispatch&status=success&head_sha=$GITHUB_SHA&per_page=1" \
+            --jq '.workflow_runs[0] // empty')"
+          [[ -n "$run_json" ]]
+          jq -e \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg head "$GITHUB_SHA" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            '.status == "completed" and .conclusion == "success" and .event == "workflow_dispatch" and .path == ".github/workflows/build-gate.yml" and .head_branch == $branch and .head_sha == $head and .head_repository.full_name == $repository' \
+            <<< "$run_json" > /dev/null
+          run_id="$(jq -r .id <<< "$run_json")"
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          printf 'run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download the staged Build gate bundle
+        id: gate-bundle-download
+        if: steps.gate-bundle.outcome == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: staged-release-bundle
+          path: build/release
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.gate-bundle.outputs.run_id }}
+
+      - name: Reverify the reused staged bytes against this exact commit
+        id: gate-bundle-verify
+        if: steps.gate-bundle-download.outcome == 'success'
+        continue-on-error: true
+        run: python scripts/release/verify_release.py --verify-staged
+
+      - name: Resolve whether the Build gate bundle was reused
+        id: reuse
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.attest_run_id == ''
+        shell: bash
+        env:
+          GATE_RUN_ID: ${{ steps.gate-bundle.outputs.run_id }}
+          VERIFY_OUTCOME: ${{ steps.gate-bundle-verify.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "$VERIFY_OUTCOME" == success ]]; then
+            printf 'reused=true\n' >> "$GITHUB_OUTPUT"
+            printf 'Reused the reverified staged bundle from Build gate run %s.\n' \
+              "$GATE_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          rm -rf build/release
+          printf 'reused=false\n' >> "$GITHUB_OUTPUT"
+          printf 'No exact-head Build gate bundle was authenticated; building from source.\n' \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Build all production artifacts and E2E harnesses
+        if: steps.reuse.outputs.reused != 'true'
         run: >-
           ./gradlew --no-daemon --no-parallel --stacktrace
           clean buildAllLanes buildAllE2EHarnesses
 
       - name: Stage and verify all production artifacts
+        if: steps.reuse.outputs.reused != 'true'
         run: >-
           python scripts/release/verify_release.py
           --matrix release/release-matrix.json
@@ -354,9 +458,14 @@ jobs:
       - runtime-policy
       - required-gate
       - attest
+    # Non-attest runs boot this advisory job only on a release-branch-named ref; pull
+    # requests, schedule, and automation/sync/* runs always resolve publish=false, so they
+    # skip the runner entirely and the skip stays visible in the job graph.
     if: >-
       always() &&
       ((inputs.attest_run_id == '' &&
+      (startsWith(github.ref_name, 'fabric-and-neoforge-') ||
+      startsWith(github.ref_name, 'forge-and-fabric-')) &&
       needs.runtime-policy.outputs.effective == 'full' &&
       needs.required-gate.result == 'success') ||
       (inputs.attest_run_id != '' &&
@@ -390,8 +499,8 @@ jobs:
           --require-hashes
           --requirement scripts/pages/requirements.txt
 
-      # Pull-request, master, schedule and automation-branch runs still pass through this advisory
-      # job, but only a real release branch may create the stable artifact consumed by Pages.
+      # The job-level ref-name prefilter is shape-only; only a branch the release inventory
+      # actually validates may create the stable artifact consumed by Pages.
       - name: Resolve exact public evidence provenance
         id: identity
         shell: bash
