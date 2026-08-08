@@ -32,12 +32,58 @@ jobs:
       issues: write
       pull-requests: write
     outputs:
-      current: ${{ steps.port.outputs.current }}
+      current: ${{ steps.sibling.outputs.current || steps.port.outputs.current }}
       pr_number: ${{ steps.repair.outputs.pr_number }}
       repair: ${{ steps.repair.outputs.attempt }}
 
     steps:
+      - name: Ignore non-actionable dispatches without a checkout
+        id: sibling
+        shell: bash
+        env:
+          EXPECTED_CONCLUSION: ${{ github.event.client_payload.conclusion }}
+          EXPECTED_GATE: ${{ github.event.client_payload.gate }}
+          EXPECTED_SHA: ${{ github.event.client_payload.head_sha }}
+          HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Gate senders normalize their dispatch to success or failure; anything else is
+          # malformed or from an older sender revision and is ignored loudly instead of
+          # turning a routine cancellation into a red handler run.
+          if [[ "$EXPECTED_CONCLUSION" != success \
+              && "$EXPECTED_CONCLUSION" != failure ]]; then
+            printf 'Ignoring dispatch with unexpected conclusion %q\n' \
+              "$EXPECTED_CONCLUSION"
+            printf 'current=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A failure dispatch always runs the full inspect: the bounded repair path needs it
+          # regardless of the sibling gate's state.
+          if [[ "$EXPECTED_CONCLUSION" == failure ]]; then
+            exit 0
+          fi
+          # A success dispatch can merge only after BOTH exact-head gates passed. When the
+          # sibling gate has not finished, its own completion dispatch redoes this work, so
+          # end here before paying for two full-history checkouts at propagation peak.
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HEAD_BRANCH" =~ ^automation/sync/[A-Za-z0-9._/-]+$ ]]
+          sibling_gate=on-demand-e2e.yml
+          if [[ "$EXPECTED_GATE" == on-demand-e2e.yml ]]; then
+            sibling_gate=build-gate.yml
+          fi
+          sibling_success="$(gh run list --workflow "$sibling_gate" \
+            --branch "$HEAD_BRANCH" --event workflow_dispatch --limit 100 \
+            --json headSha,status,conclusion \
+            --jq "[.[] | select(.headSha == \"$EXPECTED_SHA\") | select(.status == \"completed\" and .conclusion == \"success\")] | length")"
+          if [[ "$sibling_success" == 0 ]]; then
+            printf 'sibling gate not yet complete; deferring to its dispatch\n'
+            printf 'current=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
       - name: Check out the exact port head without credentials
+        if: steps.sibling.outputs.current != 'false'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.client_payload.head_sha }}
@@ -46,6 +92,7 @@ jobs:
 
       - name: Ignore a superseded gate result
         id: port
+        if: steps.sibling.outputs.current != 'false'
         shell: bash
         env:
           EXPECTED_SHA: ${{ github.event.client_payload.head_sha }}
@@ -128,39 +175,9 @@ jobs:
               [[ "$scenario_active" == 0 ]]
             fi
 
-            # A success notification can advance toward status publication, so authenticate its
-            # complete matrix against the current protected evaluator. Failure notifications keep
-            # the looser shape above because an upstream build failure legitimately creates no
-            # scenario matrix and may still receive one bounded repair attempt.
-            if [[ "$EXPECTED_CONCLUSION" == success ]]; then
-              protected_sha="$(gh api \
-                "repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha)"
-              [[ "$protected_sha" =~ ^[0-9a-f]{40}$ ]]
-              git fetch --no-tags origin "$protected_sha"
-              controller="$RUNNER_TEMP/protected-e2e-controller"
-              mkdir -p "$controller/scripts/ci" "$controller/scripts/release" \
-                "$controller/e2e"
-              git show "$protected_sha:scripts/ci/e2e_job_graph.py" \
-                > "$controller/scripts/ci/e2e_job_graph.py"
-              git show "$protected_sha:scripts/release/matrix.py" \
-                > "$controller/scripts/release/matrix.py"
-              git show "$protected_sha:e2e/scenario_contract.py" \
-                > "$controller/e2e/scenario_contract.py"
-              git show "$protected_sha:e2e/scenario-contract.json" \
-                > "$controller/e2e/scenario-contract.json"
-              git show "$protected_sha:e2e/loader-bootstrap-contract.json" \
-                > "$controller/e2e/loader-bootstrap-contract.json"
-              printf '%s' "$jobs_json" > "$RUNNER_TEMP/e2e-jobs.json"
-              python3 "$controller/scripts/ci/e2e_job_graph.py" \
-                --matrix release/release-matrix.json \
-                --jobs "$RUNNER_TEMP/e2e-jobs.json" \
-                --repository . \
-                --protected-sha "$protected_sha" \
-                --head-sha "$EXPECTED_SHA" \
-                --bootstrap-contract "$controller/e2e/loader-bootstrap-contract.json" \
-                --runtime-policy "$EXPECTED_RUNTIME_POLICY" \
-                > "$RUNNER_TEMP/e2e-job-graph.json"
-            fi
+            # The merge job validates the complete job graph against the protected evaluator
+            # for every arrival order before any status publication, so the full validation
+            # deliberately lives only there.
           fi
 
       - name: Reserve the single repair attempt
@@ -663,29 +680,43 @@ jobs:
         run: |
           set -euo pipefail
           head_sha="$(git rev-parse HEAD)"
-          latest_result() {
+          exact_head_runs() {
             local workflow="$1"
             gh run list --workflow "$workflow" --branch "$HEAD_BRANCH" \
-              --event workflow_dispatch --limit 20 \
+              --event workflow_dispatch --limit 100 \
               --json databaseId,headSha,status,conclusion \
-              --jq ".[] | select(.headSha == \"$head_sha\") | [.databaseId,.status,.conclusion] | @tsv" \
-              | head -n 1
+              --jq "[.[] | select(.headSha == \"$head_sha\")]"
           }
-          build_result="$(latest_result build-gate.yml)"
-          e2e_result="$(latest_result on-demand-e2e.yml)"
-          IFS=$'\t' read -r build_run_id build_status build_conclusion \
-            <<< "$build_result"
-          IFS=$'\t' read -r e2e_run_id e2e_status e2e_conclusion \
-            <<< "$e2e_result"
-          if [[ "$build_status" != completed || "$build_conclusion" != success ]] \
-              || [[ "$e2e_status" != completed || "$e2e_conclusion" != success ]]; then
+          # A completed successful exact-head dispatch is durable evidence for this immutable
+          # commit: a newer flaky failure on the same head must not mask an older success. Any
+          # exact-head run still queued or in progress defers to its completion dispatch.
+          gate_success_id() {
+            jq -r 'if length == 0 then "missing"
+              elif ([.[] | select(.status != "completed")] | length) > 0 then "pending"
+              else ([.[] | select(.status == "completed" and .conclusion == "success")]
+                | if length > 0 then .[0].databaseId else "failed" end)
+              end' <<< "$1"
+          }
+          build_run_id="$(gate_success_id "$(exact_head_runs build-gate.yml)")"
+          e2e_run_id="$(gate_success_id "$(exact_head_runs on-demand-e2e.yml)")"
+          if [[ "$build_run_id" == missing || "$e2e_run_id" == missing ]]; then
+            printf 'No exact-head dispatch runs visible (build=%q e2e=%q) for %s at %s; a gate dispatch may be missing.\n' \
+              "$build_run_id" "$e2e_run_id" "$HEAD_BRANCH" "$head_sha"
+            exit 0
+          fi
+          if ! [[ "$build_run_id" =~ ^[1-9][0-9]*$ \
+              && "$e2e_run_id" =~ ^[1-9][0-9]*$ ]]; then
             printf 'Waiting for exact-head gates: build=%q e2e=%q\n' \
-              "$build_result" "$e2e_result"
+              "$build_run_id" "$e2e_run_id"
             exit 0
           fi
           pr_number="$(gh pr list --state open --head "$HEAD_BRANCH" \
             --json number --jq 'if length == 1 then .[0].number else empty end')"
-          test -n "$pr_number"
+          if [[ -z "$pr_number" ]]; then
+            printf 'No single open automation PR for %s; it was closed or merged outside this run.\n' \
+              "$HEAD_BRANCH"
+            exit 0
+          fi
           pr_json="$(gh pr view "$pr_number" \
             --json baseRefName,baseRefOid,headRefName,headRefOid,isCrossRepository,labels,state)"
           jq -e \
@@ -732,15 +763,36 @@ jobs:
             '.schema_version == 1 and (.runtime_required | type == "boolean") and (.paths | type == "array" and length > 0) and (.runtime_paths | type == "array")' \
             <<< "$runtime_manifest" > /dev/null
           runtime_policy=full
-          read -r -a parents <<< "$(git rev-list --parents -n 1 "$head_sha")"
-          if [[ "$runtime_required" == false \
-              && "${#parents[@]}" == 3 \
-              && "${parents[1]}" == "$base_sha" ]] \
-              && git merge-base --is-ancestor "${parents[2]}" "$protected_sha"; then
+          # Mirror of the on-demand revalidator's topology rule: the head must be a chain of
+          # synchronization merges over the exact PR base, one first-parent hop per wave, each
+          # hop a two-parent merge whose second parent is protected master content.
+          chain_commit="$head_sha"
+          chain_complete=false
+          for chain_hop in $(seq 1 32); do
+            read -r -a parents <<< "$(git rev-list --parents -n 1 "$chain_commit")"
+            if [[ "${#parents[@]}" != 3 ]] \
+                || ! git merge-base --is-ancestor "${parents[2]}" "$protected_sha"; then
+              break
+            fi
+            chain_commit="${parents[1]}"
+            if [[ "$chain_commit" == "$base_sha" ]]; then
+              chain_complete=true
+              break
+            fi
+          done
+          if [[ "$runtime_required" == false && "$chain_complete" == true ]]; then
             runtime_policy=not-applicable
           fi
+          # An executed and passed full suite is strictly stronger evidence than a derived
+          # not-applicable, so it supersedes; the opposite direction stays fatal because a
+          # not-applicable run carries no runtime evidence for a runtime-affecting diff.
           if [[ "$NOTIFYING_GATE" == on-demand-e2e.yml ]]; then
-            [[ "$NOTIFYING_RUNTIME_POLICY" == "$runtime_policy" ]]
+            if [[ "$runtime_policy" == not-applicable \
+                && "$NOTIFYING_RUNTIME_POLICY" == full ]]; then
+              runtime_policy=full
+            else
+              [[ "$NOTIFYING_RUNTIME_POLICY" == "$runtime_policy" ]]
+            fi
           fi
 
           current_pr_json="$(gh pr view "$pr_number" \
@@ -827,12 +879,10 @@ jobs:
             sleep 2
           done
           test -n "$target_sha"
-          git fetch --no-tags origin "$target_branch"
-          [[ "$(git rev-parse FETCH_HEAD)" == "$target_sha" ]]
-          git merge-base --is-ancestor "$head_sha" "$target_sha"
-          [[ "$(git rev-parse "${head_sha}^{tree}")" \
-            == "$(git rev-parse "${target_sha}^{tree}")" ]]
 
+          # Dispatch the attestations as soon as the merge commit is known so a concurrent
+          # push to the release branch cannot strand them; verify-gate-attestation
+          # revalidates the original runs, ancestry and exact trees before publishing.
           gh workflow run build-gate.yml --ref "$target_branch" \
             -f attest_run_id="$build_run_id" \
             -f attest_branch="$HEAD_BRANCH" \
@@ -844,3 +894,12 @@ jobs:
             -f attest_sha="$head_sha" \
             -f attest_target_sha="$target_sha" \
             -f runtime_policy="$runtime_policy"
+
+          # The merge commit must be reachable from the current release tip with a tree
+          # identical to the merged head; a legitimate later commit on top of it must not
+          # turn this run red after the merge already happened.
+          git fetch --no-tags origin "$target_branch"
+          git merge-base --is-ancestor "$target_sha" FETCH_HEAD
+          git merge-base --is-ancestor "$head_sha" "$target_sha"
+          [[ "$(git rev-parse "${head_sha}^{tree}")" \
+            == "$(git rev-parse "${target_sha}^{tree}")" ]]
