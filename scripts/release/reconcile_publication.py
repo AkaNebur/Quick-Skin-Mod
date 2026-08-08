@@ -21,6 +21,8 @@ from matrix import MatrixError, load_matrix
 MODRINTH_API = "https://api.modrinth.com/v2"
 CURSEFORGE_API = "https://api.curseforge.com/v1"
 MAX_CURSEFORGE_FILES = 2_000
+REQUEST_ATTEMPTS = 5
+REQUEST_BACKOFF_SECONDS = (2.0, 2.5, 3.0, 4.0)
 
 
 class ReconciliationError(RuntimeError):
@@ -138,6 +140,7 @@ def request_json(
     headers: dict[str, str],
     *,
     allow_not_found: bool = False,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> Any:
     request = urllib.request.Request(
         url,
@@ -147,15 +150,33 @@ def request_json(
             **headers,
         },
     )
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as exc:
-        if allow_not_found and exc.code == 404:
-            return None
-        raise ReconciliationError(f"marketplace API returned HTTP {exc.code}") from exc
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ReconciliationError(f"marketplace API request failed: {exc}") from exc
+    # Only transient failures (timeouts, connection errors, HTTP 5xx) earn a bounded retry.
+    # A definitive marketplace rejection (any other 4xx) must fail immediately.
+    last_error: Exception | None = None
+    for attempt in range(REQUEST_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            if allow_not_found and exc.code == 404:
+                return None
+            if exc.code < 500:
+                raise ReconciliationError(f"marketplace API returned HTTP {exc.code}") from exc
+            last_error = exc
+        except (urllib.error.URLError, TimeoutError) as exc:
+            last_error = exc
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ReconciliationError(f"marketplace API request failed: {exc}") from exc
+        if attempt + 1 < REQUEST_ATTEMPTS:
+            print(
+                f"marketplace API attempt {attempt + 1}/{REQUEST_ATTEMPTS} failed "
+                f"transiently ({last_error}); retrying",
+                file=sys.stderr,
+            )
+            sleep(REQUEST_BACKOFF_SECONDS[min(attempt, len(REQUEST_BACKOFF_SECONDS) - 1)])
+    raise ReconciliationError(
+        f"marketplace API request failed after {REQUEST_ATTEMPTS} attempts: {last_error}"
+    ) from last_error
 
 
 def inspect_modrinth(
@@ -205,6 +226,32 @@ def inspect_curseforge(
     if index >= MAX_CURSEFORGE_FILES:
         raise ReconciliationError("CurseForge file inventory exceeded the reconciliation bound")
     return classify_curseforge(files, expected)
+
+
+def settle_publication(
+    inspector: Callable[[], Reconciliation],
+    *,
+    verify: bool,
+    attempts: int,
+    delay_seconds: float,
+    sleep: Callable[[float], None] = time.sleep,
+) -> Reconciliation:
+    # Marketplace indexing lags a successful upload, so --verify polls briefly before
+    # declaring the publication missing; the non-verify path inspects exactly once.
+    total = max(1, attempts if verify else 1)
+    result = Reconciliation(True, None)
+    for attempt in range(total):
+        result = inspector()
+        if not verify or not result.publish:
+            return result
+        if attempt + 1 < total:
+            print(
+                f"publication not yet observable by hash "
+                f"(attempt {attempt + 1}/{total}); waiting",
+                file=sys.stderr,
+            )
+            sleep(max(0.0, delay_seconds))
+    raise ReconciliationError("published marketplace file was not observable by hash")
 
 
 def write_output(path: Path, result: Reconciliation) -> None:
@@ -270,16 +317,12 @@ def main() -> int:
                 os.environ.get("CURSEFORGE_TOKEN", ""),
             )
 
-        attempts = max(1, args.attempts if args.verify else 1)
-        result = Reconciliation(True, None)
-        for attempt in range(attempts):
-            result = inspector()
-            if not args.verify or not result.publish:
-                break
-            if attempt + 1 < attempts:
-                time.sleep(max(0.0, args.delay_seconds))
-        if args.verify and result.publish:
-            raise ReconciliationError("published marketplace file was not observable by hash")
+        result = settle_publication(
+            inspector,
+            verify=args.verify,
+            attempts=args.attempts,
+            delay_seconds=args.delay_seconds,
+        )
         if args.github_output:
             write_output(args.github_output, result)
         if args.record:
