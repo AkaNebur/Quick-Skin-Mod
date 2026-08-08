@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import io
+import json
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
+from typing import Any
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -95,6 +100,123 @@ class PublicationReconciliationTest(unittest.TestCase):
             ).publish
         )
         self.assertTrue(reconciliation.classify_curseforge([], expected).publish)
+
+
+class RequestRetryTest(unittest.TestCase):
+    def test_transient_failures_retry_until_success(self) -> None:
+        attempts = iter([
+            urllib.error.HTTPError("https://api", 502, "bad gateway", None, None),
+            urllib.error.URLError(TimeoutError("timed out")),
+            io.BytesIO(json.dumps({"ok": True}).encode("utf-8")),
+        ])
+
+        def urlopen(request: Any, timeout: float) -> Any:
+            value = next(attempts)
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+        sleeps: list[float] = []
+        with mock.patch.object(reconciliation.urllib.request, "urlopen", urlopen):
+            value = reconciliation.request_json("https://api", {}, sleep=sleeps.append)
+        self.assertEqual(value, {"ok": True})
+        self.assertEqual(sleeps, [2.0, 2.5])
+
+    def test_client_rejection_never_retries(self) -> None:
+        calls: list[int] = []
+
+        def urlopen(request: Any, timeout: float) -> Any:
+            calls.append(1)
+            raise urllib.error.HTTPError("https://api", 403, "forbidden", None, None)
+
+        sleeps: list[float] = []
+        with mock.patch.object(reconciliation.urllib.request, "urlopen", urlopen):
+            with self.assertRaisesRegex(reconciliation.ReconciliationError, "HTTP 403"):
+                reconciliation.request_json("https://api", {}, sleep=sleeps.append)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(sleeps, [])
+
+    def test_allowed_not_found_returns_none_without_retry(self) -> None:
+        calls: list[int] = []
+
+        def urlopen(request: Any, timeout: float) -> Any:
+            calls.append(1)
+            raise urllib.error.HTTPError("https://api", 404, "not found", None, None)
+
+        with mock.patch.object(reconciliation.urllib.request, "urlopen", urlopen):
+            value = reconciliation.request_json(
+                "https://api", {}, allow_not_found=True, sleep=lambda _: None
+            )
+        self.assertIsNone(value)
+        self.assertEqual(len(calls), 1)
+
+    def test_persistent_transient_failure_stays_bounded(self) -> None:
+        calls: list[int] = []
+
+        def urlopen(request: Any, timeout: float) -> Any:
+            calls.append(1)
+            raise urllib.error.HTTPError("https://api", 503, "unavailable", None, None)
+
+        sleeps: list[float] = []
+        with mock.patch.object(reconciliation.urllib.request, "urlopen", urlopen):
+            with self.assertRaisesRegex(
+                reconciliation.ReconciliationError,
+                f"after {reconciliation.REQUEST_ATTEMPTS} attempts",
+            ):
+                reconciliation.request_json("https://api", {}, sleep=sleeps.append)
+        self.assertEqual(len(calls), reconciliation.REQUEST_ATTEMPTS)
+        self.assertEqual(len(sleeps), reconciliation.REQUEST_ATTEMPTS - 1)
+
+
+class VerifySettleTest(unittest.TestCase):
+    def test_verify_polls_until_the_publication_is_observable(self) -> None:
+        results = iter([
+            reconciliation.Reconciliation(True, None),
+            reconciliation.Reconciliation(True, None),
+            reconciliation.Reconciliation(False, "remote01"),
+        ])
+        sleeps: list[float] = []
+        result = reconciliation.settle_publication(
+            lambda: next(results),
+            verify=True,
+            attempts=6,
+            delay_seconds=10.0,
+            sleep=sleeps.append,
+        )
+        self.assertFalse(result.publish)
+        self.assertEqual(result.remote_id, "remote01")
+        self.assertEqual(sleeps, [10.0, 10.0])
+
+    def test_verify_fails_closed_when_never_observable(self) -> None:
+        sleeps: list[float] = []
+        with self.assertRaisesRegex(
+            reconciliation.ReconciliationError, "not observable"
+        ):
+            reconciliation.settle_publication(
+                lambda: reconciliation.Reconciliation(True, None),
+                verify=True,
+                attempts=3,
+                delay_seconds=5.0,
+                sleep=sleeps.append,
+            )
+        self.assertEqual(sleeps, [5.0, 5.0])
+
+    def test_non_verify_inspects_exactly_once(self) -> None:
+        calls: list[int] = []
+
+        def inspector() -> reconciliation.Reconciliation:
+            calls.append(1)
+            return reconciliation.Reconciliation(True, None)
+
+        result = reconciliation.settle_publication(
+            inspector,
+            verify=False,
+            attempts=6,
+            delay_seconds=10.0,
+            sleep=lambda _: self.fail("the non-verify path must not wait"),
+        )
+        self.assertTrue(result.publish)
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == "__main__":
