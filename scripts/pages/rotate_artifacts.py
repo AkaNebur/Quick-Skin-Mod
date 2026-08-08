@@ -455,6 +455,42 @@ def rotate_branch(
     return deleted
 
 
+def rotate_generations(
+    api: ArtifactApi,
+    generations: list[BranchGeneration],
+    *,
+    repository: str,
+    pages_run_id: int,
+    pages_run_sha: str,
+    delete_delay_seconds: float,
+) -> tuple[dict[str, list[int]], list[str]]:
+    """Rotate each branch independently so one moved head cannot strand the rest."""
+
+    summary: dict[str, list[int]] = {}
+    deferred: list[str] = []
+    for generation in generations:
+        try:
+            summary[generation.branch] = rotate_branch(
+                api,
+                generation,
+                repository=repository,
+                pages_run_id=pages_run_id,
+                pages_run_sha=pages_run_sha,
+                delete_delay_seconds=delete_delay_seconds,
+            )
+        except RotationError as exc:
+            # Every deletion is individually revalidated inside rotate_branch, so a
+            # mid-rotation head or keep change only defers this branch's remaining
+            # artifacts to the next successful deployment's rotation.
+            print(
+                f"Pages evidence rotation deferred for {generation.branch}: {exc}",
+                file=sys.stderr,
+            )
+            summary[generation.branch] = []
+            deferred.append(generation.branch)
+    return summary, deferred
+
+
 def retire_pages_run_transients(
     api: ArtifactApi,
     *,
@@ -609,28 +645,33 @@ def main(argv: list[str] | None = None) -> int:
             pages_run_sha=pages_run_sha,
             trigger_artifacts=trigger_artifacts,
         )
-        summary: dict[str, list[int]] = {}
-        for generation in generations:
-            summary[generation.branch] = rotate_branch(
-                api,
-                generation,
-                repository=repository,
-                pages_run_id=pages_run_id,
-                pages_run_sha=pages_run_sha,
-                delete_delay_seconds=args.delete_delay_seconds,
-            )
-        pages_run_deleted = retire_pages_run_transients(
+        summary, deferred = rotate_generations(
             api,
-            generations=generations,
-            trigger_artifacts=trigger_artifacts,
+            generations,
             repository=repository,
             pages_run_id=pages_run_id,
             pages_run_sha=pages_run_sha,
             delete_delay_seconds=args.delete_delay_seconds,
         )
+        try:
+            pages_run_deleted = retire_pages_run_transients(
+                api,
+                generations=generations,
+                trigger_artifacts=trigger_artifacts,
+                repository=repository,
+                pages_run_id=pages_run_id,
+                pages_run_sha=pages_run_sha,
+                delete_delay_seconds=args.delete_delay_seconds,
+            )
+        except RotationError as exc:
+            # Same defer-not-abort posture: the fan-in and deploy transients are short-lived
+            # uploads, so a mid-rotation keep change leaves them to their own retention.
+            print(f"Pages run transient retirement deferred: {exc}", file=sys.stderr)
+            pages_run_deleted = []
         print(
             json.dumps(
                 {
+                    "deferred_branches": deferred,
                     "deleted_artifact_ids": summary,
                     "deleted_pages_run_artifact_ids": pages_run_deleted,
                 },

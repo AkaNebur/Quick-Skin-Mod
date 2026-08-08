@@ -75,13 +75,26 @@ jobs:
 
           source_run=''
           for attempt in {1..120}; do
-            source_run="$(gh api \
-              "repos/$GITHUB_REPOSITORY/actions/runs/$source_run_id")"
+            # A transient API error consumes one bounded attempt instead of failing the job.
+            if ! source_run="$(gh api \
+                "repos/$GITHUB_REPOSITORY/actions/runs/$source_run_id" 2>/dev/null)"; then
+              source_run=''
+              sleep 2
+              continue
+            fi
             if [[ "$(jq -r .status <<< "$source_run")" == completed ]]; then
               break
             fi
             sleep 2
           done
+          # The review is advisory: a source run that never settled successfully inside the poll
+          # budget is skipped loudly instead of surfacing as a red advisory run.
+          if [[ -z "$source_run" ]] \
+            || [[ "$(jq -r .status <<< "$source_run")" != completed ]] \
+            || [[ "$(jq -r .conclusion <<< "$source_run")" != success ]]; then
+            printf 'source run not settled within budget; skipping advisory review\n'
+            exit 0
+          fi
           workflow_id="$(gh api \
             "repos/$GITHUB_REPOSITORY/actions/workflows/on-demand-e2e.yml" --jq .id)"
           jq -e \
@@ -103,16 +116,61 @@ jobs:
             [[ "$source_branch" == automation/sync/* ]]
           fi
 
-          jobs="$(gh api \
+          # Duplicate workflow_run and repository_dispatch twins for the same source run exit
+          # here for one API call, before the heavier jobs and artifact validation below.
+          artifact_name="visual-review-$source_run_id"
+          artifacts="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$artifact_name&per_page=100")"
+          jq -e \
+            '(type == "array") and
+             ([.[] | (.artifacts | type == "array")] | all) and
+             ([.[].artifacts[]] | length <= 100)' \
+            <<< "$artifacts" > /dev/null
+          while IFS=$'\t' read -r artifact_run_id artifact_expired; do
+            [[ -n "$artifact_run_id" ]] || continue
+            [[ "$artifact_expired" == false ]] || continue
+            if owner_run="$(gh api \
+                "repos/$GITHUB_REPOSITORY/actions/runs/$artifact_run_id" 2>/dev/null)" \
+                && jq -e \
+                  --arg repository "$GITHUB_REPOSITORY" \
+                  '.status == "completed" and .conclusion == "success" and
+                   (.event == "repository_dispatch" or .event == "workflow_run") and
+                   .head_branch == "master" and
+                   .path == ".github/workflows/visual-review.yml" and
+                   .head_repository.full_name == $repository' \
+                  <<< "$owner_run" > /dev/null; then
+              printf 'Visual review already exists for source run %s\n' "$source_run_id"
+              exit 0
+            fi
+          done < <(jq -r --arg name "$artifact_name" \
+            '.[].artifacts[] | select(.name == $name) |
+             [.workflow_run.id, .expired] | @tsv' <<< "$artifacts")
+
+          # List endpoints are read as --paginate --slurp page arrays, the same shape every other
+          # trusted workflow consumes, then flattened before any count or identity assertion.
+          jobs="$(gh api --paginate --slurp \
             "repos/$GITHUB_REPOSITORY/actions/runs/$source_run_id/jobs?filter=latest&per_page=100")"
           jq -e \
-            '.total_count >= 0 and .total_count <= 100 and
-             (.jobs | type == "array" and length == .total_count)' \
+            '(type == "array") and
+             ([.[] | (.jobs | type == "array")] | all) and
+             ([.[].jobs[]] | length <= 100)' \
             <<< "$jobs" > /dev/null
-          gate_count="$(jq '[.jobs[] | select(
+          jobs="$(jq -c '[.[].jobs[]]' <<< "$jobs")"
+          gate_count="$(jq '[.[] | select(
             .name == "Packaged E2E gate" and .status == "completed" and
             .conclusion == "success")] | length' <<< "$jobs")"
           if [[ "$gate_count" -eq 0 ]]; then
+            # A lightweight attestation run legitimately has no gate job; its reusable-workflow
+            # jobs are prefixed with the caller job name. Anything else without a gate job means
+            # the pinned gate name drifted and must fail loudly instead of no-opping forever.
+            attestation_count="$(jq '[.[] | select(
+              .name | startswith("Attest tested E2E on release branch"))] | length' \
+              <<< "$jobs")"
+            if [[ "$attestation_count" -eq 0 ]]; then
+              printf 'Source run %s has no packaged gate and no attestation job\n' \
+                "$source_run_id" >&2
+              exit 1
+            fi
             printf 'Ignoring lightweight attestation run %s\n' "$source_run_id"
             exit 0
           fi
@@ -120,20 +178,21 @@ jobs:
 
           # A successful not-applicable port has the same stable gate but deliberately launches no
           # Minecraft jobs. Bind review eligibility to the source run's own unique lane artifacts.
-          expected_artifact_names="$(jq -c '[.jobs[] | select(
+          expected_artifact_names="$(jq -c '[.[] | select(
             (.name | endswith(" - contract scenarios")) and
             .status == "completed" and .conclusion == "success") |
             ("packaged-e2e-" + (.name | sub(" - contract scenarios$"; "")))] |
             sort' <<< "$jobs")"
           scenario_job_count="$(jq length <<< "$expected_artifact_names")"
-          source_artifacts="$(gh api \
+          source_artifacts="$(gh api --paginate --slurp \
             "repos/$GITHUB_REPOSITORY/actions/runs/$source_run_id/artifacts?per_page=100")"
           jq -e \
-            '.total_count >= 0 and .total_count <= 100 and
-             (.artifacts | type == "array" and length == .total_count)' \
+            '(type == "array") and
+             ([.[] | (.artifacts | type == "array")] | all) and
+             ([.[].artifacts[]] | length <= 100)' \
             <<< "$source_artifacts" > /dev/null
           artifact_inventory="$(jq -c --argjson run_id "$source_run_id" '[
-            .artifacts[] | select(.name | startswith("packaged-e2e-")) |
+            .[].artifacts[] | select(.name | startswith("packaged-e2e-")) |
             {id,name,size_in_bytes,digest,expired,workflow_run}] | sort_by(.name)' \
             <<< "$source_artifacts")"
           packaged_count="$(jq length <<< "$artifact_inventory")"
@@ -160,33 +219,6 @@ jobs:
               (.expired == false) and (.workflow_run.id == $run_id)] | all) and
             ([.[].size_in_bytes] | add // 0) <= 268435456
           ' <<< "$artifact_inventory" > /dev/null
-
-          artifact_name="visual-review-$source_run_id"
-          artifacts="$(gh api \
-            "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$artifact_name&per_page=100")"
-          jq -e \
-            '.total_count >= 0 and .total_count <= 100 and
-             (.artifacts | type == "array" and length == .total_count)' \
-            <<< "$artifacts" > /dev/null
-          while IFS=$'\t' read -r artifact_run_id artifact_expired; do
-            [[ -n "$artifact_run_id" ]] || continue
-            [[ "$artifact_expired" == false ]] || continue
-            if owner_run="$(gh api \
-                "repos/$GITHUB_REPOSITORY/actions/runs/$artifact_run_id" 2>/dev/null)" \
-                && jq -e \
-                  --arg repository "$GITHUB_REPOSITORY" \
-                  '.status == "completed" and .conclusion == "success" and
-                   (.event == "repository_dispatch" or .event == "workflow_run") and
-                   .head_branch == "master" and
-                   .path == ".github/workflows/visual-review.yml" and
-                   .head_repository.full_name == $repository' \
-                  <<< "$owner_run" > /dev/null; then
-              printf 'Visual review already exists for source run %s\n' "$source_run_id"
-              exit 0
-            fi
-          done < <(jq -r --arg name "$artifact_name" \
-            '.artifacts[] | select(.name == $name) |
-             [.workflow_run.id, .expired] | @tsv' <<< "$artifacts")
 
           [[ "$GITHUB_REF" == refs/heads/master ]]
           implementation_sha="$GITHUB_SHA"
@@ -241,6 +273,7 @@ jobs:
       # This job has no secrets. It reauthenticates the full protected job graph, downloads each
       # immutable artifact by numeric ID, then passes only decoded, content-addressed PNGs onward.
       - name: Validate and curate exact packaged evidence
+        id: evidence
         shell: bash
         env:
           ARTIFACT_INVENTORY: ${{ needs.authenticate.outputs.artifact_inventory }}
@@ -255,6 +288,19 @@ jobs:
           [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
           jq -e 'type == "array" and length > 0 and length <= 8' \
             <<< "$ARTIFACT_INVENTORY" > /dev/null
+          printf 'contract_skew=false\n' >> "$GITHUB_OUTPUT"
+
+          # Protected master code and master's scenario contract review evidence produced by the
+          # source tree. A contract mismatch between the two trees would fail step-set validation
+          # red, so skew skips this advisory review loudly instead.
+          master_contract_sha256="$(sha256sum e2e/scenario-contract.json | cut -d ' ' -f 1)"
+          source_contract_sha256="$(sha256sum source/e2e/scenario-contract.json | cut -d ' ' -f 1)"
+          if [[ "$master_contract_sha256" != "$source_contract_sha256" ]]; then
+            printf 'contract_skew=true\n' >> "$GITHUB_OUTPUT"
+            printf 'scenario-contract skew between master and source head; skipping advisory review\n' \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
           source_run="$(gh api \
             "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
@@ -275,12 +321,13 @@ jobs:
           fi
 
           jobs="$RUNNER_TEMP/source-jobs.json"
-          gh api \
+          gh api --paginate --slurp \
             "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/jobs?filter=latest&per_page=100" \
             > "$jobs"
           jq -e \
-            '.total_count > 0 and .total_count <= 100 and
-             (.jobs | type == "array" and length == .total_count)' \
+            '(type == "array") and
+             ([.[] | (.jobs | type == "array")] | all) and
+             ([.[].jobs[]] | length > 0 and length <= 100)' \
             "$jobs" > /dev/null
 
           git -C source fetch --no-tags origin "$IMPLEMENTATION_SHA"
@@ -437,6 +484,7 @@ jobs:
 
       - name: Name the source-bound curated handoff
         id: identity
+        if: steps.evidence.outputs.contract_skew == 'false'
         shell: bash
         env:
           SOURCE_RUN_ID: ${{ needs.authenticate.outputs.source_run_id }}
@@ -448,6 +496,7 @@ jobs:
 
       - name: Upload only the curated review input
         id: handoff
+        if: steps.evidence.outputs.contract_skew == 'false'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.identity.outputs.artifact_name }}
@@ -465,7 +514,15 @@ jobs:
       - curate
     if: >-
       needs.authenticate.outputs.eligible == 'true' &&
-      needs.curate.result == 'success'
+      needs.curate.result == 'success' &&
+      needs.curate.outputs.artifact_id != ''
+    # One shared group caps a 16-branch propagation to a single running model pipeline while the
+    # cheap authenticate/curate jobs stay parallel. GitHub keeps one running plus one pending job
+    # per group and cancels the older pending job; the review is advisory, so losing superseded
+    # reviews is acceptable versus sixteen concurrent Claude review pipelines.
+    concurrency:
+      group: visual-review-model
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -673,7 +730,9 @@ jobs:
       - authenticate
       - curate
       - review
-    if: always() && needs.curate.result == 'success'
+    if: >-
+      always() && needs.curate.result == 'success' &&
+      needs.curate.outputs.artifact_id != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
