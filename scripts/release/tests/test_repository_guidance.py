@@ -206,7 +206,7 @@ class RepositoryGuidanceTest(unittest.TestCase):
         self.assertIn("verify_reproducibility.py", workflow)
         self.assertIn("--rerun-tasks", workflow)
         self.assertIn("validate_changelog", release_identity)
-        attest_pin = "actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d"
+        attest_pin = "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
         self.assertEqual(workflow.count(attest_pin), 2)
         self.assertIn("sbom-path: build/release/sbom/quick-skin.cdx.json", workflow)
         combined = workflow + release_helper
