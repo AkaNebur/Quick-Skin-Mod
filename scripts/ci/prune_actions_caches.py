@@ -567,6 +567,7 @@ def prune(
     max_delete_count: int = DEFAULT_MAX_DELETE_COUNT,
     max_delete_bytes: int = DEFAULT_MAX_DELETE_BYTES,
     delete_delay_seconds: float = 0.0,
+    trigger_event: str = "",
 ) -> dict[str, Any]:
     if delete_delay_seconds < 0 or delete_delay_seconds > 10:
         raise PruneError("delete_delay_seconds must be between 0 and 10")
@@ -574,12 +575,45 @@ def prune(
         max_delete_count=max_delete_count,
         max_delete_bytes=max_delete_bytes,
     )
+    limits_report = {
+        "max_pages": MAX_PAGES,
+        "max_active_runs_per_status": MAX_ACTIVE_RUN_RESULTS,
+        "max_build_runs_per_sha": MAX_BUILD_RUNS_PER_SHA,
+        "max_jobs_per_run": MAX_JOBS_PER_RUN,
+        "max_delete_count": max_delete_count,
+        "max_delete_bytes": max_delete_bytes,
+    }
 
     default_branch = api.get_default_branch()
     if default_branch != expected_default_branch:
         raise PruneError(
             f"expected default branch {expected_default_branch!r}, got {default_branch!r}"
         )
+
+    # A branch-deletion event that fires while any potentially cache-consuming run is
+    # active is a guaranteed no-op: the active-run rule below protects the complete cache
+    # inventory. Answer that with the cheap repository-wide probe before paying for the
+    # full branch, cache, and Build-history inventory; scheduled runs and unknown events
+    # always build the complete plan.
+    if trigger_event == "delete" and api.has_any_active_run():
+        return {
+            "mode": "apply" if apply else "dry-run",
+            "limits": limits_report,
+            "repository_default_branch": default_branch,
+            "trigger_event": trigger_event,
+            "short_circuit": "delete-event-active-run",
+            "existing_branch_count": 0,
+            "active_run_present": True,
+            "active_run_branches": [],
+            "discovered_candidate_count": 0,
+            "discovered_candidate_bytes": 0,
+            "candidate_count": 0,
+            "candidate_bytes": 0,
+            "candidates": [],
+            "protected_generation_ids": [],
+            "deleted_ids": [],
+            "skipped": [],
+        }
 
     existing_branches = api.list_branches()
     if default_branch not in existing_branches:
@@ -732,15 +766,10 @@ def prune(
 
     return {
         "mode": "apply" if apply else "dry-run",
-        "limits": {
-            "max_pages": MAX_PAGES,
-            "max_active_runs_per_status": MAX_ACTIVE_RUN_RESULTS,
-            "max_build_runs_per_sha": MAX_BUILD_RUNS_PER_SHA,
-            "max_jobs_per_run": MAX_JOBS_PER_RUN,
-            "max_delete_count": max_delete_count,
-            "max_delete_bytes": max_delete_bytes,
-        },
+        "limits": limits_report,
         "repository_default_branch": default_branch,
+        "trigger_event": trigger_event,
+        "short_circuit": None,
         "existing_branch_count": len(existing_branches),
         "active_run_present": active_run_present,
         "active_run_branches": sorted(active_run_branches),
@@ -796,6 +825,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=1.0,
     )
+    parser.add_argument(
+        "--trigger-event",
+        default=os.environ.get("GITHUB_EVENT_NAME", ""),
+        help=(
+            "workflow trigger event (defaults to GITHUB_EVENT_NAME); a delete event "
+            "may short-circuit on the cheap active-run probe"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -820,6 +857,7 @@ def main(argv: list[str] | None = None) -> int:
             max_delete_count=args.max_delete_count,
             max_delete_bytes=args.max_delete_bytes,
             delete_delay_seconds=args.delete_delay_seconds,
+            trigger_event=args.trigger_event,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
