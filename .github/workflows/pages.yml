@@ -78,6 +78,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          printf 'eligible=false\n' >> "$GITHUB_OUTPUT"
           [[ "$EVIDENCE_REPOSITORY" == "$GITHUB_REPOSITORY" ]]
           [[ "$EVIDENCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$EVIDENCE_BRANCH" =~ ^[A-Za-z0-9._-]+$ ]]
@@ -106,8 +107,16 @@ jobs:
              .head_sha == $sha and .path == ".github/workflows/on-demand-e2e.yml" and
              .head_repository.full_name == $repository' \
             <<< "$source_run" > /dev/null
-          [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/$EVIDENCE_BRANCH" \
-            --jq .commit.sha)" == "$EVIDENCE_SHA" ]]
+          # A merged port may already have advanced this branch past the attested evidence.
+          # That superseding head's own attestation is guaranteed to emit a newer wake, so a
+          # stale wake ends cleanly instead of failing red.
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/$EVIDENCE_BRANCH" \
+            --jq .commit.sha)"
+          if [[ "$current_sha" != "$EVIDENCE_SHA" ]]; then
+            printf 'Branch %s advanced from %s to %s; deferring to its newer attestation wake.\n' \
+              "$EVIDENCE_BRANCH" "$EVIDENCE_SHA" "$current_sha"
+            exit 0
+          fi
 
           handoff_name="pages-e2e-$EVIDENCE_BRANCH"
           artifacts="$(gh api --paginate --slurp \
@@ -126,15 +135,18 @@ jobs:
           implementation_sha="$(gh api \
             "repos/$GITHUB_REPOSITORY/branches/master" --jq .commit.sha)"
           [[ "$implementation_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'eligible=true\n' >> "$GITHUB_OUTPUT"
           printf 'implementation_sha=%s\n' "$implementation_sha" >> "$GITHUB_OUTPUT"
 
       - name: Check out the exact protected dispatcher
+        if: steps.request.outputs.eligible == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.request.outputs.implementation_sha }}
           persist-credentials: false
 
       - name: Dispatch one protected all-branch deployment
+        if: steps.request.outputs.eligible == 'true'
         shell: bash
         env:
           EVIDENCE_BRANCH: ${{ github.event.client_payload.evidence_branch }}
@@ -296,6 +308,30 @@ jobs:
             done < <(jq -r '.[]' <<< "$branches")
             if [[ "$all_current" == true ]]; then
               printf 'Every release head already belongs to a successful deployed cache.\n'
+              exit 0
+            fi
+
+            # A deployment that fans out while release heads are still advancing is
+            # guaranteed waste: a just-merged branch has no current-head evidence yet, and
+            # its finished attestation is guaranteed to emit another wake. Defer the whole
+            # automatic run cleanly; schedule and manual runs keep their strict semantics.
+            pending=()
+            while IFS= read -r branch; do
+              probe_status=0
+              python3 scripts/pages/select_artifact.py \
+                --repository "$GITHUB_REPOSITORY" \
+                --branch "$branch" \
+                --probe || probe_status=$?
+              if [[ "$probe_status" -eq 3 ]]; then
+                pending+=("$branch")
+              elif [[ "$probe_status" -ne 0 ]]; then
+                exit "$probe_status"
+              fi
+            done < <(jq -r '.[]' <<< "$branches")
+            if [[ "${#pending[@]}" -gt 0 ]]; then
+              printf 'Not eligible: no authenticated current-head evidence yet for: %s\n' \
+                "${pending[*]}"
+              printf 'Each pending branch attestation dispatches its own later wake.\n'
               exit 0
             fi
           fi
@@ -649,10 +685,12 @@ jobs:
 
     steps:
       # The explicit follow-up uses another protected workflow_dispatch run and authenticates this
-      # owner only after it has reached completed/success.
+      # owner only after it has reached completed/success. GH_REPO supplies the repository context
+      # because this job deliberately performs no checkout.
       - name: Dispatch the exact cache-owning Pages run
         shell: bash
         env:
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
