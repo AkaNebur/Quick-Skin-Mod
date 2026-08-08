@@ -45,6 +45,9 @@ jobs:
           EXPECTED_GATE: ${{ github.event.client_payload.gate }}
           EXPECTED_SHA: ${{ github.event.client_payload.head_sha }}
           HEAD_BRANCH: ${{ github.event.client_payload.head_branch }}
+          # GH_REPO supplies the repository context because this step deliberately runs
+          # before any checkout.
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
