@@ -9,9 +9,14 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+
+RELEASE_VIEW_ATTEMPTS = 5
+RELEASE_VIEW_DELAY_SECONDS = 3.0
 
 
 class GitHubReleaseError(RuntimeError):
@@ -145,6 +150,24 @@ def release_view(tag: str) -> dict[str, Any] | None:
     return value
 
 
+def release_view_after_create(
+    tag: str, *, sleep: Callable[[float], None] = time.sleep
+) -> dict[str, Any] | None:
+    # A release created moments ago may not be readable yet; poll briefly before failing.
+    for attempt in range(RELEASE_VIEW_ATTEMPTS):
+        release = release_view(tag)
+        if release is not None:
+            return release
+        if attempt + 1 < RELEASE_VIEW_ATTEMPTS:
+            print(
+                f"created release {tag} is not yet visible "
+                f"(attempt {attempt + 1}/{RELEASE_VIEW_ATTEMPTS}); waiting",
+                file=sys.stderr,
+            )
+            sleep(RELEASE_VIEW_DELAY_SECONDS)
+    return None
+
+
 def release_assets(repository: str, release_id: int) -> list[dict[str, Any]]:
     result = run([
         "gh", "api", "--paginate", "--slurp",
@@ -215,7 +238,7 @@ def stage_release(
             "--title", title,
             "--notes-file", str(notes),
         ])
-        release = release_view(contract.tag)
+        release = release_view_after_create(contract.tag)
     if release is None or release.get("tagName") != contract.tag:
         raise GitHubReleaseError("unable to create the canonical draft release")
 
