@@ -2,7 +2,7 @@
 modLoader = "javafml"
 loaderVersion = "[47,)"
 license = "All Rights Reserved"
-issueTrackerURL = "https://github.com/AkaNebur/Quick-Skin-Mod/issues"
+issueTrackerURL = "https://github.com/The-Plum-Team/Quick-Skin-Mod/issues"
 
 [[mods]]
 modId = "quickskin"
