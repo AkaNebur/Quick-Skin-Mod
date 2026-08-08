@@ -26,6 +26,11 @@ from rotate_artifacts import (  # noqa: E402
 from version_branches import parse_version_branch  # noqa: E402
 
 
+# Probe callers distinguish "no current-head evidence" (defer and wait for the next
+# attestation wake) from a genuine selection error, which keeps the ordinary exit code 2.
+PROBE_NO_EVIDENCE_EXIT = 3
+
+
 def _newest_valid(
     api: ArtifactApi,
     artifacts: list[Artifact],
@@ -128,8 +133,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--branch", required=True)
-    parser.add_argument("--github-output", type=Path, required=True)
-    return parser.parse_args(argv)
+    parser.add_argument("--github-output", type=Path)
+    parser.add_argument(
+        "--probe",
+        action="store_true",
+        help="answer via exit status whether authenticated current-head evidence exists",
+    )
+    args = parser.parse_args(argv)
+    if not args.probe and args.github_output is None:
+        parser.error("--github-output is required unless --probe is used")
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -150,6 +163,21 @@ def main(argv: list[str] | None = None) -> int:
             api_url=os.environ.get("GITHUB_API_URL", "https://api.github.com"),
         )
         current_sha = api.get_branch_sha(branch)
+        if args.probe:
+            # The probe authenticates exactly like a selection but downloads nothing and
+            # reports a missing source as a distinct clean outcome for defer decisions.
+            try:
+                selected = select_source(
+                    api,
+                    repository=repository,
+                    branch=branch,
+                    current_sha=current_sha,
+                )
+            except RotationError as exc:
+                print(f"Pages evidence probe: {exc}", file=sys.stderr)
+                return PROBE_NO_EVIDENCE_EXIT
+            print(f"Pages evidence probe: {selected.name} covers {branch} at {current_sha}")
+            return 0
         selected = select_source(
             api,
             repository=repository,
