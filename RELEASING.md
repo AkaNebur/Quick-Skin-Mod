@@ -117,7 +117,7 @@ provenance for a downloaded JAR:
 
 ```bash
 gh attestation verify "Quick Skin - Fabric - 26.1.1-3.0.0.jar" \
-  --repo AkaNebur/Quick-Skin-Mod
+  --repo The-Plum-Team/Quick-Skin-Mod
 ```
 
 Publication receipts and packaged-runtime diagnostics remain attached to the workflow run for one
@@ -141,7 +141,7 @@ the declared state explicitly:
 
 ```bash
 python scripts/release/github_governance.py apply \
-  --confirm AkaNebur/Quick-Skin-Mod
+  --confirm The-Plum-Team/Quick-Skin-Mod
 ```
 
 The helper enables immutable releases, creates no-bypass branch and tag rulesets, requires PRs and
@@ -162,7 +162,7 @@ reached `master` and every release branch, an administrator performs the one-tim
 3. Run `Project site` manually from `master` after every release branch has produced an exact-head
    `pages-e2e-<branch>` artifact.
 
-The expected project URL is <https://akanebur.github.io/Quick-Skin-Mod/>. Later successful
+The expected project URL is <https://the-plum-team.github.io/Quick-Skin-Mod/>. Later successful
 release-branch Packaged E2E runs wake the site workflow automatically. The workflow executes the
 generator from protected `master`, validates all current release heads, and deploys through the
 `github-pages` environment. If Pages is not enabled or any branch lacks current evidence, the
