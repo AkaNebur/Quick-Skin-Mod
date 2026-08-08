@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -20,11 +21,13 @@ from rotate_artifacts import (  # noqa: E402
     load_generations,
     retire_pages_run_transients,
     rotate_branch,
+    rotate_generations,
     select_consumed_handoffs,
     select_old_caches,
     select_pages_run_transients,
 )
-from select_artifact import select_source  # noqa: E402
+import select_artifact  # noqa: E402
+from select_artifact import PROBE_NO_EVIDENCE_EXIT, select_source  # noqa: E402
 
 
 TARGET_SHA = "a" * 40
@@ -86,6 +89,7 @@ class FakeApi:
         runs: dict[int, dict[str, Any]],
         run_artifacts: dict[int, list[Artifact]] | None = None,
         branch_sha: str = TARGET_SHA,
+        branch_shas: dict[str, str] | None = None,
         missing_on_delete: set[int] | None = None,
         artifact_overrides: dict[int, Artifact] | None = None,
     ) -> None:
@@ -94,6 +98,7 @@ class FakeApi:
         self.runs = runs
         self.run_artifacts = run_artifacts or {}
         self.branch_sha = branch_sha
+        self.branch_shas = branch_shas
         self.missing_on_delete = missing_on_delete or set()
         self.deleted: list[int] = []
         self.artifacts_by_id = {
@@ -130,6 +135,10 @@ class FakeApi:
         return self.runs[run_id]
 
     def get_branch_sha(self, branch: str) -> str:
+        if self.branch_shas is not None:
+            if branch not in self.branch_shas:
+                raise AssertionError(f"unexpected branch {branch}")
+            return self.branch_shas[branch]
         self.assert_branch(branch)
         return self.branch_sha
 
@@ -610,6 +619,87 @@ class PagesArtifactRotationTest(unittest.TestCase):
         self.assertEqual(deleted, [])
         self.assertEqual(api.deleted, [])
 
+    def test_one_deferred_branch_does_not_abort_the_remaining_rotations(self) -> None:
+        other_branch = "forge-and-fabric-1.21.1"
+        keep_other = artifact(
+            210,
+            f"pages-cache-{other_branch}--{TARGET_SHA}",
+            "2026-08-03T12:00:00Z",
+            run_id=900,
+            head_branch="master",
+            head_sha=PAGES_SHA,
+        )
+        generation_other = BranchGeneration(
+            branch=other_branch,
+            target_sha=TARGET_SHA,
+            target_run_id=801,
+            keep=keep_other,
+        )
+        old_cache = artifact(
+            100,
+            f"pages-cache-{BRANCH}",
+            "2026-08-03T11:00:00Z",
+            run_id=700,
+            head_branch="master",
+            head_sha=OLD_PAGES_SHA,
+        )
+        old_cache_other = artifact(
+            101,
+            f"pages-cache-{other_branch}",
+            "2026-08-03T11:00:00Z",
+            run_id=700,
+            head_branch="master",
+            head_sha=OLD_PAGES_SHA,
+        )
+        changed_keep = artifact(
+            200,
+            self.keep.name,
+            "2026-08-03T12:30:00Z",
+            run_id=900,
+            head_branch="master",
+            head_sha=PAGES_SHA,
+        )
+        api = FakeApi(
+            keep=self.keep,
+            inventories={
+                old_cache.name: [old_cache, self.keep],
+                old_cache_other.name: [old_cache_other, keep_other],
+                f"pages-e2e-{BRANCH}": [],
+                f"pages-e2e-{other_branch}": [],
+            },
+            runs={
+                700: run(
+                    700,
+                    workflow=".github/workflows/pages.yml",
+                    event="schedule",
+                    branch="master",
+                    sha=OLD_PAGES_SHA,
+                ),
+                900: run(
+                    900,
+                    workflow=".github/workflows/pages.yml",
+                    event="workflow_dispatch",
+                    branch="master",
+                    sha=PAGES_SHA,
+                ),
+            },
+            branch_shas={BRANCH: TARGET_SHA, other_branch: TARGET_SHA},
+            # The first branch's keep artifact mutates mid-rotation, so its per-delete
+            # revalidation raises; the second branch must still rotate normally.
+            artifact_overrides={200: changed_keep},
+        )
+        summary, deferred = rotate_generations(
+            api,
+            [self.generation, generation_other],
+            repository=REPOSITORY,
+            pages_run_id=900,
+            pages_run_sha=PAGES_SHA,
+            delete_delay_seconds=0,
+        )
+        self.assertEqual(deferred, [BRANCH])
+        self.assertEqual(summary, {BRANCH: [], other_branch: [101]})
+        self.assertEqual(api.deleted, [101])
+
     def test_delete_404_is_idempotent(self) -> None:
         old_cache = artifact(
             100,
@@ -814,6 +904,53 @@ class PagesArtifactRotationTest(unittest.TestCase):
         values = api.list_artifacts("pages-cache-test")
         self.assertEqual(len(values), 101)
         self.assertEqual(api.pages, [1, 2])
+
+
+class SelectArtifactProbeTest(unittest.TestCase):
+    def probe_argv(self) -> list[str]:
+        return ["--repository", REPOSITORY, "--branch", BRANCH, "--probe"]
+
+    def test_probe_exits_zero_when_current_evidence_exists(self) -> None:
+        keep = artifact(
+            200,
+            f"pages-cache-{BRANCH}--{TARGET_SHA}",
+            "2026-08-03T12:00:00Z",
+            run_id=900,
+            head_branch="master",
+            head_sha=PAGES_SHA,
+        )
+        with patch.dict(os.environ, {"GH_TOKEN": "token"}), patch.object(
+            select_artifact, "GitHubApi"
+        ) as api_factory:
+            api_factory.return_value.get_branch_sha.return_value = TARGET_SHA
+            with patch.object(select_artifact, "select_source", return_value=keep):
+                self.assertEqual(select_artifact.main(self.probe_argv()), 0)
+
+    def test_probe_reports_missing_evidence_with_a_distinct_exit_code(self) -> None:
+        self.assertEqual(PROBE_NO_EVIDENCE_EXIT, 3)
+        with patch.dict(os.environ, {"GH_TOKEN": "token"}), patch.object(
+            select_artifact, "GitHubApi"
+        ) as api_factory:
+            api_factory.return_value.get_branch_sha.return_value = TARGET_SHA
+            with patch.object(
+                select_artifact,
+                "select_source",
+                side_effect=RotationError(
+                    f"no authenticated current evidence exists for {BRANCH}"
+                ),
+            ):
+                self.assertEqual(
+                    select_artifact.main(self.probe_argv()), PROBE_NO_EVIDENCE_EXIT
+                )
+
+    def test_probe_keeps_the_ordinary_error_exit_for_bad_configuration(self) -> None:
+        with patch.dict(os.environ, {"GH_TOKEN": ""}):
+            self.assertEqual(select_artifact.main(self.probe_argv()), 2)
+
+    def test_selection_still_requires_the_github_output_destination(self) -> None:
+        with self.assertRaises(SystemExit):
+            select_artifact.parse_args(["--repository", REPOSITORY, "--branch", BRANCH])
+        self.assertTrue(select_artifact.parse_args(self.probe_argv()).probe)
 
 
 if __name__ == "__main__":
