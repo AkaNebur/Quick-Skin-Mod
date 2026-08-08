@@ -26,6 +26,9 @@ jobs:
   discover:
     name: Discover release branches
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
     outputs:
       targets: ${{ steps.targets.outputs.value }}
     steps:
@@ -60,6 +63,19 @@ jobs:
           fi
           printf 'value=%s\n' "$value" >> "$GITHUB_OUTPUT"
 
+      - name: Ensure the automation PR label exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Created once per propagation instead of once per publish leg; the writer legs only
+          # attach the already existing label.
+          gh label create automated-version-sync \
+            --color 1D76DB \
+            --description 'Trusted master-to-version synchronization' \
+            --force
+
   propose:
     name: Prepare read-only port to ${{ matrix.target }}
     needs: discover
@@ -74,7 +90,7 @@ jobs:
       pull-requests: read
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 16
       matrix:
         target: ${{ fromJSON(needs.discover.outputs.targets) }}
 
@@ -105,6 +121,7 @@ jobs:
           python3 "$controller/scripts/release/version_branches.py" \
             --target "$TARGET_BRANCH" > /dev/null
           target_slug="${TARGET_BRANCH//[^A-Za-z0-9._-]/-}"
+          target_head_sha="$(git rev-parse HEAD)"
           open_ports="$(gh pr list --state open --base "$TARGET_BRANCH" --limit 100 \
             --json number,baseRefName,baseRefOid,headRefName,headRefOid,isCrossRepository,labels,state \
             --jq '[.[] | select(.headRefName | startswith("automation/sync/")) | select([.labels[].name] | index("automated-version-sync"))]')"
@@ -113,7 +130,7 @@ jobs:
             jq -e \
               --arg base "$TARGET_BRANCH" \
               --arg head_prefix "automation/sync/$target_slug/" \
-              --arg target_head "$(git rev-parse HEAD)" \
+              --arg target_head "$target_head_sha" \
               '.[0].state == "OPEN" and .[0].baseRefName == $base and .[0].baseRefOid == $target_head and (.[0].headRefName | startswith($head_prefix)) and (.[0].headRefOid | test("^[0-9a-f]{40}$")) and (.[0].isCrossRepository | not) and ([.[0].labels[].name] | index("automated-version-sync")) != null' \
               <<< "$open_ports" > /dev/null
             sync_branch="$(jq -r '.[0].headRefName' <<< "$open_ports")"
@@ -131,6 +148,7 @@ jobs:
           printf 'branch=%s\n' "$sync_branch" >> "$GITHUB_OUTPUT"
           printf 'existing=%s\n' "$existing" >> "$GITHUB_OUTPUT"
           printf 'source_sha=%s\n' "$source_sha" >> "$GITHUB_OUTPUT"
+          printf 'target_head_sha=%s\n' "$target_head_sha" >> "$GITHUB_OUTPUT"
           printf 'work_head_sha=%s\n' "$work_head_sha" >> "$GITHUB_OUTPUT"
 
           if git merge-base --is-ancestor "$source_sha" "$work_head_sha"; then
@@ -288,6 +306,7 @@ jobs:
           SOURCE_SHA: ${{ steps.merge.outputs.source_sha }}
           SYNC_BRANCH: ${{ steps.merge.outputs.branch }}
           TARGET_BRANCH: ${{ matrix.target }}
+          TARGET_HEAD_SHA: ${{ steps.merge.outputs.target_head_sha }}
           WORK_HEAD_SHA: ${{ steps.merge.outputs.work_head_sha }}
         run: |
           set -euo pipefail
@@ -342,16 +361,23 @@ jobs:
 
             # Classify the exact tree and parent topology that the writer will reproduce. The
             # classifier itself comes from the protected synchronization source, never the target.
+            # Both commit dates are pinned to the source commit so validate, publish and any
+            # re-run reproduce one byte-identical port commit.
             tree="$(git write-tree)"
+            port_commit_date="$(git show -s --format=%cI "$SOURCE_SHA")"
             candidate_commit="$(printf 'classify port to %s\n' "$TARGET_BRANCH" \
-              | git -c user.name='github-actions[bot]' \
+              | GIT_AUTHOR_DATE="$port_commit_date" GIT_COMMITTER_DATE="$port_commit_date" \
+                git -c user.name='github-actions[bot]' \
                 -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
                 commit-tree "$tree" -p "$WORK_HEAD_SHA" -p "$SOURCE_SHA")"
+            # The classification base is the target head the plan was built on, so the policy
+            # covers the full pull-request diff. A new port's base equals the work head; an
+            # updated open port is classified over everything it will merge, not the increment.
             impact_output="$RUNNER_TEMP/e2e-impact-output"
             : > "$impact_output"
             python3 "$RUNNER_TEMP/version-port-controller/scripts/ci/e2e_impact.py" \
               --repository . \
-              --base "$WORK_HEAD_SHA" \
+              --base "$TARGET_HEAD_SHA" \
               --head "$candidate_commit" \
               --github-output "$impact_output"
             runtime_required="$(sed -n 's/^runtime_required=//p' "$impact_output")"
@@ -360,7 +386,7 @@ jobs:
               '.schema_version == 1 and (.runtime_required | type == "boolean") and (.paths | type == "array" and length > 0) and (.runtime_paths | type == "array")' \
               <<< "$runtime_manifest" > /dev/null
             runtime_policy=full
-            if [[ "$runtime_required" == false && "$EXISTING" == false ]]; then
+            if [[ "$runtime_required" == false ]]; then
               runtime_policy=not-applicable
             fi
           else
@@ -372,6 +398,7 @@ jobs:
             --arg branch "$SYNC_BRANCH" \
             --arg work_head_sha "$WORK_HEAD_SHA" \
             --arg source_sha "$SOURCE_SHA" \
+            --arg target_head_sha "$TARGET_HEAD_SHA" \
             --arg tree "$tree" \
             --arg runtime_policy "$runtime_policy" \
             --argjson ai_conflicts "$AI_CONFLICTS" \
@@ -381,7 +408,7 @@ jobs:
             --argjson conflicted "$CONFLICTED" \
             --argjson existing "$EXISTING" \
             --argjson runtime_manifest "$runtime_manifest" \
-            '{target:$target,branch:$branch,work_head_sha:$work_head_sha,source_sha:$source_sha,tree:$tree,needed:$needed,conflicted:$conflicted,conflicts:$conflicts,ai_conflicts:$ai_conflicts,merge_evidence:$merge_evidence,existing:$existing,runtime_policy:$runtime_policy,runtime_manifest:$runtime_manifest}' \
+            '{target:$target,branch:$branch,work_head_sha:$work_head_sha,source_sha:$source_sha,target_head_sha:$target_head_sha,tree:$tree,needed:$needed,conflicted:$conflicted,conflicts:$conflicts,ai_conflicts:$ai_conflicts,merge_evidence:$merge_evidence,existing:$existing,runtime_policy:$runtime_policy,runtime_manifest:$runtime_manifest}' \
             > "$proposal_dir/version-port-plan.json"
 
       - name: Upload the read-only port proposal
@@ -402,7 +429,7 @@ jobs:
     if: >-
       always() &&
       needs.discover.result == 'success' &&
-      needs.propose.result == 'success' &&
+      needs.propose.result != 'cancelled' &&
       needs.discover.outputs.targets != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -411,7 +438,7 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 16
       matrix:
         target: ${{ fromJSON(needs.discover.outputs.targets) }}
 
@@ -459,9 +486,11 @@ jobs:
              (keys | sort) == (["ai_conflicts", "branch", "conflicted",
                "conflicts", "existing", "merge_evidence", "needed",
                "runtime_manifest", "runtime_policy", "source_sha", "target",
-               "tree", "work_head_sha"] | sort) and
+               "target_head_sha", "tree", "work_head_sha"] | sort) and
              .target == $target and .source_sha == $source and
-             (.work_head_sha | sha) and
+             (.work_head_sha | sha) and (.target_head_sha | sha) and
+             (if .existing then true
+              else .target_head_sha == .work_head_sha end) and
              (.branch | type == "string" and length <= 240 and
                test("^automation/sync/[A-Za-z0-9._/-]+$") and
                startswith("automation/sync/" + $target + "/")) and
@@ -492,7 +521,7 @@ jobs:
                 .runtime_manifest == {} and .merge_evidence == {}
               end)' \
             proposal/version-port-plan.json > /dev/null
-          for key in branch conflicted existing needed runtime_policy source_sha tree work_head_sha; do
+          for key in branch conflicted existing needed runtime_policy source_sha target_head_sha tree work_head_sha; do
             printf '%s=%s\n' "$key" "$(jq -r ".$key" proposal/version-port-plan.json)" \
               >> "$GITHUB_OUTPUT"
           done
@@ -536,23 +565,32 @@ jobs:
         working-directory: port
         shell: bash
         env:
-          EXISTING_PORT: ${{ steps.plan.outputs.existing }}
           EXPECTED_RUNTIME_MANIFEST: ${{ steps.plan.outputs.runtime_manifest }}
           EXPECTED_RUNTIME_POLICY: ${{ steps.plan.outputs.runtime_policy }}
           EXPECTED_TREE: ${{ steps.plan.outputs.tree }}
           HEAD_BRANCH: ${{ steps.plan.outputs.branch }}
           SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
           TARGET_BRANCH: ${{ matrix.target }}
+          TARGET_HEAD_SHA: ${{ steps.plan.outputs.target_head_sha }}
           WORK_HEAD_SHA: ${{ steps.plan.outputs.work_head_sha }}
         run: |
           set -euo pipefail
           if git fetch --no-tags origin "$HEAD_BRANCH"; then
             [[ "$(git rev-parse FETCH_HEAD)" == "$WORK_HEAD_SHA" ]]
+          elif git ls-remote --exit-code origin "refs/heads/$HEAD_BRANCH" \
+              > /dev/null 2>&1; then
+            # The ref exists but could not be fetched; a transient failure must never skip
+            # the head-consistency assertion.
+            echo "Failed to fetch existing synchronization branch $HEAD_BRANCH" >&2
+            exit 1
           fi
           [[ "$(git rev-parse HEAD)" == "$WORK_HEAD_SHA" ]]
           git fetch --no-tags origin "$SOURCE_SHA"
           [[ "$(git rev-parse FETCH_HEAD)" == "$SOURCE_SHA" ]]
           git cat-file -e "${SOURCE_SHA}^{commit}"
+          git fetch --no-tags origin "$TARGET_HEAD_SHA"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$TARGET_HEAD_SHA" ]]
+          git cat-file -e "${TARGET_HEAD_SHA}^{commit}"
           python3 ../controller/scripts/ci/ai_patch_policy.py patch \
             --mode port --patch ../proposal/version-port.patch
           candidate_index="$RUNNER_TEMP/version-port-candidate.index"
@@ -642,8 +680,12 @@ jobs:
           [[ "$validated_tree" == "$EXPECTED_TREE" ]]
           python3 ../controller/scripts/ci/ai_patch_policy.py staged --mode port
           tree="$(git write-tree)"
+          # Pin both commit dates to the source commit so validate, publish and any re-run
+          # reproduce one byte-identical port commit.
+          port_commit_date="$(git show -s --format=%cI "$SOURCE_SHA")"
           commit="$(printf 'chore: sync master into %s\n' "$TARGET_BRANCH" \
-            | git -c user.name='github-actions[bot]' \
+            | GIT_AUTHOR_DATE="$port_commit_date" GIT_COMMITTER_DATE="$port_commit_date" \
+              git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
               commit-tree "$tree" -p "$WORK_HEAD_SHA" -p "$SOURCE_SHA")"
           [[ "$(git rev-parse "${commit}^{tree}")" == "$tree" ]]
@@ -656,7 +698,7 @@ jobs:
           : > "$impact_output"
           python3 ../controller/scripts/ci/e2e_impact.py \
             --repository . \
-            --base "$WORK_HEAD_SHA" \
+            --base "$TARGET_HEAD_SHA" \
             --head "$commit" \
             --github-output "$impact_output"
           runtime_required="$(sed -n 's/^runtime_required=//p' "$impact_output")"
@@ -664,13 +706,10 @@ jobs:
           [[ "$(jq -S -c . <<< "$runtime_manifest")" \
             == "$(jq -S -c . <<< "$EXPECTED_RUNTIME_MANIFEST")" ]]
           runtime_policy=full
-          if [[ "$runtime_required" == false && "$EXISTING_PORT" == false ]]; then
+          if [[ "$runtime_required" == false ]]; then
             runtime_policy=not-applicable
           fi
           [[ "$runtime_policy" == "$EXPECTED_RUNTIME_POLICY" ]]
-          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
-          printf 'runtime_policy=%s\n' "$runtime_policy" >> "$GITHUB_OUTPUT"
-        id: validated
 
   publish:
     name: Publish validated port to ${{ matrix.target }}
@@ -681,8 +720,8 @@ jobs:
     if: >-
       always() &&
       needs.discover.result == 'success' &&
-      needs.propose.result == 'success' &&
-      needs.validate.result == 'success' &&
+      needs.propose.result != 'cancelled' &&
+      needs.validate.result != 'cancelled' &&
       needs.discover.outputs.targets != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -693,11 +732,29 @@ jobs:
       pull-requests: write
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 16
       matrix:
         target: ${{ fromJSON(needs.discover.outputs.targets) }}
 
     steps:
+      - name: Require this target's own validate leg
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          # Matrix needs-edges settle per stage, not per target, so a broken sibling target no
+          # longer skips this leg. The writer must still never publish a tree whose own exact
+          # validation leg did not succeed in this run.
+          jobs_json="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100")"
+          validate_result="$(jq -r \
+            --arg name "Validate port to $TARGET_BRANCH without credentials" \
+            '[.[].jobs[] | select(.name == $name)] | if length == 1 then .[0].conclusion else "invalid" end' \
+            <<< "$jobs_json")"
+          [[ "$validate_result" == success ]]
+
       - name: Download the immutable validated proposal
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -741,9 +798,11 @@ jobs:
              (keys | sort) == (["ai_conflicts", "branch", "conflicted",
                "conflicts", "existing", "merge_evidence", "needed",
                "runtime_manifest", "runtime_policy", "source_sha", "target",
-               "tree", "work_head_sha"] | sort) and
+               "target_head_sha", "tree", "work_head_sha"] | sort) and
              .target == $target and .source_sha == $source and
-             (.work_head_sha | sha) and
+             (.work_head_sha | sha) and (.target_head_sha | sha) and
+             (if .existing then true
+              else .target_head_sha == .work_head_sha end) and
              (.branch | type == "string" and length <= 240 and
                test("^automation/sync/[A-Za-z0-9._/-]+$") and
                startswith("automation/sync/" + $target + "/")) and
@@ -774,7 +833,7 @@ jobs:
                 .runtime_manifest == {} and .merge_evidence == {}
               end)' \
             proposal/version-port-plan.json > /dev/null
-          for key in branch existing needed runtime_policy source_sha tree work_head_sha; do
+          for key in branch existing needed runtime_policy source_sha target_head_sha tree work_head_sha; do
             printf '%s=%s\n' "$key" "$(jq -r ".$key" proposal/version-port-plan.json)" \
               >> "$GITHUB_OUTPUT"
           done
@@ -805,23 +864,40 @@ jobs:
         working-directory: port
         shell: bash
         env:
-          EXISTING_PORT: ${{ steps.plan.outputs.existing }}
           EXPECTED_RUNTIME_MANIFEST: ${{ steps.plan.outputs.runtime_manifest }}
           EXPECTED_RUNTIME_POLICY: ${{ steps.plan.outputs.runtime_policy }}
           EXPECTED_TREE: ${{ steps.plan.outputs.tree }}
           HEAD_BRANCH: ${{ steps.plan.outputs.branch }}
           SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
           TARGET_BRANCH: ${{ matrix.target }}
+          TARGET_HEAD_SHA: ${{ steps.plan.outputs.target_head_sha }}
           WORK_HEAD_SHA: ${{ steps.plan.outputs.work_head_sha }}
         run: |
           set -euo pipefail
           if git fetch --no-tags origin "$HEAD_BRANCH"; then
-            [[ "$(git rev-parse FETCH_HEAD)" == "$WORK_HEAD_SHA" ]]
+            fetched_head="$(git rev-parse FETCH_HEAD)"
+            if [[ "$fetched_head" != "$WORK_HEAD_SHA" ]]; then
+              # A previously interrupted publish attempt may already have pushed this port.
+              # Accept only the exact validated tree on the exact validated parents so that a
+              # re-run of a failed leg is a bounded recovery, never an overwrite.
+              [[ "$(git rev-parse "${fetched_head}^{tree}")" == "$EXPECTED_TREE" ]]
+              [[ "$(git rev-list --parents -n 1 "$fetched_head")" \
+                == "$fetched_head $WORK_HEAD_SHA $SOURCE_SHA" ]]
+            fi
+          elif git ls-remote --exit-code origin "refs/heads/$HEAD_BRANCH" \
+              > /dev/null 2>&1; then
+            # The ref exists but could not be fetched; a transient failure must never skip
+            # the head-consistency assertion.
+            echo "Failed to fetch existing synchronization branch $HEAD_BRANCH" >&2
+            exit 1
           fi
           [[ "$(git rev-parse HEAD)" == "$WORK_HEAD_SHA" ]]
           git fetch --no-tags origin "$SOURCE_SHA"
           [[ "$(git rev-parse FETCH_HEAD)" == "$SOURCE_SHA" ]]
           git cat-file -e "${SOURCE_SHA}^{commit}"
+          git fetch --no-tags origin "$TARGET_HEAD_SHA"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$TARGET_HEAD_SHA" ]]
+          git cat-file -e "${TARGET_HEAD_SHA}^{commit}"
           python3 ../controller/scripts/ci/ai_patch_policy.py patch \
             --mode port --patch ../proposal/version-port.patch
           candidate_index="$RUNNER_TEMP/version-port-candidate.index"
@@ -902,8 +978,12 @@ jobs:
           tree="$(git write-tree)"
           [[ "$tree" == "$candidate_tree" ]]
           [[ "$tree" == "$EXPECTED_TREE" ]]
+          # Pin both commit dates to the source commit so validate, publish and any re-run
+          # reproduce one byte-identical port commit.
+          port_commit_date="$(git show -s --format=%cI "$SOURCE_SHA")"
           commit="$(printf 'chore: sync master into %s\n' "$TARGET_BRANCH" \
-            | git -c user.name='github-actions[bot]' \
+            | GIT_AUTHOR_DATE="$port_commit_date" GIT_COMMITTER_DATE="$port_commit_date" \
+              git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
               commit-tree "$tree" -p "$WORK_HEAD_SHA" -p "$SOURCE_SHA")"
           [[ "$(git rev-parse "${commit}^{tree}")" == "$EXPECTED_TREE" ]]
@@ -914,7 +994,7 @@ jobs:
           : > "$impact_output"
           python3 ../controller/scripts/ci/e2e_impact.py \
             --repository . \
-            --base "$WORK_HEAD_SHA" \
+            --base "$TARGET_HEAD_SHA" \
             --head "$commit" \
             --github-output "$impact_output"
           runtime_required="$(sed -n 's/^runtime_required=//p' "$impact_output")"
@@ -922,7 +1002,7 @@ jobs:
           [[ "$(jq -S -c . <<< "$runtime_manifest")" \
             == "$(jq -S -c . <<< "$EXPECTED_RUNTIME_MANIFEST")" ]]
           runtime_policy=full
-          if [[ "$runtime_required" == false && "$EXISTING_PORT" == false ]]; then
+          if [[ "$runtime_required" == false ]]; then
             runtime_policy=not-applicable
           fi
           [[ "$runtime_policy" == "$EXPECTED_RUNTIME_POLICY" ]]
@@ -935,9 +1015,11 @@ jobs:
         shell: bash
         env:
           EXISTING_PORT: ${{ steps.plan.outputs.existing }}
+          EXPECTED_TREE: ${{ steps.plan.outputs.tree }}
           GH_TOKEN: ${{ github.token }}
           PORT_COMMIT: ${{ steps.reproduced.outputs.commit }}
           RUNTIME_POLICY: ${{ steps.reproduced.outputs.runtime_policy }}
+          SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
           SYNC_BRANCH: ${{ steps.plan.outputs.branch }}
           TARGET_BRANCH: ${{ matrix.target }}
           WORK_HEAD_SHA: ${{ steps.plan.outputs.work_head_sha }}
@@ -945,26 +1027,50 @@ jobs:
           set -euo pipefail
           [[ "$PORT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$(git rev-parse "${PORT_COMMIT}^1")" == "$WORK_HEAD_SHA" ]]
+          published_sha="$PORT_COMMIT"
+          push_needed=true
           if [[ "$EXISTING_PORT" == true ]]; then
             remote_sha="$(gh api \
               "repos/$GITHUB_REPOSITORY/git/ref/heads/$SYNC_BRANCH" \
               --jq .object.sha)"
-            [[ "$remote_sha" == "$WORK_HEAD_SHA" ]]
+            if [[ "$remote_sha" != "$WORK_HEAD_SHA" ]]; then
+              # A previously interrupted attempt already pushed this port. Accept only the
+              # exact validated tree on the exact validated parents and finish publishing it
+              # instead of failing the recovery re-run.
+              [[ "$remote_sha" =~ ^[0-9a-f]{40}$ ]]
+              git fetch --no-tags origin "$remote_sha"
+              [[ "$(git rev-parse FETCH_HEAD)" == "$remote_sha" ]]
+              [[ "$(git rev-parse "${remote_sha}^{tree}")" == "$EXPECTED_TREE" ]]
+              [[ "$(git rev-list --parents -n 1 "$remote_sha")" \
+                == "$remote_sha $WORK_HEAD_SHA $SOURCE_SHA" ]]
+              published_sha="$remote_sha"
+              push_needed=false
+            fi
           else
-            if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$SYNC_BRANCH" \
-                > /dev/null 2>&1; then
-              echo "Refusing to overwrite an unexpected synchronization branch" >&2
-              exit 1
+            if remote_sha="$(gh api \
+                "repos/$GITHUB_REPOSITORY/git/ref/heads/$SYNC_BRANCH" \
+                --jq .object.sha 2> /dev/null)"; then
+              # The branch this attempt would create already exists. Accept it only as this
+              # leg's own interrupted publication of the exact validated plan.
+              [[ "$remote_sha" =~ ^[0-9a-f]{40}$ ]]
+              git fetch --no-tags origin "$remote_sha"
+              [[ "$(git rev-parse FETCH_HEAD)" == "$remote_sha" ]]
+              if [[ "$(git rev-parse "${remote_sha}^{tree}")" != "$EXPECTED_TREE" \
+                  || "$(git rev-list --parents -n 1 "$remote_sha")" \
+                    != "$remote_sha $WORK_HEAD_SHA $SOURCE_SHA" ]]; then
+                echo "Refusing to overwrite an unexpected synchronization branch" >&2
+                exit 1
+              fi
+              published_sha="$remote_sha"
+              push_needed=false
             fi
           fi
           git remote set-url origin \
             "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           gh auth setup-git
-          git push --no-verify origin "$PORT_COMMIT:refs/heads/$SYNC_BRANCH"
-          gh label create automated-version-sync \
-            --color 1D76DB \
-            --description 'Trusted master-to-version synchronization' \
-            --force
+          if [[ "$push_needed" == true ]]; then
+            git push --no-verify origin "$PORT_COMMIT:refs/heads/$SYNC_BRANCH"
+          fi
           if [[ "$EXISTING_PORT" == true ]]; then
             # GitHub publishes the pull request head asynchronously, so the commit pushed
             # above can still be invisible for a moment. Poll the same exact identity
@@ -977,7 +1083,7 @@ jobs:
                 --json url,baseRefName,headRefName,headRefOid,isCrossRepository,labels,state)"
               if jq -e \
                   --arg branch "$SYNC_BRANCH" \
-                  --arg head "$PORT_COMMIT" \
+                  --arg head "$published_sha" \
                   --arg target "$TARGET_BRANCH" \
                   'length == 1 and .[0].state == "OPEN" and .[0].baseRefName == $target and .[0].headRefName == $branch and .[0].headRefOid == $head and (.[0].isCrossRepository | not) and ([.[0].labels[].name] | index("automated-version-sync")) != null' \
                   <<< "$pr_json" > /dev/null; then
@@ -987,7 +1093,7 @@ jobs:
               sleep 2
             done
             if [[ "$pr_converged" != true ]]; then
-              echo "Open port never converged on the pushed head $PORT_COMMIT" >&2
+              echo "Open port never converged on the pushed head $published_sha" >&2
               jq -r '.[0].headRefOid // "no open port"' <<< "$pr_json" >&2
               exit 1
             fi
@@ -995,14 +1101,57 @@ jobs:
             gh pr comment "$pr_url" --body \
               "Updated this open port with the latest \`master\`; redispatching both exact-head gates."
           else
-            pr_url="$(gh pr create \
-              --base "$TARGET_BRANCH" \
-              --head "$SYNC_BRANCH" \
-              --title "chore: sync master into $TARGET_BRANCH" \
-              --label automated-version-sync \
-              --body "Automated semantic port of master into \`$TARGET_BRANCH\`. The branch's own release matrix selects every build and packaged E2E lane. Build gate and Packaged E2E are dispatched explicitly; the PR merges only after both pass.")"
+            # GitHub publishes a just-pushed ref asynchronously, and a previously interrupted
+            # attempt may already have opened this PR. Retry a bounded number of times, adopting
+            # only the exact open PR for the published head as an already-created success.
+            pr_url=''
+            for attempt in $(seq 1 5); do
+              pr_json="$(gh pr list --state open --head "$SYNC_BRANCH" --limit 2 \
+                --json url,baseRefName,headRefName,headRefOid,isCrossRepository,labels,state)"
+              if jq -e \
+                  --arg branch "$SYNC_BRANCH" \
+                  --arg head "$published_sha" \
+                  --arg target "$TARGET_BRANCH" \
+                  'length == 1 and .[0].state == "OPEN" and .[0].baseRefName == $target and .[0].headRefName == $branch and .[0].headRefOid == $head and (.[0].isCrossRepository | not) and ([.[0].labels[].name] | index("automated-version-sync")) != null' \
+                  <<< "$pr_json" > /dev/null; then
+                pr_url="$(jq -r '.[0].url' <<< "$pr_json")"
+                break
+              fi
+              if pr_url="$(gh pr create \
+                  --base "$TARGET_BRANCH" \
+                  --head "$SYNC_BRANCH" \
+                  --title "chore: sync master into $TARGET_BRANCH" \
+                  --label automated-version-sync \
+                  --body "Automated semantic port of master into \`$TARGET_BRANCH\`. The branch's own release matrix selects every build and packaged E2E lane. Build gate and Packaged E2E are dispatched explicitly; the PR merges only after both pass.")"; then
+                break
+              fi
+              pr_url=''
+              sleep 3
+            done
+            if [[ -z "$pr_url" ]]; then
+              echo "Failed to create or adopt the synchronization pull request" >&2
+              exit 1
+            fi
           fi
-          gh workflow run build-gate.yml --ref "$SYNC_BRANCH"
-          gh workflow run on-demand-e2e.yml --ref "$SYNC_BRANCH" \
-            -f runtime_policy="$RUNTIME_POLICY"
+          # Both gate dispatches are idempotent: the result handler accepts only the latest
+          # exact-head run of each gate, so a recovery re-run may safely dispatch duplicates.
+          build_gate_dispatched=false
+          for attempt in $(seq 1 5); do
+            if gh workflow run build-gate.yml --ref "$SYNC_BRANCH"; then
+              build_gate_dispatched=true
+              break
+            fi
+            sleep 3
+          done
+          [[ "$build_gate_dispatched" == true ]]
+          e2e_gate_dispatched=false
+          for attempt in $(seq 1 5); do
+            if gh workflow run on-demand-e2e.yml --ref "$SYNC_BRANCH" \
+                -f runtime_policy="$RUNTIME_POLICY"; then
+              e2e_gate_dispatched=true
+              break
+            fi
+            sleep 3
+          done
+          [[ "$e2e_gate_dispatched" == true ]]
           printf 'Prepared %s\n' "$pr_url"
