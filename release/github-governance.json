@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "api_version": "2026-03-10",
-  "repository": "AkaNebur/Quick-Skin-Mod",
+  "repository": "The-Plum-Team/Quick-Skin-Mod",
   "managed_rulesets": {
     "default_branch": "Quick Skin default branch",
     "release_branches": "Quick Skin release branches",
