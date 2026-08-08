@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 import urllib.parse
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -71,12 +73,15 @@ class FakeApi:
         self.cache_checks: list[int] = []
         self.active_calls = 0
         self.any_active_calls = 0
+        self.list_branches_calls = 0
+        self.list_caches_calls = 0
         self.successful_build_checks: list[tuple[str, str]] = []
 
     def get_default_branch(self) -> str:
         return self.default_branch
 
     def list_branches(self) -> set[str]:
+        self.list_branches_calls += 1
         return set(self.branches)
 
     def list_active_run_branches(self) -> set[str]:
@@ -85,6 +90,7 @@ class FakeApi:
         return set(self.active_snapshots[index])
 
     def list_caches(self) -> list[CacheEntry]:
+        self.list_caches_calls += 1
         return list(self.caches)
 
     def has_successful_build(self, branch: str, sha: str) -> bool:
@@ -255,6 +261,56 @@ class PruneTest(unittest.TestCase):
     def test_cli_requires_apply_for_mutation(self) -> None:
         self.assertFalse(parse_args([]).apply)
         self.assertTrue(parse_args(["--apply"]).apply)
+
+    def test_cli_trigger_event_defaults_to_the_runner_event(self) -> None:
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "delete"}):
+            self.assertEqual(parse_args([]).trigger_event, "delete")
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(parse_args([]).trigger_event, "")
+        self.assertEqual(
+            parse_args(["--trigger-event", "schedule"]).trigger_event, "schedule"
+        )
+
+    def test_delete_event_short_circuits_on_the_cheap_active_run_probe(self) -> None:
+        api = FakeApi([cache(1, "refs/heads/deleted")])
+        api.any_active_snapshots = [True]
+
+        result = prune(api, apply=True, trigger_event="delete")
+
+        self.assertEqual(result["short_circuit"], "delete-event-active-run")
+        self.assertEqual(result["trigger_event"], "delete")
+        self.assertTrue(result["active_run_present"])
+        self.assertEqual(result["deleted_ids"], [])
+        self.assertEqual(api.deleted, [])
+        self.assertEqual(api.any_active_calls, 1)
+        self.assertEqual(api.active_calls, 0)
+        self.assertEqual(api.list_branches_calls, 0)
+        self.assertEqual(api.list_caches_calls, 0)
+
+    def test_delete_event_without_active_runs_builds_the_full_plan(self) -> None:
+        api = FakeApi([cache(1, "refs/heads/deleted")])
+
+        result = prune(api, apply=True, trigger_event="delete")
+
+        self.assertIsNone(result["short_circuit"])
+        self.assertEqual(result["deleted_ids"], [1])
+        self.assertEqual(api.deleted, [1])
+        self.assertEqual(api.list_branches_calls, 1)
+        self.assertEqual(api.list_caches_calls, 1)
+
+    def test_schedule_event_keeps_the_complete_inventory_plan(self) -> None:
+        api = FakeApi([cache(1, "refs/heads/deleted")])
+        api.active_snapshots = [{"topic/using-master-fallback"}]
+        api.any_active_snapshots = [True]
+
+        result = prune(api, apply=True, trigger_event="schedule")
+
+        self.assertIsNone(result["short_circuit"])
+        self.assertTrue(result["active_run_present"])
+        self.assertEqual(result["candidate_count"], 0)
+        self.assertEqual(api.deleted, [])
+        self.assertEqual(api.list_branches_calls, 1)
+        self.assertEqual(api.list_caches_calls, 1)
 
     def test_dry_run_is_the_default_behavior_and_never_revalidates_or_deletes(self) -> None:
         api = FakeApi([cache(1, "refs/heads/deleted", size=25)])

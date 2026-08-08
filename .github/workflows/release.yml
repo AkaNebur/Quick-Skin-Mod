@@ -12,7 +12,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  # One constant group serializes tag and validation runs. The former per-ref group let a
+  # validation dispatch and a canonical tag publish run fully concurrently.
+  group: release
   cancel-in-progress: false
 
 env:
