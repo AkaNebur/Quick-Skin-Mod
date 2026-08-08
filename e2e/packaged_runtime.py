@@ -439,7 +439,7 @@ def download(url: str, destination: Path, expected_sha256: str) -> Path:
     temporary = destination.with_suffix(destination.suffix + ".part")
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "AkaNebur/Quick-Skin-Mod packaged-e2e"},
+        headers={"User-Agent": "The-Plum-Team/Quick-Skin-Mod packaged-e2e"},
     )
     try:
         with urllib.request.urlopen(request, timeout=120) as response, temporary.open("wb") as out:
