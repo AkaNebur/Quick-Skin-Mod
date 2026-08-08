@@ -29,7 +29,7 @@ class E2EImpactTest(unittest.TestCase):
         self.assertFalse(result.runtime_required)
         self.assertEqual(result.runtime_paths, ())
 
-    def test_runtime_contract_build_and_workflow_changes_fail_closed(self) -> None:
+    def test_runtime_contract_build_and_gate_workflow_changes_fail_closed(self) -> None:
         for path in (
             "common/src/main/java/com/quickskin/mod/QuickSkin.java",
             "common/src/e2e/java/com/quickskin/mod/e2e/E2EHarness.java",
@@ -39,6 +39,9 @@ class E2EImpactTest(unittest.TestCase):
             "release/release-matrix.json",
             "gradle/e2e-harness-conventions.gradle.kts",
             ".github/workflows/on-demand-e2e.yml",
+            ".github/workflows/build-gate.yml",
+            ".github/workflows/verify-gate-attestation.yml",
+            ".github/actions/run-packaged-e2e/action.yml",
             "ORACLE-RETIREMENT.md",
             "e2e/visual_review_prompt.md",
             "scripts/ci/e2e_impact.py",
@@ -47,6 +50,50 @@ class E2EImpactTest(unittest.TestCase):
                 result = impact.classify([path])
                 self.assertTrue(result.runtime_required)
                 self.assertEqual(result.runtime_paths, (path,))
+
+    def test_non_gate_workflows_can_skip_minecraft_alone_and_with_documentation(self) -> None:
+        non_gate_workflows = (
+            ".github/workflows/handle-version-port-result.yml",
+            ".github/workflows/pages.yml",
+            ".github/workflows/prune-actions-caches.yml",
+            ".github/workflows/refresh-release-status.yml",
+            ".github/workflows/release.yml",
+            ".github/workflows/sync-version-branches.yml",
+            ".github/workflows/visual-review.yml",
+        )
+        for path in non_gate_workflows:
+            with self.subTest(path=path):
+                result = impact.classify([path])
+                self.assertFalse(result.runtime_required)
+                self.assertEqual(result.runtime_paths, ())
+        combined = impact.classify([*non_gate_workflows, "docs/ai/PROJECT.md", "README.md"])
+        self.assertFalse(combined.runtime_required)
+        self.assertEqual(combined.runtime_paths, ())
+
+    def test_non_gate_workflow_mixed_with_runtime_or_gate_paths_fails_closed(self) -> None:
+        for runtime_path in (
+            "common/src/main/java/com/quickskin/mod/QuickSkin.java",
+            ".github/workflows/on-demand-e2e.yml",
+            ".github/actions/run-packaged-e2e/action.yml",
+        ):
+            with self.subTest(runtime_path=runtime_path):
+                result = impact.classify(
+                    [".github/workflows/sync-version-branches.yml", runtime_path]
+                )
+                self.assertTrue(result.runtime_required)
+                self.assertEqual(result.runtime_paths, (runtime_path,))
+
+    def test_documentation_prefix_restriction_survives_prefix_refactor(self) -> None:
+        for path, non_runtime in (
+            ("docs/ai/PROJECT.md", True),
+            ("docs/assets/architecture.png", True),
+            ("docs/tools/generate.py", False),
+            ("site/app.js", True),
+            ("site/assets/style.css", True),
+        ):
+            with self.subTest(path=path):
+                result = impact.classify([path])
+                self.assertEqual(result.runtime_required, not non_runtime)
 
     def test_mixed_diff_requires_runtime_and_records_exact_reason(self) -> None:
         result = impact.classify(["README.md", "fabric/src/main/java/Entrypoint.java"])
