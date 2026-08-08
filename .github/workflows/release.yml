@@ -52,7 +52,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       - name: Verify exact Gradle bootstrap checksums
         shell: bash
@@ -78,7 +78,7 @@ jobs:
           python-version: "3.13"
 
       - name: Configure Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           # The stable branch build gate owns cache writes. A tagged release may wait for an
           # environment approval, so it restores that cache without creating a tag-scoped copy.
@@ -149,13 +149,13 @@ jobs:
 
       - name: Attest exact production JAR provenance
         if: ${{ github.event_name == 'push' }}
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: build/release/files/*.jar
 
       - name: Attest exact production JAR SBOM
         if: ${{ github.event_name == 'push' }}
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: build/release/files/*.jar
           sbom-path: build/release/sbom/quick-skin.cdx.json
