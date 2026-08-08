@@ -2,7 +2,11 @@
 """Classify whether a version-port diff can safely skip packaged Minecraft.
 
 The policy is deliberately an allowlist. Unknown, malformed, runtime-facing, build, matrix,
-workflow, harness, oracle, and self-policy paths all require the full packaged E2E gate.
+harness, oracle, and self-policy paths all require the full packaged E2E gate. Non-gate
+workflow files are exact-listed as non-runtime: a change to a workflow that neither executes
+the packaged gates nor supplies their composite action cannot alter packaged-runtime
+evidence. The gate and controller surfaces — on-demand-e2e.yml, build-gate.yml,
+verify-gate-attestation.yml, and everything under .github/actions/ — remain runtime-required.
 """
 
 from __future__ import annotations
@@ -43,10 +47,23 @@ EXACT_NON_RUNTIME_PATHS = frozenset(
     }
 )
 
-NON_RUNTIME_PREFIXES = (
-    "docs/",
-    "site/",
+EXACT_NON_RUNTIME_WORKFLOWS = frozenset(
+    {
+        ".github/workflows/handle-version-port-result.yml",
+        ".github/workflows/pages.yml",
+        ".github/workflows/prune-actions-caches.yml",
+        ".github/workflows/refresh-release-status.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/sync-version-branches.yml",
+        ".github/workflows/visual-review.yml",
+    }
 )
+
+DOCUMENTATION_PREFIX = "docs/"
+
+DOCUMENTATION_ASSET_PREFIX = "docs/assets/"
+
+UNRESTRICTED_NON_RUNTIME_PREFIXES = ("site/",)
 
 EXACT_NON_RUNTIME_TESTS = frozenset(
     {
@@ -99,11 +116,11 @@ def normalize_path(raw: str) -> str:
 def is_non_runtime_path(path: str) -> bool:
     if path in ROOT_DOCUMENTS or path in EXACT_NON_RUNTIME_PATHS:
         return True
-    if path in EXACT_NON_RUNTIME_TESTS:
+    if path in EXACT_NON_RUNTIME_TESTS or path in EXACT_NON_RUNTIME_WORKFLOWS:
         return True
-    if path.startswith("docs/"):
-        return path.endswith(".md") or path.startswith("docs/assets/")
-    return any(path.startswith(prefix) for prefix in NON_RUNTIME_PREFIXES[1:])
+    if path.startswith(DOCUMENTATION_PREFIX):
+        return path.endswith(".md") or path.startswith(DOCUMENTATION_ASSET_PREFIX)
+    return any(path.startswith(prefix) for prefix in UNRESTRICTED_NON_RUNTIME_PREFIXES)
 
 
 def classify(paths: Iterable[str]) -> Classification:
