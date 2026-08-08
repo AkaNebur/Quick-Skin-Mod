@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -82,6 +83,33 @@ class GitHubReleaseContractTest(unittest.TestCase):
             manifest.write_text(json.dumps(data), encoding="utf-8")
             with self.assertRaisesRegex(github_release.GitHubReleaseError, "no CycloneDX SBOM"):
                 github_release.load_contract(manifest, stage, tag, commit)
+
+
+class ReleaseViewAfterCreateTest(unittest.TestCase):
+    def test_view_after_create_waits_out_eventual_consistency(self) -> None:
+        release = {"tagName": "mc1.20.1-v3.0.0", "isDraft": True}
+        sleeps: list[float] = []
+        with mock.patch.object(
+            github_release, "release_view", side_effect=[None, None, release]
+        ) as view:
+            value = github_release.release_view_after_create(
+                "mc1.20.1-v3.0.0", sleep=sleeps.append
+            )
+        self.assertEqual(value, release)
+        self.assertEqual(view.call_count, 3)
+        self.assertEqual(sleeps, [github_release.RELEASE_VIEW_DELAY_SECONDS] * 2)
+
+    def test_view_after_create_stays_bounded_when_never_visible(self) -> None:
+        sleeps: list[float] = []
+        with mock.patch.object(
+            github_release, "release_view", return_value=None
+        ) as view:
+            value = github_release.release_view_after_create(
+                "mc1.20.1-v3.0.0", sleep=sleeps.append
+            )
+        self.assertIsNone(value)
+        self.assertEqual(view.call_count, github_release.RELEASE_VIEW_ATTEMPTS)
+        self.assertEqual(len(sleeps), github_release.RELEASE_VIEW_ATTEMPTS - 1)
 
 
 if __name__ == "__main__":
