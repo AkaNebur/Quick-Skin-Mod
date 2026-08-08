@@ -143,10 +143,8 @@ jobs:
           [[ "$changed_paths" == README.md ]]
 
           head_sha="$(git rev-parse HEAD)"
-          updated=false
           if [[ -z "$previous_head" || "$head_sha" != "$previous_head" ]]; then
             git push origin "HEAD:refs/heads/$AUTOMATION_BRANCH"
-            updated=true
           fi
 
           pr_url="$(gh pr list --state open --base master --head "$AUTOMATION_BRANCH" \
@@ -158,8 +156,25 @@ jobs:
               --title 'docs: refresh release status table' \
               --body 'Automated deterministic refresh generated from the live version branches and each branch-owned release matrix.')"
           fi
-          if [[ "$updated" == true ]]; then
+
+          # Gate dispatch is keyed to the current automation head, not to whether this run
+          # pushed it: a cancellation between push and dispatch must not strand the PR. The
+          # response is read shape-agnostically so an object or page-array body both count.
+          gate_runs_for_head() {
+            gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/$1/runs?head_sha=$head_sha&per_page=1" \
+              --jq 'if type == "array" then [.[].workflow_runs[]?] else .workflow_runs end | length'
+          }
+          if [[ "$(gate_runs_for_head build-gate.yml)" == 0 ]]; then
+            printf 'Dispatching build-gate.yml for automation head %s\n' "$head_sha"
             gh workflow run build-gate.yml --ref "$AUTOMATION_BRANCH"
+          else
+            printf 'build-gate.yml already has a run for %s\n' "$head_sha"
+          fi
+          if [[ "$(gate_runs_for_head on-demand-e2e.yml)" == 0 ]]; then
+            printf 'Dispatching on-demand-e2e.yml for automation head %s\n' "$head_sha"
             gh workflow run on-demand-e2e.yml --ref "$AUTOMATION_BRANCH"
+          else
+            printf 'on-demand-e2e.yml already has a run for %s\n' "$head_sha"
           fi
           printf 'Release status PR: %s\n' "$pr_url"
