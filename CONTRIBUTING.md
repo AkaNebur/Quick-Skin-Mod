@@ -92,7 +92,7 @@ Fork the repository on GitHub, then replace `YOUR-GITHUB-USER` below:
 ```bash
 git clone https://github.com/YOUR-GITHUB-USER/Quick-Skin-Mod.git
 cd Quick-Skin-Mod
-git remote add upstream https://github.com/AkaNebur/Quick-Skin-Mod.git
+git remote add upstream https://github.com/The-Plum-Team/Quick-Skin-Mod.git
 git fetch upstream
 ```
 
